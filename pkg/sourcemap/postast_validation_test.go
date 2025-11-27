@@ -461,12 +461,16 @@ func transpileDingoFile(t *testing.T, dingoPath string) (goPath, mapPath string)
 		t.Fatalf("Failed to create generator: %v", err)
 	}
 
+	// CRITICAL: Keep markers during generation - they're needed for source maps
+	// Source map generator (GenerateFromFiles) looks for markers in the .go file
+	gen.SetKeepMarkers(true)
+
 	goCode, err := gen.Generate(&dingoast.File{File: parseResult.AST})
 	if err != nil {
 		t.Fatalf("Failed to generate Go code: %v", err)
 	}
 
-	// Write temporary .go file
+	// Write temporary .go file (WITH markers for source map generation)
 	goPath = filepath.Join(t.TempDir(), filepath.Base(dingoPath)+".go")
 	if err := os.WriteFile(goPath, goCode, 0644); err != nil {
 		t.Fatalf("Failed to write .go file: %v", err)
@@ -484,6 +488,13 @@ func transpileDingoFile(t *testing.T, dingoPath string) (goPath, mapPath string)
 	sourceMap, err := GenerateFromFiles(dingoPath, goPath, metadata)
 	if err != nil {
 		t.Fatalf("Failed to generate source map: %v", err)
+	}
+
+	// After source map is generated, clean markers from .go file
+	// This matches production behavior (clean output for user)
+	cleanedCode := generator.RemoveDebugMarkers(goCode)
+	if err := os.WriteFile(goPath, cleanedCode, 0644); err != nil {
+		t.Fatalf("Failed to write cleaned .go file: %v", err)
 	}
 
 	// Write source map

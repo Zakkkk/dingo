@@ -136,17 +136,14 @@ func (r *RustMatchProcessor) getScrutineeVarName(matchID int) string {
 	return fmt.Sprintf("scrutinee%d", matchID+1)
 }
 
-// getResultVarName returns result variable name (result, result2, result3, ...)
+// getResultVarName returns result variable name (__match_result_0, __match_result_1, ...)
 func (r *RustMatchProcessor) getResultVarName(matchID int) string {
-	if matchID == 0 {
-		return "result"
-	}
-	return fmt.Sprintf("result%d", matchID+1)
+	return fmt.Sprintf("__match_result_%d", matchID)
 }
 
 // isGeneratedResultVar checks if a variable name is a generated result variable
 func (r *RustMatchProcessor) isGeneratedResultVar(varName string) bool {
-	return varName == "result" || strings.HasPrefix(varName, "result")
+	return strings.HasPrefix(varName, "__match_result_")
 }
 
 // Name returns the processor name
@@ -920,23 +917,16 @@ func (r *RustMatchProcessor) generateSwitch(scrutinee string, arms []patternArm,
 	})
 	outputLine++
 
-	// Only add panic for expression context (isInAssignment) where we need exhaustiveness guarantee
-	// For statement context, just execute the arm and continue after the switch
-	if isInAssignment {
-		buf.WriteString("panic(\"unreachable: match is exhaustive\")\n")
-		mappings = append(mappings, Mapping{
-			OriginalLine:    originalLine,
-			OriginalColumn:  1,
-			GeneratedLine:   outputLine,
-			GeneratedColumn: 1,
-			Length:          5,
-			Name:            "rust_match_panic",
-		})
-		outputLine++
-	}
+	// Logic for return vs panic after switch:
+	// 1. If "return match" (auto-generated __match_result_N): emit "return __match_result_N", NO panic (return makes panic unreachable)
+	// 2. If "let x = match" (user variable): emit panic (exhaustiveness), NO return (user handles return)
+	// 3. If statement context (no assignment): emit panic as safety net
 
-	// If in assignment context with auto-generated variable (return match), add return statement
-	if isInAssignment && assignmentVar != "" && r.isGeneratedResultVar(assignmentVar) {
+	// Check if this is an auto-generated result variable (from "return match")
+	isGeneratedVar := assignmentVar != "" && strings.HasPrefix(assignmentVar, "__match_result_")
+
+	if isInAssignment && isGeneratedVar {
+		// Case 1: "return match" - emit return statement, NO panic
 		buf.WriteString(fmt.Sprintf("return %s\n", assignmentVar))
 		mappings = append(mappings, Mapping{
 			OriginalLine:    originalLine,
@@ -945,6 +935,18 @@ func (r *RustMatchProcessor) generateSwitch(scrutinee string, arms []patternArm,
 			GeneratedColumn: 1,
 			Length:          6, // "return"
 			Name:            "rust_match_return",
+		})
+		outputLine++
+	} else {
+		// Case 2 & 3: "let x = match" or statement match - emit panic for exhaustiveness
+		buf.WriteString("panic(\"unreachable: match is exhaustive\")\n")
+		mappings = append(mappings, Mapping{
+			OriginalLine:    originalLine,
+			OriginalColumn:  1,
+			GeneratedLine:   outputLine,
+			GeneratedColumn: 1,
+			Length:          5,
+			Name:            "rust_match_panic",
 		})
 		outputLine++
 	}
@@ -964,13 +966,25 @@ func (r *RustMatchProcessor) generateSwitch(scrutinee string, arms []patternArm,
 }
 
 // inferMatchResultType infers the result type from match arms
-// For now, uses simple heuristics based on first arm's pattern
+// FIX 2: Analyze all arm expressions to detect common concrete types
 func (r *RustMatchProcessor) inferMatchResultType(arms []patternArm) string {
 	if len(arms) == 0 {
 		return "interface{}" // Fallback
 	}
 
-	// Look at first arm's pattern to infer type
+	// Try to infer concrete type by analyzing arm expressions
+	// This returns concrete type (string, int, bool) or "interface{}" for mixed/complex types
+	inferredType, wasMixed := r.inferTypeFromExpressions(arms)
+	if inferredType != "" {
+		return inferredType
+	}
+
+	// If types were mixed or complex, use interface{}
+	if wasMixed {
+		return "interface{}"
+	}
+
+	// Fallback: Look at first arm's pattern to infer type (only for simple cases)
 	firstPattern := arms[0].pattern
 	switch firstPattern {
 	case "Ok", "Err":
@@ -985,6 +999,105 @@ func (r *RustMatchProcessor) inferMatchResultType(arms []patternArm) string {
 		// Custom enum or unknown
 		return "interface{}"
 	}
+}
+
+// inferTypeFromExpressions analyzes match arm expressions to detect common concrete types
+// FIX 2: Returns (concrete type, wasMixed) where:
+//   - concrete type = "string", "int", "bool", etc. if all arms return same type
+//   - wasMixed = true if arms have different types or contain complex expressions
+func (r *RustMatchProcessor) inferTypeFromExpressions(arms []patternArm) (string, bool) {
+	if len(arms) == 0 {
+		return "", false
+	}
+
+	// Collect inferred types from each arm
+	var types []string
+	for _, arm := range arms {
+		expr := strings.TrimSpace(arm.expression)
+
+		// Skip block expressions (too complex to analyze)
+		if strings.HasPrefix(expr, "{") {
+			return "", true // Complex, use interface{}
+		}
+
+		// Infer type from expression syntax
+		inferredType := r.inferTypeFromExpression(expr)
+		if inferredType == "" {
+			return "", true // Can't infer, use interface{}
+		}
+		types = append(types, inferredType)
+	}
+
+	// Check if all types are the same
+	if len(types) == 0 {
+		return "", false
+	}
+
+	firstType := types[0]
+	for _, t := range types[1:] {
+		if t != firstType {
+			return "", true // Mixed types, use interface{}
+		}
+	}
+
+	return firstType, false
+}
+
+// inferTypeFromExpression infers Go type from a simple expression
+// FIX 2: Detects string, int, bool literals and basic expressions
+func (r *RustMatchProcessor) inferTypeFromExpression(expr string) string {
+	expr = strings.TrimSpace(expr)
+
+	// String literals: "hello", `hello`
+	if strings.HasPrefix(expr, "\"") || strings.HasPrefix(expr, "`") {
+		return "string"
+	}
+
+	// Boolean literals: true, false
+	if expr == "true" || expr == "false" {
+		return "bool"
+	}
+
+	// Integer literals: 0, 42, -1, 100
+	// Simple heuristic: starts with digit or minus followed by digit
+	if len(expr) > 0 {
+		ch := expr[0]
+		if ch >= '0' && ch <= '9' {
+			return "int"
+		}
+		if ch == '-' && len(expr) > 1 && expr[1] >= '0' && expr[1] <= '9' {
+			return "int"
+		}
+	}
+
+	// Float literals: 3.14, -0.5
+	if strings.Contains(expr, ".") {
+		parts := strings.Split(expr, ".")
+		if len(parts) == 2 {
+			// Check if both parts are numeric
+			before := strings.TrimPrefix(parts[0], "-")
+			after := parts[1]
+			if r.isNumeric(before) && r.isNumeric(after) {
+				return "float64"
+			}
+		}
+	}
+
+	// Can't infer type - could be variable, function call, complex expression
+	return ""
+}
+
+// isNumeric checks if a string contains only digits
+func (r *RustMatchProcessor) isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // armGroup represents a group of arms with the same pattern (different guards)

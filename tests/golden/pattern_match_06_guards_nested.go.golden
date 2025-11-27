@@ -109,7 +109,7 @@ func (r Result) AndThen(fn func(int) Result) Result {
 
 // Using 'where' keyword (Swift-style)
 func analyzeValue(opt Option) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: opt
 	scrutinee := opt
 	switch scrutinee.tag {
@@ -117,30 +117,29 @@ func analyzeValue(opt Option) string {
 		x := *scrutinee.some
 		// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 100
 		if x > 100 {
-			result = "large"
+			__match_result_0 = "large"
 			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 10
 		} else if x > 10 {
-			result = "medium"
+			__match_result_0 = "medium"
 			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 0
 		} else if x > 0 {
-			result = "small"
+			__match_result_0 = "small"
 			// DINGO_PATTERN: OptionSome(_)
 		} else {
-			result = "non-positive"
+			__match_result_0 = "non-positive"
 		}
 	case OptionTagNone:
 		// DINGO_PATTERN: OptionNone
-		result = "none"
+		__match_result_0 = "none"
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }
 
 // Simple pattern with where guards (NOT nested)
 func processResult(result Result) string {
-	var result2 interface{}
+	var __match_result_1 string
 	// DINGO_MATCH_START: result
 	scrutinee2 := result
 	switch scrutinee2.tag {
@@ -148,27 +147,26 @@ func processResult(result Result) string {
 		val := *scrutinee2.ok
 		// DINGO_PATTERN: ResultOk(val) | DINGO_GUARD: val > 100
 		if val > 100 {
-			result2 = "large value"
+			__match_result_1 = "large value"
 			// DINGO_PATTERN: ResultOk(val) | DINGO_GUARD: val > 0
 		} else if val > 0 {
-			result2 = "positive value"
+			__match_result_1 = "positive value"
 			// DINGO_PATTERN: ResultOk(_)
 		} else {
-			result2 = "non-positive value"
+			__match_result_1 = "non-positive value"
 		}
 	case ResultTagErr:
 		// DINGO_PATTERN: ResultErr(_)
-		result2 = "error"
+		__match_result_1 = "error"
 	}
-	panic("unreachable: match is exhaustive")
-	return result2
+	return __match_result_1
 	// DINGO_MATCH_END
 
 }
 
 // Guard fallthrough demonstration
 func categorize(opt Option) string {
-	var result3 interface{}
+	var __match_result_2 string
 	// DINGO_MATCH_START: opt
 	scrutinee3 := opt
 	switch scrutinee3.tag {
@@ -176,23 +174,22 @@ func categorize(opt Option) string {
 		x := *scrutinee3.some
 		// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%3 == 0 && x%5 == 0
 		if x%3 == 0 && x%5 == 0 {
-			result3 = "fizzbuzz"
+			__match_result_2 = "fizzbuzz"
 			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%3 == 0
 		} else if x%3 == 0 {
-			result3 = "fizz"
+			__match_result_2 = "fizz"
 			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%5 == 0
 		} else if x%5 == 0 {
-			result3 = "buzz"
+			__match_result_2 = "buzz"
 			// DINGO_PATTERN: OptionSome(x)
 		} else {
-			result3 = "number"
+			__match_result_2 = "number"
 		}
 	case OptionTagNone:
 		// DINGO_PATTERN: OptionNone
-		result3 = "empty"
+		__match_result_2 = "empty"
 	}
-	panic("unreachable: match is exhaustive")
-	return result3
+	return __match_result_2
 	// DINGO_MATCH_END
 
 }

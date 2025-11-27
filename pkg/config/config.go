@@ -59,11 +59,21 @@ type MatchConfig struct {
 	Syntax string `toml:"syntax"`
 }
 
+// DebugConfig controls debug-related output settings
+type DebugConfig struct {
+	// KeepMarkers controls whether internal markers remain in generated .go files
+	// Markers like // dingo:let:x, // dingo:E:1 are used internally for source maps
+	// When true: Keep markers (useful for debugging transpiler)
+	// When false: Remove markers for clean production output (default)
+	KeepMarkers bool `toml:"keep_markers"`
+}
+
 // Config represents the complete Dingo project configuration
 type Config struct {
 	Features  FeatureConfig   `toml:"features"`
 	Match     MatchConfig     `toml:"match"`
 	SourceMap SourceMapConfig `toml:"sourcemaps"`
+	Debug     DebugConfig     `toml:"debug"`
 }
 
 // ResultTypeConfig controls Result<T, E> type behavior
@@ -187,6 +197,9 @@ func DefaultConfig() *Config {
 		SourceMap: SourceMapConfig{
 			Enabled: true,
 			Format:  FormatInline, // Default to inline for development
+		},
+		Debug: DebugConfig{
+			KeepMarkers: false, // Default to clean output for production
 		},
 	}
 }

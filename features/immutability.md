@@ -1,7 +1,7 @@
 # Immutability
 
 **Priority:** P2 (Medium - Important for concurrent safety)
-**Status:** 🔴 Not Started
+**Status:** ✅ Implemented (let immutability)
 **Community Demand:** ⭐⭐⭐ (Proposal #27975)
 **Inspiration:** Rust, Swift
 

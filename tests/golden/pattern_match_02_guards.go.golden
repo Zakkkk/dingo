@@ -31,7 +31,7 @@ func (e Value) IsString() bool {
 	return e.tag == ValueTagString
 }
 func describe(v Value) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: v
 	scrutinee := v
 	switch scrutinee.tag {
@@ -39,26 +39,25 @@ func describe(v Value) string {
 		n := *scrutinee.int
 		// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n > 0
 		if n > 0 {
-			result = "Positive number"
+			__match_result_0 = "Positive number"
 			// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n < 0
 		} else if n < 0 {
-			result = "Negative number"
+			__match_result_0 = "Negative number"
 			// DINGO_PATTERN: ValueInt(_)
 		} else {
-			result = "Zero"
+			__match_result_0 = "Zero"
 		}
 	case ValueTagString:
 		s := *scrutinee.string
 		// DINGO_PATTERN: ValueString(s) | DINGO_GUARD: len(s) > 5
 		if len(s) > 5 {
-			result = "Long string"
+			__match_result_0 = "Long string"
 			// DINGO_PATTERN: ValueString(_)
 		} else {
-			result = "Short string"
+			__match_result_0 = "Short string"
 		}
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }

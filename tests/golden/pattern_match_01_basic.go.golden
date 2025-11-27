@@ -36,22 +36,21 @@ func (e Status) IsComplete() bool {
 	return e.tag == StatusTagComplete
 }
 func getStatusMessage(s Status) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: s
 	scrutinee := s
 	switch scrutinee.tag {
 	case StatusTagPending:
 		// DINGO_PATTERN: StatusPending
-		result = "Waiting to start"
+		__match_result_0 = "Waiting to start"
 	case StatusTagActive:
 		// DINGO_PATTERN: StatusActive
-		result = "Currently running"
+		__match_result_0 = "Currently running"
 	case StatusTagComplete:
 		// DINGO_PATTERN: StatusComplete
-		result = "Finished"
+		__match_result_0 = "Finished"
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }

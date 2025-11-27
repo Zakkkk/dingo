@@ -46,25 +46,24 @@ func (e Color) IsRGB() bool {
 	return e.tag == ColorTagRGB
 }
 func colorToHex(c Color) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: c
 	scrutinee := c
 	switch scrutinee.tag {
 	case ColorTagRed:
 		// DINGO_PATTERN: ColorRed
-		result = "#FF0000"
+		__match_result_0 = "#FF0000"
 	case ColorTagGreen:
 		// DINGO_PATTERN: ColorGreen
-		result = "#00FF00"
+		__match_result_0 = "#00FF00"
 	case ColorTagBlue:
 		// DINGO_PATTERN: ColorBlue
-		result = "#0000FF"
+		__match_result_0 = "#0000FF"
 	case ColorTagRGB{r, g, b}:
 		// DINGO_PATTERN: ColorRGB{r, g, b}
-		result = "#" + toHex(r) + toHex(g) + toHex(b)
+		__match_result_0 = "#" + toHex(r) + toHex(g) + toHex(b)
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }

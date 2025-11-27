@@ -52,7 +52,8 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 		FileSet:     fset,
 		TypeInfo:    nil, // TODO: Add type information when available
 		Config:      &plugin.Config{
-			EmitGeneratedMarkers: true, // Default: enabled
+			EmitGeneratedMarkers: true,  // Default: enabled
+			KeepMarkers:          false, // Default: clean output (remove markers)
 		},
 		Registry:    registry,
 		Logger:      logger,
@@ -110,6 +111,11 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 	placeholderResolver := builtin.NewPlaceholderResolverPlugin()
 	pipeline.RegisterPlugin(placeholderResolver)
 
+	// Immutability plugin - checks let-declared variables for reassignment
+	// Runs before unused vars plugin to report errors early
+	immutabilityPlugin := builtin.NewImmutabilityPlugin()
+	pipeline.RegisterPlugin(immutabilityPlugin)
+
 	// Register unused variable handling plugin (runs last)
 	unusedVarsPlugin := builtin.NewUnusedVarsPlugin()
 	pipeline.RegisterPlugin(unusedVarsPlugin)
@@ -134,6 +140,13 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 // SetLogger sets the logger for the generator
 func (g *Generator) SetLogger(logger plugin.Logger) {
 	g.logger = logger
+}
+
+// SetKeepMarkers sets whether to keep debug markers in output
+func (g *Generator) SetKeepMarkers(keep bool) {
+	if g.pipeline != nil && g.pipeline.Ctx != nil && g.pipeline.Ctx.Config != nil {
+		g.pipeline.Ctx.Config.KeepMarkers = keep
+	}
 }
 
 // Generate converts a Dingo AST to Go source code
@@ -280,7 +293,19 @@ func (g *Generator) Generate(file *dingoast.File) ([]byte, error) {
 
 	// Step 9: Remove extra blank lines between top-level declarations
 	// This ensures consistent formatting matching golden files
-	final := removeBlankLinesBetweenDeclarations(cleaned)
+	formatted := removeBlankLinesBetweenDeclarations(cleaned)
+
+	// Step 10: Remove debug markers if configured
+	// When config.Debug.KeepMarkers is false (default), remove all dingo:* markers
+	final := formatted
+	if g.pipeline != nil && g.pipeline.Ctx != nil && g.pipeline.Ctx.Config != nil {
+		if !g.pipeline.Ctx.Config.KeepMarkers {
+			final = RemoveDebugMarkers(formatted)
+			if g.logger != nil {
+				g.logger.Debugf("Removed debug markers from output")
+			}
+		}
+	}
 
 	return final, nil
 }

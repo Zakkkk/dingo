@@ -46,6 +46,11 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Features.OptionType.GoInterop != "opt-in" {
 		t.Errorf("Expected Option go_interop default to be 'opt-in', got %q", cfg.Features.OptionType.GoInterop)
 	}
+
+	// Test Debug defaults
+	if cfg.Debug.KeepMarkers {
+		t.Error("Expected KeepMarkers to be false by default")
+	}
 }
 
 func TestSyntaxStyleValidation(t *testing.T) {
@@ -344,6 +349,38 @@ func TestConfigValidation(t *testing.T) {
 				SourceMap: SourceMapConfig{
 					Enabled: true,
 					Format:  FormatInline,
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "debug keep_markers true",
+			config: &Config{
+				Features: FeatureConfig{
+					ErrorPropagationSyntax: SyntaxQuestion,
+				},
+				SourceMap: SourceMapConfig{
+					Enabled: true,
+					Format:  FormatInline,
+				},
+				Debug: DebugConfig{
+					KeepMarkers: true,
+				},
+			},
+			wantError: false,
+		},
+		{
+			name: "debug keep_markers false",
+			config: &Config{
+				Features: FeatureConfig{
+					ErrorPropagationSyntax: SyntaxQuestion,
+				},
+				SourceMap: SourceMapConfig{
+					Enabled: true,
+					Format:  FormatInline,
+				},
+				Debug: DebugConfig{
+					KeepMarkers: false,
 				},
 			},
 			wantError: false,

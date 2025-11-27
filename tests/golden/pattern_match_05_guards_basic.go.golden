@@ -55,7 +55,7 @@ func (r Result) AndThen(fn func(int) Result) Result {
 
 // Simple guard on Result type
 func classifyNumber(result Result) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: result
 	scrutinee := result
 	switch scrutinee.tag {
@@ -63,28 +63,27 @@ func classifyNumber(result Result) string {
 		x := *scrutinee.ok
 		// DINGO_PATTERN: ResultOk(x) | DINGO_GUARD: x > 0
 		if x > 0 {
-			result = "positive"
+			__match_result_0 = "positive"
 			// DINGO_PATTERN: ResultOk(x) | DINGO_GUARD: x < 0
 		} else if x < 0 {
-			result = "negative"
+			__match_result_0 = "negative"
 			// DINGO_PATTERN: ResultOk(_)
 		} else {
-			result = "zero"
+			__match_result_0 = "zero"
 		}
 	case ResultTagErr:
 		e := *scrutinee.err
 		// DINGO_PATTERN: ResultErr(e)
-		result = "error"
+		__match_result_0 = "error"
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }
 
 // Guard with multiple conditions
 func validateAge(result Result) string {
-	var result2 interface{}
+	var __match_result_1 string
 	// DINGO_MATCH_START: result
 	scrutinee2 := result
 	switch scrutinee2.tag {
@@ -92,27 +91,26 @@ func validateAge(result Result) string {
 		age := *scrutinee2.ok
 		// DINGO_PATTERN: ResultOk(age) | DINGO_GUARD: age >= 18 && age < 65
 		if age >= 18 && age < 65 {
-			result2 = "adult"
+			__match_result_1 = "adult"
 			// DINGO_PATTERN: ResultOk(age) | DINGO_GUARD: age >= 65
 		} else if age >= 65 {
-			result2 = "senior"
+			__match_result_1 = "senior"
 			// DINGO_PATTERN: ResultOk(_)
 		} else {
-			result2 = "minor"
+			__match_result_1 = "minor"
 		}
 	case ResultTagErr:
 		// DINGO_PATTERN: ResultErr(_)
-		result2 = "invalid"
+		__match_result_1 = "invalid"
 	}
-	panic("unreachable: match is exhaustive")
-	return result2
+	return __match_result_1
 	// DINGO_MATCH_END
 
 }
 
 // Guard with function call
 func checkLength(result Result) string {
-	var result3 interface{}
+	var __match_result_2 string
 	// DINGO_MATCH_START: result
 	scrutinee3 := result
 	switch scrutinee3.tag {
@@ -120,17 +118,16 @@ func checkLength(result Result) string {
 		n := *scrutinee3.ok
 		// DINGO_PATTERN: ResultOk(n) | DINGO_GUARD: isEven(n)
 		if isEven(n) {
-			result3 = "even"
+			__match_result_2 = "even"
 			// DINGO_PATTERN: ResultOk(_)
 		} else {
-			result3 = "odd"
+			__match_result_2 = "odd"
 		}
 	case ResultTagErr:
 		// DINGO_PATTERN: ResultErr(_)
-		result3 = "error"
+		__match_result_2 = "error"
 	}
-	panic("unreachable: match is exhaustive")
-	return result3
+	return __match_result_2
 	// DINGO_MATCH_END
 
 }

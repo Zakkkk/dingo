@@ -112,10 +112,9 @@ func (r Result_Option_int_error) AndThen(fn func(Option_int) interface{}) interf
 	}
 	return struct {
 		tag ResultTag
-		ok  *
+		ok  *interface{}
 
 		// DINGO_MATCH_START: result
-		interface{}
 		err *error
 	}{tag: r.tag, ok: nil, err: r.err}
 }
@@ -132,49 +131,49 @@ func (r Result_Option_int_error) OrElse(fn func(error) interface{}) interface{} 
 		err *interface{}
 	}{tag: r.tag, ok: r.ok, err: nil}
 }
-func
+func (r Result_Option_int_error) And(
 
 // DINGO_PATTERN: Some(val)
-(r Result_Option_int_error) And(other interface{}) interface{} {
+other interface{}) interface{} {
 
 	// DINGO_PATTERN: None
 	if r.tag == ResultTagOk {
-
-		// DINGO_MATCH_END
 		return other
 	}
 	return r
 }
-func (r Result_Option_int_error) Or(other Result_Option_int_error) Result_Option_int_error {
+func (r Result_Option_int_error) Or(
+
+// DINGO_MATCH_END
+other Result_Option_int_error) Result_Option_int_error {
+	if r.
 
 	// DINGO_PATTERN: Err(e)
-	if r.tag == ResultTagOk {
+	tag == ResultTagOk {
 		return r
 	}
 	return other
 }
 
-type Result_interface_error struct
-
-// DINGO_MATCH_END
-{
+type Result_interface_error struct {
 	tag ResultTag
+
+	// DINGO_MATCH_END
 	ok  *interface{}
 	err *error
 }
 func Result_interface_error_Ok(arg0 interface{}) Result_interface_error {
-	return Result_interface_error{
+	return Result_interface_error{tag: ResultTagOk, ok: &arg0}
 
 	// 42
-	tag: ResultTagOk, ok: &arg0}
 }
-func Result_interface_error_Err(
+func Result_interface_error_Err(arg0 error) Result_interface_error {
 
-// 0
-arg0 error) Result_interface_error {
+	// 0
+	return Result_interface_error{
 
 	// -1
-	return Result_interface_error{tag: ResultTagErr, err: &arg0}
+	tag: ResultTagErr, err: &arg0}
 }
 func (r Result_interface_error) IsOk() bool {
 	return r.tag == ResultTagOk
@@ -448,7 +447,7 @@ func (o Option) Unwrap() int {
 	return *o.some
 }
 func processNestedMatch(result Result) int {
-	var result ResultIntError
+	var __match_result_0 interface{}
 
 	scrutinee := result
 	switch scrutinee.tag {
@@ -465,14 +464,14 @@ func processNestedMatch(result Result) int {
 
 			0
 		}
+		panic("unreachable: match is exhaustive")
 
 	case ResultTagErr:
 		e := *scrutinee.err
 
-		result = -1
+		__match_result_0 = -1
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 
 }
 func main() {

@@ -259,6 +259,7 @@ func (ctx *Context) NextTempVar() string {
 // Config for code generation
 type Config struct {
 	EmitGeneratedMarkers bool
+	KeepMarkers          bool // When false, remove dingo:* markers from output
 }
 
 // Logger interface for plugin logging

@@ -589,3 +589,198 @@ func TestRustMatchProcessor_ParseArmsWithGuards(t *testing.T) {
 }
 
 // Removed: TestRustMatchProcessor_BothIfAndWhere (Swift 'where' keyword removed in Phase 4.2)
+
+// ========================================================================
+// FIX 1: Panic/Return Order Tests
+// ========================================================================
+
+func TestRustMatchProcessor_ReturnMatchPanicOrder(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `return match result {
+    Ok(x) => x * 2,
+    Err(e) => 0
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// For "return match", should emit "return __match_result_0" with NO panic
+	// (panic after return would be unreachable dead code)
+	returnIdx := strings.Index(result, "return __match_result_0")
+	panicIdx := strings.Index(result, "panic(\"unreachable: match is exhaustive\")")
+
+	if returnIdx == -1 {
+		t.Errorf("Expected return statement in output.\nGot:\n%s", result)
+	}
+	if panicIdx != -1 {
+		t.Errorf("Should NOT have panic statement after return (unreachable code).\nGot:\n%s", result)
+	}
+
+	// Verify the variable declaration uses the generated name
+	if !strings.Contains(result, "var __match_result_0 ") {
+		t.Errorf("Expected variable declaration 'var __match_result_0'.\nGot:\n%s", result)
+	}
+}
+
+func TestRustMatchProcessor_LetMatchHasPanicNoReturn(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let x = match result {
+    Ok(val) => val,
+    Err(e) => 0
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// For "let x = match", should have panic (exhaustiveness) but NO return statement
+	// User's code will handle the return after match completes
+	if !strings.Contains(result, "panic(\"unreachable: match is exhaustive\")") {
+		t.Errorf("Expected panic statement for let assignment (exhaustiveness check).\nGot:\n%s", result)
+	}
+
+	// Should NOT have a return statement (user handles return themselves)
+	if strings.Contains(result, "return x") || strings.Contains(result, "return __match") {
+		t.Errorf("Should not have return statement for let assignment.\nGot:\n%s", result)
+	}
+
+	// Should have variable declaration
+	if !strings.Contains(result, "var x ") {
+		t.Errorf("Expected variable declaration for let assignment.\nGot:\n%s", result)
+	}
+}
+
+// ========================================================================
+// FIX 2: Type Inference Tests
+// ========================================================================
+
+func TestRustMatchProcessor_TypeInference_String(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let msg = match status {
+    Active => "running",
+    Pending => "waiting",
+    _ => "unknown"
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// Should infer string type (not interface{})
+	if !strings.Contains(result, "var msg string") {
+		t.Errorf("Expected 'var msg string' for string type inference.\nGot:\n%s", result)
+	}
+
+	// Should NOT use interface{}
+	if strings.Contains(result, "interface{}") {
+		t.Errorf("Should not use interface{} when all arms return string.\nGot:\n%s", result)
+	}
+}
+
+func TestRustMatchProcessor_TypeInference_Int(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let count = match result {
+    Ok(x) => 100,
+    Err(e) => 0
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// Should infer int type (not interface{})
+	if !strings.Contains(result, "var count int") {
+		t.Errorf("Expected 'var count int' for int type inference.\nGot:\n%s", result)
+	}
+
+	// Should NOT use interface{}
+	if strings.Contains(result, "interface{}") {
+		t.Errorf("Should not use interface{} when all arms return int.\nGot:\n%s", result)
+	}
+}
+
+func TestRustMatchProcessor_TypeInference_Bool(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let valid = match status {
+    Active => true,
+    Pending => false,
+    _ => false
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// Should infer bool type (not interface{})
+	if !strings.Contains(result, "var valid bool") {
+		t.Errorf("Expected 'var valid bool' for bool type inference.\nGot:\n%s", result)
+	}
+
+	// Should NOT use interface{}
+	if strings.Contains(result, "interface{}") {
+		t.Errorf("Should not use interface{} when all arms return bool.\nGot:\n%s", result)
+	}
+}
+
+func TestRustMatchProcessor_TypeInference_Mixed(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let value = match result {
+    Ok(x) => "success",
+    Err(e) => 0
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// Should use interface{} for mixed types (string and int)
+	if !strings.Contains(result, "var value interface{}") {
+		t.Errorf("Expected 'var value interface{}' for mixed types.\nGot:\n%s", result)
+	}
+}
+
+func TestRustMatchProcessor_TypeInference_ComplexExpression(t *testing.T) {
+	processor := NewRustMatchProcessor()
+
+	input := `let result = match status {
+    Active => computeValue(x),
+    Pending => getDefault()
+}`
+
+	output, _, err := processor.Process([]byte(input))
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+
+	result := string(output)
+
+	// Should use interface{} for complex expressions (function calls)
+	if !strings.Contains(result, "var result interface{}") {
+		t.Errorf("Expected 'var result interface{}' for complex expressions.\nGot:\n%s", result)
+	}
+}

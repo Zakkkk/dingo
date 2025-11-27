@@ -103,23 +103,28 @@ func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error
 	}
 
 	// Step 5: Generate with plugins
+	// IMPORTANT: Always keep markers during generation - they're needed for source maps
+	// Marker cleanup happens AFTER source map generation (Step 8)
 	logger := plugin.NewNoOpLogger() // Silent logger for library use
 	gen, err := generator.NewWithPlugins(fset, registry, logger)
 	if err != nil {
 		return fmt.Errorf("failed to create generator: %w", err)
 	}
 
+	// Keep markers during generation - cleanup happens after source map generation
+	gen.SetKeepMarkers(true)
+
 	outputCode, err := gen.Generate(file)
 	if err != nil {
 		return fmt.Errorf("generation error: %w", err)
 	}
 
-	// Step 6: Write .go file
+	// Step 6: Write .go file WITH markers (needed for source map generation)
 	if err := os.WriteFile(outputPath, outputCode, 0644); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
-	// Step 7: Generate source map
+	// Step 7: Generate source map (reads file with markers)
 	sourceMapPath := outputPath + ".map"
 	sourceMap, err := sourcemap.GenerateFromFiles(inputPath, outputPath, metadata)
 	if err != nil {
@@ -135,6 +140,16 @@ func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error
 
 	if err := os.WriteFile(sourceMapPath, sourceMapJSON, 0644); err != nil {
 		return nil // Non-fatal
+	}
+
+	// Step 8: Clean markers from .go file if configured (default: clean)
+	// This happens AFTER source map generation so markers are available for mapping
+	if !t.config.Debug.KeepMarkers {
+		cleanedCode := generator.RemoveDebugMarkers(outputCode)
+		if err := os.WriteFile(outputPath, cleanedCode, 0644); err != nil {
+			// Non-fatal: file was already written with markers
+			return nil
+		}
 	}
 
 	return nil

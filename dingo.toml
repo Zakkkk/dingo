@@ -35,3 +35,9 @@ enabled = true
 # - both: Both inline and separate files
 # - none: Disabled
 format = "inline"
+
+[debug]
+# Keep internal markers in generated output (default: false)
+# When false, markers like // dingo:e:0 are removed from final .go files
+# Set to true for debugging source map generation
+keep_markers = false

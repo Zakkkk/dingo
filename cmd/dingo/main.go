@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -545,8 +546,7 @@ func expandWorkspacePatterns(patterns []string) ([]string, error) {
 
 // isWorkspacePattern checks if a string is a workspace pattern (contains ...)
 func isWorkspacePattern(s string) bool {
-	return s == "..." || s == "./..." ||
-		(len(s) > 4 && s[len(s)-4:] == "/...")
+	return s == "..." || s == "./..." || strings.HasSuffix(s, "/...")
 }
 
 // expandPattern expands a workspace pattern to actual .dingo files

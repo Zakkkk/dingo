@@ -78,7 +78,7 @@ func (e Value) IsString() bool {
 	return e.tag == ValueTagString
 }
 func processResult(r Result) string {
-	var result interface{}
+	var __match_result_0 string
 	// DINGO_MATCH_START: r
 	scrutinee := r
 	switch scrutinee.tag {
@@ -87,18 +87,17 @@ func processResult(r Result) string {
 		switch nestedResultOk.tag {
 		case ValueTagInt:
 			n := *nestedResultOk.int
-			result = "Got integer: " + string(n)
+			__match_result_0 = "Got integer: " + string(n)
 		case ValueTagString:
 			s := *nestedResultOk.string
-			result = "Got string: " + s
+			__match_result_0 = "Got string: " + s
 		}
 	case ResultTagErr:
 		e := *scrutinee.err
 		// DINGO_PATTERN: ResultErr(e)
-		result = "Error: " + e.Error()
+		__match_result_0 = "Error: " + e.Error()
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
 	// DINGO_MATCH_END
 
 }
