@@ -1127,19 +1127,8 @@ func (r *RustMatchProcessor) generateCaseWithGuards(scrutineeVar string, group a
 				if isInAssignment && assignmentVar != "" {
 					buf.WriteString(fmt.Sprintf("\t\t%s = %s\n", assignmentVar, arm.expression))
 				} else {
-					// FIX T2B: Add return statement for expression-only arms
-					exprTrimmed := strings.TrimSpace(arm.expression)
-					needsReturn := !strings.HasPrefix(exprTrimmed, "return ") &&
-						!strings.HasPrefix(exprTrimmed, "panic(") &&
-						!strings.HasPrefix(exprTrimmed, "break") &&
-						!strings.HasPrefix(exprTrimmed, "continue") &&
-						!strings.HasPrefix(exprTrimmed, "{")
-
-					if needsReturn {
-						buf.WriteString(fmt.Sprintf("\t\treturn %s\n", arm.expression))
-					} else {
-						buf.WriteString(fmt.Sprintf("\t\t%s\n", arm.expression))
-					}
+					// Statement context: just execute expression, no return
+					buf.WriteString(fmt.Sprintf("\t\t%s\n", arm.expression))
 				}
 			}
 		}
