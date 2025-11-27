@@ -101,6 +101,53 @@ Task → agent:
 
 **Main chat NEVER reads detail files (unless presenting to user).**
 
+## ⚠️ CRITICAL: AST-Based Architecture (NOT Regex)
+
+**ALL Dingo syntax transformations MUST use AST-based approaches, NOT regex.**
+
+### The Rule
+
+| ❌ DO NOT | ✅ DO INSTEAD |
+|-----------|---------------|
+| Fix bugs in regex preprocessors | Implement AST-based solution |
+| Add new regex patterns | Create proper AST nodes |
+| Extend regex-based code | Use `pkg/ast/` infrastructure |
+| Copy regex patterns | Write AST transformation logic |
+
+### Why?
+
+The `pkg/preprocessor/` regex-based code is **legacy** and will be **migrated to AST**. Regex transformations are:
+- Fragile (edge cases break easily)
+- Hard to debug (complex patterns)
+- Error-prone (position tracking issues)
+- Not extensible (adding features = more hacks)
+
+### Current Migration Status
+
+See `ai-docs/AST_MIGRATION.md` for full details.
+
+**Regex-based (TO BE MIGRATED):**
+- `keywords.go` - `let` declarations → **LetDecl AST node**
+- `type_annot.go` - Type annotations → **AST-based**
+- `error_prop.go` - Error propagation → **ErrorPropExpr AST node**
+- `enum.go` - Sum types → **EnumDecl AST node**
+- `rust_match.go` - Pattern matching → **MatchExpr AST node**
+- `lambda.go` - Lambdas → **LambdaExpr AST node**
+- `null_coalesce.go` - Null coalescing → **AST-based**
+- `safe_nav.go` - Safe navigation → **AST-based**
+
+**AST Infrastructure (EXTEND THIS):**
+- `pkg/ast/` - Dingo AST nodes
+- `pkg/parser/` - Dingo parser
+- `pkg/plugin/` - AST transformation plugins
+
+### When You Encounter Regex Bugs
+
+1. **DO NOT** fix the regex
+2. **DO** note it in `ai-docs/AST_MIGRATION.md`
+3. **DO** implement AST-based solution if time permits
+4. **DO** mark the regex code with `// TODO(ast-migration): ...`
+
 ## Project Structure Rules
 
 ### Root Directory (Minimal)

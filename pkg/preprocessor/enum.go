@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: pkg/ast/enum.go with EnumDecl AST node
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -8,7 +13,7 @@ import (
 	"strings"
 )
 
-// Package-level compiled regexes for enum processing
+// Package-level compiled regexes - LEGACY, TO BE REPLACED WITH AST
 var (
 	// Matches: enum Name { ... }
 	enumPattern = regexp.MustCompile(`(?s)enum\s+(\w+)\s*\{([^}]*)\}`)
@@ -58,6 +63,13 @@ func (e *EnumProcessor) ProcessInternal(code string) (string, []TransformMetadat
 		return code, nil, nil
 	}
 
+	// Collect enum names and variants for constructor call transformation
+	type enumInfo struct {
+		name     string
+		variants []string
+	}
+	var enumInfos []enumInfo
+
 	// Process enums in reverse order to maintain correct offsets
 	result := []byte(code)
 	for i := len(enums) - 1; i >= 0; i-- {
@@ -69,6 +81,13 @@ func (e *EnumProcessor) ProcessInternal(code string) (string, []TransformMetadat
 			// Lenient error handling - continue
 			continue
 		}
+
+		// Collect variant names for constructor transformation
+		variantNames := make([]string, len(variants))
+		for j, v := range variants {
+			variantNames[j] = v.Name
+		}
+		enumInfos = append(enumInfos, enumInfo{name: enum.name, variants: variantNames})
 
 		// Generate Go sum type with marker
 		generated := e.generateSumTypeWithMarker(enum.name, variants, &counter)
@@ -90,7 +109,19 @@ func (e *EnumProcessor) ProcessInternal(code string) (string, []TransformMetadat
 		metadata = append(metadata, meta)
 	}
 
-	return string(result), metadata, nil
+	// Transform underscore constructor calls to PascalCase
+	// e.g., Status_Pending() → StatusPending()
+	resultStr := string(result)
+	for _, info := range enumInfos {
+		for _, variant := range info.variants {
+			// Replace EnumName_Variant with EnumNameVariant
+			oldCall := info.name + "_" + variant
+			newCall := info.name + variant
+			resultStr = strings.ReplaceAll(resultStr, oldCall, newCall)
+		}
+	}
+
+	return resultStr, metadata, nil
 }
 
 // enumDecl represents a parsed enum declaration
@@ -462,6 +493,7 @@ func (e *EnumProcessor) generateSumType(enumName string, variants []Variant) str
 	buf.WriteString("}\n\n")
 
 	// 4. Generate constructor functions
+	// Use PascalCase: StatusPending() following Go naming conventions
 	for _, variant := range variants {
 		constructorName := fmt.Sprintf("%s%s", enumName, variant.Name)
 		tagConstName := fmt.Sprintf("%s%s", tagTypeName, variant.Name)

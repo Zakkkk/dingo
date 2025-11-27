@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: pkg/ast/error_prop.go with ErrorPropExpr AST node
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -12,9 +17,10 @@ import (
 	"strings"
 )
 
-// Package-level compiled regexes (Issue 2: Regex Performance)
+// Package-level compiled regexes - LEGACY, TO BE REPLACED WITH AST
 var (
-	assignPattern = regexp.MustCompile(`^\s*(let|var)\s+(\w+)\s*=\s*(.+)$`)
+	// Updated to handle := short declarations (after DingoPreParser transforms let → :=)
+	assignPattern = regexp.MustCompile(`^\s*(?:(let|var)\s+)?(\w+)\s*:?=\s*(.+)$`)
 	returnPattern = regexp.MustCompile(`^\s*return\s+(.+)$`)
 	// CRITICAL FIX: Use non-greedy (.*?\?) to match minimal content before ?
 	// This ensures we match the FIRST ? before a quote, not the LAST one
@@ -603,8 +609,9 @@ func (e *ErrorPropProcessor) trackFunctionCallInExpr(expr string) {
 		return
 	}
 
-	// Get the part before '('
+	// Get the part before '(' and remove all spaces (DingoPreParser adds spaces)
 	beforeParen := strings.TrimSpace(expr[:parenIdx])
+	beforeParen = strings.ReplaceAll(beforeParen, " ", "")
 
 	// Split by '.' to handle qualified names (pkg.Func or obj.Method)
 	parts := strings.Split(beforeParen, ".")
@@ -644,6 +651,9 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 		if strings.Contains(rightSide, "?") {
 			expr, errMsg := e.extractExpressionAndMessage(rightSide)
 
+			// Track function call for import detection
+			e.trackFunctionCallInExpr(expr)
+
 			// Find position of ? operator
 			qPos := strings.LastIndex(matches[0], "?")
 			if qPos == -1 {
@@ -678,6 +688,9 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 		returnPart := matches[1] // Everything after return
 		if strings.Contains(returnPart, "?") {
 			expr, errMsg := e.extractExpressionAndMessage(returnPart)
+
+			// Track function call for import detection
+			e.trackFunctionCallInExpr(expr)
 
 			// Find position of ? operator
 			qPos := strings.LastIndex(matches[0], "?")
@@ -719,6 +732,9 @@ func (e *ErrorPropProcessor) expandAssignmentWithMarker(matches []string, expr s
 
 	// Track function call for import detection
 	e.trackFunctionCallInExpr(exprClean)
+
+	// Normalize spaces around dots (DingoPreParser adds spaces)
+	exprClean = normalizeSpaces(exprClean)
 
 	// No-number-first pattern: first occurrence has no number
 	tmpVar := ""
@@ -776,6 +792,9 @@ func (e *ErrorPropProcessor) expandReturnWithMarker(matches []string, expr strin
 
 	// Track function call for import detection
 	e.trackFunctionCallInExpr(exprClean)
+
+	// Normalize spaces around dots (DingoPreParser adds spaces)
+	exprClean = normalizeSpaces(exprClean)
 
 	// Generate correct number of temporary variables for multi-value returns
 	numNonErrorReturns := 1
@@ -850,4 +869,19 @@ func (e *ErrorPropProcessor) expandReturnWithMarker(matches []string, expr strin
 	buf.WriteString(fmt.Sprintf("return %s", strings.Join(returnVals, ", ")))
 
 	return buf.String(), nil
+}
+
+// normalizeSpaces removes spaces around dots and before parens in expressions
+// Fixes: "os . ReadFile (" → "os.ReadFile("
+// This handles the spaces added by DingoPreParser tokenization
+func normalizeSpaces(expr string) string {
+	// Remove spaces around dots (handle both " . " and " .")
+	result := strings.ReplaceAll(expr, " . ", ".")
+	result = strings.ReplaceAll(result, " .", ".")
+	result = strings.ReplaceAll(result, ". ", ".")
+
+	// Remove spaces before opening parenthesis
+	result = strings.ReplaceAll(result, " (", "(")
+
+	return result
 }

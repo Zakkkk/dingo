@@ -1,12 +1,17 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: AST-based type annotation handling
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
 	"regexp"
 )
 
-// Package-level compiled regex (Issue 2: Regex Performance)
+// Package-level compiled regex - LEGACY, TO BE REPLACED WITH AST
 // IMPORTANT-2 FIX: Enhanced pattern to handle all Go type patterns robustly
 // Examples:
 //   - Basic: x: int, x: string

@@ -33,133 +33,140 @@ func Result_int_error_Err(arg0 error) Result_int_error {
 	tag: ResultTagErr, err: &arg0}
 }
 func (r Result_int_error) IsOk() bool {
-	return r.tag == ResultTagOk
+	return r.
 
 	// DINGO_PATTERN: Err(e)
+	tag == ResultTagOk
 }
-func (r Result_int_error) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r Result_int_error) Unwrap(
+func (r Result_int_error) IsErr(
 
 // DINGO_MATCH_END
-) int {
+) bool {
+	return r.
 
 	// Example 2: Pattern match on Option[T]
+	tag == ResultTagErr
+}
+func (r Result_int_error) Unwrap() int {
 	if r.tag != ResultTagOk {
 		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
 
 		// DINGO_MATCH_START: opt
 	}
+	if r.ok == nil {
+		panic("Result contains nil Ok value")
+	}
 	return *r.ok
 }
-func (r Result_int_error) UnwrapOr(defaultValue int) int {
-	if r.tag == ResultTagOk {
-		return *r.ok
+func (r Result_int_error) UnwrapOr(
 
-		// DINGO_PATTERN: Some(s)
+// DINGO_PATTERN: Some(s)
+defaultValue int) int {
+	if r.tag == ResultTagOk {
+		return *
+
+		// DINGO_PATTERN: None
+		r.ok
 	}
 	return defaultValue
 }
-func (r Result_int_error) UnwrapErr() error {
+func (r Result_int_error) UnwrapErr(
 
-	// DINGO_PATTERN: None
+// DINGO_MATCH_END
+
+// Example 3: Pattern match with wildcard
+) error {
 	if r.tag != ResultTagErr {
 		panic("called UnwrapErr on Ok")
 	}
 	if r.err == nil {
 		panic("Result contains nil Err value")
 
-		// DINGO_MATCH_END
-
-		// Example 3: Pattern match with wildcard
+		// DINGO_MATCH_START: status
 	}
 	return *r.err
 }
 func (r Result_int_error) UnwrapOrElse(fn func(error) int) int {
-	if r.tag == ResultTagOk &&
 
-	// DINGO_MATCH_START: status
-	r.ok != nil {
+	// DINGO_PATTERN: Active
+	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok
 	}
-	if r.err != nil {
+	if
+
+	// DINGO_PATTERN: Pending
+	r.err != nil {
 		return fn(*r.err)
 	}
 	panic("Result in invalid state")
 
-	// DINGO_PATTERN: Active
+	// DINGO_PATTERN: _
 }
-func (r Result_int_error) Map(fn func(int) interface{}) interface{} {
+func (r Result_int_error) Map(
 
-	// DINGO_PATTERN: Pending
+// DINGO_MATCH_END
+fn func(int) interface{}) interface{} {
+
+	// Example 4: Pattern match in assignment context
 	if r.tag == ResultTagOk && r.ok != nil {
 		u := fn(*r.ok)
-		return struct
-
-		// DINGO_PATTERN: _
-		{
+		return struct {
 			tag ResultTag
 			ok  *interface{}
 			err *error
-		}{tag: ResultTagOk, ok: &u}
+		}{tag: ResultTagOk,
+
+		// DINGO_MATCH_START: opt
+		ok: &u}
+	}
+	return struct {
+		tag ResultTag
+		ok  *interface{}
+		err *error
+	}{tag: r.tag, ok: nil, err: r.err}
+}
+func (r Result_int_error) MapErr(
+
+// DINGO_PATTERN: Some(x)
+fn func(error) interface{}) interface{} {
+	if r.tag == ResultTagErr &&
+
+	// DINGO_PATTERN: None
+	r.err != nil {
+		f := fn(*r.err)
+		return struct {
+			tag ResultTag
+			ok  *int
+			err *interface{}
+		}{tag: ResultTagErr, ok: nil, err: &f}
 	}
 	return struct
 
 	// DINGO_MATCH_END
 	{
 		tag ResultTag
-		ok  *interface{}
-
-		// Example 4: Pattern match in assignment context
-		err *error
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r Result_int_error) MapErr(fn func(error) interface{}) interface{} {
-	if r.tag ==
-
-	// DINGO_MATCH_START: opt
-	ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *int
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err:
-
-		// DINGO_PATTERN: Some(x)
-		&f}
-	}
-	return struct {
-		tag ResultTag
 		ok  *int
 		err *interface{}
-	}{tag: r.tag, ok: r.
 
-	// DINGO_PATTERN: None
-	ok, err: nil}
+		// Example 5: Nested pattern matching
+	}{tag: r.tag, ok: r.ok, err: nil}
 }
 func (r Result_int_error) Filter(predicate func(int) bool) Result_int_error {
-	if r.tag == ResultTagOk && predicate(
 
-	// DINGO_MATCH_END
-	*r.ok) {
+	// DINGO_MATCH_START: result
+	if r.tag == ResultTagOk && predicate(*r.ok) {
 		return r
 	}
 	return r
 }
-func (r Result_int_error) AndThen(
+func (r Result_int_error) AndThen(fn func(int) interface{}) interface{} {
 
-// Example 5: Nested pattern matching
-fn func(int) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*
+	// DINGO_PATTERN: Ok(inner)
+	if r.tag == ResultTagOk && r.
 
-		// DINGO_MATCH_START: result
-		r.ok)
+	// DINGO_MATCH_START: inner
+	ok != nil {
+		return fn(*r.ok)
 	}
 	return struct {
 		tag ResultTag
@@ -167,41 +174,44 @@ fn func(int) interface{}) interface{} {
 		err *error
 	}{tag: r.tag, ok: nil, err: r.err}
 }
-func (r Result_int_error) OrElse(fn func
+func (r Result_int_error) OrElse(
 
-// DINGO_PATTERN: Ok(inner)
-(error) interface{}) interface{} {
+// DINGO_PATTERN: Some(val)
+fn func(error) interface{}) interface{} {
+	if
 
-	// DINGO_MATCH_START: inner
-	if r.tag == ResultTagErr && r.err != nil {
+	// DINGO_PATTERN: None
+	r.tag == ResultTagErr && r.err !=
+
+	// DINGO_MATCH_END
+	nil {
 		return fn(*r.err)
 	}
 	return struct {
 		tag ResultTag
 		ok  *int
 		err *interface{}
-	}{tag: r.tag, ok: r.ok,
 
-	// DINGO_PATTERN: Some(val)
-	err: nil}
+		// DINGO_PATTERN: Err(e)
+	}{tag: r.tag, ok: r.ok, err: nil}
 }
-func (r Result_int_error) And(other interface{}) interface{} {
+func
 
-	// DINGO_PATTERN: None
+// DINGO_MATCH_END
+(r Result_int_error) And(
+
+// Helper enum for example 3
+other interface{}) interface{} {
 	if r.tag == ResultTagOk {
 		return other
 	}
 	return r
 }
 func (r Result_int_error) Or(other Result_int_error) Result_int_error {
-
-	// DINGO_MATCH_END
 	if r.tag == ResultTagOk {
 		return r
 	}
 	return other
-
-	// DINGO_PATTERN: Err(e)
 }
 
 type Result_unknown_error struct {
@@ -209,12 +219,7 @@ type Result_unknown_error struct {
 	ok  *unknown
 	err *error
 }
-func Result_unknown_error_Ok(
-
-// DINGO_MATCH_END
-arg0 unknown) Result_unknown_error {
-
-	// Helper enum for example 3
+func Result_unknown_error_Ok(arg0 unknown) Result_unknown_error {
 	return Result_unknown_error{tag: ResultTagOk, ok: &arg0}
 }
 func Result_unknown_error_Err(arg0 error) Result_unknown_error {
@@ -515,13 +520,12 @@ func processResult(result Result[int, error]) int {
 	case ResultTagOk:
 		value := *scrutinee.ok
 
-		return value * 2
+		value * 2
 	case ResultTagErr:
 		e := *scrutinee.err
 
-		return 0
+		0
 	}
-	panic("unreachable: match is exhaustive")
 
 }
 func processOption(opt Option[string]) string {
@@ -531,12 +535,11 @@ func processOption(opt Option[string]) string {
 	case OptionTagSome:
 		s := *scrutinee2.some
 
-		return s
+		s
 	case OptionTagNone:
 
-		return "default"
+		"default"
 	}
-	panic("unreachable: match is exhaustive")
 
 }
 func handleStatus(status Status) string {
@@ -545,15 +548,14 @@ func handleStatus(status Status) string {
 	switch scrutinee3.tag {
 	case ActiveTag:
 
-		return "running"
+		"running"
 	case PendingTag:
 
-		return "waiting"
+		"waiting"
 	default:
 
 		"unknown"
 	}
-	panic("unreachable: match is exhaustive")
 
 }
 func doubleIfPresent(opt Option[int]) Option[int] {
@@ -588,20 +590,18 @@ func processNested(result Result[Option[int], error]) int {
 			case OptionTagSome:
 				val := *scrutinee6.some
 
-				return val
+				val
 			case OptionTagNone:
 
-				return 0
+				0
 			}
-			panic("unreachable: match is exhaustive")
 
 		}
 	case ResultTagErr:
 		e := *scrutinee5.err
 
-		return -1
+		-1
 	}
-	panic("unreachable: match is exhaustive")
 
 }
 

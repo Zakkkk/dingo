@@ -4,6 +4,62 @@ All notable changes to the Dingo compiler will be documented in this file.
 
 ## [Unreleased]
 
+### 🏗️ P0 AST Migration - LetDecl (2025-11-27)
+
+**Type**: Architecture Improvement
+**Priority**: P0 (Foundation for AST-based transformations)
+
+**Overview:**
+Replaced regex-based `let` declaration processing with proper AST-based parsing. This is the first step in migrating all preprocessors from fragile regex patterns to robust AST transformations.
+
+**New Packages Created:**
+
+1. **pkg/lexer/** - Dingo tokenizer with full Unicode support
+   - `token.go` - Token types (LET, VAR, IDENT, STRING, etc.)
+   - `lexer.go` - Lexer with UTF-8 decoding, buffered PeekToken
+   - `lexer_test.go` - 9 test cases
+
+2. **pkg/ast/let.go** - LetDecl AST node
+   - Supports single/multiple variable declarations
+   - Type annotations preserved for TypeAnnotProcessor
+   - `ToGo()` method for code generation
+
+3. **pkg/preprocessor/dingo_preparser.go** - DingoPreParser processor
+   - Runs FIRST in preprocessing pipeline (position #0)
+   - Parses `let` declarations using lexer
+   - Replaces regex-based KeywordProcessor for `let`
+
+**Transformations:**
+```
+let x: int = 5    →  var x int = 5
+let y = "hello"   →  y := "hello"
+let a, b = fn()   →  a, b := fn()
+```
+
+**Architecture:**
+```
+DingoPreParser (NEW)  →  [Other Preprocessors]  →  go/parser  →  .go output
+     ↓
+   Lexer → Parser → LetDecl AST → ToGo()
+```
+
+**Test Results:**
+- pkg/lexer: 9/9 passing
+- pkg/preprocessor: 127/127 passing
+- Golden tests: 88/91 passing (96.7%)
+
+**Documentation:**
+- Created `ai-docs/AST_MIGRATION.md` - Full migration plan for all preprocessors
+- Added TODO(ast-migration) comments to all regex-based preprocessors
+- Session files: `ai-docs/sessions/20251127-114237-ast-migration/`
+
+**Next Steps (P1):**
+- TypeAnnotProcessor → AST-based
+- ErrorPropProcessor → AST-based
+- EnumProcessor → AST-based
+
+---
+
 ### 🚀 LSP Integration + Auto-Rebuild Complete (2025-11-22)
 
 **Type**: Feature Release + Bug Fixes

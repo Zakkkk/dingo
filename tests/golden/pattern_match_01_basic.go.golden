@@ -41,13 +41,13 @@ func getStatusMessage(s Status) string {
 	scrutinee := s
 	switch scrutinee.tag {
 	case StatusTagPending:
-		// DINGO_PATTERN: Status_Pending
+		// DINGO_PATTERN: StatusPending
 		result = "Waiting to start"
 	case StatusTagActive:
-		// DINGO_PATTERN: Status_Active
+		// DINGO_PATTERN: StatusActive
 		result = "Currently running"
 	case StatusTagComplete:
-		// DINGO_PATTERN: Status_Complete
+		// DINGO_PATTERN: StatusComplete
 		result = "Finished"
 	}
 	panic("unreachable: match is exhaustive")
@@ -56,7 +56,7 @@ func getStatusMessage(s Status) string {
 
 }
 func main() {
-	status := Status_Active()
+	status := StatusActive()
 	msg := getStatusMessage(status)
 	println(msg)
 }

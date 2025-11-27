@@ -102,19 +102,22 @@ func handleResult(r Result_int_error) string {
 			t.Errorf("Expected no errors, but got: %v", ctx.GetErrors())
 		}
 
-		// Step 8: Verify panic was added for exhaustive match
-		panicFound := false
+		// Step 8: Verify switch statement was generated for pattern match
+		// Note: Statement context match no longer generates panic (only expression context does)
+		switchFound := false
 		ast.Inspect(transformed, func(n ast.Node) bool {
-			if call, ok := n.(*ast.CallExpr); ok {
-				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "panic" {
-					panicFound = true
-					return false
+			if sw, ok := n.(*ast.SwitchStmt); ok {
+				if sel, ok := sw.Tag.(*ast.SelectorExpr); ok {
+					if sel.Sel.Name == "tag" {
+						switchFound = true
+						return false
+					}
 				}
 			}
 			return true
 		})
-		if !panicFound {
-			t.Error("Expected default panic for exhaustive match, but not found")
+		if !switchFound {
+			t.Error("Expected switch statement for pattern match, but not found")
 		}
 
 		t.Log("✓ Pattern match integration test passed")
@@ -376,13 +379,16 @@ func process(r Result_string_error) Option_int {
 		}
 
 		// Step 8: Verify both pattern match and None inference worked (C6 FIX)
-		panicFound := false
+		switchFound := false
 		noneFound := false
 		ast.Inspect(transformed, func(n ast.Node) bool {
-			// Check for panic (pattern match)
-			if call, ok := n.(*ast.CallExpr); ok {
-				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "panic" {
-					panicFound = true
+			// Check for switch statement (pattern match generates switch scrutinee.tag)
+			// Note: Statement context match no longer generates panic (only expression context does)
+			if sw, ok := n.(*ast.SwitchStmt); ok {
+				if sel, ok := sw.Tag.(*ast.SelectorExpr); ok {
+					if sel.Sel.Name == "tag" {
+						switchFound = true
+					}
 				}
 			}
 			// Check for None transformation (tag-based struct)
@@ -412,8 +418,8 @@ func process(r Result_string_error) Option_int {
 			return true
 		})
 
-		if !panicFound {
-			t.Error("Expected default panic for pattern match, but not found")
+		if !switchFound {
+			t.Error("Expected switch statement for pattern match, but not found")
 		}
 		if !noneFound {
 			t.Error("Expected None to be transformed, but not found")

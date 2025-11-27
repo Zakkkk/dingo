@@ -336,7 +336,8 @@ func main() {
 		t.Fatalf("Failed to read .go file: %v", err)
 	}
 
-	// Verify type annotation transformed
+	// Verify transformation: DingoPreParser transforms let x: int = 42 → var x: int = 42
+	// TypeAnnotProcessor then removes the colon: var x: int = 42 → var x int = 42
 	goSource := string(goContent)
 	if !containsString(goSource, "var x int = 42") {
 		t.Errorf("Expected 'var x int = 42' in output, got:\n%s", goSource)

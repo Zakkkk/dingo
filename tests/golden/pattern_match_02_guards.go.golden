@@ -37,22 +37,22 @@ func describe(v Value) string {
 	switch scrutinee.tag {
 	case ValueTagInt:
 		n := *scrutinee.int
-		// DINGO_PATTERN: Value_Int(n) | DINGO_GUARD: n > 0
+		// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n > 0
 		if n > 0 {
 			result = "Positive number"
-			// DINGO_PATTERN: Value_Int(n) | DINGO_GUARD: n < 0
+			// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n < 0
 		} else if n < 0 {
 			result = "Negative number"
-			// DINGO_PATTERN: Value_Int(_)
+			// DINGO_PATTERN: ValueInt(_)
 		} else {
 			result = "Zero"
 		}
 	case ValueTagString:
 		s := *scrutinee.string
-		// DINGO_PATTERN: Value_String(s) | DINGO_GUARD: len(s) > 5
+		// DINGO_PATTERN: ValueString(s) | DINGO_GUARD: len(s) > 5
 		if len(s) > 5 {
 			result = "Long string"
-			// DINGO_PATTERN: Value_String(_)
+			// DINGO_PATTERN: ValueString(_)
 		} else {
 			result = "Short string"
 		}
@@ -63,8 +63,8 @@ func describe(v Value) string {
 
 }
 func main() {
-	val1 := Value_Int(42)
-	val2 := Value_String("hello world")
+	val1 := ValueInt(42)
+	val2 := ValueString("hello world")
 
 	println(describe(val1))
 	println(describe(val2))

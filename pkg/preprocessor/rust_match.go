@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: pkg/ast/match.go with MatchExpr AST node
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -9,10 +14,14 @@ import (
 )
 
 // RustMatchProcessor handles Rust-like pattern matching syntax
+// LEGACY: Uses regex - TO BE REPLACED WITH AST
 // Transforms: match expr { Pattern => expression, ... } → Go switch statement with markers
 type RustMatchProcessor struct {
 	matchCounter int
 	mappings     []Mapping
+	// enumVariants maps bare variant names to their fully qualified tag names
+	// e.g., "Pending" → "StatusTagPending" if we found "enum Status { Pending, ... }"
+	enumVariants map[string]string
 }
 
 // Pattern-matching regex for Rust-like match expressions
@@ -26,7 +35,97 @@ func NewRustMatchProcessor() *RustMatchProcessor {
 	return &RustMatchProcessor{
 		matchCounter: 0,
 		mappings:     []Mapping{},
+		enumVariants: make(map[string]string),
 	}
+}
+
+// scanEnumDefinitions pre-scans the source to find enum definitions and build
+// a mapping from bare variant names to fully qualified tag names.
+// This allows match expressions to use bare variants like "Pending" instead of "Status_Pending".
+func (r *RustMatchProcessor) scanEnumDefinitions(source []byte) {
+	// Pattern to match enum definitions: enum EnumName { Variant1, Variant2, ... }
+	// Also handles variants with data: Variant { field: Type }
+	enumPattern := regexp.MustCompile(`(?s)enum\s+(\w+)\s*\{([^}]+)\}`)
+
+	matches := enumPattern.FindAllSubmatch(source, -1)
+	for _, match := range matches {
+		enumName := string(match[1])
+		body := string(match[2])
+
+		// Extract variant names from body
+		variants := r.extractVariantNames(body)
+		for _, variant := range variants {
+			// Map bare variant to fully qualified tag: Pending → StatusTagPending
+			tagName := enumName + "Tag" + variant
+			r.enumVariants[variant] = tagName
+
+			// Also map qualified variant: Status_Pending → StatusTagPending
+			qualifiedName := enumName + "_" + variant
+			r.enumVariants[qualifiedName] = tagName
+		}
+	}
+}
+
+// extractVariantNames extracts variant names from an enum body
+func (r *RustMatchProcessor) extractVariantNames(body string) []string {
+	var variants []string
+
+	// Split by comma, handling both simple and struct variants
+	// Simple: "Pending, Active, Complete"
+	// Struct: "Circle { radius: float64 }, Rectangle { width: float64, height: float64 }"
+	depth := 0
+	current := strings.Builder{}
+
+	for _, ch := range body {
+		switch ch {
+		case '{':
+			depth++
+			current.WriteRune(ch)
+		case '}':
+			depth--
+			current.WriteRune(ch)
+		case ',':
+			if depth == 0 {
+				// End of variant
+				name := extractVariantName(current.String())
+				if name != "" {
+					variants = append(variants, name)
+				}
+				current.Reset()
+			} else {
+				current.WriteRune(ch)
+			}
+		default:
+			current.WriteRune(ch)
+		}
+	}
+
+	// Don't forget the last variant (no trailing comma)
+	name := extractVariantName(current.String())
+	if name != "" {
+		variants = append(variants, name)
+	}
+
+	return variants
+}
+
+// extractVariantName extracts the variant name from a variant definition
+// e.g., "  Pending  " → "Pending"
+// e.g., "  Circle { radius: float64 }  " → "Circle"
+// e.g., "  Ok(value: string)  " → "Ok"
+func extractVariantName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+
+	// Find first word character sequence
+	for i, ch := range s {
+		if ch == '{' || ch == '(' || ch == ' ' || ch == '\t' || ch == '\n' {
+			return strings.TrimSpace(s[:i])
+		}
+	}
+	return s
 }
 
 // getScrutineeVarName returns scrutinee variable name (scrutinee, scrutinee2, scrutinee3, ...)
@@ -60,6 +159,11 @@ func (r *RustMatchProcessor) Name() string {
 func (r *RustMatchProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	r.mappings = []Mapping{}
 	r.matchCounter = 0
+	r.enumVariants = make(map[string]string)
+
+	// Pre-scan for enum definitions to build variant → tag mappings
+	// This allows bare variant names like "Pending" in match arms
+	r.scanEnumDefinitions(source)
 
 	// Run multiple passes until no more match keywords remain
 	// This handles nested match blocks recursively
@@ -816,17 +920,20 @@ func (r *RustMatchProcessor) generateSwitch(scrutinee string, arms []patternArm,
 	})
 	outputLine++
 
-	// PRIORITY 3 FIX: Add panic for exhaustiveness (Go doesn't know switch is exhaustive)
-	buf.WriteString("panic(\"unreachable: match is exhaustive\")\n")
-	mappings = append(mappings, Mapping{
-		OriginalLine:    originalLine,
-		OriginalColumn:  1,
-		GeneratedLine:   outputLine,
-		GeneratedColumn: 1,
-		Length:          5,
-		Name:            "rust_match_panic",
-	})
-	outputLine++
+	// Only add panic for expression context (isInAssignment) where we need exhaustiveness guarantee
+	// For statement context, just execute the arm and continue after the switch
+	if isInAssignment {
+		buf.WriteString("panic(\"unreachable: match is exhaustive\")\n")
+		mappings = append(mappings, Mapping{
+			OriginalLine:    originalLine,
+			OriginalColumn:  1,
+			GeneratedLine:   outputLine,
+			GeneratedColumn: 1,
+			Length:          5,
+			Name:            "rust_match_panic",
+		})
+		outputLine++
+	}
 
 	// If in assignment context with auto-generated variable (return match), add return statement
 	if isInAssignment && assignmentVar != "" && r.isGeneratedResultVar(assignmentVar) {
@@ -1102,19 +1209,8 @@ func (r *RustMatchProcessor) generateCaseWithGuards(scrutineeVar string, group a
 			if isInAssignment && assignmentVar != "" {
 				buf.WriteString(fmt.Sprintf("\t\t%s = %s\n", assignmentVar, exprStr))
 			} else {
-				// FIX T2B: Add return statement for expression-only arms
-				exprTrimmed := strings.TrimSpace(exprStr)
-				needsReturn := !strings.HasPrefix(exprTrimmed, "return ") &&
-					!strings.HasPrefix(exprTrimmed, "panic(") &&
-					!strings.HasPrefix(exprTrimmed, "break") &&
-					!strings.HasPrefix(exprTrimmed, "continue") &&
-					!strings.HasPrefix(exprTrimmed, "{")
-
-				if needsReturn {
-					buf.WriteString(fmt.Sprintf("\t\treturn %s\n", exprStr))
-				} else {
-					buf.WriteString(fmt.Sprintf("\t\t%s\n", exprStr))
-				}
+				// Statement context: just execute expression, no return
+				buf.WriteString(fmt.Sprintf("\t\t%s\n", exprStr))
 			}
 		} else {
 			// No guard: this is the else clause (or standalone if no other guards)
@@ -1131,20 +1227,8 @@ func (r *RustMatchProcessor) generateCaseWithGuards(scrutineeVar string, group a
 			if isInAssignment && assignmentVar != "" {
 				buf.WriteString(fmt.Sprintf("%s%s = %s\n", indent, assignmentVar, exprStr))
 			} else {
-				// FIX T2B: Add return statement for expression-only arms
-				// If expression doesn't already start with return/panic/break/continue, add return
-				exprTrimmed := strings.TrimSpace(exprStr)
-				needsReturn := !strings.HasPrefix(exprTrimmed, "return ") &&
-					!strings.HasPrefix(exprTrimmed, "panic(") &&
-					!strings.HasPrefix(exprTrimmed, "break") &&
-					!strings.HasPrefix(exprTrimmed, "continue") &&
-					!strings.HasPrefix(exprTrimmed, "{") // Block expressions handle their own returns
-
-				if needsReturn {
-					buf.WriteString(fmt.Sprintf("%sreturn %s\n", indent, exprStr))
-				} else {
-					buf.WriteString(fmt.Sprintf("%s%s\n", indent, exprStr))
-				}
+				// Statement context: just execute expression, no return
+				buf.WriteString(fmt.Sprintf("%s%s\n", indent, exprStr))
 			}
 
 			// Close else block if we had previous guards
@@ -1176,19 +1260,8 @@ func (r *RustMatchProcessor) generateCase(scrutineeVar string, arm patternArm, o
 		if isInAssignment && assignmentVar != "" {
 			buf.WriteString(fmt.Sprintf("\t%s = %s\n", assignmentVar, arm.expression))
 		} else {
-			// FIX T2B: Add return statement for expression-only arms
-			exprTrimmed := strings.TrimSpace(arm.expression)
-			needsReturn := !strings.HasPrefix(exprTrimmed, "return ") &&
-				!strings.HasPrefix(exprTrimmed, "panic(") &&
-				!strings.HasPrefix(exprTrimmed, "break") &&
-				!strings.HasPrefix(exprTrimmed, "continue") &&
-				!strings.HasPrefix(exprTrimmed, "{")
-
-			if needsReturn {
-				buf.WriteString(fmt.Sprintf("\treturn %s\n", arm.expression))
-			} else {
-				buf.WriteString(fmt.Sprintf("\t%s\n", arm.expression))
-			}
+			// Statement context: just execute expression, no return
+			buf.WriteString(fmt.Sprintf("\t%s\n", arm.expression))
 		}
 
 		mappings = append(mappings, Mapping{
@@ -1325,6 +1398,7 @@ func (r *RustMatchProcessor) generateCase(scrutineeVar string, arm patternArm, o
 // Ok → ResultTagOk, Err → ResultTagErr, Some → OptionTagSome, None → OptionTagNone
 // ResultOk → ResultTagOk, OptionSome → OptionTagSome (constructor-style names)
 // Status_Pending → StatusTagPending (for custom enums)
+// Pending → StatusTagPending (if enum Status { Pending, ... } was found in source)
 func (r *RustMatchProcessor) getTagName(pattern string) string {
 	switch pattern {
 	case "Ok":
@@ -1345,6 +1419,12 @@ func (r *RustMatchProcessor) getTagName(pattern string) string {
 	case "OptionNone":
 		return "OptionTagNone"
 	default:
+		// First, check if we found this variant in a pre-scanned enum definition
+		// This handles bare variant names like "Pending" when we know it belongs to "Status"
+		if tagName, ok := r.enumVariants[pattern]; ok {
+			return tagName
+		}
+
 		// Custom enum variant: EnumName_Variant → EnumNameTagVariant
 		// Example: Value_Int → ValueTagInt
 		if idx := strings.Index(pattern, "_"); idx > 0 {
@@ -1352,7 +1432,9 @@ func (r *RustMatchProcessor) getTagName(pattern string) string {
 			variantName := pattern[idx+1:]
 			return enumName + "Tag" + variantName
 		}
-		// Bare variant name (shouldn't happen in well-formed Dingo code)
+
+		// Bare variant name not found in any enum - this is likely an error
+		// but we'll generate something reasonable for debugging
 		return pattern + "Tag"
 	}
 }

@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: AST-based import handling using go/ast import manipulation
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"fmt"
 	"regexp"
@@ -7,6 +12,7 @@ import (
 )
 
 // UnqualifiedImportProcessor transforms unqualified stdlib calls to qualified calls
+// LEGACY: Uses regex - TO BE REPLACED WITH AST
 // and tracks which imports need to be added.
 //
 // Example transformations:

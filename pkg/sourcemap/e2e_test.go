@@ -198,8 +198,8 @@ func greet(name: string, age: int) string {
 func TestE2E_SourceMapAccuracy(t *testing.T) {
 	dingoCode := `package main
 
-func getValue() (int, error) {
-	let x = compute()?
+func getValue(n: int) (int, error) {
+	let x = compute(n)?
 	return x, nil
 }
 `

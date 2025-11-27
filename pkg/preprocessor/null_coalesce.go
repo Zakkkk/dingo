@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: AST-based null coalescing handling
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -8,6 +13,7 @@ import (
 )
 
 // NullCoalesceProcessor handles the ?? operator for null coalescing
+// LEGACY: Uses regex - TO BE REPLACED WITH AST
 // Transforms: value ?? default → null-safe default value handling
 // Supports both Option<T> types and raw Go pointers (*T)
 // Optimizes simple cases with inline code, complex cases with IIFE

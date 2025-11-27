@@ -298,28 +298,41 @@ func readConfig(path string) ([]byte, error) {
 	// pointing to the marker line (// dingo:e:N) where the transformation occurred.
 	// This is sufficient for error reporting - the marker indicates the transformation point.
 	//
-	// The error propagation on line 4 generates 1 metadata entry with marker "// dingo:e:0"
-	// After import injection, the marker appears at line 9 (line 4 + 4 import lines + 1 assignment line)
+	// With DingoPreParser, we get TWO mappings:
+	// 1. let_decl mapping (from DingoPreParser: let → :=)
+	// 2. error_prop mapping (from ErrorPropProcessor: ? → error handling)
+	// We need to find the error_prop mapping.
 
-	if len(sourceMap.Mappings) != 1 {
-		t.Errorf("expected 1 mapping (metadata-based), got %d", len(sourceMap.Mappings))
+	if len(sourceMap.Mappings) < 1 {
+		t.Errorf("expected at least 1 mapping, got %d", len(sourceMap.Mappings))
+		return
+	}
+
+	// Find the error_prop mapping
+	var errorPropMapping *Mapping
+	for i := range sourceMap.Mappings {
+		if sourceMap.Mappings[i].Name == "error_prop" {
+			errorPropMapping = &sourceMap.Mappings[i]
+			break
+		}
+	}
+
+	if errorPropMapping == nil {
+		t.Error("expected error_prop mapping not found")
 		for i, m := range sourceMap.Mappings {
 			t.Logf("Mapping %d: orig=%d gen=%d name=%s", i, m.OriginalLine, m.GeneratedLine, m.Name)
 		}
 		return
 	}
 
-	// Verify the single mapping points from original line 4 to the marker line
-	mapping := sourceMap.Mappings[0]
-	if mapping.OriginalLine != 4 {
-		t.Errorf("expected mapping from original line 4, got %d", mapping.OriginalLine)
+	// Verify the error_prop mapping points from original line 4 to the marker line
+	if errorPropMapping.OriginalLine != 4 {
+		t.Errorf("expected mapping from original line 4, got %d", errorPropMapping.OriginalLine)
 	}
-	if mapping.Name != "error_prop" {
-		t.Errorf("expected mapping type 'error_prop', got '%s'", mapping.Name)
-	}
-	// Generated line should be 9 (line 8: assignment, line 9: marker)
-	if mapping.GeneratedLine != 9 {
-		t.Errorf("expected mapping to generated line 9 (marker line), got %d", mapping.GeneratedLine)
+	// Generated line should be 9 (marker line after tmp, err := ...)
+	// With imports: package (1) + blank (2) + import ( (3) + "os" (4) + ) (5) + blank (6) + func (7) + tmp, err (8) + marker (9)
+	if errorPropMapping.GeneratedLine != 9 {
+		t.Errorf("expected mapping to generated line 9 (marker line), got %d", errorPropMapping.GeneratedLine)
 	}
 }
 
@@ -342,32 +355,35 @@ func process(path string) ([]byte, error) {
 	}
 
 	// The metadata-based system generates ONE mapping per transformation.
-	// Line 4 has one error propagation → 1 mapping
-	// Line 5 has one error propagation → 1 mapping
-	// Total: 2 mappings
+	// With DingoPreParser, we get:
+	// Line 4: let_decl + error_prop → 2 mappings
+	// Line 5: let_decl + error_prop → 2 mappings
+	// Total: 4 mappings (but we only care about error_prop ones)
 
-	if len(sourceMap.Mappings) != 2 {
-		t.Errorf("expected 2 mappings (metadata-based: 1 per error prop), got %d", len(sourceMap.Mappings))
+	// Filter to error_prop mappings only
+	var errorPropMappings []Mapping
+	for _, m := range sourceMap.Mappings {
+		if m.Name == "error_prop" {
+			errorPropMappings = append(errorPropMappings, m)
+		}
+	}
+
+	if len(errorPropMappings) != 2 {
+		t.Errorf("expected 2 error_prop mappings, got %d", len(errorPropMappings))
 		for i, m := range sourceMap.Mappings {
 			t.Logf("Mapping %d: orig=%d gen=%d name=%s", i, m.OriginalLine, m.GeneratedLine, m.Name)
 		}
 		return
 	}
 
-	// First mapping: line 4 error propagation
-	if sourceMap.Mappings[0].OriginalLine != 4 {
-		t.Errorf("mapping 0: expected original line 4, got %d", sourceMap.Mappings[0].OriginalLine)
-	}
-	if sourceMap.Mappings[0].Name != "error_prop" {
-		t.Errorf("mapping 0: expected type 'error_prop', got '%s'", sourceMap.Mappings[0].Name)
+	// First error_prop mapping: line 4 error propagation
+	if errorPropMappings[0].OriginalLine != 4 {
+		t.Errorf("mapping 0: expected original line 4, got %d", errorPropMappings[0].OriginalLine)
 	}
 
-	// Second mapping: line 5 error propagation
-	if sourceMap.Mappings[1].OriginalLine != 5 {
-		t.Errorf("mapping 1: expected original line 5, got %d", sourceMap.Mappings[1].OriginalLine)
-	}
-	if sourceMap.Mappings[1].Name != "error_prop" {
-		t.Errorf("mapping 1: expected type 'error_prop', got '%s'", sourceMap.Mappings[1].Name)
+	// Second error_prop mapping: line 5 error propagation
+	if errorPropMappings[1].OriginalLine != 5 {
+		t.Errorf("mapping 1: expected original line 5, got %d", errorPropMappings[1].OriginalLine)
 	}
 }
 

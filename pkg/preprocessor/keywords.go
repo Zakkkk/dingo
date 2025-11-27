@@ -1,10 +1,15 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: pkg/ast/let.go with LetDecl AST node
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"regexp"
 )
 
-// Package-level compiled regex (Issue 2: Regex Performance)
+// Package-level compiled regex - LEGACY, TO BE REPLACED WITH AST
 var (
 	// Match: let identifier(s) [: type] = expression
 	// Handles:
@@ -40,12 +45,22 @@ func (k *KeywordProcessor) Name() string {
 // Converts: let x = value → x := value
 // Converts: let identifier Type → var identifier Type
 func (k *KeywordProcessor) Process(source []byte) ([]byte, []Mapping, error) {
-	// First, transform declarations without initialization: let identifier Type → var identifier Type
-	// Preserve trailing whitespace with $3
-	result := letDeclPattern.ReplaceAll(source, []byte("var $1 $2$3"))
+	// CRITICAL: Order matters to prevent regex backtracking bugs!
+	//
+	// The letDeclPattern regex can backtrack and incorrectly split identifiers
+	// when followed by `=`. For example, `let status = func() string` would
+	// incorrectly become `var statu s = func() string` because the regex
+	// backtracks to make `([\w]+)` capture "statu" and `([\w\[\]*<>]+)` capture "s".
+	//
+	// Fix: Process assignments FIRST to consume the `let x =` pattern,
+	// then process declarations (which have no `=`).
 
-	// Then, transform assignments: let x = value → x := value
-	result = letPattern.ReplaceAll(result, []byte("$1 :="))
+	// Step 1: Transform assignments: let x = value → x := value
+	result := letPattern.ReplaceAll(source, []byte("$1 :="))
+
+	// Step 2: Transform declarations without initialization: let identifier Type → var identifier Type
+	// Preserve trailing whitespace with $3
+	result = letDeclPattern.ReplaceAll(result, []byte("var $1 $2$3"))
 
 	return result, nil, nil
 }

@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: AST-based safe navigation handling
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -8,6 +13,7 @@ import (
 )
 
 // SafeNavProcessor handles the ?. operator for safe navigation
+// LEGACY: Uses regex - TO BE REPLACED WITH AST
 // Transforms: user?.address?.city → null-safe chain with Option/pointer checks
 // Supports both Option<T> types and raw Go pointers (*T)
 type SafeNavProcessor struct {

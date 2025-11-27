@@ -57,7 +57,7 @@ func divide(a float64, b float64) Result {
 	return ResultOk(a / b)
 }
 func main() {
-	var resul t = divide(10.0, 2.0)
+	result := divide(10.0, 2.0)
 	if result.IsOk() {
 		v := *result.ok
 		_ = v

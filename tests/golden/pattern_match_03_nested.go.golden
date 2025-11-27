@@ -103,8 +103,8 @@ func processResult(r Result) string {
 
 }
 func main() {
-	result1 := ResultOk(Value_Int(42))
-	result2 := ResultOk(Value_String("hello"))
+	result1 := ResultOk(ValueInt(42))
+	result2 := ResultOk(ValueString("hello"))
 	result3 := ResultErr(errors.New("failed"))
 
 	println(processResult(result1))

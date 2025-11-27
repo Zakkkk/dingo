@@ -164,6 +164,12 @@ func runBuild(files []string, output string, watch bool, _ string) error {
 		fmt.Fprintf(os.Stderr, "Warning: config load failed, using defaults: %v\n", err)
 	}
 
+	// Expand workspace patterns (./..., ./pkg/...) to actual files
+	expandedFiles, err := expandWorkspacePatterns(files)
+	if err != nil {
+		return fmt.Errorf("failed to expand workspace patterns: %w", err)
+	}
+
 	// Create beautiful output handler
 	buildUI := ui.NewBuildOutput()
 
@@ -171,13 +177,13 @@ func runBuild(files []string, output string, watch bool, _ string) error {
 	buildUI.PrintHeader(version)
 
 	// Print build start
-	buildUI.PrintBuildStart(len(files))
+	buildUI.PrintBuildStart(len(expandedFiles))
 
 	// Build each file
 	success := true
 	var lastError error
 
-	for _, file := range files {
+	for _, file := range expandedFiles {
 		if err := buildFile(file, output, buildUI, cfg); err != nil {
 			success = false
 			lastError = err
@@ -514,4 +520,71 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%.2fs", d.Seconds())
 	}
+}
+
+// expandWorkspacePatterns expands workspace patterns like ./... to actual .dingo files
+func expandWorkspacePatterns(patterns []string) ([]string, error) {
+	var result []string
+
+	for _, pattern := range patterns {
+		// Check if this is a workspace pattern
+		if isWorkspacePattern(pattern) {
+			files, err := expandPattern(pattern)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, files...)
+		} else {
+			// Regular file path, keep as-is
+			result = append(result, pattern)
+		}
+	}
+
+	return result, nil
+}
+
+// isWorkspacePattern checks if a string is a workspace pattern (contains ...)
+func isWorkspacePattern(s string) bool {
+	return s == "..." || s == "./..." ||
+		(len(s) > 4 && s[len(s)-4:] == "/...")
+}
+
+// expandPattern expands a workspace pattern to actual .dingo files
+func expandPattern(pattern string) ([]string, error) {
+	// Get current directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Find workspace root
+	root, err := DetectWorkspaceRoot(cwd)
+	if err != nil {
+		// Fall back to current directory if no workspace root found
+		root = cwd
+	}
+
+	// Scan workspace for packages
+	ws, err := ScanWorkspace(root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan workspace: %w", err)
+	}
+
+	// Collect files matching the pattern
+	var files []string
+	for _, pkg := range ws.Packages {
+		if MatchesPattern(pkg.Path, pattern) {
+			for _, dingoFile := range pkg.DingoFiles {
+				// Convert to absolute path
+				absPath := filepath.Join(root, dingoFile)
+				files = append(files, absPath)
+			}
+		}
+	}
+
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no .dingo files found matching pattern: %s", pattern)
+	}
+
+	return files, nil
 }

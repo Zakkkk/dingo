@@ -51,16 +51,16 @@ func colorToHex(c Color) string {
 	scrutinee := c
 	switch scrutinee.tag {
 	case ColorTagRed:
-		// DINGO_PATTERN: Color_Red
+		// DINGO_PATTERN: ColorRed
 		result = "#FF0000"
 	case ColorTagGreen:
-		// DINGO_PATTERN: Color_Green
+		// DINGO_PATTERN: ColorGreen
 		result = "#00FF00"
 	case ColorTagBlue:
-		// DINGO_PATTERN: Color_Blue
+		// DINGO_PATTERN: ColorBlue
 		result = "#0000FF"
 	case ColorTagRGB{r, g, b}:
-		// DINGO_PATTERN: Color_RGB{r, g, b}
+		// DINGO_PATTERN: ColorRGB{r, g, b}
 		result = "#" + toHex(r) + toHex(g) + toHex(b)
 	}
 	panic("unreachable: match is exhaustive")
@@ -76,8 +76,8 @@ func toHex(n int) string {
 	return string(n)
 }
 func main() {
-	red := Color_Red()
-	custom := Color_RGB{r: 128, g: 64, b: 32}
+	red := ColorRed()
+	custom := ColorRGB{r: 128, g: 64, b: 32}
 
 	println("Red:", colorToHex(red))
 	println("Custom:", colorToHex(custom))

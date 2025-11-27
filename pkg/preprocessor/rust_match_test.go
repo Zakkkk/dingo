@@ -65,6 +65,8 @@ func TestRustMatchProcessor_SimpleOption(t *testing.T) {
 	result := string(output)
 
 	// Check for key components
+	// Note: Statement context (standalone match) doesn't add 'return'
+	// For expression context, use 'let x = match ...' or 'return match ...'
 	expected := []string{
 		"scrutinee := value",
 		"// DINGO_MATCH_START: value",
@@ -74,7 +76,7 @@ func TestRustMatchProcessor_SimpleOption(t *testing.T) {
 		"v := *scrutinee.some",
 		"case OptionTagNone:",
 		"// DINGO_PATTERN: None",
-		"return \"default\"",
+		"\"default\"",
 		"// DINGO_MATCH_END",
 	}
 

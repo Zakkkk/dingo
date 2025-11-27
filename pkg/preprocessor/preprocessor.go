@@ -104,35 +104,40 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 
 	processors := []FeatureProcessor{
 		// Order matters! Process in this sequence:
-		// 0. Generic syntax (<> → []) - must be FIRST before type annotations
+		// 0. Dingo Pre-Parser (let → var/short decl) - MUST be FIRST
+		//    Transforms: let x: Type = val → var x: Type = val
+		//    Transforms: let x = val → x := val
+		NewDingoPreParser(),
+		// 1. Generic syntax (<> → []) - must be early before type annotations
 		NewGenericSyntaxProcessor(),
-		// 1. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
+		// 2. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
 		//    Match arms: Pattern => Expression (structural context)
 		//    Lambdas: params => expression (expression context)
 		NewRustMatchProcessor(),
-		// 2. Lambdas (x => expr, |x| expr) - AFTER pattern matching
+		// 3. Lambdas (x => expr, |x| expr) - AFTER pattern matching
 		NewLambdaProcessorWithConfig(cfg),
-		// 3. Type annotations (: → space) - after lambdas, after generic syntax
+		// 4. Type annotations (: → space) - after lambdas, after generic syntax
 		NewTypeAnnotProcessor(),
-		// 4. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
+		// 5. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
 		NewTupleProcessor(),
-		// 5. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
+		// 6. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
 		NewSafeNavProcessor(),
-		// 6. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
+		// 7. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
 		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
 		NewNullCoalesceProcessor(),
-		// 7. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
+		// 8. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
-		// 8. Error propagation (expr?) - AFTER ternary (handles remaining ?)
+		// 9. Error propagation (expr?) - AFTER ternary (handles remaining ?)
 		NewErrorPropProcessorWithConfig(legacyConfig),
 	}
 
-	// 9. Enums (enum Name { ... }) - after error prop, before keywords
+	// 10. Enums (enum Name { ... }) - after error prop
 	processors = append(processors, NewEnumProcessor())
 
-	// 10. Keywords (let → var) - after pattern match, error prop, and enum
-	processors = append(processors, NewKeywordProcessor())
+	// REMOVED: KeywordProcessor - REPLACED by DingoPreParser (position 0)
+	// DingoPreParser handles let declarations with full AST-based parsing
+	// processors = append(processors, NewKeywordProcessor())
 
 	// 11. Unqualified imports (ReadFile → os.ReadFile) - requires cache
 	if cache != nil {

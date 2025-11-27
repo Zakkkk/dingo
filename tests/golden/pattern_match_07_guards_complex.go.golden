@@ -83,29 +83,29 @@ func routeRequest(req Request) string {
 	switch scrutinee.tag {
 	case RequestTagGet:
 		path := *scrutinee.get
-		// DINGO_PATTERN: Request_Get(path) | DINGO_GUARD: strings.HasPrefix(path, "/api/")
+		// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: strings.HasPrefix(path, "/api/")
 		if strings.HasPrefix(path, "/api/") {
 			result = "API endpoint"
-			// DINGO_PATTERN: Request_Get(path) | DINGO_GUARD: len(path) > 0
+			// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: len(path) > 0
 		} else if len(path) > 0 {
 			result = "static resource"
 		}
 	case RequestTagPost:
 		path := *scrutinee.post
 		body := *scrutinee.post1
-		// DINGO_PATTERN: Request_Post(path, body) | DINGO_GUARD: len(body) > 100 && strings.Contains(path, "upload")
+		// DINGO_PATTERN: RequestPost(path, body) | DINGO_GUARD: len(body) > 100 && strings.Contains(path, "upload")
 		if len(body) > 100 && strings.Contains(path, "upload") {
 			result = "large upload"
-			// DINGO_PATTERN: Request_Post(_, body) | DINGO_GUARD: len(body) > 0
+			// DINGO_PATTERN: RequestPost(_, body) | DINGO_GUARD: len(body) > 0
 		} else if len(body) > 0 {
 			result = "post request"
 		}
 	case RequestTagDelete:
 		path := *scrutinee.delete
-		// DINGO_PATTERN: Request_Delete(path) | DINGO_GUARD: isProtected(path)
+		// DINGO_PATTERN: RequestDelete(path) | DINGO_GUARD: isProtected(path)
 		if isProtected(path) {
 			result = "forbidden"
-			// DINGO_PATTERN: Request_Delete(_)
+			// DINGO_PATTERN: RequestDelete(_)
 		} else {
 			result = "delete request"
 		}
@@ -127,27 +127,27 @@ func classifyStatus(status Status) string {
 	switch scrutinee2.tag {
 	case StatusTagActive:
 		count := *scrutinee2.active
-		// DINGO_PATTERN: Status_Active(count) | DINGO_GUARD: count > 1000 || count < 0
+		// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count > 1000 || count < 0
 		if count > 1000 || count < 0 {
 			result2 = "unusual"
-			// DINGO_PATTERN: Status_Active(count) | DINGO_GUARD: count >= 100 && count <= 1000
+			// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count >= 100 && count <= 1000
 		} else if count >= 100 && count <= 1000 {
 			result2 = "normal"
-			// DINGO_PATTERN: Status_Active(_)
+			// DINGO_PATTERN: StatusActive(_)
 		} else {
 			result2 = "low activity"
 		}
 	case StatusTagPaused:
 		duration := *scrutinee2.paused
-		// DINGO_PATTERN: Status_Paused(duration) | DINGO_GUARD: duration > 3600
+		// DINGO_PATTERN: StatusPaused(duration) | DINGO_GUARD: duration > 3600
 		if duration > 3600 {
 			result2 = "long pause"
-			// DINGO_PATTERN: Status_Paused(_) | DINGO_GUARD: true
+			// DINGO_PATTERN: StatusPaused(_) | DINGO_GUARD: true
 		} else if true {
 			result2 = "short pause"
 		}
 	case StatusTagStopped:
-		// DINGO_PATTERN: Status_Stopped
+		// DINGO_PATTERN: StatusStopped
 		result2 = "stopped"
 	}
 	panic("unreachable: match is exhaustive")
@@ -172,7 +172,7 @@ func isProtected(path string) bool {
 	return strings.HasPrefix(path, "/admin/")
 }
 func main() {
-	println(routeRequest(Request_Get("/api/users")))
-	println(classifyStatus(Status_Active(500)))
+	println(routeRequest(RequestGet("/api/users")))
+	println(classifyStatus(StatusActive(500)))
 	// println(processValue(42)) // TODO: Enable when type switch support added
 }

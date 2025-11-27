@@ -1,5 +1,10 @@
 package preprocessor
 
+// TODO(ast-migration): This file uses regex-based transformations which are fragile.
+// MIGRATE TO: pkg/ast/lambda.go with LambdaExpr AST node
+// See: ai-docs/AST_MIGRATION.md for migration plan
+// DO NOT fix regex bugs - implement AST-based solution instead
+
 import (
 	"bytes"
 	"fmt"
@@ -10,7 +15,7 @@ import (
 	dingoerrors "github.com/MadAppGang/dingo/pkg/errors"
 )
 
-// Package-level compiled regexes for lambda transformations
+// Package-level compiled regexes - LEGACY, TO BE REPLACED WITH AST
 var (
 	// TypeScript arrow syntax patterns
 	// Pattern 1: Single param without parens (identifier only): x => expr

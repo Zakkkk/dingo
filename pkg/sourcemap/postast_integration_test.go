@@ -21,8 +21,8 @@ import (
 func TestPostASTIntegration(t *testing.T) {
 	dingoCode := `package main
 
-func test() {
-	let x = getValue()?
+func test(n: int) {
+	let x = getValue(n)?
 }
 `
 

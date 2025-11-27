@@ -102,5 +102,5 @@ func createUser() User {
 // ERROR CASE: This should fail compilation
 // Uncomment to test error handling
 // fn ambiguousNone() {
-//     x := None  // ERROR: cannot infer type for None constant
+//     let x = None  // ERROR: cannot infer type for None constant
 // }
