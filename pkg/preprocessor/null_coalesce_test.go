@@ -16,19 +16,19 @@ func TestNullCoalesceProcessor_SimpleIdentifier(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate inline IIFE
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, `x := "default"`) {
+		t.Errorf("Expected default-first assignment, got: %s", output)
 	}
 
-	// Should check and use __UNWRAP__ placeholder
-	if !strings.Contains(output, "IsSome()") || !strings.Contains(output, "__UNWRAP__") {
-		t.Errorf("Expected Option check, got: %s", output)
+	// Should check and reassign if not nil
+	if !strings.Contains(output, "if val := value; val != nil") {
+		t.Errorf("Expected nil check, got: %s", output)
 	}
 
-	// Should return default
-	if !strings.Contains(output, `return "default"`) {
-		t.Errorf("Expected default return, got: %s", output)
+	// Should have dingo marker
+	if !strings.Contains(output, "// dingo:c:") {
+		t.Errorf("Expected dingo marker, got: %s", output)
 	}
 }
 
@@ -43,24 +43,24 @@ func TestNullCoalesceProcessor_ChainedCoalesce(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate IIFE (complex case)
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern for rightmost default
+	if !strings.Contains(output, `"default"`) {
+		t.Errorf("Expected default value, got: %s", output)
 	}
 
-	// Should check value first
+	// Should check value
 	if !strings.Contains(output, "value") {
 		t.Errorf("Expected value check, got: %s", output)
 	}
 
-	// Should check fallback second
+	// Should check fallback
 	if !strings.Contains(output, "fallback") {
 		t.Errorf("Expected fallback check, got: %s", output)
 	}
 
-	// Should return default last
-	if !strings.Contains(output, `"default"`) {
-		t.Errorf("Expected default return, got: %s", output)
+	// Should have nested nil checks
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil checks, got: %s", output)
 	}
 }
 
@@ -75,14 +75,19 @@ func TestNullCoalesceProcessor_ComplexLeft(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate IIFE (complex case)
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, `x := "default"`) {
+		t.Errorf("Expected default-first assignment, got: %s", output)
 	}
 
-	// Should call getValue() once
+	// Should call getValue() in condition
 	if !strings.Contains(output, "getValue()") {
 		t.Errorf("Expected getValue() call, got: %s", output)
+	}
+
+	// Should have nil check
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil check, got: %s", output)
 	}
 }
 
@@ -97,9 +102,9 @@ func TestNullCoalesceProcessor_SafeNavChain(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate IIFE (complex case)
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, `x := "Unknown"`) {
+		t.Errorf("Expected default-first assignment, got: %s", output)
 	}
 
 	// Should reference safe nav result
@@ -107,9 +112,9 @@ func TestNullCoalesceProcessor_SafeNavChain(t *testing.T) {
 		t.Errorf("Expected safe nav reference, got: %s", output)
 	}
 
-	// Should return default
-	if !strings.Contains(output, `"Unknown"`) {
-		t.Errorf("Expected default return, got: %s", output)
+	// Should have nil check
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil check, got: %s", output)
 	}
 }
 
@@ -124,14 +129,14 @@ func TestNullCoalesceProcessor_NumberLiteral(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate inline IIFE
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, "x := 0") {
+		t.Errorf("Expected default-first assignment, got: %s", output)
 	}
 
-	// Should return 0
-	if !strings.Contains(output, "return 0") {
-		t.Errorf("Expected 0 return, got: %s", output)
+	// Should have nil check
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil check, got: %s", output)
 	}
 }
 
@@ -155,7 +160,8 @@ func TestNullCoalesceProcessor_NoOperator(t *testing.T) {
 func TestNullCoalesceProcessor_MultipleOnSameLine(t *testing.T) {
 	processor := NewNullCoalesceProcessor()
 
-	source := `let x = a ?? "x"; let y = b ?? "y"`
+	source := `let x = a ?? "x"
+let y = b ?? "y"`
 	result, _, err := processor.Process([]byte(source))
 	if err != nil {
 		t.Fatalf("Process failed: %v", err)
@@ -163,9 +169,14 @@ func TestNullCoalesceProcessor_MultipleOnSameLine(t *testing.T) {
 
 	output := string(result)
 
-	// Should process both
-	if strings.Count(output, "func()") < 2 {
-		t.Errorf("Expected 2 IIFEs, got: %s", output)
+	// Should process both with default-first pattern
+	if strings.Count(output, "!= nil") < 2 {
+		t.Errorf("Expected 2 nil checks, got: %s", output)
+	}
+
+	// Should have both defaults
+	if !strings.Contains(output, `"x"`) || !strings.Contains(output, `"y"`) {
+		t.Errorf("Expected both defaults, got: %s", output)
 	}
 }
 
@@ -180,14 +191,14 @@ func TestNullCoalesceProcessor_BooleanLiteral(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate inline IIFE
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, "x := true") {
+		t.Errorf("Expected default-first assignment, got: %s", output)
 	}
 
-	// Should return true
-	if !strings.Contains(output, "return true") {
-		t.Errorf("Expected true return, got: %s", output)
+	// Should have nil check
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil check, got: %s", output)
 	}
 }
 
@@ -202,9 +213,9 @@ func TestNullCoalesceProcessor_ComplexChain(t *testing.T) {
 
 	output := string(result)
 
-	// Should generate IIFE
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE, got: %s", output)
+	// Should use default-first pattern
+	if !strings.Contains(output, `"none"`) {
+		t.Errorf("Expected default value, got: %s", output)
 	}
 
 	// Should check getUser() first
@@ -217,9 +228,9 @@ func TestNullCoalesceProcessor_ComplexChain(t *testing.T) {
 		t.Errorf("Expected getFallback() call, got: %s", output)
 	}
 
-	// Should return "none" last
-	if !strings.Contains(output, `"none"`) {
-		t.Errorf("Expected none return, got: %s", output)
+	// Should have nested nil checks
+	if !strings.Contains(output, "!= nil") {
+		t.Errorf("Expected nil checks, got: %s", output)
 	}
 }
 
@@ -419,9 +430,9 @@ let name = user ?? "Unknown"`
 		t.Errorf("Expected first line preserved, got: %s", output)
 	}
 
-	// Second line should have null coalesce
-	if !strings.Contains(output, "func()") {
-		t.Errorf("Expected IIFE in second line, got: %s", output)
+	// Second line should have null coalesce with default-first pattern
+	if !strings.Contains(output, `name := "Unknown"`) {
+		t.Errorf("Expected default-first assignment in second line, got: %s", output)
 	}
 }
 
@@ -474,9 +485,9 @@ func TestNullCoalesceProcessor_CommentsIgnored(t *testing.T) {
 			for _, line := range lines {
 				if strings.HasPrefix(strings.TrimSpace(line), "//") ||
 				   strings.HasPrefix(strings.TrimSpace(line), "/*") {
-					// This is a comment line - should not contain func() or IIFE
-					if strings.Contains(line, "func()") {
-						t.Errorf("Comment was transformed (contains func()): %s", line)
+					// This is a comment line - should not contain default-first pattern
+					if strings.Contains(line, ":=") && strings.Contains(line, "if val :=") {
+						t.Errorf("Comment was transformed: %s", line)
 					}
 				}
 			}
@@ -501,8 +512,8 @@ func TestNullCoalesceProcessor_StringLiteralsWithCommentMarkers(t *testing.T) {
 		t.Errorf("Expected URL preserved, got: %s", output)
 	}
 
-	// Should still transform the ??
-	if !strings.Contains(output, "func()") {
+	// Should still transform the ?? with default-first pattern
+	if !strings.Contains(output, `url := "http://example.com"`) {
 		t.Errorf("Expected ?? to be transformed, got: %s", output)
 	}
 }

@@ -846,18 +846,23 @@ func (s *SafeNavProcessor) generateSafeNavCode(base string, elements []ChainElem
 		code, mappings := s.generatePointerMode(base, elements, originalLine, outputLine)
 		return code, mappings, nil
 	case TypeUnknown:
-		// Generate placeholder for AST plugin to resolve
-		code, mappings := s.generateInferPlaceholder(base, elements, originalLine, outputLine)
-		return code, mappings, nil
+		// Generate compile error for unknown type (cannot infer)
+		return "", nil, fmt.Errorf(
+			"line %d: cannot infer type for safe navigation on '%s'\n"+
+				"  Help: Add explicit type annotation to enable type inference\n"+
+				"  Example: var %s: UserOption = getUser()\n"+
+				"  Example: var %s: *User = getUser()\n"+
+				"  Note: Safe navigation requires Option<T> or pointer type (*T)",
+			originalLine, base, base, base)
 	case TypeRegular:
 		// Error: cannot use ?. on non-nullable type
 		// Provide clear error message with help text
 		return "", nil, fmt.Errorf(
-			"safe navigation requires nullable type\n"+
+			"line %d: safe navigation requires nullable type\n"+
 				"  Variable '%s' is not Option<T> or pointer type (*T)\n"+
 				"  Help: Use Option<T> for nullable values, or use pointer type (*T)\n"+
 				"  Note: If this is a pointer/Option, ensure type annotation is explicit",
-			base)
+			originalLine, base)
 	}
 
 	return "", nil, nil

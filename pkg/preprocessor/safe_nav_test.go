@@ -143,43 +143,43 @@ let value = config?.db?.connection?.timeout`,
 	}
 }
 
-func TestSafeNavProcessor_UnknownType_Placeholder(t *testing.T) {
+func TestSafeNavProcessor_UnknownType_Error(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		contains []string
+		name        string
+		input       string
+		expectError bool
+		errorMsg    string
 	}{
 		{
-			name: "unknown type generates placeholder",
+			name: "unknown type generates error",
 			input: `let user = getUser()
 let name = user?.name`,
-			contains: []string{
-				`__SAFE_NAV_INFER__(user, "name")`,
-			},
+			expectError: true,
+			errorMsg:    "cannot infer type",
 		},
 		{
-			name: "unknown type chain generates placeholder",
+			name: "unknown type chain generates error",
 			input: `let config = getConfig()
 let value = config?.settings?.timeout`,
-			contains: []string{
-				`__SAFE_NAV_INFER__(config, "settings", "timeout")`,
-			},
+			expectError: true,
+			errorMsg:    "cannot infer type",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			processor := NewSafeNavProcessor()
-			output, _, err := processor.Process([]byte(tt.input))
-			if err != nil {
-				t.Fatalf("Process() error = %v", err)
-			}
+			_, _, err := processor.Process([]byte(tt.input))
 
-			result := string(output)
-
-			for _, str := range tt.contains {
-				if !strings.Contains(result, str) {
-					t.Errorf("Output missing expected string: %q\nGot:\n%s", str, result)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, got nil", tt.errorMsg)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
 				}
 			}
 		})

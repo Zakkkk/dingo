@@ -354,15 +354,24 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 	}
 
 	// Check if preceded by identifier (function call) or } (IIFE pattern)
+	// CRITICAL: Skip backward over whitespace to find actual preceding character
 	if startIdx > 0 {
-		prevChar := line[startIdx-1]
-		// If previous character is letter, digit, or underscore → function call
-		if isIdentifierChar(prevChar) {
-			return false, nil, closeParen
+		// Find the first non-whitespace character before the (
+		nonWhitespaceIdx := startIdx - 1
+		for nonWhitespaceIdx >= 0 && (line[nonWhitespaceIdx] == ' ' || line[nonWhitespaceIdx] == '\t') {
+			nonWhitespaceIdx--
 		}
-		// If previous character is } → IIFE pattern (e.g., }())
-		if prevChar == '}' {
-			return false, nil, closeParen
+
+		if nonWhitespaceIdx >= 0 {
+			prevChar := line[nonWhitespaceIdx]
+			// If previous character is letter, digit, or underscore → function call
+			if isIdentifierChar(prevChar) {
+				return false, nil, closeParen
+			}
+			// If previous character is } → IIFE pattern (e.g., }())
+			if prevChar == '}' {
+				return false, nil, closeParen
+			}
 		}
 	}
 

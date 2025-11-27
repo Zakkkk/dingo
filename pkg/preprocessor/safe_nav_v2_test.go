@@ -8,7 +8,7 @@ import (
 func TestSafeNavProcessor_Metadata(t *testing.T) {
 	p := NewSafeNavProcessor()
 
-	code := `let name: *string
+	code := `let user: *User = getUser()
 let result = user?.name`
 
 	result, metadata, err := p.ProcessInternal(code)
@@ -47,10 +47,11 @@ let result = user?.name`
 func TestSafeNavProcessor_UniqueMarkers(t *testing.T) {
 	p := NewSafeNavProcessor()
 
-	code := `let user: *User
+	code := `let user: *User = getUser()
+let address: *Address = getAddress()
 let name = user?.name
-let city = user?.address?.city
-let zip = user?.address?.zip`
+let city = address?.city
+let zip = address?.zip`
 
 	result, metadata, err := p.ProcessInternal(code)
 	if err != nil {

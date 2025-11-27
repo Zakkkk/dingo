@@ -176,17 +176,96 @@ func (n *NullCoalesceProcessor) processLineWithMetadata(line string, originalLin
 	}
 
 	// Find all ?? expressions in the line
-	result := line
-	var meta *TransformMetadata
-
-	// Process from right to left to preserve positions
 	positions := findNullCoalescePositions(line)
 	if len(positions) == 0 {
 		return line, nil, nil
 	}
 
-	// Only create ONE metadata entry for the FIRST transformation
-	// (subsequent ?? on same line share same transformation context)
+	// Check if this is a `let varName = expr ?? default` pattern
+	// If so, we need to hoist the if-else block and restructure the statement
+	letMatch := regexp.MustCompile(`^(\s*)(let\s+\w+\s*=\s*)`).FindStringSubmatch(line)
+	if letMatch != nil {
+		// This is a let assignment - special handling needed
+		indent := letMatch[1]
+		letPart := letMatch[2]
+
+		// Extract variable name from let statement
+		varNameMatch := regexp.MustCompile(`let\s+(\w+)`).FindStringSubmatch(letPart)
+		if varNameMatch == nil {
+			return line, nil, fmt.Errorf("failed to extract variable name from let statement")
+		}
+		varName := varNameMatch[1]
+
+		// Process the first (and likely only) ?? expression
+		pos := positions[0]
+		left := line[pos.leftStart:pos.leftEnd]
+		right := line[pos.rightStart:pos.rightEnd]
+
+		// Handle chained ?? (a ?? b ?? c)
+		chain := []string{left, right}
+		i := 0
+		chainRightEnd := pos.rightEnd
+
+		for i < len(positions)-1 {
+			nextPos := positions[i+1]
+			// Check if next position's left overlaps with current right
+			if nextPos.leftStart < chainRightEnd {
+				chainRight := line[nextPos.rightStart:nextPos.rightEnd]
+				chain = append(chain, chainRight)
+				chainRightEnd = nextPos.rightEnd
+				i++
+			} else {
+				break
+			}
+		}
+
+		// Detect type of leftmost operand
+		leftType := n.typeDetector.DetectType(strings.TrimSpace(chain[0]))
+
+		// Generate if-else block with variable assignment using actual variable name
+		marker := fmt.Sprintf("// dingo:c:%d", *markerCounter)
+		*markerCounter++ // Increment for this marker
+		replacement := n.generateIfElseWithVarName(chain, leftType, varName, marker, markerCounter)
+
+		// Create metadata
+		meta := &TransformMetadata{
+			Type:            "null_coalesce",
+			OriginalLine:    originalLineNum,
+			OriginalColumn:  pos.opStart + 1,
+			OriginalLength:  2, // length of ??
+			OriginalText:    "??",
+			GeneratedMarker: marker,
+			ASTNodeType:     "IfExpr",
+		}
+
+		// Extract inline comment if present
+		inlineComment := ""
+		if commentIdx := strings.Index(line, "//"); commentIdx > pos.rightEnd {
+			inlineComment = " " + strings.TrimSpace(line[commentIdx:])
+		}
+
+		// Return the if-else block (preserving indentation and inline comment)
+		lines := strings.Split(replacement, "\n")
+		indentedLines := make([]string, len(lines))
+		for i, l := range lines {
+			if l != "" {
+				indentedLines[i] = indent + l
+				// Append inline comment to last line
+				if i == len(lines)-1 && inlineComment != "" {
+					indentedLines[i] += inlineComment
+				}
+			} else {
+				indentedLines[i] = l
+			}
+		}
+		result := strings.Join(indentedLines, "\n")
+
+		return result, meta, nil
+	}
+
+	// Not a let assignment - use inline replacement (for function args, etc.)
+	result := line
+	var meta *TransformMetadata
 	firstTransform := true
 
 	// Process in reverse order to maintain string positions
@@ -225,7 +304,7 @@ func (n *NullCoalesceProcessor) processLineWithMetadata(line string, originalLin
 		// Detect type of leftmost operand
 		leftType := n.typeDetector.DetectType(strings.TrimSpace(chain[0]))
 
-		// Generate replacement code with marker
+		// Generate replacement code with marker (temp variable)
 		replacement := n.generateCoalesceCodeWithMarker(chain, complexity, leftType, markerCounter)
 
 		// Create metadata for first transformation only
@@ -892,57 +971,78 @@ func (n *NullCoalesceProcessor) generateIIFE(chain []string, leftType TypeKind, 
 
 // generateCoalesceCodeWithMarker generates null coalescing code with marker support
 func (n *NullCoalesceProcessor) generateCoalesceCodeWithMarker(chain []string, complexity CoalesceComplexity, leftType TypeKind, markerCounter *int) string {
-	var result string
-
-	// Generate the coalesce expression (simplified - no line tracking needed)
-	switch complexity {
-	case ComplexitySimple:
-		result = n.generateInlineSimple(chain, leftType)
-	case ComplexityComplex:
-		result = n.generateIIFESimple(chain, leftType)
-	default:
-		return ""
-	}
-
-	// Insert marker
-	marker := fmt.Sprintf("// dingo:c:%d\n", *markerCounter)
-	result = marker + result
+	marker := fmt.Sprintf(" // dingo:c:%d", *markerCounter)
 	*markerCounter++
 
-	return result
-}
-
-// generateInlineSimple generates inline null coalescing code (simplified, no mapping)
-func (n *NullCoalesceProcessor) generateInlineSimple(chain []string, leftType TypeKind) string {
-	left := strings.TrimSpace(chain[0])
-	right := strings.TrimSpace(chain[1])
-
-	// Detect right operand type
-	rightType := n.typeDetector.DetectType(right)
-
-	// Generate based on left type
-	switch leftType {
-	case TypeOption:
-		if rightType == TypeOption {
-			return fmt.Sprintf("func() __INFER__ { if %s.IsSome() { return %s }; return %s }()", left, left, right)
-		}
-		return fmt.Sprintf("func() __INFER__ { if %s.IsSome() { return __UNWRAP__(%s) }; return %s }()", left, left, right)
-
-	case TypePointer:
-		return fmt.Sprintf("func() __INFER__ { if %s != nil { return *%s }; return %s }()", left, left, right)
-
-	case TypeUnknown, TypeRegular:
-		if rightType == TypeOption {
-			return fmt.Sprintf("func() __INFER__ { if %s.IsSome() { return %s }; return %s }()", left, left, right)
-		}
-		return fmt.Sprintf("func() __INFER__ { if %s.IsSome() { return __UNWRAP__(%s) }; return %s }()", left, left, right)
+	// For both simple and complex cases, use if-else pattern
+	if len(chain) == 2 {
+		// Simple case: a ?? b
+		return n.generateIfElseSimple(chain[0], chain[1], leftType, marker)
 	}
 
-	return ""
+	// Complex/chained case: a ?? b ?? c
+	return n.generateIfElseChained(chain, leftType, marker, markerCounter)
 }
 
-// generateIIFESimple generates IIFE null coalescing code (simplified, no mapping)
-func (n *NullCoalesceProcessor) generateIIFESimple(chain []string, leftType TypeKind) string {
+// generateIfElseWithVarName generates if-else pattern using the actual variable name from let statement
+func (n *NullCoalesceProcessor) generateIfElseWithVarName(chain []string, leftType TypeKind, varName string, marker string, markerCounter *int) string {
+	if len(chain) == 2 {
+		// Simple case: let x = a ?? b
+		return n.generateIfElseWithVarNameSimple(chain[0], chain[1], leftType, varName, marker)
+	}
+
+	// Chained case: let x = a ?? b ?? c
+	return n.generateIfElseWithVarNameChained(chain, leftType, varName, marker, markerCounter)
+}
+
+// generateIfElseWithVarNameSimple generates simple if-else using actual variable name
+// Uses default-first pattern: x := defaultValue; if condition { x = actualValue }
+func (n *NullCoalesceProcessor) generateIfElseWithVarNameSimple(left, right string, leftType TypeKind, varName string, marker string) string {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+
+	var buf bytes.Buffer
+
+	// Detect right operand type to determine unwrapping
+	rightType := n.typeDetector.DetectType(right)
+
+	// Generate based on left type using default-first pattern
+	switch leftType {
+	case TypeOption:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", varName, right))
+		// Override if left is Some
+		buf.WriteString(fmt.Sprintf("if val := %s; val.IsSome() { %s\n", left, marker))
+		if rightType == TypeOption {
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
+		} else {
+			buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", varName))
+		}
+		buf.WriteString("}")
+
+	case TypePointer:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", varName, right))
+		// Override if left is non-nil
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", left, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = *val\n", varName))
+		buf.WriteString("}")
+
+	case TypeUnknown, TypeRegular:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", varName, right))
+		// Override if left is non-nil
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", left, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
+		buf.WriteString("}")
+	}
+
+	return buf.String()
+}
+
+// generateIfElseWithVarNameChained generates chained if-else using actual variable name
+// Uses default-first pattern: x := finalDefault; if ... { x = ... }
+func (n *NullCoalesceProcessor) generateIfElseWithVarNameChained(chain []string, leftType TypeKind, varName string, marker string, markerCounter *int) string {
 	var buf bytes.Buffer
 
 	// Check if all operands are Options
@@ -955,45 +1055,192 @@ func (n *NullCoalesceProcessor) generateIIFESimple(chain []string, leftType Type
 		}
 	}
 
-	buf.WriteString("func() __INFER__ { ")
+	// Initialize with final default (last operand)
+	lastOperand := strings.TrimSpace(chain[len(chain)-1])
+	buf.WriteString(fmt.Sprintf("%s := %s\n", varName, lastOperand))
 
-	// Generate checks for each element in chain
-	for i := 0; i < len(chain)-1; i++ {
-		operand := strings.TrimSpace(chain[i])
-
-		tmpVar := ""
-		if n.tmpCounter == 1 {
-			tmpVar = "coalesce"
+	// First element uses the provided marker
+	firstOperand := strings.TrimSpace(chain[0])
+	switch leftType {
+	case TypeOption:
+		buf.WriteString(fmt.Sprintf("if val := %s; val.IsSome() { %s\n", firstOperand, marker))
+		if allOptions {
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
 		} else {
-			tmpVar = fmt.Sprintf("coalesce%d", n.tmpCounter-1)
+			buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", varName))
 		}
-		n.tmpCounter++
 
-		buf.WriteString(fmt.Sprintf("%s := %s; ", tmpVar, operand))
+	case TypePointer:
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", firstOperand, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = *val\n", varName))
+
+	case TypeUnknown, TypeRegular:
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", firstOperand, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
+	}
+
+	// Middle elements use else if with new markers
+	for i := 1; i < len(chain)-1; i++ {
+		operand := strings.TrimSpace(chain[i])
+		newMarker := fmt.Sprintf("// dingo:c:%d", *markerCounter)
+		*markerCounter++
 
 		switch leftType {
 		case TypeOption:
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val.IsSome() { %s\n", operand, newMarker))
 			if allOptions {
-				buf.WriteString(fmt.Sprintf("if %s.IsSome() { return %s }; ", tmpVar, tmpVar))
+				buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
 			} else {
-				buf.WriteString(fmt.Sprintf("if %s.IsSome() { return %s.Unwrap() }; ", tmpVar, tmpVar))
+				buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", varName))
 			}
 
 		case TypePointer:
-			buf.WriteString(fmt.Sprintf("if %s != nil { return *%s }; ", tmpVar, tmpVar))
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val != nil { %s\n", operand, newMarker))
+			buf.WriteString(fmt.Sprintf("\t%s = *val\n", varName))
 
 		case TypeUnknown, TypeRegular:
-			if allOptions {
-				buf.WriteString(fmt.Sprintf("if __IS_SOME__(%s) { return %s }; ", tmpVar, tmpVar))
-			} else {
-				buf.WriteString(fmt.Sprintf("if __IS_SOME__(%s) { return __UNWRAP__(%s) }; ", tmpVar, tmpVar))
-			}
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val != nil { %s\n", operand, newMarker))
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", varName))
 		}
 	}
 
-	// Final fallback
+	// Close the if-else chain (no final else needed - default already set)
+	buf.WriteString("}")
+
+	return buf.String()
+}
+
+// generateIfElseSimple generates if-else pattern for simple case: a ?? b
+// Uses default-first pattern: x := defaultValue; if condition { x = actualValue }
+func (n *NullCoalesceProcessor) generateIfElseSimple(left, right string, leftType TypeKind, marker string) string {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+
+	// Generate temp variable name using no-number-first pattern
+	var resultVar string
+	if n.tmpCounter == 1 {
+		resultVar = "coalesce"
+	} else {
+		resultVar = fmt.Sprintf("coalesce%d", n.tmpCounter-1)
+	}
+	n.tmpCounter++
+
+	var buf bytes.Buffer
+
+	// Detect right operand type to determine unwrapping
+	rightType := n.typeDetector.DetectType(right)
+
+	// Generate based on left type using default-first pattern
+	switch leftType {
+	case TypeOption:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", resultVar, right))
+		// Override if left is Some
+		buf.WriteString(fmt.Sprintf("if val := %s; val.IsSome() { %s\n", left, marker))
+		if rightType == TypeOption {
+			// Option ?? Option → no unwrap
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+		} else {
+			// Option ?? Primitive → unwrap
+			buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", resultVar))
+		}
+		buf.WriteString("}")
+
+	case TypePointer:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", resultVar, right))
+		// Override if left is non-nil
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", left, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = *val\n", resultVar))
+		buf.WriteString("}")
+
+	case TypeUnknown, TypeRegular:
+		// Initialize with default (right)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", resultVar, right))
+		// Override if left is non-nil
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil { %s\n", left, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+		buf.WriteString("}")
+	}
+
+	return buf.String()
+}
+
+// generateIfElseChained generates if-else pattern for chained case: a ?? b ?? c
+// Uses default-first pattern: x := finalDefault; if ... { x = ... }
+func (n *NullCoalesceProcessor) generateIfElseChained(chain []string, leftType TypeKind, marker string, markerCounter *int) string {
+	// Generate temp variable name using no-number-first pattern
+	var resultVar string
+	if n.tmpCounter == 1 {
+		resultVar = "coalesce"
+	} else {
+		resultVar = fmt.Sprintf("coalesce%d", n.tmpCounter-1)
+	}
+	n.tmpCounter++
+
+	var buf bytes.Buffer
+
+	// Check if all operands are Options
+	allOptions := leftType == TypeOption
+	if allOptions {
+		lastOperand := strings.TrimSpace(chain[len(chain)-1])
+		lastType := n.typeDetector.DetectType(lastOperand)
+		if lastType != TypeOption {
+			allOptions = false
+		}
+	}
+
+	// Initialize with final default (last operand)
 	lastOperand := strings.TrimSpace(chain[len(chain)-1])
-	buf.WriteString(fmt.Sprintf("return %s }()", lastOperand))
+	buf.WriteString(fmt.Sprintf("%s := %s\n", resultVar, lastOperand))
+
+	// First element uses the provided marker
+	firstOperand := strings.TrimSpace(chain[0])
+	switch leftType {
+	case TypeOption:
+		buf.WriteString(fmt.Sprintf("if val := %s; val.IsSome() {%s\n", firstOperand, marker))
+		if allOptions {
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+		} else {
+			buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", resultVar))
+		}
+
+	case TypePointer:
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil {%s\n", firstOperand, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = *val\n", resultVar))
+
+	case TypeUnknown, TypeRegular:
+		buf.WriteString(fmt.Sprintf("if val := %s; val != nil {%s\n", firstOperand, marker))
+		buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+	}
+
+	// Middle elements use else if with new markers
+	for i := 1; i < len(chain)-1; i++ {
+		operand := strings.TrimSpace(chain[i])
+		newMarker := fmt.Sprintf(" // dingo:c:%d", *markerCounter)
+		*markerCounter++
+
+		switch leftType {
+		case TypeOption:
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val.IsSome() {%s\n", operand, newMarker))
+			if allOptions {
+				buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+			} else {
+				buf.WriteString(fmt.Sprintf("\t%s = __UNWRAP__(val)\n", resultVar))
+			}
+
+		case TypePointer:
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val != nil {%s\n", operand, newMarker))
+			buf.WriteString(fmt.Sprintf("\t%s = *val\n", resultVar))
+
+		case TypeUnknown, TypeRegular:
+			buf.WriteString(fmt.Sprintf("} else if val := %s; val != nil {%s\n", operand, newMarker))
+			buf.WriteString(fmt.Sprintf("\t%s = val\n", resultVar))
+		}
+	}
+
+	// Close the if-else chain (no final else needed - default already set)
+	buf.WriteString("}")
 
 	return buf.String()
 }
