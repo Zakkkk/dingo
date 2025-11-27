@@ -87,6 +87,11 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 	tuplePlugin := builtin.NewTuplePlugin()
 	pipeline.RegisterPlugin(tuplePlugin)
 
+	// Tuple return fixer - converts Tuple2(a,b) back to a,b in return statements
+	// This fixes cases where the preprocessor incorrectly wrapped multi-value returns
+	tupleReturnFixer := builtin.NewTupleReturnFixer()
+	pipeline.RegisterPlugin(tupleReturnFixer)
+
 	// Lambda type inference plugin (infers lambda parameter types from context)
 	lambdaTypeInferencePlugin := builtin.NewLambdaTypeInferencePlugin()
 	pipeline.RegisterPlugin(lambdaTypeInferencePlugin)

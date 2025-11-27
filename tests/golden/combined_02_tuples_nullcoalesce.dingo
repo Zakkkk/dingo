@@ -1,0 +1,259 @@
+package main
+
+// Test: Tuples with null coalescing integration
+// Feature: Tuples + Null coalescing (??)
+// Complexity: medium
+// Description: Tests null coalescing within tuple expressions:
+// - Tuple literals with ?? inside
+// - Tuple destructuring with ?? fallbacks
+// - Nested combinations
+
+import "fmt"
+
+enum StringOption {
+	Some(string),
+	None,
+}
+
+enum IntOption {
+	Some(int),
+	None,
+}
+
+enum BoolOption {
+	Some(bool),
+	None,
+}
+
+func main() {
+	// ===== Test 1: Tuple Literals with Null Coalesce =====
+	// Scenario: Create tuples with ?? for fallback values
+
+	// Simple tuple with ?? in each element
+	let name: StringOption = getName()
+	let age: IntOption = getAge()
+	let pair1 = (name ?? "Unknown", age ?? 0)
+	fmt.Printf("Pair 1: %v\n", pair1)
+
+	// Three-element tuple with mixed fallbacks
+	let city: StringOption = getCity()
+	let triple = (name ?? "Guest", age ?? 18, city ?? "Unknown City")
+	fmt.Printf("Triple: %v\n", triple)
+
+	// Tuple with function call fallbacks
+	let email: StringOption = getEmail()
+	let phone: StringOption = getPhone()
+	let contact = (email ?? getDefaultEmail(), phone ?? getDefaultPhone())
+	fmt.Printf("Contact: %v\n", contact)
+
+	// ===== Test 2: Nested Null Coalesce in Tuples =====
+	// Scenario: Multiple levels of ?? within tuple elements
+
+	// Chained ?? in tuple: (a ?? b ?? c, d ?? e)
+	let firstName: StringOption = getFirstName()
+	let lastName: StringOption = getLastName()
+	let middleName: StringOption = getMiddleName()
+	let fullName = (firstName ?? middleName ?? "John", lastName ?? "Doe")
+	fmt.Printf("Full name: %v\n", fullName)
+
+	// Nested tuples with ??
+	let id: IntOption = getUserID()
+	let role: StringOption = getRole()
+	let nested = ((id ?? 0, role ?? "user"), (name ?? "Anonymous", age ?? 0))
+	fmt.Printf("Nested: %v\n", nested)
+
+	// ===== Test 3: Tuple Destructuring with Null Coalesce =====
+	// Scenario: Assign tuple elements with ?? fallbacks
+
+	// Destructure with ?? in assignment
+	let userInfo = getUserInfo()
+	let (userName, userAge) = (userInfo.name ?? "Guest", userInfo.age ?? 21)
+	fmt.Printf("Destructured: %s, %d\n", userName, userAge)
+
+	// Multiple destructuring with fallbacks
+	let profile = getProfile()
+	let (profileName, profileBio, profileURL) = (
+		profile.name ?? "Anonymous",
+		profile.bio ?? "No bio",
+		profile.url ?? "https://example.com",
+	)
+	fmt.Printf("Profile: %s - %s - %s\n", profileName, profileBio, profileURL)
+
+	// ===== Test 4: Tuples in Expressions with Null Coalesce =====
+	// Scenario: Use tuple + ?? in larger expressions
+
+	// Tuple as function argument with ?? inside
+	let coord = getCoordinate()
+	displayPoint((coord.x ?? 0, coord.y ?? 0))
+
+	// Tuple comparison with ??
+	let point1 = getPoint(1)
+	let point2 = getPoint(2)
+	let sameX = (point1.x ?? 0) == (point2.x ?? 0)
+	let sameY = (point1.y ?? 0) == (point2.y ?? 0)
+	fmt.Printf("Same coordinates? X=%v, Y=%v\n", sameX, sameY)
+
+	// ===== Test 5: Complex Nested Combinations =====
+	// Scenario: Deep nesting of tuples and ??
+
+	// Tuple of tuples with ?? at multiple levels
+	let user1Name: StringOption = StringOptionSome("Alice")
+	let user2Name: StringOption = StringOptionNone()
+	let score1: IntOption = IntOptionSome(100)
+	let score2: IntOption = IntOptionNone()
+	let gameState = (
+		(user1Name ?? "Player 1", score1 ?? 0),
+		(user2Name ?? "Player 2", score2 ?? 0),
+	)
+	fmt.Printf("Game state: %v\n", gameState)
+
+	// Tuple with arithmetic on ?? values
+	let width: IntOption = getWidth()
+	let height: IntOption = getHeight()
+	let dimensions = (
+		(width ?? 800) * 2,
+		(height ?? 600) / 2,
+	)
+	fmt.Printf("Dimensions: %v\n", dimensions)
+
+	// ===== Test 6: Return Tuples with Null Coalesce =====
+	// Scenario: Functions returning tuples with ?? inside
+
+	let result1 = processData(nil)
+	fmt.Printf("Result 1: %v\n", result1)
+
+	let input = "test"
+	let result2 = processData(&input)
+	fmt.Printf("Result 2: %v\n", result2)
+}
+
+// ===== Helper Types =====
+
+type UserInfo struct {
+	name StringOption
+	age  IntOption
+}
+
+type Profile struct {
+	name StringOption
+	bio  StringOption
+	url  StringOption
+}
+
+type Coordinate struct {
+	x IntOption
+	y IntOption
+}
+
+// ===== Helper Functions =====
+
+func getName() StringOption {
+	return StringOptionNone()
+}
+
+func getAge() IntOption {
+	return IntOptionNone()
+}
+
+func getCity() StringOption {
+	return StringOptionNone()
+}
+
+func getEmail() StringOption {
+	return StringOptionSome("user@example.com")
+}
+
+func getPhone() StringOption {
+	return StringOptionNone()
+}
+
+func getDefaultEmail() string {
+	return "default@example.com"
+}
+
+func getDefaultPhone() string {
+	return "555-0000"
+}
+
+func getFirstName() StringOption {
+	return StringOptionNone()
+}
+
+func getLastName() StringOption {
+	return StringOptionNone()
+}
+
+func getMiddleName() StringOption {
+	return StringOptionSome("M")
+}
+
+func getUserID() IntOption {
+	return IntOptionSome(123)
+}
+
+func getRole() StringOption {
+	return StringOptionNone()
+}
+
+func getUserInfo() UserInfo {
+	return UserInfo{
+		name: StringOptionSome("Bob"),
+		age:  IntOptionNone(),
+	}
+}
+
+func getProfile() Profile {
+	return Profile{
+		name: StringOptionNone(),
+		bio:  StringOptionSome("Developer"),
+		url:  StringOptionNone(),
+	}
+}
+
+func getCoordinate() Coordinate {
+	return Coordinate{
+		x: IntOptionNone(),
+		y: IntOptionSome(50),
+	}
+}
+
+func getPoint(id int) Coordinate {
+	if id == 1 {
+		return Coordinate{
+			x: IntOptionSome(10),
+			y: IntOptionSome(20),
+		}
+	}
+	return Coordinate{
+		x: IntOptionNone(),
+		y: IntOptionNone(),
+	}
+}
+
+func getWidth() IntOption {
+	return IntOptionNone()
+}
+
+func getHeight() IntOption {
+	return IntOptionSome(1200)
+}
+
+func displayPoint(coords (int, int)) {
+	let (x, y) = coords
+	fmt.Printf("Point at (%d, %d)\n", x, y)
+}
+
+func processData(input *string) (string, int, bool) {
+	let data: StringOption = StringOptionNone()
+	if input != nil {
+		data = StringOptionSome(*input)
+	}
+	let count: IntOption = IntOptionNone()
+	let valid: BoolOption = BoolOptionSome(true)
+
+	return (
+		data ?? "no data",
+		count ?? -1,
+		valid ?? false,
+	)
+}

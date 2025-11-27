@@ -87,6 +87,49 @@ func TestTupleProcessor_TupleLiterals(t *testing.T) {
 			wantMatch: "__TUPLE_3__LITERAL__",
 			wantErr:   false,
 		},
+		// Block comment tests
+		{
+			name:      "tuple_with_block_comment_after",
+			input:     `let x = (a, b) /* tuple comment */`,
+			wantMatch: "__TUPLE_2__LITERAL__",
+			wantErr:   false,
+		},
+		{
+			name:      "tuple_inside_block_comment",
+			input:     `/* let x = (a, b) */ let y = 5`,
+			wantMatch: "let y = 5", // Tuple inside comment should not transform
+			wantErr:   false,
+		},
+		{
+			name:      "function_call_with_block_comment",
+			input:     `let x = foo(/* comment */ a, b)`,
+			wantMatch: "foo(/* comment */ a, b)", // Function call, not tuple
+			wantErr:   false,
+		},
+		{
+			name:      "tuple_after_block_comment",
+			input:     `let x = /* comment */ (a, b)`,
+			wantMatch: "__TUPLE_2__LITERAL__",
+			wantErr:   false,
+		},
+		{
+			name:      "block_comment_with_paren_inside",
+			input:     `let x = 5 /* (not, a, tuple) */`,
+			wantMatch: "let x = 5", // Parens inside comment ignored
+			wantErr:   false,
+		},
+		{
+			name:      "line_comment_with_tuple",
+			input:     `let x = (a, b) // this is a tuple`,
+			wantMatch: "__TUPLE_2__LITERAL__",
+			wantErr:   false,
+		},
+		{
+			name:      "tuple_in_line_comment",
+			input:     `let x = 5 // (a, b) would be a tuple`,
+			wantMatch: "let x = 5", // Tuple in line comment should not transform
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -1,0 +1,244 @@
+package main
+
+// Test: Combined all features - ternary, safe nav, null coalesce, tuples
+// Feature: Ternary (? :) + Safe Nav (?.) + Null Coalesce (??) + Tuples
+// Complexity: high
+// Description: Tests maximum feature integration:
+// - Ternary with safe nav and null coalesce
+// - Tuples containing ternary expressions
+// - All operators combined in complex expressions
+
+import "fmt"
+
+enum StringOption {
+	Some(string),
+	None,
+}
+
+enum IntOption {
+	Some(int),
+	None,
+}
+
+enum BoolOption {
+	Some(bool),
+	None,
+}
+
+type User struct {
+	name     string
+	age      int
+	profile  *Profile
+	settings *Settings
+}
+
+type Profile struct {
+	bio     *string
+	website *string
+	score   *int
+}
+
+type Settings struct {
+	theme    *string
+	darkMode *bool
+}
+
+func main() {
+	// ===== Test 1: Ternary with Safe Nav and Null Coalesce =====
+	// Scenario: condition ? (a?.b ?? default) : fallback
+
+	let user1 = getUser(1)
+	let isActive = true
+
+	// Ternary with safe nav + null coalesce in true branch
+	let theme1 = isActive ? (user1?.settings?.theme ?? "light") : "disabled"
+	fmt.Println("Theme 1:", theme1)
+
+	// Ternary with safe nav + null coalesce in both branches
+	let bio1 = isActive ? (user1?.profile?.bio ?? "No bio") : (user1?.profile?.website ?? "No website")
+	fmt.Println("Bio 1:", bio1)
+
+	// Nested ternary with ?? fallbacks
+	let priority = user1?.profile?.score ?? 0
+	let level = priority > 100 ? "high" : priority > 50 ? "medium" : "low"
+	fmt.Println("Level:", level)
+
+	// ===== Test 2: Tuples with Ternary Expressions =====
+	// Scenario: (condition ? a : b, condition ? c : d)
+
+	let user2 = getUser(2)
+	let isPremium = checkPremium(user2)
+
+	// Tuple elements are ternary expressions
+	let userInfo1 = (
+		isPremium ? "Premium" : "Free",
+		isPremium ? 100 : 10,
+	)
+	fmt.Printf("User info 1: %v\n", userInfo1)
+
+	// Tuple with ternary + null coalesce
+	let userInfo2 = (
+		isPremium ? (user2?.profile?.bio ?? "VIP Member") : "Standard User",
+		isPremium ? (user2?.profile?.score ?? 100) : 0,
+	)
+	fmt.Printf("User info 2: %v\n", userInfo2)
+
+	// ===== Test 3: Ternary Returning Tuples =====
+	// Scenario: condition ? (a, b) : (c, d)
+
+	let user3 = getUser(3)
+	let hasProfile = user3 != nil && user3.profile != nil
+
+	// Ternary returns different tuples
+	let coords = hasProfile ?
+		(user3?.profile?.score ?? 0, 100) :
+		(0, 0)
+	fmt.Printf("Coordinates: %v\n", coords)
+
+	// Ternary with tuples containing ?? and ?.
+	let status = hasProfile ?
+		((user3?.profile?.bio ?? "Member"), (user3?.profile?.score ?? 50)) :
+		("Guest", 0)
+	fmt.Printf("Status: %v\n", status)
+
+	// ===== Test 4: Safe Nav on Ternary Results =====
+	// Scenario: (condition ? obj1 : obj2)?.property
+
+	let user4 = getUser(4)
+	let user5 = getUser(5)
+	let useFirst = true
+
+	// Safe nav on ternary result
+	let selectedTheme = (useFirst ? user4 : user5)?.settings?.theme ?? "default"
+	fmt.Println("Selected theme:", selectedTheme)
+
+	// Chained safe nav on ternary
+	let selectedBio = (useFirst ? user4 : user5)?.profile?.bio ?? (useFirst ? user5 : user4)?.profile?.bio ?? "No bio"
+	fmt.Println("Selected bio:", selectedBio)
+
+	// ===== Test 5: Complex Nested Combinations =====
+	// Scenario: All four features in single expression
+
+	let user6 = getUser(6)
+	let mode = "display"
+
+	// Maximum nesting: ternary ? tuple(safenav?.prop ?? default) : tuple(...)
+	let result1 = mode == "display" ?
+		(
+			user6?.profile?.bio ?? "No bio available",
+			user6?.profile?.score ?? 0,
+			user6?.settings?.theme ?? "system",
+		) :
+		(
+			"Hidden",
+			-1,
+			"none",
+		)
+	fmt.Printf("Result 1: %v\n", result1)
+
+	// Ternary with arithmetic on safe nav + null coalesce results
+	let score = user6?.profile?.score ?? 50
+	let bonus = score > 75 ? score * 2 : score
+	let finalScore = (bonus, score > 75 ? "Excellent" : "Good")
+	fmt.Printf("Final score: %v\n", finalScore)
+
+	// ===== Test 6: Ternary in Tuple with Null Coalesce Chain =====
+	// Scenario: Complex precedence and grouping
+
+	let user7 = getUser(7)
+	let user8 = getUser(8)
+	let preferFirst = true
+
+	// Tuple with complex element expressions
+	let comparison = (
+		preferFirst ? (user7?.profile?.score ?? 0) : (user8?.profile?.score ?? 0),
+		preferFirst ? (user7?.settings?.theme ?? "light") : (user8?.settings?.theme ?? "dark"),
+		(preferFirst ? user7 : user8)?.profile?.bio ?? "Unknown",
+	)
+	fmt.Printf("Comparison: %v\n", comparison)
+
+	// Nested ternary in tuple with safe nav fallback chains
+	let age1 = 25
+	let age2 = 30
+	let metadata = (
+		age1 >= 18 ? "adult" : "minor",
+		age2 >= 21 ? (user7?.profile?.website ?? "verified.com") : "unverified",
+		age1 > age2 ? (user7?.profile?.score ?? 100) : (user8?.profile?.score ?? 50),
+	)
+	fmt.Printf("Metadata: %v\n", metadata)
+
+	// ===== Test 7: All Features in Function Calls =====
+	// Scenario: Pass complex expressions as arguments
+
+	let user9 = getUser(9)
+	let isEnabled = true
+
+	// Function call with all features combined
+	processUser(
+		isEnabled ? (user9?.profile?.bio ?? "Default bio") : "Disabled",
+		(user9?.profile?.score ?? 0, isEnabled ? 100 : 0),
+		isEnabled ? user9?.settings?.theme ?? "auto" : "none",
+	)
+
+	// Chained calls with complex expressions
+	let formattedData = formatData(
+		(isEnabled ? user9 : nil)?.profile?.bio ?? "N/A",
+		isEnabled ? (
+			(user9?.profile?.score ?? 50),
+			(user9?.settings?.darkMode ?? false),
+		) : (0, false),
+	)
+	fmt.Println("Formatted:", formattedData)
+}
+
+// ===== Helper Functions =====
+
+func getUser(id int) *User {
+	if id == 1 {
+		let bio = "Software engineer"
+		let website = "https://example.com"
+		let score = 150
+		let theme = "dark"
+		let darkMode = true
+		return &User{
+			name: "Alice",
+			age:  30,
+			profile: &Profile{
+				bio:     &bio,
+				website: &website,
+				score:   &score,
+			},
+			settings: &Settings{
+				theme:    &theme,
+				darkMode: &darkMode,
+			},
+		}
+	} else if id == 4 {
+		let theme = "light"
+		return &User{
+			name: "Bob",
+			age:  25,
+			settings: &Settings{
+				theme: &theme,
+			},
+		}
+	}
+	return nil
+}
+
+func checkPremium(user *User) bool {
+	if user != nil && user.profile != nil && user.profile.score != nil {
+		return *user.profile.score > 100
+	}
+	return false
+}
+
+func processUser(bio string, scores (int, int), theme string) {
+	let (primary, secondary) = scores
+	fmt.Printf("Processing: bio=%s, scores=(%d, %d), theme=%s\n", bio, primary, secondary, theme)
+}
+
+func formatData(bio string, data (int, bool)) string {
+	let (score, enabled) = data
+	return fmt.Sprintf("Bio: %s, Score: %d, Enabled: %v", bio, score, enabled)
+}

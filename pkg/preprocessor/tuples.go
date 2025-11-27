@@ -18,15 +18,17 @@ import (
 //   - 2-12 elements → ok (Tuple2 through Tuple12)
 //   - >12 elements → error: "Maximum 12 elements"
 type TupleProcessor struct {
-	counter  int       // For temporary variable generation (starts at 1, first var is "tmp", then "tmp1", "tmp2"...)
-	mappings []Mapping // Source map tracking
+	counter           int       // For temporary variable generation (starts at 1, first var is "tmp", then "tmp1", "tmp2"...)
+	mappings          []Mapping // Source map tracking
+	blockCommentDepth int       // Track multiline block comments across lines
 }
 
 // NewTupleProcessor creates a new tuple processor
 func NewTupleProcessor() *TupleProcessor {
 	return &TupleProcessor{
-		counter:  1,
-		mappings: []Mapping{},
+		counter:           1,
+		mappings:          []Mapping{},
+		blockCommentDepth: 0,
 	}
 }
 
@@ -40,6 +42,7 @@ func (t *TupleProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	// Reset state
 	t.counter = 1
 	t.mappings = []Mapping{}
+	t.blockCommentDepth = 0
 
 	lines := strings.Split(string(source), "\n")
 	var output bytes.Buffer
@@ -50,7 +53,7 @@ func (t *TupleProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	for inputLineNum < len(lines) {
 		line := lines[inputLineNum]
 
-		// Process the line
+		// Process the line (blockCommentDepth is threaded through processor state)
 		transformed, newMappings, err := t.processLine(line, inputLineNum+1, outputLineNum)
 		if err != nil {
 			return nil, nil, fmt.Errorf("line %d: %w", inputLineNum+1, err)
@@ -296,6 +299,11 @@ func (t *TupleProcessor) processTupleLiterals(line string, originalLineNum int, 
 
 	// Scan for potential tuple literals
 	for i := 0; i < len(result); i++ {
+		// Skip if we're inside a comment (checked by isInsideComment helper)
+		if t.isInsideComment(result, i) {
+			continue
+		}
+
 		if result[i] != '(' {
 			continue
 		}
@@ -677,19 +685,132 @@ func containsBalancedParens(s string) bool {
 	return depth == 0
 }
 
+// isInsideComment checks if a position is inside a comment (// or /* */)
+// Returns true if the position is within a comment
+// Also updates processor's blockCommentDepth state for multiline tracking
+func (t *TupleProcessor) isInsideComment(line string, pos int) bool {
+	inString := false
+	stringChar := byte(0)
+	inBlockComment := t.blockCommentDepth > 0 // Start with state from previous line
+
+	for i := 0; i <= pos && i < len(line); i++ {
+		ch := line[i]
+
+		// Track string state
+		if !inString {
+			// Handle regular strings with escape sequences
+			if ch == '"' || ch == '\'' {
+				inString = true
+				stringChar = ch
+				continue
+			}
+			// Handle raw strings (backticks) - NO escape sequences
+			if ch == '`' {
+				inString = true
+				stringChar = ch
+				continue
+			}
+		} else {
+			// Inside string - check for closing quote
+			if ch == stringChar {
+				// Backticks (raw strings) have NO escape sequences
+				if stringChar == '`' {
+					inString = false
+					stringChar = 0
+					continue
+				}
+
+				// For " and ' - check for escape sequences
+				if i > 0 && line[i-1] == '\\' {
+					// Count consecutive backslashes
+					backslashCount := 0
+					for j := i - 1; j >= 0 && line[j] == '\\'; j-- {
+						backslashCount++
+					}
+					// If odd number of backslashes, quote is escaped
+					if backslashCount%2 == 1 {
+						continue
+					}
+				}
+				inString = false
+				stringChar = 0
+			}
+			continue
+		}
+
+		// Check for comment markers (only when not in string)
+		if !inString {
+			// Single-line comment
+			if i+1 < len(line) && line[i] == '/' && line[i+1] == '/' {
+				// Rest of line is comment
+				return pos >= i
+			}
+			// Block comment start
+			if i+1 < len(line) && line[i] == '/' && line[i+1] == '*' {
+				inBlockComment = true
+				i++ // Skip the *
+				continue
+			}
+			// Block comment end
+			if inBlockComment && i+1 < len(line) && line[i] == '*' && line[i+1] == '/' {
+				inBlockComment = false
+				i++ // Skip the /
+				continue
+			}
+		}
+	}
+
+	// Update processor state for next line
+	if inBlockComment {
+		t.blockCommentDepth = 1
+	} else {
+		t.blockCommentDepth = 0
+	}
+
+	return inBlockComment
+}
+
 // findMatchingParen finds the index of the closing paren that matches the opening paren at startIdx
+// Skips parentheses inside strings and comments (both // and /* */)
 func findMatchingParen(s string, startIdx int) int {
 	if startIdx >= len(s) || s[startIdx] != '(' {
 		return -1
 	}
 
+	// Explicit state initialization to prevent bleed from previous calls
 	depth := 1
 	inString := false
 	escaped := false
+	inBlockComment := false // Always start fresh
 
 	for i := startIdx + 1; i < len(s); i++ {
 		ch := s[i]
 
+		// Handle block comments
+		if !inString && !inBlockComment {
+			// Check for block comment start
+			if i+1 < len(s) && ch == '/' && s[i+1] == '*' {
+				inBlockComment = true
+				i++ // Skip the *
+				continue
+			}
+			// Check for line comment start - rest of line is comment
+			if i+1 < len(s) && ch == '/' && s[i+1] == '/' {
+				// Line comment - everything after is comment, so we won't find closing paren
+				return -1
+			}
+		}
+
+		// Handle block comment end
+		if inBlockComment {
+			if i+1 < len(s) && ch == '*' && s[i+1] == '/' {
+				inBlockComment = false
+				i++ // Skip the /
+			}
+			continue
+		}
+
+		// Handle string escapes
 		if escaped {
 			escaped = false
 			continue
@@ -700,6 +821,7 @@ func findMatchingParen(s string, startIdx int) int {
 			continue
 		}
 
+		// Handle string boundaries
 		if ch == '"' {
 			inString = !inString
 			continue
@@ -709,6 +831,7 @@ func findMatchingParen(s string, startIdx int) int {
 			continue
 		}
 
+		// Count parentheses (only when not in string or comment)
 		if ch == '(' {
 			depth++
 		} else if ch == ')' {
