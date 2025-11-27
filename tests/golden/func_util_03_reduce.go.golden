@@ -1,5 +1,9 @@
 package main
 
+// Test: Reduce function on slices
+// Feature: Functional reduce/fold utility
+// Complexity: intermediate
+
 func reduce(arr []int, initial int, f func(int, int) int) int {
 	result := initial
 	for _, v := range arr {
@@ -10,10 +14,13 @@ func reduce(arr []int, initial int, f func(int, int) int) int {
 func main() {
 	numbers := []int{1, 2, 3, 4, 5}
 
+	// Sum using reduce
 	sum := reduce(numbers, 0, func(acc __TYPE_INFERENCE_NEEDED, x __TYPE_INFERENCE_NEEDED) { return acc + x })
 
+	// Product using reduce
 	product := reduce(numbers, 1, func(acc __TYPE_INFERENCE_NEEDED, x __TYPE_INFERENCE_NEEDED) { return acc * x })
 
+	// Max using reduce
 	max := reduce(numbers, numbers[0], func(acc __TYPE_INFERENCE_NEEDED, x __TYPE_INFERENCE_NEEDED) {
 		if x > acc {
 			return x

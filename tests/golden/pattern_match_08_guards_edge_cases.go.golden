@@ -4,7 +4,7 @@ package main
 // Feature: Edge cases for pattern guard behavior
 // Complexity: advanced
 
-// dingo:n:0
+
 type ValueTag uint8
 
 const (

@@ -5,7 +5,7 @@ package main
 // Complexity: intermediate
 // Limitation: where guards with NESTED patterns not yet supported
 
-// dingo:n:1
+
 type OptionTag uint8
 
 const (
@@ -59,7 +59,7 @@ func (o Option) Unwrap() int {
 	return *o.some
 }
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

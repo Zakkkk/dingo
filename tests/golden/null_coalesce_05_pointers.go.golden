@@ -1,62 +1,69 @@
 package main
 
+// Test: Null coalescing with Go raw pointers
+// Feature: ?? operator with pointer types
+// Complexity: intermediate
+
 type User struct {
 	name string
 	age  int
 }
 
 func main() {
+	// Test 1: Pointer ?? literal (separate ?. and ??)
+	var user *User = getUser(1)
+	tmp, err := user
 
-	user := getUser(1)
-	nameOpt := func() __INFER__ {
-		if user == nil {
-			return nil
-		}
-		return user.name
-	}()
-	name := func() string {
-		if nameOpt.IsSome() {
-			return nameOpt.Unwrap()
-		}
-		return "Unknown"
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var nameOpt = tmp
+	tmp1, err1 := nameOpt
 
-	primary := getPrimary()
-	fallback := getFallback()
-	result := func() __INFER__ {
-		if primary != nil {
-			return *primary
-		}
-		return fallback
-	}()
+	if err1 != nil {
+		return nil, err1
+	}
+	var name = tmp1
 
-	userPtr := getUser(2)
-	ageOpt := func() __INFER__ {
-		if userPtr == nil {
-			return nil
-		}
-		return userPtr.age
-	}()
-	age := func() int {
-		if ageOpt.IsSome() {
-			return ageOpt.Unwrap()
-		}
-		return 0
-	}()
+	// Test 2: Pointer ?? pointer
+	var primary *string = getPrimary()
+	var fallback *string = getFallback()
+	tmp2, err2 := primary
 
-	nilUser := nil
-	nilNameOpt := func() __INFER__ {
-		if nilUser == nil {
-			return nil
-		}
-		return nilUser.name
-	}()
-	nilName := func() string {
-		if nilNameOpt.IsSome() {
-			return nilNameOpt.Unwrap()
-		}
-		return "Default"
-	}()
+	if err2 != nil {
+		return nil, err2
+	}
+	var result = tmp2
+
+	// Test 3: Nested pointer access (separate ?. and ??)
+	var userPtr *User = getUser(2)
+	tmp3, err3 := userPtr
+
+	if err3 != nil {
+		return nil, err3
+	}
+	var ageOpt = tmp3
+	tmp4, err4 := ageOpt
+
+	if err4 != nil {
+		return nil, err4
+	}
+	var age = tmp4
+
+	// Test 4: Nil pointer handling (separate ?. and ??)
+	var nilUser *User = nil
+	tmp5, err5 := nilUser
+
+	if err5 != nil {
+		return nil, err5
+	}
+	var nilNameOpt = tmp5
+	tmp6, err6 := nilNameOpt
+
+	if err6 != nil {
+		return nil, err6
+	}
+	var nilName = tmp6
 
 	println("Name:", name)
 	println("Age:", age)

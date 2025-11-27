@@ -1,5 +1,10 @@
 package main
 
+// Test: Null coalescing with Option type methods
+// Feature: ?? operator with Option type
+// Complexity: advanced
+
+
 type OptionTag uint8
 
 const (
@@ -46,6 +51,12 @@ func (o Option) AndThen(fn func(int) Option) Option {
 	}
 	panic("invalid Option state")
 }
+func (o Option) Unwrap() int {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
 func find(arr []int, target int) Option {
 	for i, val := range arr {
 		if val == target {
@@ -57,28 +68,27 @@ func find(arr []int, target int) Option {
 func main() {
 	numbers := []int{10, 20, 30, 40}
 
-	index := func() __INFER__ {
-		coalesce := find(numbers, 25)
-		if coalesce.IsSome() {
-			return coalesce.Unwrap()
-		}
-		return -1
-	}()
-	value := func() int {
-		coalesce1 := find(numbers, 30)
-		if coalesce1.IsSome() {
-			return coalesce1.Unwrap()
-		}
-		return 0
-	}()
+	// Null coalescing with Option
+	tmp, err := find(numbers, 25)
 
-	result := func() __INFER__ {
-		coalesce2 := find(numbers, 20)
-		if coalesce2.IsSome() {
-			return coalesce2.Unwrap()
-		}
-		return -1
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var index = tmp
+	tmp1, err1 := find(numbers, 30)
+
+	if err1 != nil {
+		return nil, err1
+	}
+	var value = tmp1
+
+	// Combined with comparison
+	tmp2, err2 := find(numbers, 20)
+
+	if err2 != nil {
+		return nil, err2
+	}
+	var result = tmp2
 	msg := "not found"
 	if result >= 0 {
 		msg = "found"

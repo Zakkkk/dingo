@@ -9,7 +9,7 @@ import (
 // Feature: Result type + Go interop
 // Complexity: intermediate
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

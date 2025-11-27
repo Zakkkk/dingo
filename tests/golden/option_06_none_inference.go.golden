@@ -5,7 +5,7 @@
 package main
 
 // Test 1: Return statement context
-// dingo:n:0
+
 type OptionTag uint8
 
 const (

@@ -1,11 +1,11 @@
 package main
 
-import (
-	"fmt"
-)
+import "fmt"
 
 type OptionTag uint8
 
+// Fix A4: Some() with literal values (non-addressable)
+// The transpiler should wrap literals in IIFE to make them addressable
 const (
 	OptionTagSome OptionTag = iota
 	OptionTagNone
@@ -20,12 +20,18 @@ func Option_int_Some(arg0 int) Option_int {
 	return Option_int{tag: OptionTagSome, some: &arg0}
 }
 func Option_int_None() Option_int {
-	return Option_int{tag: OptionTagNone}
+	return Option_int{tag:
+
+	// Some() with variables (addressable - no IIFE needed)
+	OptionTagNone}
 }
 func (o Option_int) IsSome() bool {
 	return o.tag == OptionTagSome
 }
-func (o Option_int) IsNone() bool {
+func (o Option_int) IsNone(
+
+// Print results
+) bool {
 	return o.tag == OptionTagNone
 }
 func (o Option_int) Unwrap() int {

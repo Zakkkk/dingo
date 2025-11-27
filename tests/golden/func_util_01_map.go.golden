@@ -1,6 +1,10 @@
 package main
 
-func _map(arr []int, f func(int) int) []int {
+// Test: Map function on slices
+// Feature: Functional map utility
+// Complexity: basic
+
+func mapSlice(arr []int, f func(int) int) []int {
 	result := make([]int, len(arr))
 	for i, v := range arr {
 		result[i] = f(v)
@@ -9,13 +13,11 @@ func _map(arr []int, f func(int) int) []int {
 }
 func main() {
 	numbers := []int{1, 2, 3, 4, 5}
+
 	// Map with lambda
-	doubled := _map(numbers, func(x int) int {
-		return x * 2
-	})
-	squared := _map(numbers, func(x int) int {
-		return x * x
-	})
+	doubled := mapSlice(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x * 2 })
+	squared := mapSlice(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x * x })
+
 	println("Doubled:", doubled)
 	println("Squared:", squared)
 }

@@ -2,7 +2,7 @@ package main
 
 import "errors"
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

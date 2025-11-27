@@ -1,8 +1,7 @@
 package main
 
-import (
-	"errors"
-)
+import "errors"
+
 
 type ResultTag uint8
 
@@ -65,51 +64,54 @@ func validateUser(name string) Result {
 }
 func processUser(id int) Result {
 	user := fetchUser(id)
-
+	// DINGO_MATCH_START: user
 	scrutinee := user
 	switch scrutinee.tag {
 	case ResultTagOk:
 		u := *scrutinee.ok
-
+		// DINGO_PATTERN: Ok(u)
 		{
 			validated := validateUser(u)
-
+			// DINGO_MATCH_START: validated
 			scrutinee3 := validated
 			switch scrutinee3.tag {
 			case ResultTagOk:
 				v := *scrutinee3.ok
-
+				// DINGO_PATTERN: Ok(v)
 				return ResultOk(v)
 			case ResultTagErr:
 				e := *scrutinee3.err
-
+				// DINGO_PATTERN: Err(e)
 				return ResultErr(e)
 			}
 			panic("unreachable: match is exhaustive")
+			// DINGO_MATCH_END
 
 		}
 	case ResultTagErr:
 		e := *scrutinee.err
-
+		// DINGO_PATTERN: Err(e)
 		return ResultErr(e)
 	}
 	panic("unreachable: match is exhaustive")
+	// DINGO_MATCH_END
 
 }
 func main() {
 	result := processUser(42)
-
+	// DINGO_MATCH_START: result
 	scrutinee2 := result
 	switch scrutinee2.tag {
 	case ResultTagOk:
 		user := *scrutinee2.ok
-
-		return println("Success:", user)
+		// DINGO_PATTERN: Ok(user)
+		println("Success:", user)
 	case ResultTagErr:
 		error := *scrutinee2.err
-
-		return println("Error:", error)
+		// DINGO_PATTERN: Err(error)
+		println("Error:", error)
 	}
 	panic("unreachable: match is exhaustive")
+	// DINGO_MATCH_END
 
 }

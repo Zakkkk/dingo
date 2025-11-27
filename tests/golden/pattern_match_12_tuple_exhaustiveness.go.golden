@@ -6,7 +6,7 @@ import "errors"
 // Feature: Tuple pattern destructuring - exhaustiveness
 // Complexity: advanced
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

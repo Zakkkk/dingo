@@ -1,5 +1,10 @@
 package main
 
+// Test: Basic null coalescing with simple cases (inline optimization)
+// Feature: Null coalescing (??)
+// Complexity: basic
+
+
 type StringOptionTag uint8
 
 const (
@@ -46,6 +51,13 @@ func (o StringOption) AndThen(fn func(string) StringOption) StringOption {
 	}
 	panic("invalid StringOption state")
 }
+func (o StringOption) Unwrap() string {
+	if o.tag != StringOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+
 
 type IntOptionTag uint8
 
@@ -92,47 +104,56 @@ func (o IntOption) AndThen(fn func(int) IntOption) IntOption {
 	}
 	panic("invalid IntOption state")
 }
+func (o IntOption) Unwrap() int {
+	if o.tag != IntOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
 func main() {
+	// Test 1: Simple identifier ?? literal (inline optimization)
+	var name StringOption = getUserName()
+	tmp, err := name
 
-	name := getUserName()
-	displayName := func() string {
-		if name.IsSome() {
-			return name.Unwrap()
-		}
-		return "Guest"
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var displayName = tmp
 
-	fallback := StringOptionSome("Default")
-	result := func() __INFER__ {
-		if name.IsSome() {
-			return name.Unwrap()
-		}
-		return fallback
-	}()
+	// Test 2: Simple identifier ?? identifier
+	var fallback StringOption = StringOptionSome("Default")
+	tmp1, err1 := name
 
-	count := getCount()
-	finalCount := func() int {
-		if count.IsSome() {
-			return count.Unwrap()
-		}
-		return 0
-	}()
+	if err1 != nil {
+		return nil, err1
+	}
+	var result = tmp1
 
-	firstName := StringOptionNone()
-	firstDisplay := func() string {
-		if firstName.IsSome() {
-			return firstName.Unwrap()
-		}
-		return "Anonymous"
-	}()
+	// Test 3: Option[int] ?? literal
+	var count IntOption = getCount()
+	tmp2, err2 := count
 
-	age := IntOptionNone()
-	ageDisplay := func() int {
-		if age.IsSome() {
-			return age.Unwrap()
-		}
-		return 18
-	}()
+	if err2 != nil {
+		return nil, err2
+	}
+	var finalCount = tmp2
+
+	// Test 4: Multiple separate ?? operations
+	var firstName StringOption = StringOptionNone()
+	tmp3, err3 := firstName
+
+	if err3 != nil {
+		return nil, err3
+	}
+	var firstDisplay = tmp3
+
+	var age IntOption = IntOptionNone()
+	tmp4, err4 := age
+
+	if err4 != nil {
+		return nil, err4
+	}
+	var ageDisplay = tmp4
 }
 func getUserName() StringOption {
 	return StringOptionNone()

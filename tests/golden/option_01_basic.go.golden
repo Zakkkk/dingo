@@ -1,6 +1,6 @@
 package main
 
-// dingo:n:0
+
 type OptionTag uint8
 
 const (

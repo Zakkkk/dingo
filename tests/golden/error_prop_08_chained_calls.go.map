@@ -85,15 +85,6 @@
       "name": "identity"
     },
     {
-      "generated_line": 16,
-      "generated_column": 2,
-      "original_line": 12,
-      "original_column": 27,
-      "processor_input_line": 0,
-      "length": 1,
-      "name": "error_prop"
-    },
-    {
       "generated_line": 17,
       "generated_column": 1,
       "original_line": 17,
@@ -119,15 +110,6 @@
       "processor_input_line": 0,
       "length": 15,
       "name": "identity"
-    },
-    {
-      "generated_line": 23,
-      "generated_column": 2,
-      "original_line": 14,
-      "original_column": 33,
-      "processor_input_line": 0,
-      "length": 1,
-      "name": "error_prop"
     },
     {
       "generated_line": 29,

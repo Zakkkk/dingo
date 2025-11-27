@@ -4,7 +4,7 @@ package main
 // Feature: Pattern matching with runtime guard conditions
 // Complexity: basic
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

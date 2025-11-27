@@ -1,54 +1,60 @@
 package main
 
-import (
-	"errors"
-)
+import "errors"
+
+// Test: Nested sum types
+// Feature: Sum types with nested enum variants
+// Complexity: advanced
+
+
+type ResultTag uint8
 
 const (
-	variantsTagOk variantsTag = iota
-	variantsTagErr
+	ResultTagOk ResultTag = iota
+	ResultTagErr
 )
 
-type variants struct {
-	tag variantsTag
+type Result struct {
+	tag ResultTag
 	err *error
 	ok  *Value
 }
 
-func variantsOk(arg0 Value) variants {
-	return variants{tag: variantsTagOk, ok: &arg0}
+func ResultOk(arg0 Value) Result {
+	return Result{tag: ResultTagOk, ok: &arg0}
 }
-func variantsErr(arg0 error) variants {
-	return variants{tag: variantsTagErr, err: &arg0}
+func ResultErr(arg0 error) Result {
+	return Result{tag: ResultTagErr, err: &arg0}
 }
-func (e variants) IsOk() bool {
-	return e.tag == variantsTagOk
+func (e Result) IsOk() bool {
+	return e.tag == ResultTagOk
 }
-func (e variants) IsErr() bool {
-	return e.tag == variantsTagErr
+func (e Result) IsErr() bool {
+	return e.tag == ResultTagErr
 }
-func (r variants) Map(fn func(Value) Value) variants {
+func (r Result) Map(fn func(Value) Value) Result {
 	switch r.tag {
-	case variantsTagOk:
+	case ResultTagOk:
 		if r.ok != nil {
-			return variantsOk(fn(*r.ok))
+			return ResultOk(fn(*r.ok))
 		}
-	case variantsTagErr:
+	case ResultTagErr:
 		return r
 	}
-	panic("invalid variants state")
+	panic("invalid Result state")
 }
-func (r variants) AndThen(fn func(Value) variants) variants {
+func (r Result) AndThen(fn func(Value) Result) Result {
 	switch r.tag {
-	case variantsTagOk:
+	case ResultTagOk:
 		if r.ok != nil {
 			return fn(*r.ok)
 		}
-	case variantsTagErr:
+	case ResultTagErr:
 		return r
 	}
-	panic("invalid variants state")
+	panic("invalid Result state")
 }
+
 
 type ValueTag uint8
 
@@ -86,9 +92,9 @@ func parseInt(s string) Result {
 		return ResultErr(errors.New("empty string"))
 	}
 	if s == "null" {
-		return ResultOk(Value_None())
+		return ResultOk(ValueNone())
 	}
-	return ResultOk(Value_String(s))
+	return ResultOk(ValueString(s))
 }
 func main() {
 	result := parseInt("hello")

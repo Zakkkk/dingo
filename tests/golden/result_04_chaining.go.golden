@@ -6,7 +6,7 @@ import "errors"
 // Feature: Result type with map and and_then
 // Complexity: advanced
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

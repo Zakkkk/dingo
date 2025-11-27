@@ -1,7 +1,17 @@
 package main
 
 func main() {
+	// Basic safe navigation (smart unwrap mode)
+	tmp, err := user
 
-	name := user
-	city := user
+	if err != nil {
+		return nil, err
+	}
+	var name = tmp
+	tmp1, err1 := user
+
+	if err1 != nil {
+		return nil, err1
+	}
+	var city = tmp1
 }

@@ -1,8 +1,11 @@
 package main
 
-import (
-	"errors"
-)
+import "errors"
+
+// Test: Result type with pattern matching
+// Feature: Result type + pattern matching
+// Complexity: intermediate
+
 
 type ResultTag uint8
 
@@ -58,21 +61,21 @@ func divide(a float64, b float64) Result {
 	return ResultOk(a / b)
 }
 func handleResult(r Result) string {
-	var result interface{}
-
+	var __match_result_0 string
+	// DINGO_MATCH_START: r
 	scrutinee := r
 	switch scrutinee.tag {
 	case ResultTagOk:
 		val := *scrutinee.ok
-
-		result = "Success: " + string(int(val))
+		// DINGO_PATTERN: ResultOk(val)
+		__match_result_0 = "Success: " + string(int(val))
 	case ResultTagErr:
 		e := *scrutinee.err
-
-		result = "Error: " + e.Error()
+		// DINGO_PATTERN: ResultErr(e)
+		__match_result_0 = "Error: " + e.Error()
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
+	// DINGO_MATCH_END
 
 }
 func main() {

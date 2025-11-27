@@ -1,9 +1,14 @@
 package main
 
+// Test: Chained safe navigation
+// Feature: Safe navigation with multiple levels
+// Complexity: intermediate
+
 type Address struct {
 	city   *string
 	street *string
 }
+
 type User struct {
 	name    string
 	address *Address
@@ -12,10 +17,27 @@ type User struct {
 func main() {
 	user := &User{name: "Alice", address: nil}
 
-	city := user
-	street := user
+	// Chained safe navigation
+	tmp, err := user
 
-	upperCity := user
+	if err != nil {
+		return nil, err
+	}
+	var city = tmp
+	tmp1, err1 := user
+
+	if err1 != nil {
+		return nil, err1
+	}
+	var street = tmp1
+
+	// Safe navigation with method calls
+	tmp2, err2 := user
+
+	if err2 != nil {
+		return nil, err2
+	}
+	var upperCity = tmp2
 
 	println("City:", city)
 	println("Street:", street)

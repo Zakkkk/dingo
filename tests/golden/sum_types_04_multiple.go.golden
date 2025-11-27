@@ -1,5 +1,6 @@
 package main
 
+
 type StatusTag uint8
 
 const (
@@ -23,6 +24,7 @@ func (e Status) IsPending() bool {
 func (e Status) IsActive() bool {
 	return e.tag == StatusTagActive
 }
+
 
 type PriorityTag uint8
 

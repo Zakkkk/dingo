@@ -6,7 +6,7 @@ import (
 
 func readConfig(filePath2 string) ([]byte, error) {
 	tmp, err := os.ReadFile(filePath)
-	// dingo:e:0
+
 	if err != nil {
 		return nil, err
 	}
@@ -15,7 +15,7 @@ func readConfig(filePath2 string) ([]byte, error) {
 }
 func test() {
 	tmp, err := readConfig("config.yaml")
-	// dingo:e:1
+
 	if err != nil {
 		return nil, err
 	}

@@ -1,5 +1,6 @@
 package main
 
+
 type OptionTag uint8
 
 const (
@@ -46,6 +47,12 @@ func (o Option) AndThen(fn func(string) Option) Option {
 	}
 	panic("invalid Option state")
 }
+func (o Option) Unwrap() string {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
 func findUser(id int) Option {
 	if id > 0 {
 		return OptionSome("User" + string(rune(id)))
@@ -54,18 +61,19 @@ func findUser(id int) Option {
 }
 func getUserOrDefault(id int) string {
 	user := findUser(id)
-
+	// DINGO_MATCH_START: user
 	scrutinee := user
 	switch scrutinee.tag {
 	case OptionTagSome:
 		name := *scrutinee.some
-
+		// DINGO_PATTERN: Some(name)
 		return name
 	case OptionTagNone:
-
+		// DINGO_PATTERN: None
 		return "Anonymous"
 	}
 	panic("unreachable: match is exhaustive")
+	// DINGO_MATCH_END
 
 }
 func main() {

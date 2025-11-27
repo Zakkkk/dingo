@@ -76,15 +76,6 @@
       "name": "identity"
     },
     {
-      "generated_line": 13,
-      "generated_column": 2,
-      "original_line": 11,
-      "original_column": 34,
-      "processor_input_line": 0,
-      "length": 1,
-      "name": "error_prop"
-    },
-    {
       "generated_line": 14,
       "generated_column": 1,
       "original_line": 14,
@@ -128,15 +119,6 @@
       "processor_input_line": 0,
       "length": 35,
       "name": "identity"
-    },
-    {
-      "generated_line": 22,
-      "generated_column": 2,
-      "original_line": 16,
-      "original_column": 34,
-      "processor_input_line": 0,
-      "length": 1,
-      "name": "error_prop"
     },
     {
       "generated_line": 28,

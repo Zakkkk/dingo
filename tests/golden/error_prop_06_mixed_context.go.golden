@@ -8,13 +8,13 @@ import "strconv"
 
 func processData(path string) (int, error) {
 	tmp, err := os.ReadFile(path)
-	// dingo:e:0
+
 	if err != nil {
 		return 0, err
 	}
 	var data = tmp
 	tmp1, err1 := strconv.Atoi(string(data))
-	// dingo:e:1
+
 	if err1 != nil {
 		return 0, err1
 	}

@@ -11,7 +11,7 @@ type User struct {
 
 func fetchUser(id int) (*User, error) {
 	tmp, err := os.ReadFile("user.json")
-	// dingo:e:0
+
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +20,7 @@ func fetchUser(id int) (*User, error) {
 }
 func getNames() ([]string, error) {
 	tmp, err := os.ReadFile("names.txt")
-	// dingo:e:1
+
 	if err != nil {
 		return nil, err
 	}

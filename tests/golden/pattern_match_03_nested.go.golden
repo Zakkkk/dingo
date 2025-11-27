@@ -3,56 +3,59 @@ package main
 import "errors"
 
 // Test: Nested pattern matching
-// Feature: Match with nested // dingo:n:1
-type patternsTag uint8
+// Feature: Match with nested enum patterns
+// Complexity: advanced
+
+
+type ResultTag uint8
 
 const (
-	patternsTagOk patternsTag = iota
-	patternsTagErr
+	ResultTagOk ResultTag = iota
+	ResultTagErr
 )
 
-type patterns struct {
-	tag patternsTag
+type Result struct {
+	tag ResultTag
 	err *error
 	ok  *Value
 }
 
-func patternsOk(arg0 Value) patterns {
-	return patterns{tag: patternsTagOk, ok: &arg0}
+func ResultOk(arg0 Value) Result {
+	return Result{tag: ResultTagOk, ok: &arg0}
 }
-func patternsErr(arg0 error) patterns {
-	return patterns{tag: patternsTagErr, err: &arg0}
+func ResultErr(arg0 error) Result {
+	return Result{tag: ResultTagErr, err: &arg0}
 }
-func (e patterns) IsOk() bool {
-	return e.tag == patternsTagOk
+func (e Result) IsOk() bool {
+	return e.tag == ResultTagOk
 }
-func (e patterns) IsErr() bool {
-	return e.tag == patternsTagErr
+func (e Result) IsErr() bool {
+	return e.tag == ResultTagErr
 }
-func (r patterns) Map(fn func(Value) Value) patterns {
+func (r Result) Map(fn func(Value) Value) Result {
 	switch r.tag {
-	case patternsTagOk:
+	case ResultTagOk:
 		if r.ok != nil {
-			return patternsOk(fn(*r.ok))
+			return ResultOk(fn(*r.ok))
 		}
-	case patternsTagErr:
+	case ResultTagErr:
 		return r
 	}
-	panic("invalid patterns state")
+	panic("invalid Result state")
 }
-func (r patterns) AndThen(fn func(Value) patterns) patterns {
+func (r Result) AndThen(fn func(Value) Result) Result {
 	switch r.tag {
-	case patternsTagOk:
+	case ResultTagOk:
 		if r.ok != nil {
 			return fn(*r.ok)
 		}
-	case patternsTagErr:
+	case ResultTagErr:
 		return r
 	}
-	panic("invalid patterns state")
+	panic("invalid Result state")
 }
 
-// dingo:n:0
+
 type ValueTag uint8
 
 const (

@@ -1,6 +1,11 @@
 package main
 
-type Tuple2IntInt struct {
+type
+
+// Test: Tuple edge cases and boundary conditions
+// Feature: Boundary conditions, special cases
+// Complexity: intermediate
+Tuple2IntInt struct {
 	_0 int
 	_1 int
 }
@@ -22,24 +27,28 @@ func getComplex() (int, int) {
 	return x + y, x * y
 }
 func main() {
-
+	// Minimum arity
 	tmp := getMinimum()
 	a, b := tmp._0, tmp._1
 	println("Minimum:", a, b)
 
+	// Wildcard destructuring - ignore middle elements
 	tmp1 := processData()
 	first, _, _, _, last := tmp1._0, tmp1._1, tmp1._2, tmp1._3, tmp1._4
 	println("Wildcards:", first, last)
 
+	// Complex expressions in tuple
 	tmp2 := getComplex()
 	sum, product := tmp2._0, tmp2._1
 	println("Complex:", sum, product)
 
+	// Tuple in assignment
 	coords := Tuple2IntInt{_0: 100, _1: 200}
 	tmp3 := coords
 	x, y := tmp3._0, tmp3._1
 	println("Assignment:", x, y)
 
+	// Multiple tuple assignments
 	data1 := Tuple2IntInt{_0: 1, _1: 2}
 	data2 := Tuple2IntInt{_0: 3, _1: 4}
 	tmp4 := data1

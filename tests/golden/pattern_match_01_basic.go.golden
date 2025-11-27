@@ -4,7 +4,7 @@ package main
 // Feature: Pattern matching with match expression
 // Complexity: basic
 
-// dingo:n:0
+
 type StatusTag uint8
 
 const (

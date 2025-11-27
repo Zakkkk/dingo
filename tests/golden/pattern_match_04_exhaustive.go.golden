@@ -4,7 +4,7 @@ package main
 // Feature: Compiler ensures all cases covered
 // Complexity: intermediate
 
-// dingo:n:0
+
 type ColorTag uint8
 
 const (

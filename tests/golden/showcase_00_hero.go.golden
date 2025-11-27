@@ -31,13 +31,13 @@ func fetchUser(id int) (*User, error) {
 // Notice: Zero manual error checks!
 func getUserData(id int, email string) (*User, error) {
 	tmp, err := validateEmail(email)
-	// dingo:e:0
+
 	if err != nil {
 		return nil, err
 	}
 	var validEmail = tmp
 	tmp1, err1 := fetchUser(id)
-	// dingo:e:1
+
 	if err1 != nil {
 		return nil, err1
 	}

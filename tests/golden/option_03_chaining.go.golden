@@ -4,7 +4,7 @@ package main
 // Feature: Option type with method chaining
 // Complexity: advanced
 
-// dingo:n:0
+
 type OptionTag uint8
 
 const (

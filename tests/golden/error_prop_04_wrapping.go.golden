@@ -8,7 +8,7 @@ import (
 func readUserConfig(username string) ([]byte, error) {
 	path := "/home/" + username + "/config.json"
 	tmp, err := os.ReadFile(path)
-	// dingo:e:0
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to read user config: %w", err)
 	}

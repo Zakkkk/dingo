@@ -6,7 +6,7 @@ import "errors"
 // Feature: Tuple pattern destructuring - wildcards
 // Complexity: intermediate
 
-// dingo:n:0
+
 type ResultTag uint8
 
 const (

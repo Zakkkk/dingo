@@ -40,15 +40,6 @@
       "name": "identity"
     },
     {
-      "generated_line": 8,
-      "generated_column": 2,
-      "original_line": 4,
-      "original_column": 16,
-      "processor_input_line": 0,
-      "length": 1,
-      "name": "error_prop"
-    },
-    {
       "generated_line": 12,
       "generated_column": 1,
       "original_line": 5,

@@ -6,7 +6,7 @@ import "strings"
 // Feature: Guards with complex boolean logic, field access, and method calls
 // Complexity: advanced
 
-// dingo:n:1
+
 type RequestTag uint8
 
 const (
@@ -42,7 +42,7 @@ func (e Request) IsDelete() bool {
 	return e.tag == RequestTagDelete
 }
 
-// dingo:n:0
+
 type StatusTag uint8
 
 const (

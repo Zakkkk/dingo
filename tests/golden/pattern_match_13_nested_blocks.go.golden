@@ -19,7 +19,7 @@ type Result_Option_int_error struct {
 	ok  *Option_int
 	err *error
 
-	// dingo:n:1
+
 }
 
 func Result_Option_int_error_Ok(arg0 Option_int) Result_Option_int_error {
@@ -60,7 +60,7 @@ func (r Result_Option_int_error) UnwrapErr() error {
 }
 func (r Result_Option_int_error) UnwrapOrElse(
 
-// dingo:n:0
+
 fn func(error) Option_int) Option_int {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok

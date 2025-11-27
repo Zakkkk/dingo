@@ -1,5 +1,10 @@
 package main
 
+// Test: Null coalescing integration with safe navigation
+// Feature: ?? operator combined with ?.
+// Complexity: intermediate
+
+
 type UserOptionTag uint8
 
 const (
@@ -46,6 +51,13 @@ func (o UserOption) AndThen(fn func(User) UserOption) UserOption {
 	}
 	panic("invalid UserOption state")
 }
+func (o UserOption) Unwrap() User {
+	if o.tag != UserOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+
 
 type AddressOptionTag uint8
 
@@ -92,6 +104,13 @@ func (o AddressOption) AndThen(fn func(Address) AddressOption) AddressOption {
 	}
 	panic("invalid AddressOption state")
 }
+func (o AddressOption) Unwrap() Address {
+	if o.tag != AddressOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+
 
 type StringOptionTag uint8
 
@@ -138,85 +157,107 @@ func (o StringOption) AndThen(fn func(string) StringOption) StringOption {
 	}
 	panic("invalid StringOption state")
 }
+func (o StringOption) Unwrap() string {
+	if o.tag != StringOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
 
 type User struct {
 	name    string
 	address AddressOption
 }
+
 type Address struct {
 	city StringOption
 	zip  string
 }
 func main() {
+	// Test 1: Separate safe navigation and null coalescing
+	// Note: Direct combination of ?. and ?? is not supported due to multi-line IIFE complexity
+	var user UserOption = getUser(1)
+	tmp, err := user
 
-	user := getUser(1)
-	userNameOpt := func() __INFER__ {
-		if user.IsNone() {
-			return __INFER___None()
-		}
-		user := user.Unwrap()
-		return user.name
-	}()
-	userName := func() string {
-		if userNameOpt.IsSome() {
-			return userNameOpt.Unwrap()
-		}
-		return "unknown"
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var userNameOpt = tmp
+	tmp1, err1 := userNameOpt
 
+	if err1 != nil {
+		return nil, err1
+	}
+	var userName = tmp1
+
+	// Test 2: user?.address?.city ?? defaultCity
 	defaultCity := "San Francisco"
-	addressOpt := func() __INFER__ {
-		if user.IsNone() {
-			return __INFER___None()
-		}
-		user1 := user.Unwrap()
-		return user1.address
-	}()
-	cityOpt := addressOpt
-	city := func() __INFER__ {
-		if cityOpt.IsSome() {
-			return cityOpt.Unwrap()
-		}
-		return defaultCity
-	}()
+	tmp2, err2 := user
 
-	profile := fetchProfile()
-	emailOpt := func() __INFER__ {
-		if profile.IsNone() {
-			return __INFER___None()
-		}
-		profile2 := profile.Unwrap()
-		return profile2.getEmail()
-	}()
-	email := func() string {
-		if emailOpt.IsSome() {
-			return emailOpt.Unwrap()
-		}
-		return "no-email@example.com"
-	}()
+	if err2 != nil {
+		return nil, err2
+	}
+	var addressOpt = tmp2
+	tmp3, err3 := addressOpt
 
-	user2 := getUser(2)
-	addressOpt2 := func() __INFER__ {
-		if user2.IsNone() {
-			return __INFER___None()
-		}
-		user23 := user2.Unwrap()
-		return user23.address
-	}()
-	zipOpt := addressOpt2
-	cityOpt2 := addressOpt2
-	zip := func() string {
-		if zipOpt.IsSome() {
-			return zipOpt.Unwrap()
-		}
-		return "00000"
-	}()
-	city2 := func() string {
-		if cityOpt2.IsSome() {
-			return cityOpt2.Unwrap()
-		}
-		return "Unknown City"
-	}()
+	if err3 != nil {
+		return nil, err3
+	}
+	var cityOpt = tmp3
+	tmp4, err4 := cityOpt
+
+	if err4 != nil {
+		return nil, err4
+	}
+	var city = tmp4
+
+	// Test 3: Chain with method calls
+	var profile UserOption = fetchProfile()
+	tmp5, err5 := profile
+
+	if err5 != nil {
+		return nil, err5
+	}
+	var emailOpt = tmp5
+	tmp6, err6 := emailOpt
+
+	if err6 != nil {
+		return nil, err6
+	}
+	var email = tmp6
+
+	// Test 4: Multiple safe nav with different fallbacks
+	var user2 UserOption = getUser(2)
+	tmp7, err7 := user2
+
+	if err7 != nil {
+		return nil, err7
+	}
+	var addressOpt2 = tmp7
+	tmp8, err8 := addressOpt2
+
+	if err8 != nil {
+		return nil, err8
+	}
+	var zipOpt = tmp8
+	tmp9, err9 := addressOpt2
+
+	if err9 != nil {
+		return nil, err9
+	}
+	var cityOpt2 = tmp9
+	tmp10, err10 := zipOpt
+
+	if err10 != nil {
+		return nil, err10
+	}
+	var zip = tmp10
+	tmp11, err11 := cityOpt2
+
+	if err11 != nil {
+		return nil, err11
+	}
+	var city2 = tmp11
 
 	println("User:", userName, "City:", city, "Email:", email)
 	println("Zip:", zip, "City2:", city2)

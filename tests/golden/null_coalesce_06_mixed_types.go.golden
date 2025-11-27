@@ -1,5 +1,10 @@
 package main
 
+// Test: Null coalescing with mixed Option and pointer types
+// Feature: ?? operator with type transitions
+// Complexity: advanced
+
+
 type UserOptionTag uint8
 
 const (
@@ -46,6 +51,13 @@ func (o UserOption) AndThen(fn func(User) UserOption) UserOption {
 	}
 	panic("invalid UserOption state")
 }
+func (o UserOption) Unwrap() User {
+	if o.tag != UserOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+
 
 type StringOptionTag uint8
 
@@ -92,79 +104,96 @@ func (o StringOption) AndThen(fn func(string) StringOption) StringOption {
 	}
 	panic("invalid StringOption state")
 }
+func (o StringOption) Unwrap() string {
+	if o.tag != StringOptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
 
 type User struct {
 	name    string
 	profile *Profile
 }
+
 type Profile struct {
 	bio string
 }
 func main() {
+	// Test 1: Option -> pointer transition (separate ?. and ??)
+	var user UserOption = getUser()
+	tmp, err := user
 
-	user := getUser()
-	profileOpt := func() __INFER__ {
-		if user.IsNone() {
-			return __INFER___None()
-		}
-		user := user.Unwrap()
-		return user.profile
-	}()
-	bioOpt := profileOpt
-	bio := func() string {
-		if bioOpt.IsSome() {
-			return bioOpt.Unwrap()
-		}
-		return "No bio"
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var profileOpt = tmp
+	tmp1, err1 := profileOpt
 
-	userPtr := getUserPtr()
-	nameOpt := func() __INFER__ {
-		if userPtr == nil {
-			return nil
-		}
-		return userPtr.name
-	}()
-	name := func() string {
-		if nameOpt.IsSome() {
-			return nameOpt.Unwrap()
-		}
-		return "Anonymous"
-	}()
+	if err1 != nil {
+		return nil, err1
+	}
+	var bioOpt = tmp1
+	tmp2, err2 := bioOpt
 
-	user2 := UserOptionSome(User{
+	if err2 != nil {
+		return nil, err2
+	}
+	var bio = tmp2
+
+	// Test 2: Pointer -> Option transition (separate ?. and ??)
+	var userPtr *User = getUserPtr()
+	tmp3, err3 := userPtr
+
+	if err3 != nil {
+		return nil, err3
+	}
+	var nameOpt = tmp3
+	tmp4, err4 := nameOpt
+
+	if err4 != nil {
+		return nil, err4
+	}
+	var name = tmp4
+
+	// Test 3: Mixed chain with multiple types (separate ?. and ??)
+	var user2 UserOption = UserOptionSome(User{
 		name:    "Bob",
 		profile: &Profile{bio: "Engineer"},
 	})
-	profileOpt2 := func() __INFER__ {
-		if user2.IsNone() {
-			return __INFER___None()
-		}
-		user21 := user2.Unwrap()
-		return user21.profile
-	}()
-	bioOpt2 := profileOpt2
-	profile := func() string {
-		if bioOpt2.IsSome() {
-			return bioOpt2.Unwrap()
-		}
-		return "Default bio"
-	}()
+	tmp5, err5 := user2
 
-	user3 := getUser()
-	emailOpt := func() __INFER__ {
-		if user3.IsNone() {
-			return __INFER___None()
-		}
-		user32 := user3.Unwrap()
-		return user32.getEmail()
-	}()
-	email := func() string {
-		if emailOpt.IsSome() {
-			return emailOpt.Unwrap()
-		}
-		return "no-email"
-	}()
+	if err5 != nil {
+		return nil, err5
+	}
+	var profileOpt2 = tmp5
+	tmp6, err6 := profileOpt2
+
+	if err6 != nil {
+		return nil, err6
+	}
+	var bioOpt2 = tmp6
+	tmp7, err7 := bioOpt2
+
+	if err7 != nil {
+		return nil, err7
+	}
+	var profile = tmp7
+
+	// Test 4: Option method returning pointer (separate ?. and ??)
+	var user3 UserOption = getUser()
+	tmp8, err8 := user3
+
+	if err8 != nil {
+		return nil, err8
+	}
+	var emailOpt = tmp8
+	tmp9, err9 := emailOpt
+
+	if err9 != nil {
+		return nil, err9
+	}
+	var email = tmp9
 
 	println("Bio:", bio)
 	println("Name:", name)

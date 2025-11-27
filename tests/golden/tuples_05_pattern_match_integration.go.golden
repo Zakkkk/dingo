@@ -1,5 +1,10 @@
 package main
 
+// Test: Tuples with pattern matching
+// Feature: Integration with match expressions
+// Complexity: advanced
+
+
 type StatusTag uint8
 
 const (
@@ -31,13 +36,13 @@ func (e Status) IsComplete() bool {
 	return e.tag == StatusTagComplete
 }
 func getStatus() (Status, int) {
-	return Status_Active(), 50
+	return StatusActive(), 50
 }
 func getCoords() (int, int) {
 	return 10, 20
 }
 func analyzePoint(x int, y int) string {
-
+	// Pattern matching on individual values instead of tuple literals
 	if x == 0 && y == 0 {
 		return "origin"
 	}
@@ -51,34 +56,36 @@ func analyzePoint(x int, y int) string {
 }
 func analyzeStatus(s Status, progress int) string {
 	// Simplified: use match on enum only
-	var result interface{}
-
+	var __match_result_0 string
+	// DINGO_MATCH_START: s
 	scrutinee := s
 	switch scrutinee.tag {
 	case StatusTagPending:
-
-		result = "not started"
+		// DINGO_PATTERN: StatusPending
+		__match_result_0 = "not started"
 	case StatusTagActive:
-
-		result = "in progress"
+		// DINGO_PATTERN: StatusActive
+		__match_result_0 = "in progress"
 	case StatusTagComplete:
-
-		result = "finished"
+		// DINGO_PATTERN: StatusComplete
+		__match_result_0 = "finished"
 	}
-	panic("unreachable: match is exhaustive")
-	return result
+	return __match_result_0
+	// DINGO_MATCH_END
 
 }
 func main() {
-
+	// Pattern match with tuple literals
 	location := analyzePoint(0, 5)
 	println("Location:", location)
 
+	// Pattern match with tuple destructuring
 	tmp := getStatus()
 	status, progress := tmp._0, tmp._1
 	msg := analyzeStatus(status, progress)
 	println("Status:", msg)
 
+	// Tuple destructuring with value checks
 	tmp1 := getCoords()
 	cx, cy := tmp1._0, tmp1._1
 	var result string

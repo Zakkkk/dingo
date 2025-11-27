@@ -1,5 +1,9 @@
 package main
 
+// Test: Safe navigation with method calls
+// Feature: ?. with methods and function calls
+// Complexity: advanced
+
 type Config struct {
 	timeout *int
 }
@@ -13,16 +17,27 @@ func (c *Config) validate() bool {
 func main() {
 	config := &Config{timeout: nil}
 
-	timeout := config
-	isValid := config
+	// Safe navigation with method calls
+	tmp, err := config
 
-	actualTimeout := func() int {
-		coalesce := config
-		if coalesce.IsSome() {
-			return coalesce.Unwrap()
-		}
-		return 30
-	}()
+	if err != nil {
+		return nil, err
+	}
+	var timeout = tmp
+	tmp1, err1 := config
+
+	if err1 != nil {
+		return nil, err1
+	}
+	var isValid = tmp1
+
+	// Chained with null coalescing
+	tmp2, err2 := config
+
+	if err2 != nil {
+		return nil, err2
+	}
+	var actualTimeout = tmp2
 
 	println("Timeout:", timeout, "Valid:", isValid, "Actual:", actualTimeout)
 }

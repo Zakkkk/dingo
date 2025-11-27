@@ -102,6 +102,14 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		cfg = config.DefaultConfig()
 	}
 
+	// Create error propagation processor with legacy config if provided
+	var errorPropProcessor FeatureProcessor
+	if legacyConfig != nil {
+		errorPropProcessor = NewErrorPropASTProcessorWithConfig(legacyConfig)
+	} else {
+		errorPropProcessor = NewErrorPropASTProcessor()
+	}
+
 	processors := []FeatureProcessor{
 		// Order matters! Process in this sequence:
 		// 0. Dingo Pre-Parser (let → var/short decl) - MUST be FIRST
@@ -116,8 +124,8 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		NewRustMatchProcessor(),
 		// 3. Lambdas (x => expr, |x| expr) - AFTER pattern matching
 		NewLambdaProcessorWithConfig(cfg),
-		// 4. Type annotations (: → space) - after lambdas, after generic syntax
-		NewTypeAnnotProcessor(),
+		// 4. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
+		NewTypeAnnotASTProcessor(),
 		// 5. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
 		NewTupleProcessor(),
 		// 6. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
@@ -128,12 +136,12 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		// 8. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
-		// 9. Error propagation (expr?) - AFTER ternary (handles remaining ?)
-		NewErrorPropProcessorWithConfig(legacyConfig),
+		// 9. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
+		errorPropProcessor,
 	}
 
-	// 10. Enums (enum Name { ... }) - after error prop
-	processors = append(processors, NewEnumProcessor())
+	// 10. Enums (enum Name { ... }) - AST-based, after error prop
+	processors = append(processors, NewEnumASTProcessor())
 
 	// REMOVED: KeywordProcessor - REPLACED by DingoPreParser (position 0)
 	// DingoPreParser handles let declarations with full AST-based parsing
