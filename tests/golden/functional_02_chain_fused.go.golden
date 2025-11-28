@@ -1,0 +1,23 @@
+package main
+
+import "fmt"
+
+func main() {
+	nums := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+
+	// Fused chain: filter -> map
+	// Should generate single loop with if + transform
+	evens := func() []_ {
+	tmp := make([]_, 0, len(nums))
+	for _, x __TYPE_INFERENCE_NEEDED := range nums {
+		if x % 2 == 0 {
+			tmp = append(tmp, x __TYPE_INFERENCE_NEEDED)
+		}
+	}
+	return tmp
+}().map(func(x __TYPE_INFERENCE_NEEDED) { return x * 10 })
+
+	for _, n := range evens {
+		fmt.Println(n)
+	}
+}

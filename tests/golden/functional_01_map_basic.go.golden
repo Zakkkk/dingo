@@ -1,0 +1,20 @@
+package main
+
+import "fmt"
+
+func main() {
+	nums := []int{1, 2, 3, 4, 5}
+
+	// Basic map operation
+	doubled := func() []_ {
+	tmp := make([]_, 0, len(nums))
+	for _, x __TYPE_INFERENCE_NEEDED := range nums {
+		tmp = append(tmp, x * 2)
+	}
+	return tmp
+}()
+
+	for _, n := range doubled {
+		fmt.Println(n)
+	}
+}

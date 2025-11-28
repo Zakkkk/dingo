@@ -1,0 +1,23 @@
+package main
+
+import "fmt"
+
+func main() {
+	nums := []int{1, 2, 3, 4, 5}
+
+	// find() returns Option[T]
+	result := func() Option_ {
+	for _, x __TYPE_INFERENCE_NEEDED := range nums {
+		if x > 3 {
+			return Option__Some(x __TYPE_INFERENCE_NEEDED)
+		}
+	}
+	return Option__None()
+}()
+
+	if result.IsSome() {
+		fmt.Printf("Found: %d\n", result.Unwrap())
+	} else {
+		fmt.Println("Not found")
+	}
+}

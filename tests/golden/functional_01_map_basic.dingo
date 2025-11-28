@@ -1,0 +1,14 @@
+package main
+
+import "fmt"
+
+func main() {
+	nums := []int{1, 2, 3, 4, 5}
+
+	// Basic map operation
+	doubled := nums.map(x => x * 2)
+
+	for _, n := range doubled {
+		fmt.Println(n)
+	}
+}

@@ -124,30 +124,32 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		NewRustMatchProcessor(),
 		// 3. Lambdas (x => expr, |x| expr) - AFTER pattern matching
 		NewLambdaProcessorWithConfig(cfg),
-		// 4. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
+		// 4. Functional utilities (map, filter, reduce, etc.) - AFTER lambdas (lambdas expand first)
+		NewFunctionalProcessor(),
+		// 5. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
 		NewTypeAnnotASTProcessor(),
-		// 5. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
+		// 6. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
 		NewTupleProcessor(),
-		// 6. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
+		// 7. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
 		NewSafeNavProcessor(),
-		// 7. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
+		// 8. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
 		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
 		NewNullCoalesceProcessor(),
-		// 8. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
+		// 9. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
-		// 9. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
+		// 10. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
 		errorPropProcessor,
 	}
 
-	// 10. Enums (enum Name { ... }) - AST-based, after error prop
+	// 11. Enums (enum Name { ... }) - AST-based, after error prop
 	processors = append(processors, NewEnumASTProcessor())
 
 	// REMOVED: KeywordProcessor - REPLACED by DingoPreParser (position 0)
 	// DingoPreParser handles let declarations with full AST-based parsing
 	// processors = append(processors, NewKeywordProcessor())
 
-	// 11. Unqualified imports (ReadFile → os.ReadFile) - requires cache
+	// 12. Unqualified imports (ReadFile → os.ReadFile) - requires cache
 	if cache != nil {
 		processors = append(processors, NewUnqualifiedImportProcessor(cache))
 	}
