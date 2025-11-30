@@ -119,26 +119,32 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		// 1. Legacy Option/Result syntax (Option_int → Option[int]) - BEFORE generic syntax
 		//    Transforms: Option_int → Option[int], Result_int_error → Result[int, error]
 		//    Transforms: Option_int_Some(x) → Some(x), Option_int_None() → None
-		NewLegacyOptionSyntaxProcessor(),
+		// TODO(ast-migration): Re-enable after fixing NewLegacyOptionSyntaxProcessor
+		// NewLegacyOptionSyntaxProcessor(),
 		// 2. Generic syntax (<> → []) - must be early before type annotations
 		NewGenericSyntaxProcessor(),
 		// 3. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
 		//    Match arms: Pattern => Expression (structural context)
 		//    Lambdas: params => expression (expression context)
-		NewRustMatchProcessor(),
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewRustMatchASTProcessor(),
 		// 4. Lambdas (x => expr, |x| expr) - AFTER pattern matching
-		NewLambdaProcessorWithConfig(cfg),
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewLambdaASTProcessor(),
 		// 5. Functional utilities (map, filter, reduce, etc.) - AFTER lambdas (lambdas expand first)
-		NewFunctionalProcessor(),
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewFunctionalASTProcessor(),
 		// 6. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
 		NewTypeAnnotASTProcessor(),
 		// 7. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
 		NewTupleProcessor(),
 		// 8. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
-		NewSafeNavProcessor(),
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewSafeNavASTProcessor(),
 		// 9. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
 		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
-		NewNullCoalesceProcessor(),
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewNullCoalesceASTProcessor(),
 		// 10. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
@@ -154,8 +160,9 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 	// processors = append(processors, NewKeywordProcessor())
 
 	// 13. Unqualified imports (ReadFile → os.ReadFile) - requires cache
+	//     MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 	if cache != nil {
-		processors = append(processors, NewUnqualifiedImportProcessor(cache))
+		processors = append(processors, NewUnqualifiedImportProcessorAST(cache))
 	}
 
 	return &Preprocessor{
