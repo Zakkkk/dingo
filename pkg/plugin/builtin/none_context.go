@@ -240,7 +240,8 @@ func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (string, error) 
 	}
 
 	// Validate that the inferred type is an Option type
-	if !strings.HasPrefix(inferredType, "Option_") {
+	// Support both camelCase (OptionInt) and legacy underscore (Option_int) formats
+	if !strings.HasPrefix(inferredType, "Option") {
 		return "", fmt.Errorf("expected Option<T> type, got %s", inferredType)
 	}
 

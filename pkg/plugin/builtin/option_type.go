@@ -44,6 +44,9 @@ type OptionTypePlugin struct {
 
 	// Track Some() constructor calls that need to be replaced with struct literals
 	someConstructorRewrites map[*ast.CallExpr]*ast.CompositeLit
+
+	// Track None identifiers that need to be replaced with struct literals
+	noneRewrites map[*ast.Ident]*ast.CompositeLit
 }
 
 // NewOptionTypePlugin creates a new Option type plugin
@@ -219,7 +222,11 @@ func (p *OptionTypePlugin) handleNoneExpression(ident *ast.Ident) {
 	p.ctx.Logger.Debugf("Transforming None → %s{tag: OptionTagNone}", optionTypeName)
 	p.ctx.Logger.Debugf("Generated replacement AST: %v", replacement)
 
-	// Note: Actual AST replacement happens in the Transform phase
+	// Store for Transform phase
+	if p.noneRewrites == nil {
+		p.noneRewrites = make(map[*ast.Ident]*ast.CompositeLit)
+	}
+	p.noneRewrites[ident] = replacement
 }
 
 // handleSomeConstructor processes Some(value) constructor
@@ -1289,8 +1296,9 @@ func (p *OptionTypePlugin) inferTypeFromExpr(expr ast.Expr) (string, error) {
 // It rewrites:
 // 1. Option[T] generic syntax to concrete OptionT types
 // 2. Some(value) constructor calls to struct literals
+// 3. None identifiers to struct literals
 func (p *OptionTypePlugin) Transform(node ast.Node) (ast.Node, error) {
-	if len(p.genericTypeRewrites) == 0 && len(p.someConstructorRewrites) == 0 {
+	if len(p.genericTypeRewrites) == 0 && len(p.someConstructorRewrites) == 0 && len(p.noneRewrites) == 0 {
 		return node, nil // No transformations needed
 	}
 
@@ -1313,6 +1321,14 @@ func (p *OptionTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 			// Check if this is a Some() call we need to replace
 			if callExpr, ok := n.(*ast.CallExpr); ok {
 				if replacement, found := p.someConstructorRewrites[callExpr]; found {
+					cursor.Replace(replacement)
+					return true
+				}
+			}
+
+			// Check if this is a None identifier we need to replace
+			if ident, ok := n.(*ast.Ident); ok {
+				if replacement, found := p.noneRewrites[ident]; found {
 					cursor.Replace(replacement)
 					return true
 				}

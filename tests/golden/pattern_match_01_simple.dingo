@@ -33,7 +33,7 @@ func handleStatus(status: Status) -> string {
 func doubleIfPresent(opt: Option<int>) -> Option<int> {
 	let result = match opt {
 		Some(x) => Some(x * 2),
-		None => Option_int_None()
+		None => OptionIntNone()
 	}
 	return result
 }

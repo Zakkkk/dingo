@@ -1011,9 +1011,10 @@ func (s *TypeInferenceService) RegisterResultType(typeName string, okType, errTy
 
 	// CRITICAL FIX #1: Validate round-trip consistency
 	// Ensure type name is actually derived from these type strings
-	expectedTypeName := fmt.Sprintf("Result_%s_%s",
-		s.sanitizeTypeName(okTypeStr),
-		s.sanitizeTypeName(errTypeStr))
+	// Use camelCase format: Result + SanitizedOkType + SanitizedErrType
+	expectedTypeName := fmt.Sprintf("Result%s%s",
+		SanitizeTypeName(okTypeStr),
+		SanitizeTypeName(errTypeStr))
 	if typeName != expectedTypeName {
 		s.logger.Warnf("Type name mismatch: expected %s, got %s (sanitization may be lossy)", expectedTypeName, typeName)
 	}
@@ -1071,7 +1072,8 @@ func (s *TypeInferenceService) RegisterOptionType(typeName string, valueType typ
 	s.logger.Debugf("Registered Option type: %s (T=%s)", typeName, valueTypeStr)
 
 	// CRITICAL FIX #1: Validate round-trip consistency
-	expectedTypeName := fmt.Sprintf("Option_%s", s.sanitizeTypeName(valueTypeStr))
+	// Use camelCase format: Option + SanitizedValueType
+	expectedTypeName := fmt.Sprintf("Option%s", SanitizeTypeName(valueTypeStr))
 	if typeName != expectedTypeName {
 		s.logger.Warnf("Type name mismatch: expected %s, got %s (sanitization may be lossy)", expectedTypeName, typeName)
 	}
