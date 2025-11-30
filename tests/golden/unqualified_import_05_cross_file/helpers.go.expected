@@ -1,0 +1,15 @@
+package main
+
+// Test: Cross-file package scanning - helper functions
+// Feature: Unqualified import inference (package-wide scanning)
+// Complexity: advanced
+
+// User-defined function in separate file
+func ProcessData(data []byte) string {
+	return string(data) + " (processed)"
+}
+
+// Another local function
+func ValidateInput(s string) bool {
+	return len(s) > 0
+}

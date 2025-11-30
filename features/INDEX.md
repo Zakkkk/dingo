@@ -2,9 +2,9 @@
 
 This document provides a comprehensive overview of all planned features for the Dingo language, organized by priority, complexity, and implementation status.
 
-**Last Updated:** 2025-11-19
-**Phase:** Phase V Complete - Infrastructure & Developer Experience (Ready for v1.0)
-**Status Source of Truth:** See CLAUDE.md for current implementation phase and test results (92.2% passing rate, 245/266 tests)
+**Last Updated:** 2025-11-30
+**Phase:** Phase 9 Complete - Ternary Operator (v1.0-BETA Ready)
+**Status Source of Truth:** See CLAUDE.md for current implementation phase and test results (99.0% passing rate, 711/718 tests)
 **Philosophy:** As a meta-language, Dingo can implement features Go rejected, as long as they transpile cleanly
 
 ---
@@ -61,13 +61,13 @@ This document provides a comprehensive overview of all planned features for the 
 | **P0** | Pattern Matching | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 4) | [pattern-matching.md](./pattern-matching.md) |
 | **P0** | Sum Types | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ (996+ 👍) | ✅ Implemented (Phase 3) | [sum-types.md](./sum-types.md) |
 | **P1** | Type-Safe Enums | 🟡 Medium | 1-2 weeks | ⭐⭐⭐⭐⭐ (900+ 👍) | ✅ Implemented (Phase 3) | [enums.md](./enums.md) |
-| **P1** | Lambda/Arrow Functions | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐ (750+ 👍) | 🔴 Not Started | [lambdas.md](./lambdas.md) |
+| **P1** | Lambda/Arrow Functions | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐ (750+ 👍) | ✅ Implemented (Phase 6) | [lambdas.md](./lambdas.md) |
 | **P1** | Null Safety (`?.`) | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐ | 🔴 Not Started | [null-safety.md](./null-safety.md) |
-| **P2** | Functional Utilities | 🟢 Low | 1 week | ⭐⭐⭐ | 🔴 Not Started | [functional-utilities.md](./functional-utilities.md) |
-| **P2** | Tuples | 🟡 Medium | 1-2 weeks | ⭐⭐⭐ | 🟡 Partial (10% - pattern matching only) | [tuples.md](./tuples.md) |
-| **P2** | Null Coalescing (`??`) | 🟢 Low | 2-3 days | ⭐⭐⭐ | 🔴 Not Started | [null-coalescing.md](./null-coalescing.md) |
+| **P2** | Functional Utilities | 🟢 Low | 1 week | ⭐⭐⭐ | ✅ Implemented (Phase 9) | [functional-utilities.md](./functional-utilities.md) |
+| **P2** | Tuples | 🟡 Medium | 1-2 weeks | ⭐⭐⭐ | ✅ Implemented (Phase 8) | [tuples.md](./tuples.md) |
+| **P2** | Null Coalescing (`??`) | 🟢 Low | 2-3 days | ⭐⭐⭐ | ⚠️ Partial (parser refinement needed) | [null-coalescing.md](./null-coalescing.md) |
 | **P2** | Immutability | 🔴 Very High | 4+ weeks | ⭐⭐⭐ | 🔴 Not Started | [immutability.md](./immutability.md) |
-| **P3** | Ternary Operator | 🟢 Low | 2-3 days | ⭐⭐ | 🔴 Not Started | [ternary-operator.md](./ternary-operator.md) |
+| **P3** | Ternary Operator | 🟢 Low | 2-3 days | ⭐⭐ | ✅ Implemented (Phase 9) | [ternary-operator.md](./ternary-operator.md) |
 | **P3** | Default Parameters | 🟡 Medium | 2 weeks | ⭐⭐ | 🔴 Not Started | [default-parameters.md](./default-parameters.md) |
 | **P4** | Function Overloading | 🟠 High | 3 weeks | ⭐⭐ | 🔴 Not Started | [function-overloading.md](./function-overloading.md) |
 | **P4** | Operator Overloading | 🟡 Medium | 2 weeks | ⭐⭐ | 🔴 Not Started | [operator-overloading.md](./operator-overloading.md) |
