@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -39,30 +37,28 @@ var (
 	actualPattern   = regexp.MustCompile(`Actual: (.+\.go)`)
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: diff-visualizer <test-output-file>")
-		os.Exit(1)
+func runDiff(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: diff <test-output-file>")
 	}
 
-	inputFile := os.Args[1]
+	inputFile := args[0]
 	file, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error opening file: %w", err)
 	}
 	defer file.Close()
 
 	visualizer := NewDiffVisualizer()
 	if err := visualizer.Parse(file); err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing test output: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing test output: %w", err)
 	}
 
 	if err := visualizer.GenerateMarkdown(os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "Error generating markdown: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error generating markdown: %w", err)
 	}
+
+	return nil
 }
 
 // NewDiffVisualizer creates a new DiffVisualizer instance
@@ -260,7 +256,7 @@ func calculateDiffInfo(expected, actual string) DiffInfo {
 	}
 
 	info.TotalDiff = info.LinesAdded + info.LinesRemoved
-	info.LinesChanged = min(info.LinesAdded, info.LinesRemoved)
+	info.LinesChanged = minInt(info.LinesAdded, info.LinesRemoved)
 
 	return info
 }
@@ -277,7 +273,7 @@ func generateUnifiedDiff(expected, actual string) string {
 	diff.WriteString("+++ actual\n")
 
 	// Simple line-by-line comparison
-	maxLines := max(len(expectedLines), len(actualLines))
+	maxLines := maxInt(len(expectedLines), len(actualLines))
 	for i := 0; i < maxLines; i++ {
 		var expectedLine, actualLine string
 		if i < len(expectedLines) {
@@ -300,16 +296,16 @@ func generateUnifiedDiff(expected, actual string) string {
 	return diff.String()
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
+// minInt returns the minimum of two integers
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
 
-// max returns the maximum of two integers
-func max(a, b int) int {
+// maxInt returns the maximum of two integers
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

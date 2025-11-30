@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -28,25 +26,25 @@ type TrackerConfig struct {
 
 // BenchmarkResult represents a single benchmark measurement
 type BenchmarkResult struct {
-	Name          string  `json:"name"`
-	Iterations    int64   `json:"iterations"`
-	NsPerOp       float64 `json:"ns_per_op"`
-	BytesPerOp    int64   `json:"bytes_per_op,omitempty"`
-	AllocsPerOp   int64   `json:"allocs_per_op,omitempty"`
-	MBPerSec      float64 `json:"mb_per_sec,omitempty"`
-	Timestamp     string  `json:"timestamp"`
-	GitCommit     string  `json:"git_commit,omitempty"`
-	GitBranch     string  `json:"git_branch,omitempty"`
+	Name        string  `json:"name"`
+	Iterations  int64   `json:"iterations"`
+	NsPerOp     float64 `json:"ns_per_op"`
+	BytesPerOp  int64   `json:"bytes_per_op,omitempty"`
+	AllocsPerOp int64   `json:"allocs_per_op,omitempty"`
+	MBPerSec    float64 `json:"mb_per_sec,omitempty"`
+	Timestamp   string  `json:"timestamp"`
+	GitCommit   string  `json:"git_commit,omitempty"`
+	GitBranch   string  `json:"git_branch,omitempty"`
 }
 
 // PerformanceReport contains analysis of benchmark results
 type PerformanceReport struct {
-	Timestamp    string            `json:"timestamp"`
-	GitCommit    string            `json:"git_commit"`
-	GitBranch    string            `json:"git_branch"`
-	Results      []BenchmarkResult `json:"results"`
-	Summary      Summary           `json:"summary"`
-	Regressions  []Regression      `json:"regressions,omitempty"`
+	Timestamp   string            `json:"timestamp"`
+	GitCommit   string            `json:"git_commit"`
+	GitBranch   string            `json:"git_branch"`
+	Results     []BenchmarkResult `json:"results"`
+	Summary     Summary           `json:"summary"`
+	Regressions []Regression      `json:"regressions,omitempty"`
 }
 
 // Summary provides aggregate statistics
@@ -72,10 +70,9 @@ var (
 	benchPattern = regexp.MustCompile(`^Benchmark(\S+)-\d+\s+(\d+)\s+([\d.]+)\s+ns/op(?:\s+([\d.]+)\s+B/op)?(?:\s+([\d.]+)\s+allocs/op)?(?:\s+([\d.]+)\s+MB/s)?`)
 )
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: performance-tracker <benchmark-output-file> [history-file]")
-		os.Exit(1)
+func runPerf(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: perf <benchmark-output-file> [history-file]")
 	}
 
 	config := TrackerConfig{
@@ -84,21 +81,19 @@ func main() {
 		RegressionLimit: 10.0, // 10% regression threshold
 	}
 
-	if len(os.Args) >= 3 {
-		config.HistoryFile = os.Args[2]
+	if len(args) >= 2 {
+		config.HistoryFile = args[1]
 	}
 
-	file, err := os.Open(os.Args[1])
+	file, err := os.Open(args[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error opening file: %w", err)
 	}
 	defer file.Close()
 
 	tracker := NewPerformanceTracker(config)
 	if err := tracker.Parse(file); err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing benchmark output: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error parsing benchmark output: %w", err)
 	}
 
 	report := tracker.GenerateReport()
@@ -112,8 +107,7 @@ func main() {
 
 	// Output JSON report
 	if err := writeJSON(config.OutputFile, report); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing JSON: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error writing JSON: %w", err)
 	}
 
 	// Print human-readable summary
@@ -121,8 +115,10 @@ func main() {
 
 	// Exit with non-zero if regressions found
 	if len(report.Regressions) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("performance regressions detected")
 	}
+
+	return nil
 }
 
 // NewPerformanceTracker creates a new tracker instance
@@ -318,15 +314,15 @@ func printSummary(report PerformanceReport) {
 	fmt.Println()
 
 	if len(report.Regressions) > 0 {
-		fmt.Println("## ⚠️ Performance Regressions Detected")
+		fmt.Println("## Performance Regressions Detected")
 		fmt.Println()
 		fmt.Println("| Benchmark | Metric | Old Value | New Value | Change | Severity |")
 		fmt.Println("|-----------|--------|-----------|-----------|--------|----------|")
 
 		for _, reg := range report.Regressions {
-			icon := "⚠️"
+			icon := "WARNING"
 			if reg.Severity == "critical" {
-				icon = "🔴"
+				icon = "CRITICAL"
 			}
 
 			fmt.Printf("| `%s` | %s | %.2f | %.2f | +%.1f%% | %s %s |\n",
@@ -341,7 +337,7 @@ func printSummary(report PerformanceReport) {
 		}
 		fmt.Println()
 	} else {
-		fmt.Println("## ✅ No Performance Regressions")
+		fmt.Println("## No Performance Regressions")
 		fmt.Println()
 	}
 

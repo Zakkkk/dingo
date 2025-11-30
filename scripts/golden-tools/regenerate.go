@@ -1,5 +1,3 @@
-//go:build ignore
-
 package main
 
 import (
@@ -19,24 +17,22 @@ import (
 // simpleLogger implements plugin.Logger
 type simpleLogger struct{}
 
-func (l *simpleLogger) Info(msg string)                  { fmt.Println("INFO:", msg) }
-func (l *simpleLogger) Error(msg string)                 { fmt.Println("ERROR:", msg) }
+func (l *simpleLogger) Info(msg string)                   { fmt.Println("INFO:", msg) }
+func (l *simpleLogger) Error(msg string)                  { fmt.Println("ERROR:", msg) }
 func (l *simpleLogger) Debugf(format string, args ...any) { fmt.Printf("DEBUG: "+format+"\n", args...) }
 func (l *simpleLogger) Warnf(format string, args ...any)  { fmt.Printf("WARN: "+format+"\n", args...) }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run regenerate_golden.go <file.dingo>")
-		os.Exit(1)
+func runRegenerate(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: regenerate <file.dingo>")
 	}
 
-	dingoFile := os.Args[1]
+	dingoFile := args[0]
 
 	// Read Dingo source
 	dingoSrc, err := os.ReadFile(dingoFile)
 	if err != nil {
-		fmt.Printf("Failed to read %s: %v\n", dingoFile, err)
-		os.Exit(1)
+		return fmt.Errorf("failed to read %s: %w", dingoFile, err)
 	}
 
 	fset := token.NewFileSet()
@@ -50,8 +46,7 @@ func main() {
 	if _, err := os.Stat(testConfigPath); err == nil {
 		cfg = config.DefaultConfig()
 		if _, err := toml.DecodeFile(testConfigPath, cfg); err != nil {
-			fmt.Printf("Failed to load config: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to load config: %w", err)
 		}
 	}
 
@@ -77,15 +72,13 @@ func main() {
 	// Preprocess
 	preprocessed, _, err := preprocessorInst.Process()
 	if err != nil {
-		fmt.Printf("Preprocessing failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("preprocessing failed: %w", err)
 	}
 
 	// Parse
 	file, err := parser.ParseFile(fset, dingoFile, []byte(preprocessed), parser.ParseComments)
 	if err != nil {
-		fmt.Printf("Parse failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("parse failed: %w", err)
 	}
 
 	// Create generator
@@ -93,24 +86,22 @@ func main() {
 	logger := &simpleLogger{}
 	gen, err := generator.NewWithPlugins(fset, registry, logger)
 	if err != nil {
-		fmt.Printf("Failed to create generator: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create generator: %w", err)
 	}
 
 	// Generate Go code
 	output, err := gen.Generate(file)
 	if err != nil {
-		fmt.Printf("Generation failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("generation failed: %w", err)
 	}
 
 	// Write .go.golden file
 	goldenFile := filepath.Join(filepath.Dir(dingoFile), baseName+".go.golden")
 
 	if err := os.WriteFile(goldenFile, output, 0644); err != nil {
-		fmt.Printf("Failed to write %s: %v\n", goldenFile, err)
-		os.Exit(1)
+		return fmt.Errorf("failed to write %s: %w", goldenFile, err)
 	}
 
 	fmt.Printf("✓ Regenerated %s\n", goldenFile)
+	return nil
 }
