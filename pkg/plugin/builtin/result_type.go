@@ -41,6 +41,10 @@ type ResultTypePlugin struct {
 
 	// Type inference service for accurate type resolution (Fix A5)
 	typeInference *TypeInferenceService
+
+	// Track generic type references (Result[T, E]) that need to be rewritten to concrete types (ResultTE)
+	genericTypeRewrites map[*ast.IndexExpr]string
+	genericListRewrites map[*ast.IndexListExpr]string
 }
 
 // NewResultTypePlugin creates a new Result type plugin
@@ -136,6 +140,12 @@ func (p *ResultTypePlugin) handleGenericResult(expr *ast.IndexExpr) {
 			p.emitResultDeclaration(typeName, "error", resultType)
 			p.emittedTypes[resultType] = true
 		}
+
+		// Track this IndexExpr for replacement during Transform phase
+		if p.genericTypeRewrites == nil {
+			p.genericTypeRewrites = make(map[*ast.IndexExpr]string)
+		}
+		p.genericTypeRewrites[expr] = resultType
 	}
 }
 
@@ -143,6 +153,8 @@ func (p *ResultTypePlugin) handleGenericResult(expr *ast.IndexExpr) {
 func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
 	// Check if the base type is "Result"
 	if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "Result" {
+		var resultType string
+
 		if len(expr.Indices) == 2 {
 			var okType, errType string
 			// Result<T, E> with explicit error type
@@ -170,7 +182,7 @@ func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
 				errType = p.getTypeName(expr.Indices[1])
 			}
 
-			resultType := fmt.Sprintf("Result%s",
+			resultType = fmt.Sprintf("Result%s",
 				SanitizeTypeName(okType, errType))
 
 			if !p.emittedTypes[resultType] {
@@ -194,12 +206,20 @@ func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
 				// No type inference service - use heuristic
 				okType = p.getTypeName(expr.Indices[0])
 			}
-			resultType := fmt.Sprintf("Result%s", SanitizeTypeName(okType, "error"))
+			resultType = fmt.Sprintf("Result%s", SanitizeTypeName(okType, "error"))
 
 			if !p.emittedTypes[resultType] {
 				p.emitResultDeclaration(okType, "error", resultType)
 				p.emittedTypes[resultType] = true
 			}
+		}
+
+		// Track this IndexListExpr for replacement during Transform phase
+		if resultType != "" {
+			if p.genericListRewrites == nil {
+				p.genericListRewrites = make(map[*ast.IndexListExpr]string)
+			}
+			p.genericListRewrites[expr] = resultType
 		}
 	}
 }
@@ -555,6 +575,11 @@ func (p *ResultTypePlugin) emitResultDeclaration(okType, errType, resultTypeName
 	}
 	// FileSet is only needed for position information (token.NoPos), not for type generation
 
+	// Normalize type names to camelCase (e.g., Option_int → OptionInt)
+	// This ensures type references are consistent with generated type names
+	okType = NormalizeTypeName(okType)
+	errType = NormalizeTypeName(errType)
+
 	// Generate ResultTag enum (only once)
 	if !p.emittedTypes["ResultTag"] {
 		p.emitResultTagEnum()
@@ -696,7 +721,7 @@ func (p *ResultTypePlugin) emitConstructorFunction(resultTypeName, argType strin
 		fieldName = "err"
 	}
 
-	funcName := fmt.Sprintf("%s_%s", resultTypeName, funcSuffix)
+	funcName := fmt.Sprintf("%s%s", resultTypeName, funcSuffix)
 	argTypeAST := p.typeToAST(argType, false) // Non-pointer parameter
 
 	// func Result_T_E_Ok(arg0 T) Result_T_E {
@@ -1895,7 +1920,9 @@ func (p *ResultTypePlugin) ClearPendingDeclarations() {
 }
 
 // Transform performs AST transformations on the node
-// This method replaces Ok() and Err() constructor calls with struct literals
+// This method replaces:
+// 1. Ok() and Err() constructor calls with struct literals
+// 2. Result[T, E] generic syntax with concrete ResultTE types
 func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 	if p.ctx == nil {
 		return nil, fmt.Errorf("plugin context not initialized")
@@ -1905,6 +1932,28 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 	transformed := astutil.Apply(node,
 		func(cursor *astutil.Cursor) bool {
 			n := cursor.Node()
+
+			// Check for generic type references (Result[T, E]) that need rewriting
+			if indexExpr, ok := n.(*ast.IndexExpr); ok {
+				if replacement, found := p.genericTypeRewrites[indexExpr]; found {
+					cursor.Replace(&ast.Ident{
+						NamePos: indexExpr.Pos(),
+						Name:    replacement,
+					})
+					return true
+				}
+			}
+
+			// Check for generic type references with multiple type params (Result[T, E])
+			if indexListExpr, ok := n.(*ast.IndexListExpr); ok {
+				if replacement, found := p.genericListRewrites[indexListExpr]; found {
+					cursor.Replace(&ast.Ident{
+						NamePos: indexListExpr.Pos(),
+						Name:    replacement,
+					})
+					return true
+				}
+			}
 
 			// Check if this is a CallExpr we need to transform
 			if call, ok := n.(*ast.CallExpr); ok {

@@ -21,7 +21,7 @@ func TestTypeDeclaration_BasicResultIntError(t *testing.T) {
 	}
 	p.SetContext(ctx)
 
-	// Test: Result<int> should generate Result_int_error (underscore convention)
+	// Test: Result<int> should generate ResultIntError (camelCase convention)
 	indexExpr := &ast.IndexExpr{
 		X:     ast.NewIdent("Result"),
 		Index: ast.NewIdent("int"),
@@ -40,8 +40,8 @@ func TestTypeDeclaration_BasicResultIntError(t *testing.T) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					// Underscore naming convention (reverted from camelCase)
-					if typeSpec.Name.Name == "Result_int_error" {
+					// camelCase naming convention
+					if typeSpec.Name.Name == "ResultIntError" {
 						foundResultType = true
 						// Verify struct fields
 						if structType, ok := typeSpec.Type.(*ast.StructType); ok {
@@ -66,7 +66,7 @@ func TestTypeDeclaration_BasicResultIntError(t *testing.T) {
 	}
 
 	if !foundResultType {
-		t.Error("expected Result_int_error type declaration")
+		t.Error("expected ResultIntError type declaration")
 	}
 	if !foundResultTag {
 		t.Error("expected ResultTag type declaration")
@@ -101,7 +101,7 @@ func TestTypeDeclaration_ComplexPointerTypes(t *testing.T) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					if typeSpec.Name.Name == "Result_ptr_User_ptr_CustomError" {
+					if typeSpec.Name.Name == "ResultPtrUserPtrCustomError" {
 						foundType = true
 					}
 				}
@@ -110,7 +110,7 @@ func TestTypeDeclaration_ComplexPointerTypes(t *testing.T) {
 	}
 
 	if !foundType {
-		t.Error("expected Result_ptr_User_ptr_CustomError type declaration")
+		t.Error("expected ResultPtrUserPtrCustomError type declaration")
 	}
 }
 
@@ -142,7 +142,7 @@ func TestTypeDeclaration_ComplexSliceTypes(t *testing.T) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					if typeSpec.Name.Name == "Result_slice_byte_error" {
+					if typeSpec.Name.Name == "ResultSliceByteError" {
 						foundType = true
 					}
 				}
@@ -151,7 +151,7 @@ func TestTypeDeclaration_ComplexSliceTypes(t *testing.T) {
 	}
 
 	if !foundType {
-		t.Error("expected Result_slice_byte_error type declaration")
+		t.Error("expected ResultSliceByteError type declaration")
 	}
 }
 
@@ -161,14 +161,14 @@ func TestTypeDeclaration_TypeNameSanitization(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"simple", "int", "_int"},
-		{"pointer", "*User", "_ptr_User"},
-		{"slice", "[]byte", "_slice_byte"},
-		{"map", "map[string]int", "_map"},  // Maps are simplified to just "map"
-		{"package qualified", "pkg.Type", "_pkg.Type"},  // Dots preserved (TODO: should sanitize dots)
-		{"nested pointer slice", "*[]string", "_ptr_slice_string"},
-		{"multiple dots", "github.com.pkg.Type", "_github.com.pkg.Type"},  // Dots preserved
-		{"array", "[10]int", "_[10]int"},  // Arrays preserve brackets (TODO: should sanitize)
+		{"simple", "int", "Int"},
+		{"pointer", "*User", "PtrUser"},
+		{"slice", "[]byte", "SliceByte"},
+		{"map", "map[string]int", "Map"},  // Maps are simplified to just "Map"
+		{"package qualified", "pkg.Type", "PkgType"},  // Dots removed, each part capitalized
+		{"nested pointer slice", "*[]string", "PtrSliceString"},
+		{"multiple dots", "github.com.pkg.Type", "GithubComPkgType"},  // All dots/slashes removed, camelCase
+		{"array", "[10]int", "Array10Int"},  // Arrays converted to ArrayNT format
 	}
 
 	for _, tt := range tests {
@@ -226,9 +226,9 @@ func TestTypeDeclaration_MultipleResultTypesInSameFile(t *testing.T) {
 	// Should have ResultTag (emitted once) plus 3 Result types with their methods
 	expectedTypes := map[string]bool{
 		"ResultTag":               false,
-		"Result_int_error":        false,
-		"Result_string_error":     false,
-		"Result_bool_CustomError": false,
+		"ResultIntError":          false,
+		"ResultStringError":       false,
+		"ResultBoolCustomError":   false,
 	}
 
 	for _, decl := range decls {
@@ -287,7 +287,7 @@ func TestConstructor_OkWithIntLiteral(t *testing.T) {
 
 	for _, decl := range decls {
 		if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl.Recv == nil {
-			if funcDecl.Name.Name == "Result_int_error_Ok" {
+			if funcDecl.Name.Name == "ResultIntErrorOk" {
 				foundConstructor = true
 				// Verify function signature
 				if len(funcDecl.Type.Params.List) != 1 {
@@ -301,7 +301,7 @@ func TestConstructor_OkWithIntLiteral(t *testing.T) {
 	}
 
 	if !foundConstructor {
-		t.Error("expected Result_int_error_Ok constructor function")
+		t.Error("expected ResultIntErrorOk constructor function")
 	}
 }
 
@@ -332,7 +332,7 @@ func TestConstructor_OkWithStringLiteral(t *testing.T) {
 		if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					if typeSpec.Name.Name == "Result_string_error" {
+					if typeSpec.Name.Name == "ResultStringError" {
 						foundType = true
 					}
 				}
@@ -341,7 +341,7 @@ func TestConstructor_OkWithStringLiteral(t *testing.T) {
 	}
 
 	if !foundType {
-		t.Error("Ok with string literal should infer Result_string_error type")
+		t.Error("Ok with string literal should infer ResultStringError type")
 	}
 }
 
@@ -381,22 +381,22 @@ func TestConstructor_OkWithVariousTypes(t *testing.T) {
 		{
 			name:     "int literal",
 			argExpr:  &ast.BasicLit{Kind: token.INT, Value: "42"},
-			expected: "Result_int_error",
+			expected: "ResultIntError",
 		},
 		{
 			name:     "float literal",
 			argExpr:  &ast.BasicLit{Kind: token.FLOAT, Value: "3.14"},
-			expected: "Result_float64_error",
+			expected: "ResultFloat64Error",
 		},
 		{
 			name:     "string literal",
 			argExpr:  &ast.BasicLit{Kind: token.STRING, Value: `"test"`},
-			expected: "Result_string_error",
+			expected: "ResultStringError",
 		},
 		{
 			name:     "rune literal",
 			argExpr:  &ast.BasicLit{Kind: token.CHAR, Value: "'a'"},
-			expected: "Result_rune_error",
+			expected: "ResultRuneError",
 		},
 	}
 
@@ -1208,7 +1208,7 @@ func TestIntegration_MultipleResultTypesCoexist(t *testing.T) {
 		}
 	}
 
-	expectedTypes := []string{"ResultTag", "Result_int_error", "Result_string_error", "Result_bool_error", "Result_float64_error"}
+	expectedTypes := []string{"ResultTag", "ResultIntError", "ResultStringError", "ResultBoolError", "ResultFloat64Error"}
 	for _, typeName := range expectedTypes {
 		if !foundTypes[typeName] {
 			t.Errorf("expected type %s not found", typeName)

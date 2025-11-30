@@ -6,102 +6,273 @@ package main
 
 import "fmt"
 
+type
+
 // Configuration struct
+OptionTag uint8
+
+const (
+	OptionTagSome OptionTag = iota
+	OptionTagNone
+)
+
+type OptionInt struct
+
+// getPort returns an optional port value
+{
+	tag  OptionTag
+	some *int
+}
+
+func OptionIntSome(arg0 int) OptionInt {
+	return OptionInt{
+
+	// Simulate reading from environment - might fail
+	tag: OptionTagSome, some: &arg0}
+}
+func OptionIntNone() OptionInt {
+	return OptionInt{
+
+	// getVerboseFlag returns an optional verbose flag
+	tag: OptionTagNone}
+}
+func (o OptionInt) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionInt) IsNone() bool {
+	return o.
+
+	// parseConfig builds a Config from optional values
+	tag == OptionTagNone
+}
+func (o OptionInt) Unwrap() int {
+	if o.tag != OptionTagSome {
+		panic(
+
+		// UnwrapOrElse: Use default value from function if None
+		"called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionInt) UnwrapOr(defaultValue int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+
+		// UnwrapOr: Use default value directly
+	}
+	return defaultValue
+}
+func (o OptionInt) UnwrapOrElse(fn func() int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionInt) Map(fn func
+
+// processPort demonstrates Map transformation
+(int) interface{}) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.
+
+	// Map: Transform Some value, propagate None
+	(int)
+	return OptionInt{tag: OptionTagSome, some: &result}
+}
+func (o OptionInt) AndThen(fn func(int) OptionInt) OptionInt {
+	if o.tag ==
+
+	// validatePort demonstrates Filter
+	OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
+
+	// Filter: Keep Some values that pass predicate
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionInt{tag: OptionTagNone}
+}
+
+type OptionBool struct {
+	tag OptionTag
+
+	// getValidPort demonstrates AndThen chaining
+	some *bool
+}
+func OptionBoolSome(arg0 bool) OptionBool {
+	return OptionBool{tag: OptionTagSome, some: &arg0}
+}
+func OptionBoolNone() OptionBool {
+	return OptionBool{
+
+	// Chain operation: validate and adjust
+	tag: OptionTagNone}
+}
+func (o OptionBool) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionBool) IsNone() bool {
+	return o.
+
+	// Complex chaining example
+	tag == OptionTagNone
+}
+func (o OptionBool) Unwrap() bool {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+
+		// Chain multiple operations
+	}
+	return *o.some
+}
+func (o OptionBool) UnwrapOr(defaultValue bool) bool {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionBool) UnwrapOrElse(fn func() bool) bool {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionBool) Map(fn func(bool) interface{}) OptionBool {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(bool)
+	return OptionBool{
+
+	// Test UnwrapOrElse
+	tag: OptionTagSome, some: &result}
+}
+func (o OptionBool) AndThen(fn func(bool) OptionBool) OptionBool {
+	if o.tag == OptionTagNone {
+
+		// Test Map
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionBool) Filter(predicate func(bool) bool) OptionBool {
+	if o.tag == OptionTagNone {
+		return o
+
+		// Test Filter
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionBool{tag: OptionTagNone}
+}
+
 type Config struct {
 	Port    int
 	Verbose bool
 }
+func getPort() OptionInt {
 
-// getPort returns an optional port value
-func getPort() Option_int {
-	// Simulate reading from environment - might fail
-	return Option_int_Some(8080)
+	return OptionInt{tag: OptionTagSome, some: func() *int {
+		tmp := 8080
+		return &tmp
+	}()}
 }
-
-// getVerboseFlag returns an optional verbose flag
-func getVerboseFlag() Option_bool {
-	return Option_bool_None()
+func getVerboseFlag() OptionBool {
+	return OptionBoolNone()
 }
-
-// parseConfig builds a Config from optional values
 func parseConfig() Config {
-	// UnwrapOrElse: Use default value from function if None
+
 	port := getPort().UnwrapOrElse(func() int {
 		return 3000
 	})
 
-	// UnwrapOr: Use default value directly
 	verbose := getVerboseFlag().UnwrapOr(false)
 
 	return Config{Port: port, Verbose: verbose}
 }
+func processPort(opt OptionInt) OptionInt {
 
-// processPort demonstrates Map transformation
-func processPort(opt Option_int) Option_int {
-	// Map: Transform Some value, propagate None
 	return opt.Map(func(port int) interface{} {
 		return port * 2
 	})
 }
+func validatePort(opt OptionInt) OptionInt {
 
-// validatePort demonstrates Filter
-func validatePort(opt Option_int) Option_int {
-	// Filter: Keep Some values that pass predicate
 	return opt.Filter(func(port int) bool {
 		return port > 1024 && port < 65535
 	})
 }
+func getValidPort(id int) OptionInt {
+	return getPort().AndThen(func(port int) OptionInt {
 
-// getValidPort demonstrates AndThen chaining
-func getValidPort(id int) Option_int {
-	return getPort().AndThen(func(port int) Option_int {
-		// Chain operation: validate and adjust
 		if port < 1024 {
-			return Option_int_None()
+			return OptionIntNone()
 		}
-		return Option_int_Some(port + id)
+		return OptionInt{tag: OptionTagSome, some: func() *int {
+			tmp1 := port + id
+			return &tmp1
+		}()}
 	})
 }
-
-// Complex chaining example
-func processConfig(useDefault bool) Option_int {
+func processConfig(useDefault bool) OptionInt {
 	port := getPort()
 
-	// Chain multiple operations
 	result := port.
 		Map(func(p int) interface{} { return p + 1000 }).
 		Filter(func(p int) bool { return p < 10000 }).
-		AndThen(func(p int) Option_int {
+		AndThen(func(p int) OptionInt {
 			if p%2 == 0 {
-				return Option_int_Some(p / 2)
+				return OptionInt{tag: OptionTagSome, some: func() *int {
+					tmp2 := p / 2
+					return &tmp2
+				}()}
 			}
-			return Option_int_None()
+			return OptionIntNone()
 		})
 
 	if result.IsNone() && useDefault {
-		return Option_int_Some(3000)
+		return OptionInt{tag: OptionTagSome, some: func() *int {
+			tmp3 := 3000
+			return &tmp3
+		}()}
 	}
 
 	return result
 }
 func main() {
-	// Test UnwrapOrElse
+
 	cfg := parseConfig()
 	fmt.Printf("Config: Port=%d, Verbose=%v\n", cfg.Port, cfg.Verbose)
 
-	// Test Map
 	doubled := processPort(getPort())
 	if doubled.IsSome() {
 		fmt.Printf("Doubled port: %d\n", *doubled.some)
 	}
 
-	// Test Filter
-	validated := validatePort(Option_int_Some(8080))
+	validated := validatePort(OptionInt{tag: OptionTagSome, some: func() *int {
+		tmp4 := 8080
+		return &tmp4
+	}()})
 	if validated.IsSome() {
 		fmt.Printf("Valid port: %d\n", *validated.some)
 	}
 
-	invalidPort := validatePort(Option_int_Some(100))
+	invalidPort := validatePort(OptionInt{tag: OptionTagSome, some: func() *int {
+		tmp5 := 100
+		return &tmp5
+	}()})
 	if invalidPort.IsNone() {
 		fmt.Println("Invalid port filtered out")
 	}

@@ -158,12 +158,17 @@ func (p *TypeAnnotASTProcessor) transformReturnArrow(line []byte) ([]byte, bool)
 	return buf.Bytes(), true
 }
 
-// transformTypeString transforms a type string, converting <> to []
+// transformTypeString transforms a type string, converting <> to [] and underscore names to camelCase
 func (p *TypeAnnotASTProcessor) transformTypeString(typeBytes []byte) []byte {
 	// Simple transformation: replace < with [ and > with ]
 	// This handles the common case of generics like Result<T,E> → Result[T,E]
 	result := bytes.ReplaceAll(typeBytes, []byte("<"), []byte("["))
 	result = bytes.ReplaceAll(result, []byte(">"), []byte("]"))
+
+	// Transform underscore type names to camelCase
+	// Option_int → OptionInt, Result_string_error → ResultStringError
+	result = transformUnderscoreType(result)
+
 	return result
 }
 
@@ -537,7 +542,10 @@ func (p *TypeAnnotASTProcessor) parseType(tokens []tokenWithPos, startIdx int, b
 
 	// Handle basic type: int, string, MyType, pkg.Type
 	if i < len(tokens) && tokens[i].tok == token.IDENT {
-		buf.WriteString(tokens[i].lit)
+		// Transform underscore type names to camelCase
+		// Option_int → OptionInt, Result_string_error → ResultStringError
+		typeName := transformUnderscoreType([]byte(tokens[i].lit))
+		buf.Write(typeName)
 		i++
 
 		// Check for qualified type: pkg.Type
@@ -546,7 +554,9 @@ func (p *TypeAnnotASTProcessor) parseType(tokens []tokenWithPos, startIdx int, b
 			i++
 
 			if i < len(tokens) && tokens[i].tok == token.IDENT {
-				buf.WriteString(tokens[i].lit)
+				// Also transform qualified types
+				qualifiedType := transformUnderscoreType([]byte(tokens[i].lit))
+				buf.Write(qualifiedType)
 				i++
 			}
 		}
@@ -661,4 +671,52 @@ func needsSpaceInFunc(t1, t2 token.Token) bool {
 	}
 
 	return false
+}
+
+// transformUnderscoreType transforms underscore-based type names to camelCase
+// Examples:
+//   Option_int → OptionInt
+//   Result_string_error → ResultStringError
+//   Option_bool → OptionBool
+//   normal_type → normalType (doesn't start with capital, so stays as-is)
+func transformUnderscoreType(typeName []byte) []byte {
+	// If no underscore, return as-is
+	if !bytes.Contains(typeName, []byte("_")) {
+		return typeName
+	}
+
+	// Split by underscore
+	parts := bytes.Split(typeName, []byte("_"))
+	if len(parts) <= 1 {
+		return typeName
+	}
+
+	// Join parts with each part capitalized
+	var result bytes.Buffer
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		// Capitalize first letter of each part
+		result.Write(capitalize(part))
+	}
+
+	return result.Bytes()
+}
+
+// capitalize capitalizes the first letter of a byte slice
+func capitalize(s []byte) []byte {
+	if len(s) == 0 {
+		return s
+	}
+
+	result := make([]byte, len(s))
+	copy(result, s)
+
+	// Capitalize first letter
+	if result[0] >= 'a' && result[0] <= 'z' {
+		result[0] = result[0] - 'a' + 'A'
+	}
+
+	return result
 }

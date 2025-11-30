@@ -116,40 +116,44 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		//    Transforms: let x: Type = val → var x: Type = val
 		//    Transforms: let x = val → x := val
 		NewDingoPreParser(),
-		// 1. Generic syntax (<> → []) - must be early before type annotations
+		// 1. Legacy Option/Result syntax (Option_int → Option[int]) - BEFORE generic syntax
+		//    Transforms: Option_int → Option[int], Result_int_error → Result[int, error]
+		//    Transforms: Option_int_Some(x) → Some(x), Option_int_None() → None
+		NewLegacyOptionSyntaxProcessor(),
+		// 2. Generic syntax (<> → []) - must be early before type annotations
 		NewGenericSyntaxProcessor(),
-		// 2. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
+		// 3. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
 		//    Match arms: Pattern => Expression (structural context)
 		//    Lambdas: params => expression (expression context)
 		NewRustMatchProcessor(),
-		// 3. Lambdas (x => expr, |x| expr) - AFTER pattern matching
+		// 4. Lambdas (x => expr, |x| expr) - AFTER pattern matching
 		NewLambdaProcessorWithConfig(cfg),
-		// 4. Functional utilities (map, filter, reduce, etc.) - AFTER lambdas (lambdas expand first)
+		// 5. Functional utilities (map, filter, reduce, etc.) - AFTER lambdas (lambdas expand first)
 		NewFunctionalProcessor(),
-		// 5. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
+		// 6. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
 		NewTypeAnnotASTProcessor(),
-		// 6. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
+		// 7. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
 		NewTupleProcessor(),
-		// 7. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
+		// 8. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
 		NewSafeNavProcessor(),
-		// 8. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
+		// 9. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
 		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
 		NewNullCoalesceProcessor(),
-		// 9. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
+		// 10. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
-		// 10. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
+		// 11. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
 		errorPropProcessor,
 	}
 
-	// 11. Enums (enum Name { ... }) - AST-based, after error prop
+	// 12. Enums (enum Name { ... }) - AST-based, after error prop
 	processors = append(processors, NewEnumASTProcessor())
 
 	// REMOVED: KeywordProcessor - REPLACED by DingoPreParser (position 0)
 	// DingoPreParser handles let declarations with full AST-based parsing
 	// processors = append(processors, NewKeywordProcessor())
 
-	// 12. Unqualified imports (ReadFile → os.ReadFile) - requires cache
+	// 13. Unqualified imports (ReadFile → os.ReadFile) - requires cache
 	if cache != nil {
 		processors = append(processors, NewUnqualifiedImportProcessor(cache))
 	}

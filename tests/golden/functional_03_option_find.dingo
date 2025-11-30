@@ -5,8 +5,8 @@ import "fmt"
 func main() {
 	nums := []int{1, 2, 3, 4, 5}
 
-	// find() returns Option<T>
-	result := nums.find(x => x > 3)
+	// find() returns Option[T]
+	result := nums.find(func(x int) bool { return x > 3 })
 
 	if result.IsSome() {
 		fmt.Printf("Found: %d\n", result.Unwrap())

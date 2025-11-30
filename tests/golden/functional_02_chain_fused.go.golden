@@ -7,15 +7,15 @@ func main() {
 
 	// Fused chain: filter -> map
 	// Should generate single loop with if + transform
-	evens := func() []_ {
-	tmp := make([]_, 0, len(nums))
-	for _, x __TYPE_INFERENCE_NEEDED := range nums {
-		if x % 2 == 0 {
-			tmp = append(tmp, x __TYPE_INFERENCE_NEEDED)
+	evens := func() []int {
+		tmp := make([]int, 0, len(nums))
+		for _, x := range nums {
+			if x%2 == 0 {
+				tmp = append(tmp, x*10)
+			}
 		}
-	}
-	return tmp
-}().map(func(x __TYPE_INFERENCE_NEEDED) { return x * 10 })
+		return tmp
+	}()
 
 	for _, n := range evens {
 		fmt.Println(n)

@@ -13,14 +13,14 @@ type Config struct {
 }
 
 // getPort returns an optional port value
-func getPort() Option_int {
+func getPort() Option[int] {
 	// Simulate reading from environment - might fail
-	return Option_int_Some(8080)
+	return Some(8080)
 }
 
 // getVerboseFlag returns an optional verbose flag
-func getVerboseFlag() Option_bool {
-	return Option_bool_None()
+func getVerboseFlag() Option[bool] {
+	return OptionBoolNone()
 }
 
 // parseConfig builds a Config from optional values
@@ -37,7 +37,7 @@ func parseConfig() Config {
 }
 
 // processPort demonstrates Map transformation
-func processPort(opt Option_int) Option_int {
+func processPort(opt Option[int]) Option[int] {
 	// Map: Transform Some value, propagate None
 	return opt.Map(func(port int) interface{} {
 		return port * 2
@@ -45,7 +45,7 @@ func processPort(opt Option_int) Option_int {
 }
 
 // validatePort demonstrates Filter
-func validatePort(opt Option_int) Option_int {
+func validatePort(opt Option[int]) Option[int] {
 	// Filter: Keep Some values that pass predicate
 	return opt.Filter(func(port int) bool {
 		return port > 1024 && port < 65535
@@ -53,33 +53,33 @@ func validatePort(opt Option_int) Option_int {
 }
 
 // getValidPort demonstrates AndThen chaining
-func getValidPort(id int) Option_int {
-	return getPort().AndThen(func(port int) Option_int {
+func getValidPort(id int) Option[int] {
+	return getPort().AndThen(func(port int) Option[int] {
 		// Chain operation: validate and adjust
 		if port < 1024 {
-			return Option_int_None()
+			return OptionIntNone()
 		}
-		return Option_int_Some(port + id)
+		return Some(port + id)
 	})
 }
 
 // Complex chaining example
-func processConfig(useDefault bool) Option_int {
+func processConfig(useDefault bool) Option[int] {
 	port := getPort()
 
 	// Chain multiple operations
 	result := port.
 		Map(func(p int) interface{} { return p + 1000 }).
 		Filter(func(p int) bool { return p < 10000 }).
-		AndThen(func(p int) Option_int {
+		AndThen(func(p int) Option[int] {
 			if p%2 == 0 {
-				return Option_int_Some(p / 2)
+				return Some(p / 2)
 			}
-			return Option_int_None()
+			return OptionIntNone()
 		})
 
 	if result.IsNone() && useDefault {
-		return Option_int_Some(3000)
+		return Some(3000)
 	}
 
 	return result
@@ -97,12 +97,12 @@ func main() {
 	}
 
 	// Test Filter
-	validated := validatePort(Option_int_Some(8080))
+	validated := validatePort(Some(8080))
 	if validated.IsSome() {
 		fmt.Printf("Valid port: %d\n", *validated.some)
 	}
 
-	invalidPort := validatePort(Option_int_Some(100))
+	invalidPort := validatePort(Some(100))
 	if invalidPort.IsNone() {
 		fmt.Println("Invalid port filtered out")
 	}

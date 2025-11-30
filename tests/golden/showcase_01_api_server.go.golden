@@ -14,25 +14,25 @@ const (
 	ResultTagErr
 )
 
-type Result_string_error struct {
+type ResultStringError struct {
 	tag ResultTag
 	ok  *string
 	err *error
 }
 
-func Result_string_error_Ok(arg0 string) Result_string_error {
-	return Result_string_error{tag: ResultTagOk, ok: &arg0}
+func ResultStringErrorOk(arg0 string) ResultStringError {
+	return ResultStringError{tag: ResultTagOk, ok: &arg0}
 }
-func Result_string_error_Err(arg0 error) Result_string_error {
-	return Result_string_error{tag: ResultTagErr, err: &arg0}
+func ResultStringErrorErr(arg0 error) ResultStringError {
+	return ResultStringError{tag: ResultTagErr, err: &arg0}
 }
-func (r Result_string_error) IsOk() bool {
+func (r ResultStringError) IsOk() bool {
 	return r.tag == ResultTagOk
 }
-func (r Result_string_error) IsErr() bool {
+func (r ResultStringError) IsErr() bool {
 	return r.tag == ResultTagErr
 }
-func (r Result_string_error) Unwrap() string {
+func (r ResultStringError) Unwrap() string {
 	if r.tag != ResultTagOk {
 		panic("called Unwrap on Err")
 	}
@@ -41,13 +41,13 @@ func (r Result_string_error) Unwrap() string {
 	}
 	return *r.ok
 }
-func (r Result_string_error) UnwrapOr(defaultValue string) string {
+func (r ResultStringError) UnwrapOr(defaultValue string) string {
 	if r.tag == ResultTagOk {
 		return *r.ok
 	}
 	return defaultValue
 }
-func (r Result_string_error) UnwrapErr() error {
+func (r ResultStringError) UnwrapErr() error {
 	if r.tag != ResultTagErr {
 		panic("called UnwrapErr on Ok")
 	}
@@ -56,7 +56,7 @@ func (r Result_string_error) UnwrapErr() error {
 	}
 	return *r.err
 }
-func (r Result_string_error) UnwrapOrElse(fn func(error) string) string {
+func (r ResultStringError) UnwrapOrElse(fn func(error) string) string {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok
 	}
@@ -65,7 +65,7 @@ func (r Result_string_error) UnwrapOrElse(fn func(error) string) string {
 	}
 	panic("Result in invalid state")
 }
-func (r Result_string_error) Map(fn func(string) interface{}) interface{} {
+func (r ResultStringError) Map(fn func(string) interface{}) interface{} {
 	if r.tag == ResultTagOk && r.ok != nil {
 		u := fn(*r.ok)
 		return struct {
@@ -80,7 +80,7 @@ func (r Result_string_error) Map(fn func(string) interface{}) interface{} {
 		err *error
 	}{tag: r.tag, ok: nil, err: r.err}
 }
-func (r Result_string_error) MapErr(fn func(error) interface{}) interface{} {
+func (r ResultStringError) MapErr(fn func(error) interface{}) interface{} {
 	if r.tag == ResultTagErr && r.err != nil {
 		f := fn(*r.err)
 		return struct {
@@ -95,13 +95,13 @@ func (r Result_string_error) MapErr(fn func(error) interface{}) interface{} {
 		err *interface{}
 	}{tag: r.tag, ok: r.ok, err: nil}
 }
-func (r Result_string_error) Filter(predicate func(string) bool) Result_string_error {
+func (r ResultStringError) Filter(predicate func(string) bool) ResultStringError {
 	if r.tag == ResultTagOk && predicate(*r.ok) {
 		return r
 	}
 	return r
 }
-func (r Result_string_error) AndThen(fn func(string) interface{}) interface{} {
+func (r ResultStringError) AndThen(fn func(string) interface{}) interface{} {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return fn(*r.ok)
 	}
@@ -111,7 +111,7 @@ func (r Result_string_error) AndThen(fn func(string) interface{}) interface{} {
 		err *error
 	}{tag: r.tag, ok: nil, err: r.err}
 }
-func (r Result_string_error) OrElse(fn func(error) interface{}) interface{} {
+func (r ResultStringError) OrElse(fn func(error) interface{}) interface{} {
 	if r.tag == ResultTagErr && r.err != nil {
 		return fn(*r.err)
 	}
@@ -121,13 +121,13 @@ func (r Result_string_error) OrElse(fn func(error) interface{}) interface{} {
 		err *interface{}
 	}{tag: r.tag, ok: r.ok, err: nil}
 }
-func (r Result_string_error) And(other interface{}) interface{} {
+func (r ResultStringError) And(other interface{}) interface{} {
 	if r.tag == ResultTagOk {
 		return other
 	}
 	return r
 }
-func (r Result_string_error) Or(other Result_string_error) Result_string_error {
+func (r ResultStringError) Or(other ResultStringError) ResultStringError {
 	if r.tag == ResultTagOk {
 		return r
 	}

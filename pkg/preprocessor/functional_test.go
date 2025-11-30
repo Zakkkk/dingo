@@ -9,20 +9,20 @@ import (
 
 func TestMapBasic(t *testing.T) {
 	processor := NewFunctionalProcessor()
-	// Note: Lambda must be pre-expanded by LambdaProcessor
-	input := `result := nums.map(func(x) { return x * 2 })`
+	// Note: Lambda must be pre-expanded by LambdaProcessor with types
+	input := `result := nums.map(func(x int) int { return x * 2 })`
 
 	output, _, err := processor.ProcessInternal(input)
 	if err != nil {
 		t.Fatalf("ProcessInternal failed: %v", err)
 	}
 
-	// Verify key transformation elements
-	if !strings.Contains(output, "func() []_") {
-		t.Error("Map should generate IIFE with []_ return type")
+	// Verify key transformation elements - now uses proper types from lambda
+	if !strings.Contains(output, "func() []int") {
+		t.Errorf("Map should generate IIFE with []int return type, got: %s", output)
 	}
-	if !strings.Contains(output, "tmp := make([]_, 0, len(nums))") {
-		t.Error("Map should initialize tmp slice")
+	if !strings.Contains(output, "tmp := make([]int, 0, len(nums))") {
+		t.Errorf("Map should initialize tmp slice with []int, got: %s", output)
 	}
 	if !strings.Contains(output, "for _, x := range nums") {
 		t.Error("Map should iterate over receiver with correct loop var")
@@ -40,7 +40,7 @@ func TestMapBasic(t *testing.T) {
 
 func TestMapWithComplexExpression(t *testing.T) {
 	processor := NewFunctionalProcessor()
-	input := `result := items.map(func(item) { return item.value * 2 + 1 })`
+	input := `result := items.map(func(item Item) int { return item.value * 2 + 1 })`
 
 	output, _, err := processor.ProcessInternal(input)
 	if err != nil {
@@ -52,9 +52,9 @@ func TestMapWithComplexExpression(t *testing.T) {
 		t.Errorf("Map transformation should preserve complex expression, got: %s", output)
 	}
 
-	// Verify IIFE structure
-	if !strings.Contains(output, "func() []_") {
-		t.Errorf("Map transformation should generate IIFE with []_ return type, got: %s", output)
+	// Verify IIFE structure with proper return type
+	if !strings.Contains(output, "func() []int") {
+		t.Errorf("Map transformation should generate IIFE with []int return type, got: %s", output)
 	}
 }
 
@@ -93,19 +93,19 @@ func TestMapErrorHandling(t *testing.T) {
 
 func TestFilterBasic(t *testing.T) {
 	processor := NewFunctionalProcessor()
-	input := `result := nums.filter(func(x) { return x > 0 })`
+	input := `result := nums.filter(func(x int) bool { return x > 0 })`
 
 	output, _, err := processor.ProcessInternal(input)
 	if err != nil {
 		t.Fatalf("ProcessInternal failed: %v", err)
 	}
 
-	// Verify key transformation elements
-	if !strings.Contains(output, "func() []_") {
-		t.Error("Filter should generate IIFE with []_ return type")
+	// Verify key transformation elements - uses param type for slice
+	if !strings.Contains(output, "func() []int") {
+		t.Errorf("Filter should generate IIFE with []int return type, got: %s", output)
 	}
-	if !strings.Contains(output, "tmp := make([]_, 0, len(nums))") {
-		t.Error("Filter should initialize tmp slice")
+	if !strings.Contains(output, "tmp := make([]int, 0, len(nums))") {
+		t.Errorf("Filter should initialize tmp slice with []int, got: %s", output)
 	}
 	if !strings.Contains(output, "for _, x := range nums") {
 		t.Error("Filter should iterate over receiver")
@@ -176,16 +176,16 @@ func TestFilterErrorHandling(t *testing.T) {
 
 func TestReduceBasic(t *testing.T) {
 	processor := NewFunctionalProcessor()
-	input := `result := nums.reduce(0, func(acc, x) { return acc + x })`
+	input := `result := nums.reduce(0, func(acc int, x int) int { return acc + x })`
 
 	output, _, err := processor.ProcessInternal(input)
 	if err != nil {
 		t.Fatalf("ProcessInternal failed: %v", err)
 	}
 
-	// Verify key transformation elements
-	if !strings.Contains(output, "func() _") {
-		t.Error("Reduce should generate IIFE with _ return type")
+	// Verify key transformation elements - uses return type from lambda
+	if !strings.Contains(output, "func() int") {
+		t.Errorf("Reduce should generate IIFE with int return type, got: %s", output)
 	}
 	if !strings.Contains(output, "acc := 0") {
 		t.Error("Reduce should initialize accumulator")
@@ -268,9 +268,9 @@ func TestSumBasic(t *testing.T) {
 		t.Fatalf("ProcessInternal failed: %v", err)
 	}
 
-	// Verify key transformation elements
-	if !strings.Contains(output, "func() _") {
-		t.Error("Sum should generate IIFE with _ return type")
+	// Verify key transformation elements - sum uses int as default type
+	if !strings.Contains(output, "func() int") {
+		t.Errorf("Sum should generate IIFE with int return type, got: %s", output)
 	}
 	if !strings.Contains(output, "sum := 0") {
 		t.Error("Sum should initialize sum variable")
@@ -641,16 +641,17 @@ z := nums.reduce(0, func(acc, n) { return acc + n })`
 
 func TestFindBasic(t *testing.T) {
 	processor := NewFunctionalProcessor()
-	input := `result := users.find(func(u) { return u.id == targetId })`
+	// Use typed lambda to get proper type inference
+	input := `result := users.find(func(u User) bool { return u.id == targetId })`
 
 	output, _, err := processor.ProcessInternal(input)
 	if err != nil {
 		t.Fatalf("ProcessInternal failed: %v", err)
 	}
 
-	// Verify key transformation elements
-	if !strings.Contains(output, "func() Option_") {
-		t.Error("find should generate IIFE with Option_ return type")
+	// Verify key transformation elements - uses camelCase naming
+	if !strings.Contains(output, "func() OptionUser") {
+		t.Error("find should generate IIFE with OptionUser return type")
 	}
 	if !strings.Contains(output, "for _, u := range users") {
 		t.Error("find should iterate over receiver with correct loop var")
@@ -658,11 +659,11 @@ func TestFindBasic(t *testing.T) {
 	if !strings.Contains(output, "if u.id == targetId") {
 		t.Error("find should check predicate")
 	}
-	if !strings.Contains(output, "return Option__Some(u)") {
-		t.Error("find should return Some on match")
+	if !strings.Contains(output, "return OptionUserSome(u)") {
+		t.Error("find should return OptionUserSome on match")
 	}
-	if !strings.Contains(output, "return Option__None()") {
-		t.Error("find should return None if no match")
+	if !strings.Contains(output, "return OptionUserNone()") {
+		t.Error("find should return OptionUserNone if no match")
 	}
 }
 
@@ -707,8 +708,8 @@ func TestFindIndexBasic(t *testing.T) {
 	}
 
 	// Verify key transformation elements
-	if !strings.Contains(output, "func() Option_int") {
-		t.Error("findIndex should generate IIFE with Option_int return type")
+	if !strings.Contains(output, "func() OptionInt") {
+		t.Error("findIndex should generate IIFE with OptionInt return type")
 	}
 	if !strings.Contains(output, "for i, x := range items") {
 		t.Error("findIndex should iterate with index variable")
@@ -716,10 +717,10 @@ func TestFindIndexBasic(t *testing.T) {
 	if !strings.Contains(output, "if x.name == \"target\"") {
 		t.Error("findIndex should check predicate")
 	}
-	if !strings.Contains(output, "return Option_int_Some(i)") {
+	if !strings.Contains(output, "return OptionIntSome(i)") {
 		t.Error("findIndex should return Some(index) on match")
 	}
-	if !strings.Contains(output, "return Option_int_None()") {
+	if !strings.Contains(output, "return OptionIntNone()") {
 		t.Error("findIndex should return None if no match")
 	}
 }
@@ -734,10 +735,10 @@ func TestMapResultBasic(t *testing.T) {
 	}
 
 	// Verify key transformation elements
-	if !strings.Contains(output, "func() Result_[]__error") {
+	if !strings.Contains(output, "func() ResultSliceInterfaceError") {
 		t.Error("mapResult should generate IIFE with Result return type")
 	}
-	if !strings.Contains(output, "tmp := make([]_, 0, len(strings))") {
+	if !strings.Contains(output, "tmp := make([]interface{}, 0, len(strings))") {
 		t.Error("mapResult should initialize tmp slice")
 	}
 	if !strings.Contains(output, "for _, s := range strings") {
@@ -749,13 +750,13 @@ func TestMapResultBasic(t *testing.T) {
 	if !strings.Contains(output, "if res.IsErr()") {
 		t.Error("mapResult should check for errors")
 	}
-	if !strings.Contains(output, "return Result_[]__error_Err(res.UnwrapErr())") {
+	if !strings.Contains(output, "return ResultSliceInterfaceErrorErr(res.UnwrapErr())") {
 		t.Error("mapResult should propagate errors")
 	}
 	if !strings.Contains(output, "tmp = append(tmp, res.Unwrap())") {
 		t.Error("mapResult should append unwrapped values")
 	}
-	if !strings.Contains(output, "return Result_[]__error_Ok(tmp)") {
+	if !strings.Contains(output, "return ResultSliceInterfaceErrorOk(tmp)") {
 		t.Error("mapResult should return Ok with collected values")
 	}
 }
@@ -801,10 +802,10 @@ func TestFilterMapBasic(t *testing.T) {
 	}
 
 	// Verify key transformation elements
-	if !strings.Contains(output, "func() []_") {
+	if !strings.Contains(output, "func() []interface{}") {
 		t.Error("filterMap should generate IIFE with slice return type")
 	}
-	if !strings.Contains(output, "tmp := make([]_, 0, len(items))") {
+	if !strings.Contains(output, "tmp := make([]interface{}, 0, len(items))") {
 		t.Error("filterMap should initialize tmp slice")
 	}
 	if !strings.Contains(output, "for _, x := range items") {
@@ -862,13 +863,13 @@ func TestPartitionBasic(t *testing.T) {
 	}
 
 	// Verify key transformation elements
-	if !strings.Contains(output, "func() ([]_, []_)") {
+	if !strings.Contains(output, "func() ([]interface{}, []interface{})") {
 		t.Error("partition should generate IIFE with tuple return type")
 	}
-	if !strings.Contains(output, "trueSlice := make([]_, 0, len(users))") {
+	if !strings.Contains(output, "trueSlice := make([]interface{}, 0, len(users))") {
 		t.Error("partition should initialize trueSlice")
 	}
-	if !strings.Contains(output, "falseSlice := make([]_, 0, len(users))") {
+	if !strings.Contains(output, "falseSlice := make([]interface{}, 0, len(users))") {
 		t.Error("partition should initialize falseSlice")
 	}
 	if !strings.Contains(output, "for _, u := range users") {

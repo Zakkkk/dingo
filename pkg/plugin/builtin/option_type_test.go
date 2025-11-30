@@ -159,7 +159,7 @@ func TestInferNoneTypeFromContext(t *testing.T) {
 	file := &ast.File{Name: ast.NewIdent("test")}
 	typeInf, _ := NewTypeInferenceService(fset, file, logger)
 
-	// Create a mock types.Info with Option_int type
+	// Create a mock types.Info with OptionInt type
 	typesInfo := &types.Info{
 		Types: make(map[ast.Expr]types.TypeAndValue),
 	}
@@ -167,9 +167,9 @@ func TestInferNoneTypeFromContext(t *testing.T) {
 	// Create None identifier
 	noneIdent := ast.NewIdent("None")
 
-	// Add type information for None (Option_int)
+	// Add type information for None (OptionInt)
 	optionIntType := types.NewNamed(
-		types.NewTypeName(token.NoPos, nil, "Option_int", nil),
+		types.NewTypeName(token.NoPos, nil, "OptionInt", nil),
 		types.NewStruct(nil, nil),
 		nil,
 	)

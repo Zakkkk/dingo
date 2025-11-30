@@ -193,9 +193,11 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 
 	// Parse all operations to extract lambdas
 	type ParsedOp struct {
-		Method string
-		Param  string
-		Body   string
+		Method     string
+		Param      string
+		ParamType  string
+		ReturnType string
+		Body       string
 	}
 
 	var ops []ParsedOp
@@ -204,15 +206,26 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 			return "", fmt.Errorf("operation %s requires arguments", op.Method)
 		}
 
-		param, body, err := f.parseLambda(op.Args[0])
+		info, err := f.parseLambdaFull(op.Args[0])
 		if err != nil {
 			return "", fmt.Errorf("%s: %w", op.Method, err)
 		}
 
+		param := ""
+		paramType := ""
+		if len(info.ParamNames) > 0 {
+			param = info.ParamNames[0]
+		}
+		if len(info.ParamTypes) > 0 {
+			paramType = info.ParamTypes[0]
+		}
+
 		ops = append(ops, ParsedOp{
-			Method: op.Method,
-			Param:  param,
-			Body:   body,
+			Method:     op.Method,
+			Param:      param,
+			ParamType:  paramType,
+			ReturnType: info.ReturnType,
+			Body:       info.Body,
 		})
 
 		// Use the first operation's parameter as loop variable
@@ -226,6 +239,12 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 	var transforms []string // Map transformations
 	currentVar := loopVar   // Track variable name through transformations
 
+	// Determine element type for the result slice
+	// - For map chains: use the return type of the last map operation
+	// - For filter chains: use the param type of the first filter
+	// - Default to interface{} if no type info
+	elemType := "interface{}"
+
 	for i, op := range ops {
 		switch op.Method {
 		case "filter":
@@ -236,6 +255,10 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 				predicate = strings.ReplaceAll(predicate, op.Param, currentVar)
 			}
 			conditions = append(conditions, predicate)
+			// Filter preserves element type
+			if i == 0 && op.ParamType != "" {
+				elemType = op.ParamType
+			}
 
 		case "map":
 			// Chain map transformations
@@ -244,8 +267,10 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 				transform = strings.ReplaceAll(transform, op.Param, currentVar)
 			}
 			transforms = append(transforms, transform)
-			// For map chains, each transform becomes the new "value"
-			// But we keep using the same variable name for simplicity
+			// Map changes element type to return type
+			if op.ReturnType != "" {
+				elemType = op.ReturnType
+			}
 		}
 
 		// Check for unsupported patterns
@@ -288,11 +313,10 @@ func (f *FunctionalProcessor) fuseToSlice(chain *FusedChain) (string, error) {
 		}
 	}
 
-	// Build IIFE
-	// NOTE: Uses []_ placeholder - Go's type inference determines concrete type
+	// Build IIFE with proper element type
 	var iife strings.Builder
-	iife.WriteString("func() []_ {\n")
-	iife.WriteString(fmt.Sprintf("\t%s := make([]_, 0, len(%s))\n", tmpVar, chain.Receiver))
+	iife.WriteString(fmt.Sprintf("func() []%s {\n", elemType))
+	iife.WriteString(fmt.Sprintf("\t%s := make([]%s, 0, len(%s))\n", tmpVar, elemType, chain.Receiver))
 	iife.WriteString(fmt.Sprintf("\tfor _, %s := range %s {\n", loopVar, chain.Receiver))
 
 	// Add filter conditions
@@ -393,22 +417,32 @@ func (f *FunctionalProcessor) fuseReduceChain(receiver, loopVar string, filters 
 	initValue := reduceOp.Args[0]
 	reduceLambda := reduceOp.Args[1]
 
-	params, body, err := f.parseLambda(reduceLambda)
+	info, err := f.parseLambdaFull(reduceLambda)
 	if err != nil {
 		return "", fmt.Errorf("reduce: %w", err)
 	}
 
-	accName, elemName, err := f.parseReduceParams(params)
-	if err != nil {
-		return "", fmt.Errorf("reduce: %w", err)
+	// Get param names: (acc, elem)
+	accName := "acc"
+	elemName := "x"
+	if len(info.ParamNames) >= 2 {
+		accName = info.ParamNames[0]
+		elemName = info.ParamNames[1]
+	} else if len(info.ParamNames) == 1 {
+		accName = info.ParamNames[0]
+	}
+
+	// Get return type (fall back to interface{} if not specified)
+	resultType := info.ReturnType
+	if resultType == "" {
+		resultType = "interface{}"
 	}
 
 	// Substitute element name with finalValue in reduce body
-	reduceBody := strings.ReplaceAll(body, elemName, finalValue)
+	reduceBody := strings.ReplaceAll(info.Body, elemName, finalValue)
 
-	// NOTE: Uses _ placeholder - Go's type inference determines concrete type from accumulator
 	var iife strings.Builder
-	iife.WriteString("func() _ {\n")
+	iife.WriteString(fmt.Sprintf("func() %s {\n", resultType))
 	iife.WriteString(fmt.Sprintf("\t%s := %s\n", accName, initValue))
 	iife.WriteString(fmt.Sprintf("\tfor _, %s := range %s {\n", loopVar, receiver))
 

@@ -30,21 +30,21 @@ func f() int {
 		{
 			name: "option_type_return",
 			code: `package test
-type Option_int struct { value *int }
-func f() Option_int {
-	return Option_int{}
+type OptionInt struct { value *int }
+func f() OptionInt {
+	return OptionInt{}
 }`,
-			expected: "test.Option_int",
+			expected: "test.OptionInt",
 			wantErr:  false,
 		},
 		{
 			name: "result_type_return",
 			code: `package test
-type Result_int_error struct { tag int }
-func f() Result_int_error {
-	return Result_int_error{}
+type ResultIntError struct { tag int }
+func f() ResultIntError {
+	return ResultIntError{}
 }`,
-			expected: "test.Result_int_error",
+			expected: "test.ResultIntError",
 			wantErr:  false,
 		},
 		{
@@ -167,23 +167,23 @@ func main() {
 		{
 			name: "option_type_assignment",
 			code: `package test
-type Option_string struct { value *string }
+type OptionString struct { value *string }
 func main() {
-	var opt Option_string
-	opt = Option_string{}
+	var opt OptionString
+	opt = OptionString{}
 }`,
-			expected: "test.Option_string",
+			expected: "test.OptionString",
 			wantErr:  false,
 		},
 		{
 			name: "result_type_assignment",
 			code: `package test
-type Result_int_error struct { tag int }
+type ResultIntError struct { tag int }
 func main() {
-	var result Result_int_error
-	result = Result_int_error{}
+	var result ResultIntError
+	result = ResultIntError{}
 }`,
-			expected: "test.Result_int_error",
+			expected: "test.ResultIntError",
 			wantErr:  false,
 		},
 	}
@@ -282,21 +282,21 @@ func main() {
 		{
 			name: "option_type_explicit",
 			code: `package test
-type Option_int struct { value *int }
+type OptionInt struct { value *int }
 func main() {
-	var opt Option_int = Option_int{}
+	var opt OptionInt = OptionInt{}
 }`,
-			expected: "test.Option_int",
+			expected: "test.OptionInt",
 			wantErr:  false,
 		},
 		{
 			name: "result_type_explicit",
 			code: `package test
-type Result_string_error struct { tag int }
+type ResultStringError struct { tag int }
 func main() {
-	var result Result_string_error = Result_string_error{}
+	var result ResultStringError = ResultStringError{}
 }`,
-			expected: "test.Result_string_error",
+			expected: "test.ResultStringError",
 			wantErr:  false,
 		},
 		{
@@ -409,23 +409,23 @@ func main() {
 		{
 			name: "option_type_param",
 			code: `package test
-type Option_int struct { value *int }
-func process(opt Option_int) {}
+type OptionInt struct { value *int }
+func process(opt OptionInt) {}
 func main() {
-	process(Option_int{})
+	process(OptionInt{})
 }`,
-			expected: "test.Option_int",
+			expected: "test.OptionInt",
 			wantErr:  false,
 		},
 		{
 			name: "result_type_param",
 			code: `package test
-type Result_string_error struct { tag int }
-func handle(result Result_string_error) {}
+type ResultStringError struct { tag int }
+func handle(result ResultStringError) {}
 func main() {
-	handle(Result_string_error{})
+	handle(ResultStringError{})
 }`,
-			expected: "test.Result_string_error",
+			expected: "test.ResultStringError",
 			wantErr:  false,
 		},
 		{
@@ -685,22 +685,22 @@ func buildParentMap(file *ast.File) map[ast.Node]ast.Node {
 func TestInferTypeFromContextIntegration(t *testing.T) {
 	code := `package test
 
-type Option_int struct { value *int }
+type OptionInt struct { value *int }
 
-func getAge() Option_int {
-	return Option_int{} // Context: return statement
+func getAge() OptionInt {
+	return OptionInt{} // Context: return statement
 }
 
 func main() {
-	var age Option_int
-	age = Option_int{} // Context: assignment
+	var age OptionInt
+	age = OptionInt{} // Context: assignment
 
-	var name Option_int = Option_int{} // Context: var decl
+	var name OptionInt = OptionInt{} // Context: var decl
 
-	processAge(Option_int{}) // Context: call arg
+	processAge(OptionInt{}) // Context: call arg
 }
 
-func processAge(opt Option_int) {}
+func processAge(opt OptionInt) {}
 `
 
 	fset := token.NewFileSet()
@@ -757,8 +757,8 @@ func processAge(opt Option_int) {}
 		}
 
 		typeName := resultType.String()
-		if typeName != "test.Option_int" {
-			t.Errorf("context %d: expected Option_int, got %s", i, typeName)
+		if typeName != "test.OptionInt" {
+			t.Errorf("context %d: expected OptionInt, got %s", i, typeName)
 		}
 	}
 }
@@ -767,12 +767,12 @@ func processAge(opt Option_int) {}
 func TestVariadicFunctionCallArgType(t *testing.T) {
 	code := `package test
 
-type Option_int struct { value *int }
+type OptionInt struct { value *int }
 
-func process(args ...Option_int) {}
+func process(args ...OptionInt) {}
 
 func main() {
-	process(Option_int{}, Option_int{})
+	process(OptionInt{}, OptionInt{})
 }
 `
 
@@ -824,8 +824,8 @@ func main() {
 		}
 
 		typeName := resultType.String()
-		if typeName != "test.Option_int" {
-			t.Errorf("arg %d: expected Option_int (variadic element type), got %s", i, typeName)
+		if typeName != "test.OptionInt" {
+			t.Errorf("arg %d: expected OptionInt (variadic element type), got %s", i, typeName)
 		}
 	}
 }

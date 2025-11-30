@@ -6,32 +6,32 @@ import "errors"
 // Feature: Match expression containing nested match expressions in arms
 // Complexity: advanced
 
-enum Result {
-	Ok(Option),
-	Err(error),
+enum MyResult {
+	MyOk(MyOption),
+	MyErr(error),
 }
 
-enum Option {
-	Some(int),
-	None,
+enum MyOption {
+	MySome(int),
+	MyNone,
 }
 
-func processNestedMatch(result Result) int {
+func processNestedMatch(result MyResult) int {
 	return match result {
-		Ok(inner) => {
+		MyOk(inner) => {
 			match inner {
-				Some(val) => val,
-				None => 0,
+				MySome(val) => val,
+				MyNone => 0,
 			}
 		},
-		Err(e) => -1,
+		MyErr(e) => -1,
 	}
 }
 
 func main() {
-	r1 := Ok(Some(42))
-	r2 := Ok(Option_int_None())
-	r3 := Err(errors.New("failed"))
+	r1 := MyResultMyOk(MyOptionMySome(42))
+	r2 := MyResultMyOk(MyOptionMyNone())
+	r3 := MyResultMyErr(errors.New("failed"))
 
 	println(processNestedMatch(r1))  // 42
 	println(processNestedMatch(r2))  // 0

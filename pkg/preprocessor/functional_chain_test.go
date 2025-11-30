@@ -86,7 +86,8 @@ func TestDetectChain_SingleOperation(t *testing.T) {
 
 func TestFuseChain_FilterMap(t *testing.T) {
 	f := NewFunctionalProcessor()
-	line := `result := nums.filter(func(x) { return x > 0 }).map(func(y) { return y * 2 })`
+	// Use typed lambdas to get proper type inference
+	line := `result := nums.filter(func(x int) bool { return x > 0 }).map(func(y int) int { return y * 2 })`
 
 	chain := f.detectChain(line)
 	if chain == nil {
@@ -100,13 +101,13 @@ func TestFuseChain_FilterMap(t *testing.T) {
 
 	t.Logf("Generated IIFE:\n%s", iife)
 
-	// Verify generated IIFE structure
-	if !strings.Contains(iife, "func() []_") {
-		t.Error("IIFE should have func() []_ signature")
+	// Verify generated IIFE structure - typed lambdas produce proper types
+	if !strings.Contains(iife, "func() []int") {
+		t.Error("IIFE should have func() []int signature")
 	}
 
-	if !strings.Contains(iife, "tmp := make([]_, 0, len(nums))") {
-		t.Error("IIFE should allocate tmp slice")
+	if !strings.Contains(iife, "tmp := make([]int, 0, len(nums))") {
+		t.Error("IIFE should allocate tmp slice with int type")
 	}
 
 	if !strings.Contains(iife, "for _, x := range nums") {
@@ -124,7 +125,7 @@ func TestFuseChain_FilterMap(t *testing.T) {
 	}
 
 	// Check no intermediate allocation (single tmp variable)
-	if strings.Count(iife, "make([]") > 1 {
+	if strings.Count(iife, "make([]int") > 1 {
 		t.Error("Fused chain should only have one allocation")
 	}
 }
@@ -182,7 +183,8 @@ func TestFuseChain_MapMap(t *testing.T) {
 
 func TestFuseChain_FilterMapReduce(t *testing.T) {
 	f := NewFunctionalProcessor()
-	line := `sum := items.filter(func(x) { return x.active }).map(func(y) { return y.value }).reduce(0, func(acc, v) { return acc + v })`
+	// Using typed lambdas to generate proper types
+	line := `sum := items.filter(func(x Item) bool { return x.active }).map(func(y Item) int { return y.value }).reduce(0, func(acc int, v int) int { return acc + v })`
 
 	chain := f.detectChain(line)
 	if chain == nil {
@@ -196,9 +198,9 @@ func TestFuseChain_FilterMapReduce(t *testing.T) {
 
 	t.Logf("Generated IIFE:\n%s", iife)
 
-	// Verify reduce structure
-	if !strings.Contains(iife, "func() _") {
-		t.Error("Reduce IIFE should return _")
+	// Verify reduce structure - uses return type from lambda
+	if !strings.Contains(iife, "func() int") {
+		t.Errorf("Reduce IIFE should return int, got: %s", iife)
 	}
 
 	if !strings.Contains(iife, "acc := 0") {

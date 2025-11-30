@@ -8,130 +8,130 @@ func TestSanitizeTypeName(t *testing.T) {
 		parts    []string
 		expected string
 	}{
-		// Single built-in types (leading underscore for type params)
+		// Single built-in types (camelCase)
 		{
 			name:     "int",
 			parts:    []string{"int"},
-			expected: "_int",
+			expected: "Int",
 		},
 		{
 			name:     "string",
 			parts:    []string{"string"},
-			expected: "_string",
+			expected: "String",
 		},
 		{
 			name:     "error",
 			parts:    []string{"error"},
-			expected: "_error",
+			expected: "Error",
 		},
 		{
 			name:     "bool",
 			parts:    []string{"bool"},
-			expected: "_bool",
+			expected: "Bool",
 		},
 		{
 			name:     "any → interface",
 			parts:    []string{"any"},
-			expected: "_interface",
+			expected: "Interface",
 		},
 
-		// Two-part type names (leading underscore, underscore separated)
+		// Two-part type names (camelCase)
 		{
 			name:     "int + error",
 			parts:    []string{"int", "error"},
-			expected: "_int_error",
+			expected: "IntError",
 		},
 		{
 			name:     "string + option",
 			parts:    []string{"string", "option"},
-			expected: "_string_option",
+			expected: "StringOption",
 		},
 		{
 			name:     "any + error",
 			parts:    []string{"any", "error"},
-			expected: "_interface_error",
+			expected: "InterfaceError",
 		},
 
-		// User-defined types (preserve capitalization with leading underscore)
+		// User-defined types (preserve capitalization)
 		{
 			name:     "User",
 			parts:    []string{"User"},
-			expected: "_User",
+			expected: "User",
 		},
 		{
 			name:     "CustomError",
 			parts:    []string{"CustomError"},
-			expected: "_CustomError",
+			expected: "CustomError",
 		},
 		{
 			name:     "UserID",
 			parts:    []string{"UserID"},
-			expected: "_UserID",
+			expected: "UserID",
 		},
 
 		// User types in compound names
 		{
 			name:     "CustomError + int",
 			parts:    []string{"CustomError", "int"},
-			expected: "_CustomError_int",
+			expected: "CustomErrorInt",
 		},
 		{
 			name:     "int + CustomError",
 			parts:    []string{"int", "CustomError"},
-			expected: "_int_CustomError",
+			expected: "IntCustomError",
 		},
 		{
 			name:     "UserID + error",
 			parts:    []string{"UserID", "error"},
-			expected: "_UserID_error",
+			expected: "UserIDError",
 		},
 
 		// Pointer types
 		{
 			name:     "*User",
 			parts:    []string{"*User"},
-			expected: "_ptr_User",
+			expected: "PtrUser",
 		},
 		{
 			name:     "*int + error",
 			parts:    []string{"*int", "error"},
-			expected: "_ptr_int_error",
+			expected: "PtrIntError",
 		},
 
 		// Slice types
 		{
 			name:     "[]string",
 			parts:    []string{"[]string"},
-			expected: "_slice_string",
+			expected: "SliceString",
 		},
 		{
 			name:     "[]int + error",
 			parts:    []string{"[]int", "error"},
-			expected: "_slice_int_error",
+			expected: "SliceIntError",
 		},
 
 		// Three-part names
 		{
 			name:     "int + string + error",
 			parts:    []string{"int", "string", "error"},
-			expected: "_int_string_error",
+			expected: "IntStringError",
 		},
 
 		// Edge cases
 		{
 			name:     "numeric types",
 			parts:    []string{"int64", "error"},
-			expected: "_int64_error",
+			expected: "Int64Error",
 		},
 		{
 			name:     "uint types",
 			parts:    []string{"uint32"},
-			expected: "_uint32",
+			expected: "Uint32",
 		},
 		{
 			name:     "float types",
 			parts:    []string{"float64", "error"},
-			expected: "_float64_error",
+			expected: "Float64Error",
 		},
 	}
 
@@ -265,55 +265,55 @@ func TestSanitizeTypeComponent(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// Built-in types (preserve lowercase)
+		// Built-in types (capitalize for camelCase)
 		{
 			name:     "int",
 			input:    "int",
-			expected: "int",
+			expected: "Int",
 		},
 		{
 			name:     "string",
 			input:    "string",
-			expected: "string",
+			expected: "String",
 		},
 		{
 			name:     "error",
 			input:    "error",
-			expected: "error",
+			expected: "Error",
 		},
 		{
-			name:     "any → interface",
+			name:     "any → Interface",
 			input:    "any",
-			expected: "interface",
+			expected: "Interface",
 		},
 		{
-			name:     "interface{} → interface",
+			name:     "interface{} → Interface",
 			input:    "interface{}",
-			expected: "interface",
+			expected: "Interface",
 		},
 
 		// Pointer types
 		{
 			name:     "*User",
 			input:    "*User",
-			expected: "ptr_User",
+			expected: "PtrUser",
 		},
 		{
 			name:     "*int",
 			input:    "*int",
-			expected: "ptr_int",
+			expected: "PtrInt",
 		},
 
 		// Slice types
 		{
 			name:     "[]string",
 			input:    "[]string",
-			expected: "slice_string",
+			expected: "SliceString",
 		},
 		{
 			name:     "[]int",
 			input:    "[]int",
-			expected: "slice_int",
+			expected: "SliceInt",
 		},
 
 		// User types (preserve case)
@@ -326,6 +326,28 @@ func TestSanitizeTypeComponent(t *testing.T) {
 			name:     "CustomError",
 			input:    "CustomError",
 			expected: "CustomError",
+		},
+
+		// Underscore-separated names (convert to camelCase)
+		{
+			name:     "Option_int → OptionInt",
+			input:    "Option_int",
+			expected: "OptionInt",
+		},
+		{
+			name:     "Result_int_error → ResultIntError",
+			input:    "Result_int_error",
+			expected: "ResultIntError",
+		},
+		{
+			name:     "Option_string → OptionString",
+			input:    "Option_string",
+			expected: "OptionString",
+		},
+		{
+			name:     "Option_User → OptionUser",
+			input:    "Option_User",
+			expected: "OptionUser",
 		},
 
 		// Edge cases
@@ -341,6 +363,94 @@ func TestSanitizeTypeComponent(t *testing.T) {
 			result := sanitizeTypeComponent(tt.input)
 			if result != tt.expected {
 				t.Errorf("sanitizeTypeComponent(%q) = %q, want %q",
+					tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeTypeName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// Underscore-separated names get converted to camelCase
+		{
+			name:     "Option_int → OptionInt",
+			input:    "Option_int",
+			expected: "OptionInt",
+		},
+		{
+			name:     "Result_int_error → ResultIntError",
+			input:    "Result_int_error",
+			expected: "ResultIntError",
+		},
+		{
+			name:     "Option_User → OptionUser",
+			input:    "Option_User",
+			expected: "OptionUser",
+		},
+
+		// Basic types are preserved
+		{
+			name:     "int preserved",
+			input:    "int",
+			expected: "int",
+		},
+		{
+			name:     "string preserved",
+			input:    "string",
+			expected: "string",
+		},
+		{
+			name:     "error preserved",
+			input:    "error",
+			expected: "error",
+		},
+
+		// User types without underscores are preserved
+		{
+			name:     "User preserved",
+			input:    "User",
+			expected: "User",
+		},
+		{
+			name:     "CustomError preserved",
+			input:    "CustomError",
+			expected: "CustomError",
+		},
+
+		// Pointer types
+		{
+			name:     "*Option_int → *OptionInt",
+			input:    "*Option_int",
+			expected: "*OptionInt",
+		},
+		{
+			name:     "*int preserved",
+			input:    "*int",
+			expected: "*int",
+		},
+
+		// Slice types
+		{
+			name:     "[]Option_int → []OptionInt",
+			input:    "[]Option_int",
+			expected: "[]OptionInt",
+		},
+		{
+			name:     "[]int preserved",
+			input:    "[]int",
+			expected: "[]int",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := NormalizeTypeName(tt.input)
+			if result != tt.expected {
+				t.Errorf("NormalizeTypeName(%q) = %q, want %q",
 					tt.input, result, tt.expected)
 			}
 		})

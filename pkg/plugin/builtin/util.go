@@ -5,18 +5,17 @@ import (
 	"strings"
 )
 
-// SanitizeTypeName converts type name parts to underscore format with leading underscore
-// This is used for Result<T,E> → Result_T_E and Option<T> → Option_T naming
+// SanitizeTypeName converts type name parts to camelCase format
+// This is used for Result<T,E> → ResultIntError and Option<T> → OptionString naming
 // Examples:
-//   ("int", "error") → "_int_error"
-//   ("string") → "_string"
-//   ("any", "error") → "_interface_error"
-//   ("*User", "error") → "_ptr_User_error"
-//   ("[]int", "error") → "_slice_int_error"
+//   ("int", "error") → "IntError"
+//   ("string") → "String"
+//   ("any", "error") → "InterfaceError"
+//   ("*User", "error") → "PtrUserError"
+//   ("[]int", "error") → "SliceIntError"
 func SanitizeTypeName(parts ...string) string {
 	var result strings.Builder
 	for _, part := range parts {
-		result.WriteString("_")
 		result.WriteString(sanitizeTypeComponent(part))
 	}
 	return result.String()
@@ -55,47 +54,128 @@ var (
 	}
 )
 
-// sanitizeTypeComponent sanitizes individual type components for underscore format
-// Handles special prefixes like *, [], map[], chan, etc.
+// sanitizeTypeComponent sanitizes individual type components for camelCase format
+// Handles special prefixes like *, [], map[], chan, arrays, and package-qualified types
+// Also converts underscore-separated names to camelCase (Option_int → OptionInt)
 func sanitizeTypeComponent(s string) string {
 	if s == "" {
 		return s
 	}
 
-	// Handle pointer types: *T → ptr_T
+	// Handle pointer types: *T → PtrT
 	if strings.HasPrefix(s, "*") {
-		return "ptr_" + sanitizeTypeComponent(strings.TrimPrefix(s, "*"))
+		return "Ptr" + sanitizeTypeComponent(strings.TrimPrefix(s, "*"))
 	}
 
-	// Handle slice types: []T → slice_T
+	// Handle slice types: []T → SliceT
 	if strings.HasPrefix(s, "[]") {
-		return "slice_" + sanitizeTypeComponent(strings.TrimPrefix(s, "[]"))
+		return "Slice" + sanitizeTypeComponent(strings.TrimPrefix(s, "[]"))
 	}
 
-	// Handle map types: map[K]V → map_K_V (simplified)
+	// Handle array types: [N]T → ArrayNT
+	if strings.HasPrefix(s, "[") {
+		closeBracket := strings.Index(s, "]")
+		if closeBracket > 0 {
+			size := s[1:closeBracket]
+			elemType := s[closeBracket+1:]
+			return "Array" + size + sanitizeTypeComponent(elemType)
+		}
+	}
+
+	// Handle map types: map[K]V → Map (simplified)
 	if strings.HasPrefix(s, "map[") {
-		// Complex parsing - for now just use "map"
-		return "map"
+		// Complex parsing - for now just use "Map"
+		return "Map"
 	}
 
-	// Handle chan types
+	// Handle chan types: chan T → ChanT
 	if strings.HasPrefix(s, "chan ") {
-		return "chan_" + sanitizeTypeComponent(strings.TrimPrefix(s, "chan "))
+		return "Chan" + sanitizeTypeComponent(strings.TrimPrefix(s, "chan "))
 	}
 
-	// Handle interface{} → interface
+	// Handle interface{} → Interface
 	if s == "interface{}" {
-		return "interface"
+		return "Interface"
 	}
 
-	// Handle any → interface (Go 1.18+)
+	// Handle any → Interface (Go 1.18+)
 	if s == "any" {
-		return "interface"
+		return "Interface"
 	}
 
-	// Otherwise return as-is (preserves case for user types like User, CustomError)
-	// Built-in types like int, string, error remain lowercase
-	return s
+	// Handle package-qualified types: pkg.Type → PkgType
+	// Example: "github.com/user/pkg.Type" → "GithubComUserPkgType"
+	if strings.Contains(s, ".") {
+		// Split by dots and capitalize each part
+		parts := strings.FieldsFunc(s, func(r rune) bool {
+			return r == '.' || r == '/'
+		})
+		var result strings.Builder
+		for _, part := range parts {
+			result.WriteString(sanitizeTypeComponent(part))
+		}
+		return result.String()
+	}
+
+	// Handle underscore-separated type names: Option_int → OptionInt
+	// This converts legacy underscore notation to camelCase
+	if strings.Contains(s, "_") {
+		parts := strings.Split(s, "_")
+		var result strings.Builder
+		for _, part := range parts {
+			result.WriteString(sanitizeTypeComponent(part))
+		}
+		return result.String()
+	}
+
+	// Check if it's a common acronym - use canonical form (e.g., HTTP, URL)
+	lower := strings.ToLower(s)
+	if acronym, ok := commonAcronyms[lower]; ok {
+		return acronym
+	}
+
+	// Check if it's a built-in type - capitalize first letter only
+	if builtinTypes[s] {
+		return capitalize(s)
+	}
+
+	// User-defined type - ensure first letter is capitalized
+	return capitalize(s)
+}
+
+// NormalizeTypeName converts underscore-separated type names to camelCase
+// while preserving basic Go types unchanged.
+// This is used for type references in struct fields and method signatures.
+// Examples:
+//   "Option_int" → "OptionInt"
+//   "Result_int_error" → "ResultIntError"
+//   "int" → "int" (preserved)
+//   "error" → "error" (preserved)
+//   "*Option_int" → "*OptionInt"
+//   "[]Option_int" → "[]OptionInt"
+func NormalizeTypeName(typeName string) string {
+	// Handle pointer types
+	if strings.HasPrefix(typeName, "*") {
+		return "*" + NormalizeTypeName(strings.TrimPrefix(typeName, "*"))
+	}
+
+	// Handle slice types
+	if strings.HasPrefix(typeName, "[]") {
+		return "[]" + NormalizeTypeName(strings.TrimPrefix(typeName, "[]"))
+	}
+
+	// If it contains underscores, it's a generated type name that needs normalization
+	if strings.Contains(typeName, "_") {
+		parts := strings.Split(typeName, "_")
+		var result strings.Builder
+		for _, part := range parts {
+			result.WriteString(capitalize(part))
+		}
+		return result.String()
+	}
+
+	// Basic types and user types without underscores are returned as-is
+	return typeName
 }
 
 // GenerateTempVarName generates temporary variable names with optional numbering
