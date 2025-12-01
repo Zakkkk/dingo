@@ -49,218 +49,268 @@ func (d *IIFEDetector) ExtractIIFEAwareOperand(line string, opPos int) string {
 		return ""
 	}
 
-	// Work backwards from opPos, skipping whitespace
-	end := opPos - 1
-	for end >= 0 && unicode.IsSpace(rune(line[end])) {
-		end--
-	}
-
-	if end < 0 {
+	// Skip whitespace backward from operator position
+	pos := d.skipWhitespaceBackward(line, opPos-1)
+	if pos < 0 {
 		return ""
 	}
 
-	// Start extracting from end position
-	start := end
+	char := line[pos]
 
-	// Check if we have a closing paren (potential IIFE invocation or function call)
-	if line[end] == ')' {
-		// Find matching opening paren
-		parenStart := d.findMatchingOpenParen(line, end)
-		if parenStart == -1 {
-			return ""
-		}
+	// Dispatch to appropriate handler based on character at position
+	switch {
+	case char == ')':
+		return d.extractCallOrIIFEOperand(line, pos, opPos)
+	case char == ']':
+		return d.extractArrayAccessOperand(line, pos)
+	default:
+		return d.extractIdentifierOperand(line, pos)
+	}
+}
 
-		// Check if this looks like a method call or field access chain: .method()
-		// Work backwards to find if there's a potential IIFE before this
-		beforeParen := parenStart - 1
-		for beforeParen >= 0 && unicode.IsSpace(rune(line[beforeParen])) {
+// skipWhitespaceBackward skips whitespace characters backward from pos
+func (d *IIFEDetector) skipWhitespaceBackward(line string, pos int) int {
+	for pos >= 0 && unicode.IsSpace(rune(line[pos])) {
+		pos--
+	}
+	return pos
+}
+
+// extractCallOrIIFEOperand handles expressions ending with ')' - could be IIFE, method call, or function call
+func (d *IIFEDetector) extractCallOrIIFEOperand(line string, endPos, opPos int) string {
+	// Find matching opening paren
+	parenStart := d.findMatchingOpenParen(line, endPos)
+	if parenStart == -1 {
+		return ""
+	}
+
+	// Check if this is a method call chain: obj.method() or iife().method()
+	if methodChain := d.tryExtractMethodChain(line, parenStart, endPos); methodChain != "" {
+		return methodChain
+	}
+
+	// Check if this is an IIFE invocation pattern: }()
+	if iifeOperand := d.tryExtractIIFE(line, parenStart, endPos, opPos); iifeOperand != "" {
+		return iifeOperand
+	}
+
+	// Not an IIFE - extract regular function call or parenthesized expression
+	return d.extractRegularCallOperand(line, parenStart, endPos)
+}
+
+// tryExtractMethodChain attempts to extract a method call chain (e.g., obj.method() or iife().field)
+func (d *IIFEDetector) tryExtractMethodChain(line string, parenStart, endPos int) string {
+	beforeParen := d.skipWhitespaceBackward(line, parenStart-1)
+	if beforeParen < 0 {
+		return ""
+	}
+
+	// If there's an identifier before the paren, check for dot before it
+	if isIdentifierChar(line[beforeParen]) || line[beforeParen] == '_' {
+		// Walk back through the identifier
+		for beforeParen >= 0 && (isIdentifierChar(line[beforeParen]) || line[beforeParen] == '_') {
 			beforeParen--
 		}
+		beforeParen = d.skipWhitespaceBackward(line, beforeParen)
 
-		// If there's an identifier before the paren, this might be a method call
-		// Check if there's a dot before the identifier
-		if beforeParen >= 0 && (isIdentifierChar(line[beforeParen]) || line[beforeParen] == '_') {
-			// Walk back through the identifier
-			for beforeParen >= 0 && (isIdentifierChar(line[beforeParen]) || line[beforeParen] == '_') {
-				beforeParen--
-			}
-			// Skip whitespace
-			for beforeParen >= 0 && unicode.IsSpace(rune(line[beforeParen])) {
-				beforeParen--
-			}
-			// Check for dot (method call or field access)
-			if beforeParen >= 0 && line[beforeParen] == '.' {
-				// This is a method call/field access, need to find what's before the dot
-				// Recursively extract the operand before the dot
-				baseOperand := d.ExtractIIFEAwareOperand(line, beforeParen)
-				if baseOperand != "" {
-					// Find where baseOperand starts in the line
-					baseStart := 0
-					for i := 0; i <= beforeParen; i++ {
-						if line[i:i+len(baseOperand)] == baseOperand {
-							baseStart = i
-							break
-						}
-					}
-					// Return base operand + the method call chain up to end
-					return line[baseStart : end+1]
+		// Check for dot (method call or field access)
+		if beforeParen >= 0 && line[beforeParen] == '.' {
+			// Recursively extract the operand before the dot
+			baseOperand := d.ExtractIIFEAwareOperand(line, beforeParen)
+			if baseOperand != "" {
+				// Find where baseOperand starts in the line
+				baseStart := d.findSubstringPosition(line, baseOperand, beforeParen)
+				if baseStart >= 0 {
+					return line[baseStart : endPos+1]
 				}
 			}
 		}
+	}
+	return ""
+}
 
-		// Check if this is an IIFE invocation pattern: }()
-		if parenStart > 0 && line[parenStart-1] == '}' {
-			// Check if the parens are empty (invocation, not call with args)
-			invocationParens := true
-			for i := parenStart + 1; i < end; i++ {
-				if !unicode.IsSpace(rune(line[i])) {
-					invocationParens = false
+// tryExtractIIFE attempts to extract an IIFE (Immediately Invoked Function Expression)
+func (d *IIFEDetector) tryExtractIIFE(line string, parenStart, endPos, opPos int) string {
+	if parenStart <= 0 || line[parenStart-1] != '}' {
+		return ""
+	}
+
+	// Check if the parens are empty (invocation, not call with args)
+	if !d.areParensEmpty(line, parenStart, endPos) {
+		return ""
+	}
+
+	// Find the start of the IIFE
+	funcStart := d.findIIFEStart(line, parenStart-1)
+	if funcStart == -1 {
+		return ""
+	}
+
+	// Extend end position to include any method calls after the IIFE
+	extendedEnd := d.extendToMethodCalls(line, endPos, opPos)
+
+	// Check for binary operators before the IIFE
+	start := d.maybeExtendToBinaryExpression(line, funcStart)
+
+	return line[start : extendedEnd+1]
+}
+
+// areParensEmpty checks if parentheses contain only whitespace
+func (d *IIFEDetector) areParensEmpty(line string, start, end int) bool {
+	for i := start + 1; i < end; i++ {
+		if !unicode.IsSpace(rune(line[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+// extendToMethodCalls extends the end position to include method calls after the current position
+func (d *IIFEDetector) extendToMethodCalls(line string, endPos, opPos int) int {
+	extendedEnd := endPos
+	pos := endPos + 1
+
+	for pos < opPos {
+		if unicode.IsSpace(rune(line[pos])) {
+			pos++
+			continue
+		}
+
+		if line[pos] != '.' {
+			break
+		}
+
+		// Field access or method call
+		pos++
+		pos = d.skipWhitespaceForward(line, pos, opPos)
+
+		// Read identifier
+		if pos < opPos && (isIdentifierChar(line[pos]) || line[pos] == '_') {
+			for pos < opPos && (isIdentifierChar(line[pos]) || line[pos] == '_') {
+				pos++
+			}
+
+			// Check for method call
+			if pos < opPos && line[pos] == '(' {
+				closeParen := d.findMatchingCloseParen(line, pos)
+				if closeParen != -1 && closeParen < opPos {
+					pos = closeParen + 1
+					extendedEnd = closeParen
+				} else {
 					break
 				}
+			} else {
+				extendedEnd = pos - 1
 			}
-
-			if invocationParens {
-				// This is an IIFE invocation pattern }()
-				funcStart := d.findIIFEStart(line, parenStart-1)
-				if funcStart != -1 {
-					start = funcStart
-
-					// Check if there are method calls or field access after the IIFE
-					// We need to extend 'end' to include them
-					extendedEnd := end
-					pos := end + 1
-					for pos < opPos {
-						if unicode.IsSpace(rune(line[pos])) {
-							pos++
-							continue
-						}
-
-						if line[pos] == '.' {
-							// Field access or method call
-							pos++
-							// Skip whitespace
-							for pos < opPos && unicode.IsSpace(rune(line[pos])) {
-								pos++
-							}
-							// Read identifier
-							if pos < opPos && (isIdentifierChar(line[pos]) || line[pos] == '_') {
-								for pos < opPos && (isIdentifierChar(line[pos]) || line[pos] == '_') {
-									pos++
-								}
-								// Check for method call
-								if pos < opPos && line[pos] == '(' {
-									// Find matching )
-									closeParen := d.findMatchingCloseParen(line, pos)
-									if closeParen != -1 && closeParen < opPos {
-										pos = closeParen + 1
-										extendedEnd = closeParen
-									} else {
-										break
-									}
-								} else {
-									extendedEnd = pos - 1
-								}
-							} else {
-								break
-							}
-						} else {
-							break
-						}
-					}
-
-					// Check if there's more before the IIFE (e.g., binary operators)
-					if start > 0 {
-						// Check if there's an operator or expression before
-						beforeStart := start - 1
-						for beforeStart >= 0 && unicode.IsSpace(rune(line[beforeStart])) {
-							beforeStart--
-						}
-						// If there's an operator, include the full expression
-						if beforeStart >= 0 && (line[beforeStart] == '+' || line[beforeStart] == '-' ||
-							line[beforeStart] == '*' || line[beforeStart] == '/' || line[beforeStart] == '%') {
-							// Extract everything from the beginning of the expression
-							start = d.findExpressionStart(line, beforeStart)
-						}
-					}
-					return line[start : extendedEnd+1]
-				}
-			}
+		} else {
+			break
 		}
+	}
 
-		// Not an IIFE, but a regular function call or parenthesized expression
-		start = parenStart
+	return extendedEnd
+}
 
-		// Look for identifier before the opening paren
-		beforePos := parenStart - 1
-		for beforePos >= 0 && unicode.IsSpace(rune(line[beforePos])) {
+// skipWhitespaceForward skips whitespace characters forward from pos up to limit
+func (d *IIFEDetector) skipWhitespaceForward(line string, pos, limit int) int {
+	for pos < limit && unicode.IsSpace(rune(line[pos])) {
+		pos++
+	}
+	return pos
+}
+
+// maybeExtendToBinaryExpression checks if there's a binary operator before start and extends if so
+func (d *IIFEDetector) maybeExtendToBinaryExpression(line string, start int) int {
+	if start <= 0 {
+		return start
+	}
+
+	beforeStart := d.skipWhitespaceBackward(line, start-1)
+	if beforeStart < 0 {
+		return start
+	}
+
+	// Check for binary operators
+	if d.isBinaryOperator(line[beforeStart]) {
+		return d.findExpressionStart(line, beforeStart)
+	}
+
+	return start
+}
+
+// isBinaryOperator checks if a character is a binary operator
+func (d *IIFEDetector) isBinaryOperator(char byte) bool {
+	return char == '+' || char == '-' || char == '*' || char == '/' || char == '%'
+}
+
+// extractRegularCallOperand extracts a regular function call or parenthesized expression
+func (d *IIFEDetector) extractRegularCallOperand(line string, parenStart, endPos int) string {
+	start := parenStart
+
+	// Look for identifier before the opening paren
+	beforePos := d.skipWhitespaceBackward(line, parenStart-1)
+
+	// Extract method call chain or identifier
+	if beforePos >= 0 && (isIdentifierChar(line[beforePos]) || line[beforePos] == '.') {
+		for beforePos >= 0 && (isIdentifierChar(line[beforePos]) || line[beforePos] == '.') {
 			beforePos--
 		}
-
-		// Check for method call chain or identifier
-		if beforePos >= 0 && (isIdentifierChar(line[beforePos]) || line[beforePos] == '.') {
-			for beforePos >= 0 && (isIdentifierChar(line[beforePos]) || line[beforePos] == '.') {
-				beforePos--
-			}
-			start = beforePos + 1
-		}
-
-		return line[start : end+1]
+		start = beforePos + 1
 	}
 
-	// Handle array/map access
-	if line[end] == ']' {
-		// Find matching opening bracket
-		bracketStart := d.findMatchingOpenBracket(line, end)
-		if bracketStart == -1 {
-			return ""
-		}
+	return line[start : endPos+1]
+}
 
-		// Look for identifier before the opening bracket
-		beforeBracket := bracketStart - 1
-		for beforeBracket >= 0 && unicode.IsSpace(rune(line[beforeBracket])) {
+// extractArrayAccessOperand handles array/map access expressions (e.g., arr[0], map[key])
+func (d *IIFEDetector) extractArrayAccessOperand(line string, endPos int) string {
+	// Find matching opening bracket
+	bracketStart := d.findMatchingOpenBracket(line, endPos)
+	if bracketStart == -1 {
+		return ""
+	}
+
+	// Look for identifier before the opening bracket
+	beforeBracket := d.skipWhitespaceBackward(line, bracketStart-1)
+
+	start := bracketStart
+	// Extract the identifier or selector expression
+	if beforeBracket >= 0 && (isIdentifierChar(line[beforeBracket]) || line[beforeBracket] == '.') {
+		for beforeBracket >= 0 && (isIdentifierChar(line[beforeBracket]) || line[beforeBracket] == '.') {
 			beforeBracket--
 		}
-
-		// Extract the identifier or selector expression
-		if beforeBracket >= 0 && (isIdentifierChar(line[beforeBracket]) || line[beforeBracket] == '.') {
-			for beforeBracket >= 0 && (isIdentifierChar(line[beforeBracket]) || line[beforeBracket] == '.') {
-				beforeBracket--
-			}
-			start = beforeBracket + 1
-		} else {
-			start = bracketStart
-		}
-
-		return line[start : end+1]
+		start = beforeBracket + 1
 	}
 
-	// Handle identifiers, selectors, and literals
-	if isIdentifierChar(line[end]) || line[end] == '.' {
-		// Walk backwards through identifiers and dots
-		for start >= 0 && (isIdentifierChar(line[start]) || line[start] == '.') {
-			start--
-		}
-		start++
+	return line[start : endPos+1]
+}
 
-		// Check if there's an operator before, for binary expressions
-		if start > 0 {
-			beforeStart := start - 1
-			for beforeStart >= 0 && unicode.IsSpace(rune(line[beforeStart])) {
-				beforeStart--
-			}
-			// If there's an operator, include the full expression
-			if beforeStart >= 0 && (line[beforeStart] == '+' || line[beforeStart] == '-' ||
-				line[beforeStart] == '*' || line[beforeStart] == '/' || line[beforeStart] == '%') {
-				// Extract everything from the beginning of the expression
-				start = d.findExpressionStart(line, beforeStart)
-			}
-		}
-
-		return line[start : end+1]
+// extractIdentifierOperand handles simple identifiers and field access expressions
+func (d *IIFEDetector) extractIdentifierOperand(line string, endPos int) string {
+	// Only handle identifiers and dots
+	if !isIdentifierChar(line[endPos]) && line[endPos] != '.' {
+		return ""
 	}
 
-	// Other cases (literals, complex expressions)
-	return ""
+	// Walk backwards through identifiers and dots
+	start := endPos
+	for start >= 0 && (isIdentifierChar(line[start]) || line[start] == '.') {
+		start--
+	}
+	start++
+
+	// Check for binary operators before the identifier
+	start = d.maybeExtendToBinaryExpression(line, start)
+
+	return line[start : endPos+1]
+}
+
+// findSubstringPosition finds the position of substring in line, searching backward from maxPos
+func (d *IIFEDetector) findSubstringPosition(line, substring string, maxPos int) int {
+	for i := 0; i <= maxPos; i++ {
+		if i+len(substring) <= len(line) && line[i:i+len(substring)] == substring {
+			return i
+		}
+	}
+	return -1
 }
 
 // findFuncKeyword searches backwards from pos to find a 'func' keyword

@@ -1289,10 +1289,13 @@ func TestLambdaASTProcessor_ErrorPropagationInBody(t *testing.T) {
 		},
 	}
 
-	proc := NewLambdaASTProcessor()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create fresh lambda processor with body processors for each test
+			config := NewDefaultPassConfig()
+			bodyProcessors := config.GetBodyProcessors()
+			proc := NewLambdaASTProcessorWithBodyProcessors(bodyProcessors)
+
 			result, _, err := proc.Process([]byte(tt.input))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

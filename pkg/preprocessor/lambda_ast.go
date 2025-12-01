@@ -2,7 +2,6 @@ package preprocessor
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
@@ -197,27 +196,14 @@ func (p *LambdaASTProcessor) findLambdaExpressions() []lambdaMatch {
 		if match != nil {
 			// Pre-process lambda body through injected body processors
 			if len(p.bodyProcessors) > 0 {
-				// Use injected processors (new architecture)
 				processedBody, err := processLambdaBody([]byte(match.expr.Body), p.bodyProcessors)
 				if err != nil {
-					// Log error but continue processing with original body
-					// The error will be caught later during Go compilation
-					fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
+					p.errors = append(p.errors, fmt.Errorf("lambda body processing at line %d: %w", match.startLine, err))
 				} else {
-					// Update lambda body with processed version
 					match.expr.Body = string(processedBody)
 				}
-			} else {
-				// Fallback to inline processing (legacy - for backward compatibility)
-				processedBody, err := p.processLambdaBodyLegacy(match.expr.Body, match.expr.ReturnType)
-				if err != nil {
-					// Log error but continue processing with original body
-					fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
-				} else {
-					// Update lambda body with processed version
-					match.expr.Body = processedBody
-				}
 			}
+			// No fallback - bodyProcessors must be provided via NewLambdaASTProcessorWithBodyProcessors
 
 			matches = append(matches, *match)
 			continue
@@ -247,144 +233,6 @@ func processLambdaBody(body []byte, processors []BodyProcessor) ([]byte, error) 
 		}
 	}
 	return processed, nil
-}
-
-// processLambdaBodyLegacy is the old inline body processing method
-// DEPRECATED: This will be removed once all processors implement BodyProcessor interface
-// Handles error propagation (?), null coalescing (??), and safe navigation (?.)
-// Returns the processed body with Dingo operators transformed to Go code
-func (p *LambdaASTProcessor) processLambdaBodyLegacy(body string, returnType string) (string, error) {
-	// Quick check: if no Dingo operators, return as-is
-	if !containsDingoOperators(body) {
-		return body, nil
-	}
-
-	// Determine if this is a block body or expression body
-	trimmedBody := strings.TrimSpace(body)
-	isBlock := strings.HasPrefix(trimmedBody, "{")
-
-	var codeToProcess string
-	if isBlock {
-		// Block body: wrap in synthetic function for proper context
-		if returnType == "" {
-			returnType = "__TYPE_INFERENCE_NEEDED"
-		}
-		// Remove outer braces and wrap
-		innerBlock := strings.TrimSpace(trimmedBody)
-		if strings.HasPrefix(innerBlock, "{") && strings.HasSuffix(innerBlock, "}") {
-			innerBlock = innerBlock[1 : len(innerBlock)-1]
-		}
-		codeToProcess = fmt.Sprintf("func __lambda__() %s {\n%s\n}", returnType, innerBlock)
-	} else {
-		// Expression body: wrap in synthetic function for proper context
-		// This allows error prop processor to infer return types correctly
-		if returnType == "" {
-			returnType = "__TYPE_INFERENCE_NEEDED"
-		}
-		codeToProcess = fmt.Sprintf("func __lambda__() %s {\n\treturn %s\n}", returnType, body)
-	}
-
-	// Process operators in correct order (safe nav -> null coalesce -> error prop)
-	// This matches the order in preprocessor.go's processor chain
-
-	// 1. Safe navigation (?.)
-	safeNav := NewSafeNavASTProcessor()
-	processed1, _, err := safeNav.ProcessInternal(codeToProcess)
-	if err != nil {
-		return "", fmt.Errorf("safe navigation in lambda body: %w", err)
-	}
-
-	// 2. Null coalescing (??)
-	nullCoalesce := NewNullCoalesceASTProcessor()
-	processed2, _, err := nullCoalesce.ProcessInternal(processed1)
-	if err != nil {
-		return "", fmt.Errorf("null coalescing in lambda body: %w", err)
-	}
-
-	// 3. Error propagation (?)
-	errorProp := NewErrorPropASTProcessor()
-	processed3, _, err := errorProp.ProcessInternal(processed2)
-	if err != nil {
-		return "", fmt.Errorf("error propagation in lambda body: %w", err)
-	}
-
-	// Extract the processed body from synthetic function
-	// Format: "func __lambda__() RetType {\n<BODY>\n}"
-
-	// Find the opening brace
-	openBrace := strings.Index(processed3, "{")
-	if openBrace == -1 {
-		return processed3, nil
-	}
-
-	// Find the matching closing brace (last one)
-	closeBrace := strings.LastIndex(processed3, "}")
-	if closeBrace == -1 || closeBrace <= openBrace {
-		return processed3, nil
-	}
-
-	// Extract body between braces
-	extractedBody := processed3[openBrace+1 : closeBrace]
-	extractedBody = strings.TrimSpace(extractedBody)
-
-	// Check if body became multi-statement (contains newlines with statements)
-	// This happens when error propagation transforms a single expression into multiple statements
-	lines := strings.Split(extractedBody, "\n")
-	hasMultipleStatements := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// Check for statement indicators (not comments, not empty)
-		if trimmed != "" && !strings.HasPrefix(trimmed, "//") {
-			// If we find multiple non-comment, non-empty lines, it's multi-statement
-			if hasMultipleStatements {
-				// Already found one, this is the second - definitely multi-statement
-				isBlock = true
-				break
-			}
-			hasMultipleStatements = true
-		}
-	}
-
-	if isBlock {
-		// Block body: wrap back in braces
-		// Don't modify the body - it's already correct with its statements
-		return "{ " + extractedBody + " }", nil
-	}
-
-	// Expression body: remove leading "return " if present
-	extractedBody = strings.TrimSpace(extractedBody)
-	if strings.HasPrefix(extractedBody, "return ") {
-		extractedBody = strings.TrimPrefix(extractedBody, "return ")
-		extractedBody = strings.TrimSpace(extractedBody)
-	}
-
-	return extractedBody, nil
-}
-
-// containsDingoOperators checks if the body contains any Dingo operators that need processing
-func containsDingoOperators(body string) bool {
-	// Check for error propagation (?), but exclude ternary (? :)
-	if idx := strings.Index(body, "?"); idx != -1 {
-		// Check if it's not a ternary operator
-		// Simple heuristic: ternary always has : after the ?
-		remaining := body[idx+1:]
-		if colonIdx := strings.Index(remaining, ":"); colonIdx == -1 || strings.Index(remaining, "?") < colonIdx {
-			// Either no colon, or another ? before colon = likely error prop
-			return true
-		}
-	}
-
-	// Check for null coalescing (??)
-	if strings.Contains(body, "??") {
-		return true
-	}
-
-	// Check for safe navigation (?.)
-	if strings.Contains(body, "?.") {
-		return true
-	}
-
-	return false
 }
 
 // tryMatchTypeScriptLambda tries to match TypeScript-style lambda: x => expr or (x, y) => expr

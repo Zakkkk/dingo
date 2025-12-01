@@ -14,6 +14,17 @@ type BodyProcessor interface {
 	Name() string
 }
 
+// Compile-time assertions: Verify all expression processors implement BodyProcessor
+// If any processor is missing ProcessBody/Name methods, this will fail at compile time
+var (
+	_ BodyProcessor = (*SafeNavASTProcessor)(nil)
+	_ BodyProcessor = (*NullCoalesceASTProcessor)(nil)
+	_ BodyProcessor = (*TernaryProcessor)(nil)
+	_ BodyProcessor = (*ErrorPropASTProcessor)(nil)
+	_ BodyProcessor = (*TypeAnnotASTProcessor)(nil)
+	_ BodyProcessor = (*FunctionalProcessor)(nil)
+)
+
 // PassConfig defines the two-pass preprocessor architecture
 //
 // Pass 1 (Structural): Transforms that change code structure
