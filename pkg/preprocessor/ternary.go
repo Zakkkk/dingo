@@ -159,6 +159,12 @@ func (t *TernaryProcessor) Name() string {
 	return "ternary_operator"
 }
 
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (t *TernaryProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := t.Process(body)
+	return result, err
+}
+
 // Process transforms ternary operators into IIFE patterns
 func (t *TernaryProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	// Initialize state

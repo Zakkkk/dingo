@@ -15,6 +15,7 @@ import (
 type NullCoalesceASTProcessor struct {
 	typeDetector *TypeDetector
 	tmpCounter   int
+	iifeDetector *IIFEDetector // For IIFE-aware operand extraction in lambda bodies
 }
 
 // NewNullCoalesceASTProcessor creates a new AST-based null coalescing preprocessor
@@ -22,12 +23,19 @@ func NewNullCoalesceASTProcessor() *NullCoalesceASTProcessor {
 	return &NullCoalesceASTProcessor{
 		typeDetector: NewTypeDetector(),
 		tmpCounter:   1,
+		iifeDetector: &IIFEDetector{},
 	}
 }
 
-// Name returns the processor name
+// Name implements BodyProcessor interface
 func (n *NullCoalesceASTProcessor) Name() string {
-	return "null_coalescing_ast"
+	return "NullCoalesce"
+}
+
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (n *NullCoalesceASTProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := n.Process(body)
+	return result, err
 }
 
 // Process implements FeatureProcessor interface for backward compatibility
@@ -281,6 +289,10 @@ func (n *NullCoalesceASTProcessor) parseNullCoalesce(line string) (*ast.NullCoal
 	}
 
 	// Extract operands between ?? operators
+	// Note: For raw Dingo syntax (user?.name ?? default), use simple extraction
+	// IIFEDetector is available (n.iifeDetector) for when SafeNav has already
+	// transformed ?.  into IIFE patterns, which can then be passed to NullCoalesce
+	// via ProcessBody() when processing lambda bodies.
 	lastEnd := rhsStart
 	for i, pos := range positions {
 		if i == 0 {

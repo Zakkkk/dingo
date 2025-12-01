@@ -27,6 +27,7 @@ type LambdaASTProcessor struct {
 	counter            int
 	errors             []error
 	strictTypeChecking bool
+	bodyProcessors     []BodyProcessor
 }
 
 // NewLambdaASTProcessor creates a new AST-based lambda processor with default style (TypeScript)
@@ -34,6 +35,18 @@ func NewLambdaASTProcessor() *LambdaASTProcessor {
 	return &LambdaASTProcessor{
 		style:              ast.TypeScriptStyle,
 		strictTypeChecking: false,
+		bodyProcessors:     nil, // No body processors by default
+	}
+}
+
+// NewLambdaASTProcessorWithBodyProcessors creates a lambda processor with injected body processors
+// Body processors are applied to lambda bodies BEFORE wrapping in func() literal
+// This enables decoupled architecture - lambda doesn't import concrete expression processors
+func NewLambdaASTProcessorWithBodyProcessors(procs []BodyProcessor) *LambdaASTProcessor {
+	return &LambdaASTProcessor{
+		style:              ast.TypeScriptStyle,
+		strictTypeChecking: false,
+		bodyProcessors:     procs,
 	}
 }
 
@@ -182,15 +195,28 @@ func (p *LambdaASTProcessor) findLambdaExpressions() []lambdaMatch {
 		}
 
 		if match != nil {
-			// Pre-process lambda body for Dingo operators BEFORE generating Go code
-			processedBody, err := p.processLambdaBody(match.expr.Body, match.expr.ReturnType)
-			if err != nil {
-				// Log error but continue processing with original body
-				// The error will be caught later during Go compilation
-				fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
+			// Pre-process lambda body through injected body processors
+			if len(p.bodyProcessors) > 0 {
+				// Use injected processors (new architecture)
+				processedBody, err := processLambdaBody([]byte(match.expr.Body), p.bodyProcessors)
+				if err != nil {
+					// Log error but continue processing with original body
+					// The error will be caught later during Go compilation
+					fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
+				} else {
+					// Update lambda body with processed version
+					match.expr.Body = string(processedBody)
+				}
 			} else {
-				// Update lambda body with processed version
-				match.expr.Body = processedBody
+				// Fallback to inline processing (legacy - for backward compatibility)
+				processedBody, err := p.processLambdaBodyLegacy(match.expr.Body, match.expr.ReturnType)
+				if err != nil {
+					// Log error but continue processing with original body
+					fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
+				} else {
+					// Update lambda body with processed version
+					match.expr.Body = processedBody
+				}
 			}
 
 			matches = append(matches, *match)
@@ -204,10 +230,30 @@ func (p *LambdaASTProcessor) findLambdaExpressions() []lambdaMatch {
 	return matches
 }
 
-// processLambdaBody pre-processes the lambda body for Dingo operators
+// processLambdaBody processes lambda body through injected expression processors
+// This is a standalone function that can be tested independently
+// Returns the processed body or error if any processor fails
+func processLambdaBody(body []byte, processors []BodyProcessor) ([]byte, error) {
+	if len(processors) == 0 {
+		return body, nil
+	}
+
+	processed := body
+	for _, proc := range processors {
+		var err error
+		processed, err = proc.ProcessBody(processed)
+		if err != nil {
+			return nil, fmt.Errorf("lambda body processing (%s): %w", proc.Name(), err)
+		}
+	}
+	return processed, nil
+}
+
+// processLambdaBodyLegacy is the old inline body processing method
+// DEPRECATED: This will be removed once all processors implement BodyProcessor interface
 // Handles error propagation (?), null coalescing (??), and safe navigation (?.)
 // Returns the processed body with Dingo operators transformed to Go code
-func (p *LambdaASTProcessor) processLambdaBody(body string, returnType string) (string, error) {
+func (p *LambdaASTProcessor) processLambdaBodyLegacy(body string, returnType string) (string, error) {
 	// Quick check: if no Dingo operators, return as-is
 	if !containsDingoOperators(body) {
 		return body, nil

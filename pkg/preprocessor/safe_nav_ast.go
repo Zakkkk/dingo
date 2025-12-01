@@ -48,6 +48,12 @@ func (s *SafeNavASTProcessor) Name() string {
 	return "safe_navigation_ast"
 }
 
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (s *SafeNavASTProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := s.Process(body)
+	return result, err
+}
+
 // Process implements FeatureProcessor interface for backward compatibility
 func (s *SafeNavASTProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	result, err := s.ProcessV2(source)

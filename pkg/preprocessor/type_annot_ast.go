@@ -27,6 +27,12 @@ func (p *TypeAnnotASTProcessor) Name() string {
 	return "type_annotations_ast"
 }
 
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (p *TypeAnnotASTProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := p.Process(body)
+	return result, err
+}
+
 // Process is the legacy interface method (implements FeatureProcessor)
 func (p *TypeAnnotASTProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	result, _, err := p.ProcessInternal(string(source))

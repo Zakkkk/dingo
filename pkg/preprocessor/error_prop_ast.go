@@ -54,6 +54,12 @@ func (p *ErrorPropASTProcessor) Name() string {
 	return "error_propagation_ast"
 }
 
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (p *ErrorPropASTProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := p.Process(body)
+	return result, err
+}
+
 // Process is the legacy interface method (implements FeatureProcessor)
 func (p *ErrorPropASTProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	result, _, err := p.ProcessInternal(string(source))

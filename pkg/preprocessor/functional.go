@@ -79,6 +79,12 @@ func (f *FunctionalProcessor) Name() string {
 	return "functional"
 }
 
+// ProcessBody implements BodyProcessor interface for lambda body processing
+func (f *FunctionalProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := f.Process(body)
+	return result, err
+}
+
 // Process is the legacy interface method (implements FeatureProcessor)
 func (f *FunctionalProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 	result, _, err := f.ProcessInternal(string(source))

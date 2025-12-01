@@ -12,10 +12,11 @@ import (
 // Preprocessor orchestrates multiple feature processors to transform
 // Dingo source code into valid Go code with semantic placeholders
 type Preprocessor struct {
-	source     []byte
-	processors []FeatureProcessor
-	oldConfig  *Config        // Deprecated: Legacy preprocessor-specific config
-	config     *config.Config // Main Dingo configuration
+	source       []byte
+	processors   []FeatureProcessor
+	oldConfig    *Config        // Deprecated: Legacy preprocessor-specific config (STILL USED for config propagation)
+	config       *config.Config // Main Dingo configuration
+	legacyConfig *Config        // Legacy config for processor configuration (e.g., MultiValueReturnMode)
 
 	// Package-wide cache (optional, for unqualified import inference)
 	// When present, enables early bailout optimization and local function exclusion
@@ -102,58 +103,21 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 		cfg = config.DefaultConfig()
 	}
 
-	// Create error propagation processor with legacy config if provided
-	var errorPropProcessor FeatureProcessor
+	// Use the new two-pass configuration from pass_config.go
+	// This ensures consistent ordering: Structural → Lambda → Expression
+	passConfig := NewDefaultPassConfig()
+	processors := passConfig.AllProcessorsWithLambda()
+
+	// If legacy config is provided, replace the ErrorPropASTProcessor with configured version
 	if legacyConfig != nil {
-		errorPropProcessor = NewErrorPropASTProcessorWithConfig(legacyConfig)
-	} else {
-		errorPropProcessor = NewErrorPropASTProcessor()
+		// Find and replace ErrorPropASTProcessor in the processors list
+		for i, proc := range processors {
+			if proc.Name() == "error_propagation_ast" {
+				processors[i] = NewErrorPropASTProcessorWithConfig(legacyConfig)
+				break
+			}
+		}
 	}
-
-	processors := []FeatureProcessor{
-		// Order matters! Process in this sequence:
-		// 0. Dingo Pre-Parser (let → var/short decl) - MUST be FIRST
-		//    Transforms: let x: Type = val → var x: Type = val
-		//    Transforms: let x = val → x := val
-		NewDingoPreParser(),
-		// 1. Legacy Option/Result syntax (Option_int → Option[int]) - BEFORE generic syntax
-		//    Transforms: Option_int → Option[int], Result_int_error → Result[int, error]
-		//    Transforms: Option_int_Some(x) → Some(x), Option_int_None() → None
-		// TODO(ast-migration): Re-enable after fixing NewLegacyOptionSyntaxProcessor
-		// NewLegacyOptionSyntaxProcessor(),
-		// 2. Generic syntax (<> → []) - must be early before type annotations
-		NewGenericSyntaxProcessor(),
-		// 3. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
-		//    Match arms: Pattern => Expression (structural context)
-		//    Lambdas: params => expression (expression context)
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewRustMatchASTProcessor(),
-		// 4. Lambdas (x => expr, |x| expr) - AFTER pattern matching
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewLambdaASTProcessor(),
-		// 5. Functional utilities (map, filter, reduce, etc.) - AFTER lambdas (lambdas expand first)
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewFunctionalASTProcessor(),
-		// 6. Type annotations (: → space) - AST-based, after lambdas, after generic syntax
-		NewTypeAnnotASTProcessor(),
-		// 7. Tuples ((a, b) = (1, 2)) - BEFORE safe navigation (uses . in field access)
-		NewTupleProcessor(),
-		// 8. Safe navigation (?.) - BEFORE null coalescing (SafeNav handles ?. before NullCoalesce sees ??)
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewSafeNavASTProcessor(),
-		// 9. Null coalescing (??) - AFTER safe navigation, BEFORE ternary
-		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewNullCoalesceASTProcessor(),
-		// 10. Ternary operator (? :) - AFTER null coalescing, BEFORE error propagation
-		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
-		NewTernaryProcessor(),
-		// 11. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
-		errorPropProcessor,
-	}
-
-	// 12. Enums (enum Name { ... }) - AST-based, after error prop
-	processors = append(processors, NewEnumASTProcessor())
 
 	// REMOVED: KeywordProcessor - REPLACED by DingoPreParser (position 0)
 	// DingoPreParser handles let declarations with full AST-based parsing
@@ -166,15 +130,20 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 	}
 
 	return &Preprocessor{
-		source:     source,
-		config:     cfg,
-		oldConfig:  nil, // No longer used
-		processors: processors,
-		cache:      cache,
+		source:       source,
+		config:       cfg,
+		oldConfig:    nil, // No longer used
+		legacyConfig: legacyConfig,
+		processors:   processors,
+		cache:        cache,
 	}
 }
 
 // ProcessWithMetadata runs all feature processors and returns both legacy mappings and metadata
+// ARCHITECTURE: Two-Pass Processing
+//   Pass 1: Structural transforms (enum, tuple, pattern matching) - change code structure
+//   Lambda: Between passes - processes body content with injected expression processors
+//   Pass 2: Expression transforms (?, ?., ??, ? :) - within expressions
 func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMetadata, error) {
 	// Early bailout optimization (GPT-5.1): If cache indicates no unqualified imports
 	// in this package, skip expensive symbol resolution for unqualified import processors
@@ -190,18 +159,35 @@ func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMet
 	allMetadata := []TransformMetadata{}
 	neededImports := []string{}
 
-	// Run each processor in sequence
-	for _, proc := range p.processors {
+	// Get two-pass configuration
+	config := NewDefaultPassConfig()
+
+	// Apply legacy config to expression processors (if provided)
+	if p.legacyConfig != nil {
+		// Replace ErrorPropASTProcessor with configured version
+		for i, proc := range config.Expression {
+			if proc.Name() == "error_propagation_ast" {
+				config.Expression[i] = NewErrorPropASTProcessorWithConfig(p.legacyConfig)
+				break
+			}
+		}
+	}
+
+	// Get body processors for lambda injection (expression processors that implement BodyProcessor)
+	bodyProcessors := config.GetBodyProcessors()
+
+	// Create lambda processor with injected body processors (decoupled architecture)
+	lambdaProc := NewLambdaASTProcessorWithBodyProcessors(bodyProcessors)
+
+	// Helper function to process with a single processor
+	processOne := func(proc FeatureProcessor, input []byte) ([]byte, error) {
 		// Check if processor implements V2 interface
 		if procV2, ok := proc.(FeatureProcessorV2); ok {
 			// Use new ProcessV2 method
-			procResult, err := procV2.ProcessV2(result)
+			procResult, err := procV2.ProcessV2(input)
 			if err != nil {
-				return "", nil, nil, fmt.Errorf("%s preprocessing failed: %w", proc.Name(), err)
+				return nil, fmt.Errorf("%s preprocessing failed: %w", proc.Name(), err)
 			}
-
-			// Update result
-			result = procResult.Source
 
 			// Merge mappings (legacy support)
 			for _, m := range procResult.Mappings {
@@ -210,24 +196,86 @@ func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMet
 
 			// Collect metadata
 			allMetadata = append(allMetadata, procResult.Metadata...)
+
+			return procResult.Source, nil
 		} else {
 			// Fall back to legacy Process method
-			processed, mappings, err := proc.Process(result)
+			processed, mappings, err := proc.Process(input)
 			if err != nil {
-				return "", nil, nil, fmt.Errorf("%s preprocessing failed: %w", proc.Name(), err)
+				return nil, fmt.Errorf("%s preprocessing failed: %w", proc.Name(), err)
 			}
-
-			// Update result
-			result = processed
 
 			// Merge mappings
 			for _, m := range mappings {
 				sourceMap.AddMapping(m)
 			}
+
+			return processed, nil
+		}
+	}
+
+	// ========== PASS 1: Structural Transforms ==========
+	// These transforms change code structure (enums → structs, tuples → multiple vars, etc.)
+	for _, proc := range config.Structural {
+		var err error
+		result, err = processOne(proc, result)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("pass 1: %w", err)
 		}
 
 		// Collect needed imports if processor implements ImportProvider
 		if importProvider, ok := proc.(ImportProvider); ok {
+			imports := importProvider.GetNeededImports()
+			neededImports = append(neededImports, imports...)
+		}
+	}
+
+	// ========== LAMBDA PROCESSING (Between Passes) ==========
+	// Lambda processor runs between passes and internally applies expression transforms to bodies
+	// This ensures lambda body expressions are processed uniformly with outer code
+	var err error
+	// Cast to FeatureProcessor interface
+	var lambdaProcInterface FeatureProcessor = lambdaProc
+	result, err = processOne(lambdaProcInterface, result)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("lambda processing: %w", err)
+	}
+
+	// Collect imports from lambda processor
+	if importProvider, ok := lambdaProcInterface.(ImportProvider); ok {
+		imports := importProvider.GetNeededImports()
+		neededImports = append(neededImports, imports...)
+	}
+
+	// ========== PASS 2: Expression Transforms ==========
+	// These transforms operate within expressions (error prop, safe nav, null coalesce, ternary)
+	// They process code OUTSIDE lambda bodies (lambda body expressions already processed)
+	for _, proc := range config.Expression {
+		result, err = processOne(proc, result)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("pass 2: %w", err)
+		}
+
+		// Collect needed imports if processor implements ImportProvider
+		if importProvider, ok := proc.(ImportProvider); ok {
+			imports := importProvider.GetNeededImports()
+			neededImports = append(neededImports, imports...)
+		}
+	}
+
+	// ========== OPTIONAL: Unqualified Imports ==========
+	// Unqualified imports (ReadFile → os.ReadFile) - only when cache is available
+	// This runs LAST after all other transforms (needs final AST structure)
+	if p.cache != nil {
+		unqualProc := NewUnqualifiedImportProcessorAST(p.cache)
+		var unqualProcInterface FeatureProcessor = unqualProc
+		result, err = processOne(unqualProcInterface, result)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("unqualified imports: %w", err)
+		}
+
+		// Collect imports from unqualified processor
+		if importProvider, ok := unqualProcInterface.(ImportProvider); ok {
 			imports := importProvider.GetNeededImports()
 			neededImports = append(neededImports, imports...)
 		}
