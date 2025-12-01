@@ -100,26 +100,63 @@ func (n *NullCoalesceASTProcessor) ProcessInternal(code string) (string, []Trans
 }
 
 // processLine processes a single line for null coalescing operators
+// Supports multiple ?? operators on the same line (separated by semicolons)
 func (n *NullCoalesceASTProcessor) processLine(line string, lineNum int, markerCounter *int) (string, *TransformMetadata, error) {
 	// Quick check: if no ?? in line, skip parsing
 	if !strings.Contains(line, "??") {
 		return line, nil, nil
 	}
 
-	// Parse the line for ?? operators
-	expr, err := n.parseNullCoalesce(line)
+	// Split line by semicolons (outside strings/comments) for multiple statements
+	statements := n.splitStatements(line)
+
+	// If only one statement, process normally
+	if len(statements) == 1 {
+		return n.processStatement(line, lineNum, markerCounter)
+	}
+
+	// Multiple statements - process each independently
+	var results []string
+	var firstMeta *TransformMetadata
+
+	for i, stmt := range statements {
+		transformed, meta, err := n.processStatement(stmt, lineNum, markerCounter)
+		if err != nil {
+			return "", nil, err
+		}
+		results = append(results, transformed)
+
+		// Keep only first metadata (for source map tracking)
+		if i == 0 && meta != nil {
+			firstMeta = meta
+		}
+	}
+
+	// Join statements with semicolons
+	return strings.Join(results, "; "), firstMeta, nil
+}
+
+// processStatement processes a single statement (no semicolons)
+func (n *NullCoalesceASTProcessor) processStatement(stmt string, lineNum int, markerCounter *int) (string, *TransformMetadata, error) {
+	// Quick check: if no ?? in statement, skip parsing
+	if !strings.Contains(stmt, "??") {
+		return stmt, nil, nil
+	}
+
+	// Parse the statement for ?? operators
+	expr, err := n.parseNullCoalesce(stmt)
 	if err != nil {
-		// If parsing fails, line doesn't contain valid ?? operator
-		return line, nil, nil
+		// If parsing fails, statement doesn't contain valid ?? operator
+		return stmt, nil, nil
 	}
 
 	if expr == nil {
 		// No ?? operator found
-		return line, nil, nil
+		return stmt, nil, nil
 	}
 
 	// Check if this is a let assignment: let varName = expr ?? default
-	letMatch, varName, indent := n.extractLetPattern(line)
+	letMatch, varName, indent := n.extractLetPattern(stmt)
 
 	marker := fmt.Sprintf("// dingo:c:%d", *markerCounter)
 	*markerCounter++
@@ -132,10 +169,83 @@ func (n *NullCoalesceASTProcessor) processLine(line string, lineNum int, markerC
 		transformed, meta = n.generateLetAssignment(expr, varName, indent, marker, lineNum, markerCounter)
 	} else {
 		// Generate inline if-else block (for expressions, function args, etc.)
-		transformed, meta = n.generateInlineExpression(expr, marker, lineNum, line)
+		transformed, meta = n.generateInlineExpression(expr, marker, lineNum, stmt)
 	}
 
 	return transformed, meta, nil
+}
+
+// splitStatements splits a line by semicolons, respecting strings and comments
+// Returns slice of statements (semicolons removed)
+func (n *NullCoalesceASTProcessor) splitStatements(line string) []string {
+	// Quick check: if no semicolon, return line as-is
+	if !strings.Contains(line, ";") {
+		return []string{line}
+	}
+
+	var statements []string
+	var current strings.Builder
+	inString := false
+	stringChar := byte(0)
+	inComment := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		// Check for comment start
+		if !inString && !inComment && i < len(line)-1 && ch == '/' && line[i+1] == '/' {
+			inComment = true
+			current.WriteByte(ch)
+			continue
+		}
+
+		// Track string state
+		if !inComment && !inString {
+			if ch == '"' || ch == '\'' || ch == '`' {
+				inString = true
+				stringChar = ch
+			}
+		} else if !inComment && inString {
+			// Check for closing quote
+			if ch == stringChar {
+				// Count consecutive backslashes before quote
+				escapeCount := 0
+				for j := i - 1; j >= 0 && line[j] == '\\'; j-- {
+					escapeCount++
+				}
+				// Quote is escaped only if ODD number of backslashes
+				if escapeCount%2 == 0 {
+					inString = false
+				}
+			}
+		}
+
+		// Split on semicolon (only outside strings and comments)
+		if !inString && !inComment && ch == ';' {
+			// Save current statement
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+			continue
+		}
+
+		current.WriteByte(ch)
+	}
+
+	// Add final statement
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	// If no statements collected, return original line
+	if len(statements) == 0 {
+		return []string{line}
+	}
+
+	return statements
 }
 
 // parseNullCoalesce parses a line for ?? operators using token-based scanning

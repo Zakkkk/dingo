@@ -2,11 +2,11 @@ package preprocessor
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/config"
-	dingoerrors "github.com/MadAppGang/dingo/pkg/errors"
 )
 
 // LambdaASTProcessor converts lambda syntax to Go function literals using token-based parsing
@@ -25,7 +25,7 @@ type LambdaASTProcessor struct {
 	line               int
 	col                int
 	counter            int
-	errors             []*dingoerrors.EnhancedError
+	errors             []error
 	strictTypeChecking bool
 }
 
@@ -73,6 +73,7 @@ func (p *LambdaASTProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 }
 
 // ProcessInternal transforms lambda syntax with metadata support
+// Uses multi-pass approach to handle nested lambdas and currying: (x) => (y) => x + y
 func (p *LambdaASTProcessor) ProcessInternal(code string) (string, []TransformMetadata, error) {
 	p.source = []byte(code)
 	p.pos = 0
@@ -81,34 +82,48 @@ func (p *LambdaASTProcessor) ProcessInternal(code string) (string, []TransformMe
 	p.counter = 0
 	p.errors = nil
 
-	var metadata []TransformMetadata
+	var allMetadata []TransformMetadata
+	result := code
+	maxPasses := 10 // Prevent infinite loops
 
-	// Find all lambda expressions
-	lambdas := p.findLambdaExpressions()
+	// Multi-pass transformation for nested lambdas
+	for pass := 0; pass < maxPasses; pass++ {
+		p.source = []byte(result)
+		p.pos = 0
+		p.line = 1
+		p.col = 1
 
-	// Build result by replacing lambdas from right to left (preserve indices)
-	result := string(p.source)
-	for i := len(lambdas) - 1; i >= 0; i-- {
-		lambda := lambdas[i]
+		// Find all lambda expressions in current pass
+		lambdas := p.findLambdaExpressions()
 
-		// Generate Go function literal
-		goCode := lambda.expr.ToGo()
+		// If no lambdas found, we're done
+		if len(lambdas) == 0 {
+			break
+		}
 
-		// Replace in source
-		result = result[:lambda.start] + goCode + result[lambda.end:]
+		// Build result by replacing lambdas from right to left (preserve indices)
+		for i := len(lambdas) - 1; i >= 0; i-- {
+			lambda := lambdas[i]
 
-		// Add metadata
-		marker := fmt.Sprintf("// dingo:l:%d", p.counter)
-		metadata = append(metadata, TransformMetadata{
-			Type:            "lambda",
-			OriginalLine:    lambda.startLine,
-			OriginalColumn:  lambda.start,
-			OriginalLength:  lambda.end - lambda.start,
-			OriginalText:    string(p.source[lambda.start:lambda.end]),
-			GeneratedMarker: marker,
-			ASTNodeType:     "FuncLit",
-		})
-		p.counter++
+			// Generate Go function literal
+			goCode := lambda.expr.ToGo()
+
+			// Replace in source
+			result = result[:lambda.start] + goCode + result[lambda.end:]
+
+			// Add metadata
+			marker := fmt.Sprintf("// dingo:l:%d", p.counter)
+			allMetadata = append(allMetadata, TransformMetadata{
+				Type:            "lambda",
+				OriginalLine:    lambda.startLine,
+				OriginalColumn:  lambda.start,
+				OriginalLength:  lambda.end - lambda.start,
+				OriginalText:    string(p.source[lambda.start:lambda.end]),
+				GeneratedMarker: marker,
+				ASTNodeType:     "FuncLit",
+			})
+			p.counter++
+		}
 	}
 
 	// Return errors if any
@@ -116,7 +131,7 @@ func (p *LambdaASTProcessor) ProcessInternal(code string) (string, []TransformMe
 		return "", nil, p.errors[0]
 	}
 
-	return result, metadata, nil
+	return result, allMetadata, nil
 }
 
 // lambdaMatch represents a matched lambda expression
@@ -167,6 +182,17 @@ func (p *LambdaASTProcessor) findLambdaExpressions() []lambdaMatch {
 		}
 
 		if match != nil {
+			// Pre-process lambda body for Dingo operators BEFORE generating Go code
+			processedBody, err := p.processLambdaBody(match.expr.Body, match.expr.ReturnType)
+			if err != nil {
+				// Log error but continue processing with original body
+				// The error will be caught later during Go compilation
+				fmt.Fprintf(os.Stderr, "warning: failed to process lambda body at line %d: %v\n", match.startLine, err)
+			} else {
+				// Update lambda body with processed version
+				match.expr.Body = processedBody
+			}
+
 			matches = append(matches, *match)
 			continue
 		}
@@ -176,6 +202,143 @@ func (p *LambdaASTProcessor) findLambdaExpressions() []lambdaMatch {
 	}
 
 	return matches
+}
+
+// processLambdaBody pre-processes the lambda body for Dingo operators
+// Handles error propagation (?), null coalescing (??), and safe navigation (?.)
+// Returns the processed body with Dingo operators transformed to Go code
+func (p *LambdaASTProcessor) processLambdaBody(body string, returnType string) (string, error) {
+	// Quick check: if no Dingo operators, return as-is
+	if !containsDingoOperators(body) {
+		return body, nil
+	}
+
+	// Determine if this is a block body or expression body
+	trimmedBody := strings.TrimSpace(body)
+	isBlock := strings.HasPrefix(trimmedBody, "{")
+
+	var codeToProcess string
+	if isBlock {
+		// Block body: wrap in synthetic function for proper context
+		if returnType == "" {
+			returnType = "__TYPE_INFERENCE_NEEDED"
+		}
+		// Remove outer braces and wrap
+		innerBlock := strings.TrimSpace(trimmedBody)
+		if strings.HasPrefix(innerBlock, "{") && strings.HasSuffix(innerBlock, "}") {
+			innerBlock = innerBlock[1 : len(innerBlock)-1]
+		}
+		codeToProcess = fmt.Sprintf("func __lambda__() %s {\n%s\n}", returnType, innerBlock)
+	} else {
+		// Expression body: wrap in synthetic function for proper context
+		// This allows error prop processor to infer return types correctly
+		if returnType == "" {
+			returnType = "__TYPE_INFERENCE_NEEDED"
+		}
+		codeToProcess = fmt.Sprintf("func __lambda__() %s {\n\treturn %s\n}", returnType, body)
+	}
+
+	// Process operators in correct order (safe nav -> null coalesce -> error prop)
+	// This matches the order in preprocessor.go's processor chain
+
+	// 1. Safe navigation (?.)
+	safeNav := NewSafeNavASTProcessor()
+	processed1, _, err := safeNav.ProcessInternal(codeToProcess)
+	if err != nil {
+		return "", fmt.Errorf("safe navigation in lambda body: %w", err)
+	}
+
+	// 2. Null coalescing (??)
+	nullCoalesce := NewNullCoalesceASTProcessor()
+	processed2, _, err := nullCoalesce.ProcessInternal(processed1)
+	if err != nil {
+		return "", fmt.Errorf("null coalescing in lambda body: %w", err)
+	}
+
+	// 3. Error propagation (?)
+	errorProp := NewErrorPropASTProcessor()
+	processed3, _, err := errorProp.ProcessInternal(processed2)
+	if err != nil {
+		return "", fmt.Errorf("error propagation in lambda body: %w", err)
+	}
+
+	// Extract the processed body from synthetic function
+	// Format: "func __lambda__() RetType {\n<BODY>\n}"
+
+	// Find the opening brace
+	openBrace := strings.Index(processed3, "{")
+	if openBrace == -1 {
+		return processed3, nil
+	}
+
+	// Find the matching closing brace (last one)
+	closeBrace := strings.LastIndex(processed3, "}")
+	if closeBrace == -1 || closeBrace <= openBrace {
+		return processed3, nil
+	}
+
+	// Extract body between braces
+	extractedBody := processed3[openBrace+1 : closeBrace]
+	extractedBody = strings.TrimSpace(extractedBody)
+
+	// Check if body became multi-statement (contains newlines with statements)
+	// This happens when error propagation transforms a single expression into multiple statements
+	lines := strings.Split(extractedBody, "\n")
+	hasMultipleStatements := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Check for statement indicators (not comments, not empty)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "//") {
+			// If we find multiple non-comment, non-empty lines, it's multi-statement
+			if hasMultipleStatements {
+				// Already found one, this is the second - definitely multi-statement
+				isBlock = true
+				break
+			}
+			hasMultipleStatements = true
+		}
+	}
+
+	if isBlock {
+		// Block body: wrap back in braces
+		// Don't modify the body - it's already correct with its statements
+		return "{ " + extractedBody + " }", nil
+	}
+
+	// Expression body: remove leading "return " if present
+	extractedBody = strings.TrimSpace(extractedBody)
+	if strings.HasPrefix(extractedBody, "return ") {
+		extractedBody = strings.TrimPrefix(extractedBody, "return ")
+		extractedBody = strings.TrimSpace(extractedBody)
+	}
+
+	return extractedBody, nil
+}
+
+// containsDingoOperators checks if the body contains any Dingo operators that need processing
+func containsDingoOperators(body string) bool {
+	// Check for error propagation (?), but exclude ternary (? :)
+	if idx := strings.Index(body, "?"); idx != -1 {
+		// Check if it's not a ternary operator
+		// Simple heuristic: ternary always has : after the ?
+		remaining := body[idx+1:]
+		if colonIdx := strings.Index(remaining, ":"); colonIdx == -1 || strings.Index(remaining, "?") < colonIdx {
+			// Either no colon, or another ? before colon = likely error prop
+			return true
+		}
+	}
+
+	// Check for null coalescing (??)
+	if strings.Contains(body, "??") {
+		return true
+	}
+
+	// Check for safe navigation (?.)
+	if strings.Contains(body, "?.") {
+		return true
+	}
+
+	return false
 }
 
 // tryMatchTypeScriptLambda tries to match TypeScript-style lambda: x => expr or (x, y) => expr
@@ -303,6 +466,35 @@ func (p *LambdaASTProcessor) tryMatchRustLambda() *lambdaMatch {
 	// Check if preceded by word char (if so, not a lambda)
 	if saved > 0 && p.isWordChar(p.source[saved-1]) {
 		return nil
+	}
+
+	// Special handling for || (either empty-param Rust lambda OR logical OR operator)
+	if p.peekN(1) == '|' {
+		// This is ||. Could be:
+		// 1) Empty-param Rust lambda: || 42
+		// 2) Logical OR in expression: x > 0 && x < 100 || y == 1
+
+		// Heuristic: If we're inside a func() body (from previous lambda transformation),
+		// treat || as logical OR, not a new lambda
+		lookback := saved - 1
+		foundFunc := false
+		for lookback >= 0 && lookback >= saved-100 { // Check up to 100 chars back
+			if lookback+5 <= len(p.source) && string(p.source[lookback:lookback+5]) == "func(" {
+				foundFunc = true
+				break
+			}
+			if p.source[lookback] == '\n' {
+				// Crossed line boundary without finding func(
+				break
+			}
+			lookback--
+		}
+
+		if foundFunc {
+			// We're inside a func() body - treat || as logical OR, not lambda
+			return nil
+		}
+		// Otherwise, treat || as empty-param Rust lambda (will be validated by param parsing)
 	}
 
 	startPos := p.pos

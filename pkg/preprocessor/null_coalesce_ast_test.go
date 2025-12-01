@@ -448,7 +448,6 @@ func TestNullCoalesceASTProcessor_BinaryExpressionLHS(t *testing.T) {
 }
 
 func TestNullCoalesceASTProcessor_MultipleCoalesceInOneLine(t *testing.T) {
-	t.Skip("Multiple ?? operators on same line (separate statements) not yet supported - use separate lines")
 	processor := NewNullCoalesceASTProcessor()
 
 	// Test multiple ?? on same line (separate expressions)
@@ -516,5 +515,203 @@ func TestNullCoalesceASTProcessor_BooleanDefault(t *testing.T) {
 	// Should check status
 	if !strings.Contains(result, "status") {
 		t.Errorf("Expected 'status' in output, got: %s", result)
+	}
+}
+
+// Statement Splitting Tests
+
+func TestNullCoalesceASTProcessor_SplitStatements_Basic(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test basic semicolon split with let (generates if-else blocks)
+	source := `let a = x ?? 0; let b = y ?? 1`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should contain both transformations
+	if !strings.Contains(result, "a := 0") {
+		t.Errorf("Expected 'a := 0' in output, got: %s", result)
+	}
+	if !strings.Contains(result, "b := 1") {
+		t.Errorf("Expected 'b := 1' in output, got: %s", result)
+	}
+
+	// Should preserve semicolon separator
+	if !strings.Contains(result, ";") {
+		t.Errorf("Expected semicolon separator, got: %s", result)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_ThreeStatements(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test three statements on one line with let
+	source := `let a = x ?? 0; let b = y ?? 1; let c = z ?? 2`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should contain all three transformations
+	if !strings.Contains(result, "a := 0") {
+		t.Errorf("Expected 'a := 0' in output, got: %s", result)
+	}
+	if !strings.Contains(result, "b := 1") {
+		t.Errorf("Expected 'b := 1' in output, got: %s", result)
+	}
+	if !strings.Contains(result, "c := 2") {
+		t.Errorf("Expected 'c := 2' in output, got: %s", result)
+	}
+
+	// Should have at least 3 markers
+	markerCount := strings.Count(result, "// dingo:c:")
+	if markerCount < 3 {
+		t.Errorf("Expected at least 3 markers, got: %d", markerCount)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_SemicolonInString(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test semicolon inside string literal (should NOT split) with let
+	source := `let a = x ?? "a;b"; let b = y ?? "c"`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should preserve semicolon in string
+	if !strings.Contains(result, `"a;b"`) {
+		t.Errorf("Expected 'a;b' preserved in string, got: %s", result)
+	}
+
+	// Should split on semicolon outside string
+	if !strings.Contains(result, `a := "a;b"`) {
+		t.Errorf("Expected 'a :=' transformation, got: %s", result)
+	}
+	if !strings.Contains(result, `b := "c"`) {
+		t.Errorf("Expected 'b :=' transformation, got: %s", result)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_SemicolonInComment(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test semicolon in comment (should NOT split) with let
+	source := `let a = x ?? 0 // comment; with semicolon`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should transform the ?? operator (comment is stripped during parsing)
+	if !strings.Contains(result, "a := 0") {
+		t.Errorf("Expected 'a := 0' transformation, got: %s", result)
+	}
+
+	// Should not split on semicolon inside comment
+	// (only one transformation should occur)
+	markerCount := strings.Count(result, "// dingo:c:")
+	if markerCount != 1 {
+		t.Errorf("Expected exactly 1 marker (no split), got: %d", markerCount)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_RawString(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test semicolon in raw string (backticks) with let
+	source := "let a = x ?? `raw;string`; let b = y ?? 2"
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should preserve semicolon in raw string
+	if !strings.Contains(result, "`raw;string`") {
+		t.Errorf("Expected raw string preserved, got: %s", result)
+	}
+
+	// Should split on semicolon outside string
+	if !strings.Contains(result, "a := `raw;string`") {
+		t.Errorf("Expected 'a :=' transformation, got: %s", result)
+	}
+	if !strings.Contains(result, "b := 2") {
+		t.Errorf("Expected 'b :=' transformation, got: %s", result)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_EscapedQuote(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test escaped quote in string with let
+	source := `let a = x ?? "test\"quote;here"; let b = y ?? 3`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should preserve escaped quote and semicolon in string
+	if !strings.Contains(result, `"test\"quote;here"`) {
+		t.Errorf("Expected escaped string preserved, got: %s", result)
+	}
+
+	// Should split on semicolon outside string
+	if !strings.Contains(result, `a := "test\"quote;here"`) {
+		t.Errorf("Expected 'a :=' transformation, got: %s", result)
+	}
+	if !strings.Contains(result, "b := 3") {
+		t.Errorf("Expected 'b :=' transformation, got: %s", result)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_MixedWithNonCoalesce(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test mix of ?? and non-?? statements with let
+	source := `let a = x ?? 0; let b = 42; let c = y ?? 1`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should contain all statements
+	if !strings.Contains(result, "a := 0") {
+		t.Errorf("Expected 'a := 0' in output, got: %s", result)
+	}
+	if !strings.Contains(result, "let b = 42") {
+		t.Errorf("Expected 'let b = 42' in output, got: %s", result)
+	}
+	if !strings.Contains(result, "c := 1") {
+		t.Errorf("Expected 'c := 1' in output, got: %s", result)
+	}
+
+	// Should have markers for transformed statements only
+	markerCount := strings.Count(result, "// dingo:c:")
+	if markerCount < 2 {
+		t.Errorf("Expected at least 2 markers, got: %d", markerCount)
+	}
+}
+
+func TestNullCoalesceASTProcessor_SplitStatements_NoSemicolon(t *testing.T) {
+	processor := NewNullCoalesceASTProcessor()
+
+	// Test single statement (no semicolon) should work as before with let
+	source := `let a = x ?? 0`
+	result, _, err := processor.ProcessInternal(source)
+	if err != nil {
+		t.Fatalf("ProcessInternal failed: %v", err)
+	}
+
+	// Should transform normally
+	if !strings.Contains(result, "a := 0") {
+		t.Errorf("Expected 'a := 0' transformation, got: %s", result)
+	}
+
+	// Should have marker
+	if !strings.Contains(result, "// dingo:c:") {
+		t.Errorf("Expected marker, got: %s", result)
 	}
 }

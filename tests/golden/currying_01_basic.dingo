@@ -1,0 +1,23 @@
+package main
+
+import "fmt"
+
+func main() {
+	// Basic two-level currying
+	let add = (x) => (y) => x + y
+	let add5 = add(5)
+	let result1 = add5(3)
+
+	// Triple nesting
+	let tripleAdd = (a) => (b) => (c) => a + b + c
+	let add10 = tripleAdd(10)
+	let add10_20 = add10(20)
+	let result2 = add10_20(30)
+
+	// Direct invocation
+	let result3 = ((x) => (y) => x * y)(4)(5)
+
+	fmt.Println("add(5)(3) =", result1)
+	fmt.Println("tripleAdd(10)(20)(30) =", result2)
+	fmt.Println("multiply(4)(5) =", result3)
+}

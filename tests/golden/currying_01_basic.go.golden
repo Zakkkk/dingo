@@ -1,0 +1,25 @@
+package main
+
+import "fmt"
+
+func main() {
+	// Basic two-level currying
+	add := func(x __TYPE_INFERENCE_NEEDED) { return func(y __TYPE_INFERENCE_NEEDED) { return x + y } }
+	add5 := add(5)
+	result1 := add5(3)
+
+	// Triple nesting
+	tripleAdd := func(a __TYPE_INFERENCE_NEEDED) {
+		return func(b __TYPE_INFERENCE_NEEDED) { return func(c __TYPE_INFERENCE_NEEDED) { return a + b + c } }
+	}
+	add10 := tripleAdd(10)
+	add10_20 := add10(20)
+	result2 := add10_20(30)
+
+	// Direct invocation
+	result3 := (func(x __TYPE_INFERENCE_NEEDED) { return func(y __TYPE_INFERENCE_NEEDED) { return x * y } })(4)(5)
+
+	fmt.Println("add(5)(3) =", result1)
+	fmt.Println("tripleAdd(10)(20)(30) =", result2)
+	fmt.Println("multiply(4)(5) =", result3)
+}

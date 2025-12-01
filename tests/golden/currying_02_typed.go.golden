@@ -1,0 +1,21 @@
+package main
+
+import "fmt"
+
+func main() {
+	// Currying with explicit types
+	typedAdd := func(x int) { return func(y int) { return x + y } }
+	typedAdd10 := typedAdd(10)
+
+	// Mixed: outer typed, inner inferred
+	partialTyped := func(x int) { return func(y __TYPE_INFERENCE_NEEDED) { return x + y } }
+
+	// In higher-order function
+	applyTwice := func(f __TYPE_INFERENCE_NEEDED) { return func(x __TYPE_INFERENCE_NEEDED) { return f(f(x)) } }
+	add1 := func(n int) { return n + 1 }
+	add2 := applyTwice(add1)
+
+	fmt.Println("typedAdd(10)(5) =", typedAdd10(5))
+	fmt.Println("partialTyped(3)(7) =", partialTyped(3)(7))
+	fmt.Println("applyTwice(add1)(0) =", add2(0))
+}
