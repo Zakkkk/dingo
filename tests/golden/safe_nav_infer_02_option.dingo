@@ -1,0 +1,106 @@
+package main
+
+// Test: Safe navigation with Option type detection (explicit annotations)
+// Tests that Option types are correctly detected via naming convention
+// Note: Uses UserOption struct instead of generic Option<T> for current implementation
+
+type UserOption struct {
+	value *User
+	none  bool
+}
+
+func (o UserOption) IsNone() bool {
+	return o.none
+}
+
+func (o UserOption) IsSome() bool {
+	return !o.none
+}
+
+func (o UserOption) Unwrap() *User {
+	if o.none {
+		panic("unwrap on None value")
+	}
+	return o.value
+}
+
+func (o UserOption) UnwrapOr(defaultVal *User) *User {
+	if o.none {
+		return defaultVal
+	}
+	return o.value
+}
+
+func SomeUser(val *User) UserOption {
+	return UserOption{value: val, none: false}
+}
+
+func NoneUser() UserOption {
+	return UserOption{none: true}
+}
+
+type User struct {
+	name    string
+	age     int
+	address *Address
+}
+
+type Address struct {
+	city    string
+	country string
+}
+
+func findUser(id int) UserOption {
+	if id == 1 {
+		return SomeUser(&User{
+			name: "Alice",
+			age:  30,
+			address: &Address{
+				city:    "Seattle",
+				country: "USA",
+			},
+		})
+	}
+	return NoneUser()
+}
+
+type UserService struct{}
+
+func (s *UserService) GetByEmail(email string) UserOption {
+	if email == "alice@example.com" {
+		return SomeUser(&User{name: "Alice", age: 30})
+	}
+	return NoneUser()
+}
+
+func main() {
+	// Test 1: Option type with safe nav
+	let user: UserOption = findUser(1)
+	let name: string = user?.name
+	println(name)
+
+	// Test 2: Option chain with nested pointer
+	let city: string = user?.address?.city
+	println(city)
+
+	// Test 3: Option from method return
+	service := &UserService{}
+	let foundUser: UserOption = service.GetByEmail("alice@example.com")
+	let email: string = foundUser?.name
+	println(email)
+
+	// Test 4: Direct call with Option result
+	let result: UserOption = findUser(1)
+	let age: int = result?.age
+	println(age)
+
+	// Test 5: Option with None case
+	let missing: UserOption = findUser(999)
+	let missingName: string = missing?.name
+	println(missingName)
+
+	// Test 6: Multiple safe navs on same Option
+	let userName: string = user?.name
+	let userAge: int = user?.age
+	println(userName, userAge)
+}

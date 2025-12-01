@@ -1,0 +1,54 @@
+package main
+
+// Test: Safe navigation with explicit type annotations (baseline for type inference)
+// Tests that type annotations are correctly parsed and used for safe navigation
+
+type User struct {
+	name    string
+	email   string
+	profile *Profile
+}
+
+type Profile struct {
+	bio     string
+	website string
+}
+
+func getUser() *User {
+	return &User{
+		name:  "Alice",
+		email: "alice@example.com",
+		profile: &Profile{
+			bio:     "Developer",
+			website: "alice.dev",
+		},
+	}
+}
+
+type UserRepository struct{}
+
+func (r *UserRepository) FindByID(id int) *User {
+	return &User{name: "Bob"}
+}
+
+func main() {
+	// Test 1: Safe nav on explicitly typed variable (basic case)
+	let user: *User = getUser()
+	let name: string = user?.name
+	println(name)
+
+	// Test 2: Chained safe nav with nested pointers
+	let bio: string = user?.profile?.bio
+	println(bio)
+
+	// Test 3: Safe nav on method return (with intermediate variable)
+	repo := &UserRepository{}
+	let foundUser: *User = repo.FindByID(123)
+	let userName: string = foundUser?.name
+	println(userName)
+
+	// Test 4: Multiple safe navs on same base
+	let email: string = user?.email
+	let website: string = user?.profile?.website
+	println(email, website)
+}

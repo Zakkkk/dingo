@@ -17,15 +17,29 @@ import (
 // Transforms: user?.address?.city → null-safe chain with Option/pointer checks
 // Supports both Option<T> types and raw Go pointers (*T)
 type SafeNavASTProcessor struct {
-	typeDetector *TypeDetector
-	tmpCounter   int
+	typeDetector   *TypeDetector   // Fallback regex-based type detector
+	typeAnalyzer   *TypeAnalyzer   // NEW: go/types based analyzer (preferred)
+	optionDetector *OptionDetector // NEW: dual-strategy Option detection
+	tmpCounter     int
 }
 
 // NewSafeNavASTProcessor creates a new AST-based safe navigation processor
 func NewSafeNavASTProcessor() *SafeNavASTProcessor {
 	return &SafeNavASTProcessor{
-		typeDetector: NewTypeDetector(),
-		tmpCounter:   1,
+		typeDetector:   NewTypeDetector(),
+		typeAnalyzer:   nil, // Initialized during Process if needed
+		optionDetector: NewOptionDetector(),
+		tmpCounter:     1,
+	}
+}
+
+// NewSafeNavASTProcessorWithAnalyzer creates processor with TypeAnalyzer
+func NewSafeNavASTProcessorWithAnalyzer(analyzer *TypeAnalyzer) *SafeNavASTProcessor {
+	return &SafeNavASTProcessor{
+		typeDetector:   NewTypeDetector(),
+		typeAnalyzer:   analyzer,
+		optionDetector: NewOptionDetector(),
+		tmpCounter:     1,
 	}
 }
 
@@ -60,6 +74,16 @@ func (s *SafeNavASTProcessor) ProcessV2(source []byte) (ProcessResult, error) {
 func (s *SafeNavASTProcessor) ProcessInternal(code string) (string, []TransformMetadata, error) {
 	// Parse source for type detection
 	s.typeDetector.ParseSource([]byte(code))
+
+	// Initialize type analyzer for this source if not already set
+	if s.typeAnalyzer == nil {
+		s.typeAnalyzer = NewTypeAnalyzer()
+		if err := s.typeAnalyzer.AnalyzeFile(code); err != nil {
+			// Log warning but continue with regex fallback
+			// Type inference will gracefully fall back to regex-based detection
+			// Note: This is expected for incomplete code during development
+		}
+	}
 
 	// Reset state
 	s.tmpCounter = 1
@@ -139,8 +163,8 @@ func (s *SafeNavASTProcessor) processLineWithMetadata(line string, originalLineN
 	for i := len(exprs) - 1; i >= 0; i-- {
 		exprPos := exprs[i]
 
-		// Detect base type
-		baseType := s.typeDetector.DetectType(exprPos.expr.Receiver)
+		// Detect base type using new determineBaseType flow
+		baseType := s.determineBaseType(exprPos.expr.Receiver)
 
 		// Create marker for metadata
 		marker := fmt.Sprintf("// dingo:s:%d", *markerCounter)
@@ -202,7 +226,16 @@ func (s *SafeNavASTProcessor) parseSafeNavLine(line string, lineNum int) ([]safe
 			// Found ?. - now extract the base identifier before it
 			baseStart, baseEnd := extractBaseBefore(line, i)
 			if baseStart == -1 {
-				return nil, fmt.Errorf("line %d: safe navigation ?. without receiver at position %d", lineNum, i)
+				return nil, fmt.Errorf(
+					"line %d, col %d: safe navigation operator without receiver\n\n"+
+						"  Found: ?. at position %d (no variable before it)\n\n"+
+						"  Help: Safe navigation requires a base expression\n\n"+
+						"    Correct usage:\n"+
+						"      user?.profile\n"+
+						"      getUser()?.name\n"+
+						"      repo.Find(id)?.Update()\n\n"+
+						"  Note: Ensure there is a valid expression before ?.",
+					lineNum, i+1, i+1)
 			}
 
 			base := line[baseStart:baseEnd]
@@ -224,11 +257,17 @@ func (s *SafeNavASTProcessor) parseSafeNavLine(line string, lineNum int) ([]safe
 					continue
 				}
 				return nil, fmt.Errorf(
-					"line %d: trailing safe navigation operator without property: %s?.\n"+
-						"  Help: Safe navigation (?.) requires a property or method after it\n"+
-						"  Example: %s?.name or %s?.getName()\n"+
+					"line %d, col %d: trailing safe navigation operator without property\n\n"+
+						"  Found: %s?. (incomplete expression)\n\n"+
+						"  Help: Safe navigation (?.) requires a property or method after it\n\n"+
+						"    Add property access:\n"+
+						"      %s?.name\n"+
+						"      %s?.profile?.city\n\n"+
+						"    Add method call:\n"+
+						"      %s?.getName()\n"+
+						"      %s?.getProfile()?.getCity()\n\n"+
 						"  Note: Did you mean error propagation (?) instead of safe navigation (?.)?",
-					lineNum, base, base, base)
+					lineNum, i+1, base, base, base, base, base)
 			}
 
 			// Build SafeNavExpr with all chain elements
@@ -256,6 +295,44 @@ func (s *SafeNavASTProcessor) parseSafeNavLine(line string, lineNum int) ([]safe
 	}
 
 	return exprs, nil
+}
+
+// determineBaseType determines the type of a base identifier using TypeAnalyzer with fallback
+// Flow:
+//  1. Try TypeAnalyzer (go/types) first - most accurate
+//  2. If fails, fallback to TypeDetector (regex-based)
+//  3. If both fail, return TypeUnknown for clear error
+func (s *SafeNavASTProcessor) determineBaseType(varName string) TypeKind {
+	// Strategy 1: Try TypeAnalyzer (go/types based)
+	if s.typeAnalyzer != nil && s.typeAnalyzer.HasTypeInfo() {
+		if typ, ok := s.typeAnalyzer.TypeOf(varName); ok {
+			// Successfully got type - now classify it
+
+			// Use OptionDetector for Option type identification
+			if s.optionDetector.IsOption(typ) {
+				return TypeOption
+			}
+
+			// Use TypeAnalyzer for pointer detection
+			if s.typeAnalyzer.IsPointer(typ) {
+				return TypePointer
+			}
+
+			// Regular non-nullable type
+			return TypeRegular
+		}
+	}
+
+	// Strategy 2: Fallback to regex-based TypeDetector
+	detectedType := s.typeDetector.DetectType(varName)
+
+	// If TypeDetector found something, use it
+	if detectedType != TypeUnknown {
+		return detectedType
+	}
+
+	// Strategy 3: Both failed - return TypeUnknown for clear error
+	return TypeUnknown
 }
 
 // parseChainAfter parses the chain after a ?. operator
@@ -394,21 +471,39 @@ func (s *SafeNavASTProcessor) generateSafeNavCode(base string, elements []ChainE
 		return s.generatePointerMode(base, elements, originalLine, outputLine)
 	case TypeUnknown:
 		// Generate compile error for unknown type (cannot infer)
+		// Clear error with contextual help and multiple suggestions
 		return "", fmt.Errorf(
-			"line %d: cannot infer type for safe navigation on '%s'\n"+
-				"  Help: Add explicit type annotation to enable type inference\n"+
-				"  Example: var %s: UserOption = getUser()\n"+
-				"  Example: var %s: *User = getUser()\n"+
-				"  Note: Safe navigation requires Option<T> or pointer type (*T)",
-			originalLine, base, base, base)
+			"line %d: cannot infer type for '%s' in safe navigation expression\n\n"+
+				"  The type of '%s' could not be determined automatically.\n"+
+				"  This may be due to:\n"+
+				"    • Type inference limitations (both go/types and regex fallback failed)\n"+
+				"    • Missing imports\n"+
+				"    • Non-nullable base type\n\n"+
+				"  Help: Add explicit type annotation\n\n"+
+				"    For Option types:\n"+
+				"      let %s: UserOption = getUser()\n"+
+				"      let %s: Option[User] = getUser()\n\n"+
+				"    For pointer types:\n"+
+				"      let %s: *User = getUser()\n"+
+				"      var %s *User = getUser()\n\n"+
+				"  Note: Safe navigation (?.) requires Option<T> or pointer type (*T)\n"+
+				"  Note: Ensure imports are correct and types are visible in current scope",
+			originalLine, base, base, base, base, base, base)
 	case TypeRegular:
 		// Error: cannot use ?. on non-nullable type
 		return "", fmt.Errorf(
-			"line %d: safe navigation requires nullable type\n"+
-				"  Variable '%s' is not Option<T> or pointer type (*T)\n"+
-				"  Help: Use Option<T> for nullable values, or use pointer type (*T)\n"+
-				"  Note: If this is a pointer/Option, ensure type annotation is explicit",
-			originalLine, base)
+			"line %d: safe navigation requires nullable type\n\n"+
+				"  Variable '%s' has non-nullable type\n"+
+				"  Safe navigation (?.) cannot be used with non-nullable values\n\n"+
+				"  Help: Choose one of these options\n\n"+
+				"    1. Wrap in Option type:\n"+
+				"       let %s: UserOption = Some(value)\n\n"+
+				"    2. Use pointer type:\n"+
+				"       let %s: *User = &value\n\n"+
+				"    3. Use regular access (if value is guaranteed non-nil):\n"+
+				"       %s.profile.name\n\n"+
+				"  Note: If '%s' should be nullable, add explicit type annotation",
+			originalLine, base, base, base, base, base)
 	}
 
 	return "", nil

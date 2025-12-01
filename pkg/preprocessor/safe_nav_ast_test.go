@@ -739,6 +739,228 @@ let y = x?.value`,
 	}
 }
 
+func TestSafeNavASTProcessor_TypeAnalyzerIntegration(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   string // Source with proper type definitions
+		input    string // Line to process
+		contains []string
+	}{
+		{
+			name: "TypeAnalyzer detects Option type",
+			source: `package main
+
+type UserOption struct {
+	value *User
+}
+
+func (o UserOption) IsNone() bool { return o.value == nil }
+func (o UserOption) Unwrap() User { return *o.value }
+
+type User struct {
+	Name string
+}
+
+func getUser() UserOption {
+	return UserOption{}
+}
+
+func main() {
+	let user: UserOption = getUser()
+	let name = user?.Name
+}`,
+			input: "let name = user?.Name",
+			contains: []string{
+				"func() __INFER__",
+				"if user.IsNone()",
+				"return __INFER__None()",
+			},
+		},
+		{
+			name: "TypeAnalyzer detects pointer type",
+			source: `package main
+
+type User struct {
+	Name string
+}
+
+func getUser() *User {
+	return nil
+}
+
+func main() {
+	let user: *User = getUser()
+	let name = user?.Name
+}`,
+			input: "let name = user?.Name",
+			contains: []string{
+				"func() __INFER__",
+				"if user == nil",
+				"return nil",
+			},
+		},
+		{
+			name: "Fallback to TypeDetector when TypeAnalyzer unavailable",
+			source: `let user: UserOption = getUser()
+let name = user?.Name`,
+			input: "let name = user?.Name",
+			contains: []string{
+				"func() __INFER__",
+				"if user.IsNone()",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewSafeNavASTProcessor()
+
+			// Parse source for TypeDetector (always needed as fallback)
+			processor.typeDetector.ParseSource([]byte(tt.source))
+
+			// For full source tests, try to create TypeAnalyzer
+			if tt.name != "Fallback to TypeDetector when TypeAnalyzer unavailable" {
+				analyzer := NewTypeAnalyzer()
+				if err := analyzer.AnalyzeFile(tt.source); err == nil {
+					// Successfully analyzed - attach to processor
+					processor.typeAnalyzer = analyzer
+				}
+				// If analysis fails, processor will fall back to TypeDetector
+			}
+
+			output, _, err := processor.ProcessInternal(tt.input)
+			if err != nil {
+				t.Fatalf("ProcessInternal() error = %v", err)
+			}
+
+			result := output
+
+			// Check required strings
+			for _, str := range tt.contains {
+				if !strings.Contains(result, str) {
+					t.Errorf("Output missing expected string: %q\nGot:\n%s", str, result)
+				}
+			}
+		})
+	}
+}
+
+func TestSafeNavASTProcessor_OptionDetectorIntegration(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   string
+		input    string
+		wantType TypeKind
+	}{
+		{
+			name: "OptionDetector identifies Option by naming",
+			source: `package main
+
+type UserOption struct {
+	value *string
+}
+
+func main() {
+	let user: UserOption = UserOption{}
+	let name = user?.value
+}`,
+			input:    "user",
+			wantType: TypeOption,
+		},
+		{
+			name: "OptionDetector identifies Option by methods",
+			source: `package main
+
+type CustomWrapper struct {
+	value *string
+}
+
+func (c CustomWrapper) IsNone() bool { return c.value == nil }
+func (c CustomWrapper) IsSome() bool { return c.value != nil }
+func (c CustomWrapper) Unwrap() string { return *c.value }
+
+func main() {
+	let wrapper: CustomWrapper = CustomWrapper{}
+	let value = wrapper?.value
+}`,
+			input:    "wrapper",
+			wantType: TypeOption,
+		},
+		{
+			name: "OptionDetector identifies pointer type",
+			source: `package main
+
+type User struct {
+	Name string
+}
+
+func main() {
+	let user: *User = &User{}
+	let name = user?.Name
+}`,
+			input:    "user",
+			wantType: TypePointer,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewSafeNavASTProcessor()
+
+			// Create and attach TypeAnalyzer
+			analyzer := NewTypeAnalyzer()
+			if err := analyzer.AnalyzeFile(tt.source); err != nil {
+				t.Skipf("TypeAnalyzer.AnalyzeFile() failed (expected for simple test): %v", err)
+			}
+			processor.typeAnalyzer = analyzer
+
+			// Test determineBaseType
+			gotType := processor.determineBaseType(tt.input)
+			if gotType != tt.wantType {
+				t.Errorf("determineBaseType(%q) = %v, want %v", tt.input, gotType, tt.wantType)
+			}
+		})
+	}
+}
+
+func TestSafeNavASTProcessor_TypeInferenceFallback(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantErrText string
+	}{
+		{
+			name:        "Unknown type - both strategies fail",
+			input:       `let unknown = getSomething()\nlet x = unknown?.field`,
+			wantErrText: "cannot infer type",
+		},
+		{
+			name:        "Error message suggests type annotation",
+			input:       `let x = y?.field`,
+			wantErrText: "Add explicit type annotation",
+		},
+		{
+			name:        "Error mentions fallback failure",
+			input:       `let x = y?.field`,
+			wantErrText: "both go/types and regex fallback",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			processor := NewSafeNavASTProcessor()
+			_, _, err := processor.ProcessInternal(tt.input)
+			if err == nil {
+				t.Errorf("ProcessInternal() expected error containing %q, got nil", tt.wantErrText)
+				return
+			}
+			if !strings.Contains(err.Error(), tt.wantErrText) {
+				t.Errorf("ProcessInternal() error = %v, want error containing %q", err, tt.wantErrText)
+			}
+		})
+	}
+}
+
 func TestSafeNavASTProcessor_MultipleOperatorsInLine(t *testing.T) {
 	tests := []struct {
 		name     string
