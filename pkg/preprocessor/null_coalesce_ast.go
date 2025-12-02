@@ -15,7 +15,6 @@ import (
 type NullCoalesceASTProcessor struct {
 	typeDetector *TypeDetector
 	tmpCounter   int
-	iifeDetector *IIFEDetector // For IIFE-aware operand extraction in lambda bodies
 }
 
 // NewNullCoalesceASTProcessor creates a new AST-based null coalescing preprocessor
@@ -23,7 +22,6 @@ func NewNullCoalesceASTProcessor() *NullCoalesceASTProcessor {
 	return &NullCoalesceASTProcessor{
 		typeDetector: NewTypeDetector(),
 		tmpCounter:   1,
-		iifeDetector: &IIFEDetector{},
 	}
 }
 
