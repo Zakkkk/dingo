@@ -16,12 +16,14 @@ func TestSafeNavASTProcessor_PropertyAccess_Option(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let name = user?.name`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
-				"return __INFER__None()",
-				"user.Unwrap()",
-				"user :=",
-				"return __INFER__Some(user.name)",
+				"var opt __INFER__",
+				"// dingo:s:",
+				"if user.IsSome()",
+				"tmp := user.Unwrap()",
+				"opt = __INFER__Some(tmp.name)",
+				"} else {",
+				"opt = __INFER__None()",
+				"let name = opt",
 			},
 		},
 		{
@@ -29,12 +31,14 @@ let name = user?.name`,
 			input: `let user: UserOption = getUser()
 let city = user?.address?.city`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
-				"user := user.Unwrap()",
-				"if user.address.IsNone()",
-				"user1 := user.address.Unwrap()",
-				"return __INFER__Some(user1.city)",
+				"var opt __INFER__",
+				"if user.IsSome()",
+				"tmp := user.Unwrap()",
+				"if tmp.address.IsSome()",
+				"tmp1 := tmp.address.Unwrap()",
+				"opt = __INFER__Some(tmp1.city)",
+				"} else {",
+				"opt = __INFER__None()",
 			},
 		},
 		{
@@ -42,11 +46,11 @@ let city = user?.address?.city`,
 			input: `let user: UserOption = getUser()
 let value = user?.profile?.settings?.theme`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 				"user.Unwrap()",
-				"user.profile.IsNone()",
-				"user1.settings.IsNone()",
+				"tmp.profile.IsSome()",
+				"tmp1.settings.IsSome()",
 			},
 		},
 	}
@@ -82,10 +86,11 @@ func TestSafeNavASTProcessor_PropertyAccess_Pointer(t *testing.T) {
 			input: `let user: *User = getUser()
 let name = user?.name`,
 			contains: []string{
-				"func() __INFER__",
-				"if user == nil",
-				"return nil",
-				"return user.name",
+				"var opt __INFER__",
+				"if user != nil",
+				"opt = user.name",
+				"} else {",
+				"opt = nil",
 			},
 		},
 		{
@@ -93,11 +98,11 @@ let name = user?.name`,
 			input: `let user: *User = getUser()
 let city = user?.address?.city`,
 			contains: []string{
-				"func() __INFER__",
-				"if user == nil",
-				"userTmp := user.address",
-				"if userTmp == nil",
-				"return userTmp.city",
+				"var opt __INFER__",
+				"if user != nil",
+				"tmp := user.address",
+				"if tmp != nil",
+				"opt = tmp.city",
 			},
 		},
 	}
@@ -133,8 +138,8 @@ func TestSafeNavASTProcessor_MethodCalls(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let name = user?.getName()`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 				"user.Unwrap()",
 				".getName()",
 			},
@@ -144,7 +149,7 @@ let name = user?.getName()`,
 			input: `let user: UserOption = getUser()
 let result = user?.process(42, "test")`,
 			contains: []string{
-				"func() __INFER__",
+				"var opt __INFER__",
 				".process(42, \"test\")",
 			},
 		},
@@ -218,7 +223,7 @@ func TestSafeNavASTProcessor_Comments(t *testing.T) {
 			name: "?. before comment",
 			input: `let user: UserOption = getUser()
 let name = user?.name // get name`,
-			want: `func() __INFER__`,
+			want: `var opt __INFER__`,
 		},
 	}
 
@@ -285,14 +290,14 @@ func TestSafeNavASTProcessor_DeepChains(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let value = user?.a?.b?.c?.d?.e`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 				"user.Unwrap()",
-				"user.a.IsNone()",
-				"user1.b.IsNone()",
-				"user2.c.IsNone()",
-				"user3.d.IsNone()",
-				"user4.e",
+				"tmp.a.IsSome()",
+				"tmp1.b.IsSome()",
+				"tmp2.c.IsSome()",
+				"tmp3.d.IsSome()",
+				"tmp4.e",
 			},
 		},
 		{
@@ -300,12 +305,12 @@ let value = user?.a?.b?.c?.d?.e`,
 			input: `let obj: *Object = getObject()
 let value = obj?.level1?.level2?.level3?.level4?.level5?.level6?.final`,
 			contains: []string{
-				"func() __INFER__",
-				"if obj == nil",
-				"objTmp := obj.level1",
-				"objTmp1 := objTmp.level2",
-				"objTmp2 := objTmp1.level3",
-				"objTmp5.level6",
+				"var opt __INFER__",
+				"if obj != nil",
+				"tmp := obj.level1",
+				"tmp1 := tmp.level2",
+				"tmp2 := tmp1.level3",
+				"tmp5.level6",
 			},
 		},
 	}
@@ -342,8 +347,8 @@ func TestSafeNavASTProcessor_CombinedWithNullCoalesce(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let name = user?.name ?? "unknown"`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 				"user.Unwrap()",
 			},
 		},
@@ -352,9 +357,9 @@ let name = user?.name ?? "unknown"`,
 			input: `let user: *User = getUser()
 let city = user?.address?.city ?? "N/A"`,
 			contains: []string{
-				"func() __INFER__",
-				"if user == nil",
-				"userTmp := user.address",
+				"var opt __INFER__",
+				"if user != nil",
+				"tmp := user.address",
 			},
 		},
 		{
@@ -362,8 +367,8 @@ let city = user?.address?.city ?? "N/A"`,
 			input: `let user: UserOption = getUser()
 let result = user?.profile?.settings?.theme ?? "default"`,
 			contains: []string{
-				"func() __INFER__",
-				"user.IsNone()",
+				"var opt __INFER__",
+				"user.IsSome()",
 			},
 		},
 	}
@@ -396,8 +401,8 @@ func TestSafeNavASTProcessor_MethodCallChains(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let value = user?.getProfile()?.name`,
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 				".getProfile()",
 			},
 		},
@@ -406,7 +411,7 @@ let value = user?.getProfile()?.name`,
 			input: `let user: UserOption = getUser()
 let value = user?.profile?.getName()`,
 			contains: []string{
-				"func() __INFER__",
+				"var opt __INFER__",
 				"user.Unwrap()",
 				".getName()",
 			},
@@ -416,7 +421,7 @@ let value = user?.profile?.getName()`,
 			input: `let user: UserOption = getUser()
 let value = user?.getProfile()?.settings?.getTheme()?.name`,
 			contains: []string{
-				"func() __INFER__",
+				"var opt __INFER__",
 				".getProfile()",
 				".getTheme()",
 			},
@@ -426,7 +431,7 @@ let value = user?.getProfile()?.settings?.getTheme()?.name`,
 			input: `let user: UserOption = getUser()
 let value = user?.transform(42, "test")?.result`,
 			contains: []string{
-				"func() __INFER__",
+				"var opt __INFER__",
 				".transform(42, \"test\")",
 			},
 		},
@@ -460,8 +465,8 @@ func TestSafeNavASTProcessor_MixedPropertyMethod(t *testing.T) {
 			input: `let user: UserOption = getUser()
 let value = user?.data?.process()?.result?.validate()?.output`,
 			contains: []string{
-				"func() __INFER__",
-				"user.IsNone()",
+				"var opt __INFER__",
+				"user.IsSome()",
 				".process()",
 				".validate()",
 			},
@@ -471,8 +476,8 @@ let value = user?.data?.process()?.result?.validate()?.output`,
 			input: `let obj: *Object = getObject()
 let value = obj?.transform(1, 2)?.apply("test")?.finalize(true, false)?.value`,
 			contains: []string{
-				"func() __INFER__",
-				"if obj == nil",
+				"var opt __INFER__",
+				"if obj != nil",
 				".transform(1, 2)",
 				".apply(\"test\")",
 				".finalize(true, false)",
@@ -510,9 +515,9 @@ if user?.isActive {
     println("active")
 }`,
 			contains: []string{
-				"func() bool",
-				"if user.IsNone()",
-				"return false",
+				"var opt bool",
+				"if user.IsSome()",
+				"opt = false",
 				".isActive",
 			},
 		},
@@ -523,8 +528,8 @@ if user?.age > 18 {
     println("adult")
 }`,
 			contains: []string{
-				"func() __INFER__",
-				"if user == nil",
+				"var opt __INFER__",
+				"if user != nil",
 				"user.age",
 			},
 		},
@@ -535,8 +540,8 @@ if user?.profile?.isVerified && user?.account?.isActive {
     println("verified and active")
 }`,
 			contains: []string{
-				"func() bool",
-				"user.IsNone()",
+				"var opt bool",
+				"user.IsSome()",
 			},
 		},
 	}
@@ -595,9 +600,9 @@ let b: *B = a?.b
 let c: *C = b?.c
 let d: *D = c?.d`,
 			contains: []string{
-				"if a == nil",
-				"if b == nil",
-				"if c == nil",
+				"if a != nil",
+				"if b != nil",
+				"if c != nil",
 			},
 		},
 	}
@@ -634,8 +639,8 @@ func TestSafeNavASTProcessor_ComplexExpressions(t *testing.T) {
 			input: `let user: UserOption = getUser()
 process(user?.name, user?.age)`,
 			contains: []string{
-				"func() __INFER__",
-				"user.IsNone()",
+				"var opt __INFER__",
+				"user.IsSome()",
 			},
 		},
 		{
@@ -771,9 +776,9 @@ func main() {
 }`,
 			input: "let name = user?.Name",
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
-				"return __INFER__None()",
+				"var opt __INFER__",
+				"if user.IsSome()",
+				"opt = __INFER__None()",
 			},
 		},
 		{
@@ -794,9 +799,9 @@ func main() {
 }`,
 			input: "let name = user?.Name",
 			contains: []string{
-				"func() __INFER__",
-				"if user == nil",
-				"return nil",
+				"var opt __INFER__",
+				"if user != nil",
+				"opt = nil",
 			},
 		},
 		{
@@ -805,8 +810,8 @@ func main() {
 let name = user?.Name`,
 			input: "let name = user?.Name",
 			contains: []string{
-				"func() __INFER__",
-				"if user.IsNone()",
+				"var opt __INFER__",
+				"if user.IsSome()",
 			},
 		},
 	}
@@ -973,9 +978,10 @@ func TestSafeNavASTProcessor_MultipleOperatorsInLine(t *testing.T) {
 let user2: UserOption = getUser2()
 let result = user1?.name + user2?.name`,
 			contains: []string{
-				"func() __INFER__",
-				"user1.IsNone()",
-				"user2.IsNone()",
+				"var opt __INFER__",
+				"var opt1 __INFER__",
+				"user1.IsSome()",
+				"user2.IsSome()",
 			},
 		},
 		{
@@ -983,8 +989,8 @@ let result = user1?.name + user2?.name`,
 			input: `let user: UserOption = getUser()
 let name = user?.isActive ? user?.name : "inactive"`,
 			contains: []string{
-				"func() bool",
-				"user.IsNone()",
+				"var opt bool",
+				"user.IsSome()",
 			},
 		},
 	}

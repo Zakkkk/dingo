@@ -21,6 +21,7 @@ type SafeNavASTProcessor struct {
 	typeAnalyzer   *TypeAnalyzer   // NEW: go/types based analyzer (preferred)
 	optionDetector *OptionDetector // NEW: dual-strategy Option detection
 	tmpCounter     int
+	optCounter     int // Counter for opt variables (opt, opt1, opt2, ...)
 }
 
 // NewSafeNavASTProcessor creates a new AST-based safe navigation processor
@@ -30,6 +31,7 @@ func NewSafeNavASTProcessor() *SafeNavASTProcessor {
 		typeAnalyzer:   nil, // Initialized during Process if needed
 		optionDetector: NewOptionDetector(),
 		tmpCounter:     1,
+		optCounter:     1,
 	}
 }
 
@@ -40,6 +42,7 @@ func NewSafeNavASTProcessorWithAnalyzer(analyzer *TypeAnalyzer) *SafeNavASTProce
 		typeAnalyzer:   analyzer,
 		optionDetector: NewOptionDetector(),
 		tmpCounter:     1,
+		optCounter:     1,
 	}
 }
 
@@ -93,6 +96,7 @@ func (s *SafeNavASTProcessor) ProcessInternal(code string) (string, []TransformM
 
 	// Reset state
 	s.tmpCounter = 1
+	s.optCounter = 1
 
 	var metadata []TransformMetadata
 	counter := 0
@@ -160,7 +164,15 @@ func (s *SafeNavASTProcessor) processLineWithMetadata(line string, originalLineN
 		return line, nil, nil
 	}
 
-	// Transform line with all safe nav expressions
+	// Check if this is an expression context (assignment, return, function arg)
+	needsHoisting := s.needsStatementHoisting(line, exprs)
+
+	if needsHoisting {
+		// Generate hoisted if-statements before the line
+		return s.processWithHoisting(line, exprs, originalLineNum, outputLineNum, markerCounter)
+	}
+
+	// Original behavior: inline replacement
 	result := line
 	var meta *TransformMetadata
 	firstTransform := true
@@ -201,6 +213,123 @@ func (s *SafeNavASTProcessor) processLineWithMetadata(line string, originalLineN
 	}
 
 	return result, meta, nil
+}
+
+// needsStatementHoisting determines if safe nav expressions need to be hoisted
+func (s *SafeNavASTProcessor) needsStatementHoisting(line string, exprs []safeNavExprPosition) bool {
+	trimmed := strings.TrimSpace(line)
+
+	// Check for assignment (contains := or =)
+	if strings.Contains(trimmed, ":=") || strings.Contains(trimmed, "=") {
+		return true
+	}
+
+	// Check for return statement
+	if strings.HasPrefix(trimmed, "return ") {
+		return true
+	}
+
+	// Check for function call (has parentheses and safe nav inside args)
+	// Simple heuristic: if line has ( after safe nav, it's likely a function arg
+	for _, expr := range exprs {
+		afterExpr := line[expr.end:]
+		if strings.Contains(afterExpr, "(") || strings.Contains(afterExpr, ",") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// processWithHoisting generates hoisted if-statements before the line
+func (s *SafeNavASTProcessor) processWithHoisting(line string, exprs []safeNavExprPosition, originalLineNum int, outputLineNum int, markerCounter *int) (string, *TransformMetadata, error) {
+	var hoistedCode bytes.Buffer
+	var meta *TransformMetadata
+	firstTransform := true
+
+	result := line
+	var optVars []string
+
+	// Process each expression and generate hoisted code
+	// Process in reverse order to maintain string positions for replacement
+	for i := len(exprs) - 1; i >= 0; i-- {
+		exprPos := exprs[i]
+
+		// Detect base type
+		baseType := s.determineBaseType(exprPos.expr.Receiver)
+
+		// Create marker for metadata
+		marker := fmt.Sprintf("// dingo:s:%d", *markerCounter)
+
+		// Generate hoisted if-statement block
+		hoistedBlock, optVar, err := s.generateHoistedBlock(exprPos.expr.Receiver, exprPos.chain, baseType, marker, originalLineNum, outputLineNum)
+		if err != nil {
+			return "", nil, err
+		}
+
+		// Prepend to hoisted code (since we're processing in reverse, prepending gives correct left-to-right order)
+		existingCode := hoistedCode.String()
+		hoistedCode.Reset()
+		hoistedCode.WriteString(hoistedBlock)
+		hoistedCode.WriteString(existingCode)
+		optVars = append([]string{optVar}, optVars...) // prepend to maintain order
+
+		// Create metadata for first transformation
+		if firstTransform {
+			meta = &TransformMetadata{
+				Type:            "safe_nav",
+				OriginalLine:    originalLineNum,
+				OriginalColumn:  exprPos.startCol + 1,
+				OriginalLength:  2, // length of ?.
+				OriginalText:    "?.",
+				GeneratedMarker: marker,
+				ASTNodeType:     "CallExpr",
+			}
+			*markerCounter++
+			firstTransform = false
+		}
+
+		// Replace safe nav expression with just the opt variable
+		result = result[:exprPos.start] + optVar + result[exprPos.end:]
+	}
+
+	// Combine hoisted code with modified line
+	finalResult := hoistedCode.String() + result
+
+	return finalResult, meta, nil
+}
+
+// generateHoistedBlock generates an if-statement block and returns it with the opt variable name
+func (s *SafeNavASTProcessor) generateHoistedBlock(base string, chain []ChainElement, baseType TypeKind, marker string, originalLine int, outputLine int) (string, string, error) {
+	// Generate the if-statement code
+	code, err := s.generateSafeNavCode(base, chain, baseType, originalLine, outputLine)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Extract the opt variable name from the generated code
+	// Format: "var opt __INFER__\n..."
+	varLine := strings.Split(code, "\n")[0]
+	varParts := strings.Fields(varLine)
+	var optVar string
+	if len(varParts) >= 2 {
+		optVar = varParts[1]
+	} else {
+		return "", "", fmt.Errorf("failed to extract opt variable from generated code")
+	}
+
+	// Insert marker after var declaration
+	varIdx := strings.Index(code, "\n")
+	if varIdx != -1 && strings.HasPrefix(code, "var opt") {
+		before := code[:varIdx]
+		after := code[varIdx:]
+		code = before + " " + marker + after
+	}
+
+	// Add newline after the block for proper formatting
+	code += "\n"
+
+	return code, optVar, nil
 }
 
 // safeNavExprPosition tracks a safe nav expression's position in source
@@ -451,16 +580,16 @@ func (s *SafeNavASTProcessor) generateSafeNavCodeWithMarker(base string, chain [
 		return "", err
 	}
 
-	// For IIFE pattern (Option/Pointer mode), insert marker after opening brace
-	// Pattern: "func() __INFER__ {\n" → "func() __INFER__ { " + marker + "\n"
-	braceIdx := strings.Index(code, "{\n")
-	if braceIdx != -1 {
-		// Insert marker after the brace, before the newline
-		before := code[:braceIdx+1] // Include the {
-		after := code[braceIdx+1:]  // Include the \n and rest
+	// For if-statement pattern, insert marker after var declaration line
+	// Pattern: "var opt Type\n" → "var opt Type " + marker + "\n"
+	varIdx := strings.Index(code, "\n")
+	if varIdx != -1 && strings.HasPrefix(code, "var opt") {
+		// Insert marker at end of var declaration line
+		before := code[:varIdx]     // var declaration without newline
+		after := code[varIdx:]      // \n and rest
 		code = before + " " + marker + after
 	} else {
-		// For placeholder pattern, prepend marker as comment line
+		// Fallback: prepend marker as comment line
 		code = marker + "\n" + code
 	}
 
@@ -515,141 +644,176 @@ func (s *SafeNavASTProcessor) generateSafeNavCode(base string, elements []ChainE
 	return "", nil
 }
 
-// generateOptionMode generates safe navigation for Option<T> types
+// generateOptionMode generates safe navigation for Option<T> types using if-statements
 func (s *SafeNavASTProcessor) generateOptionMode(base string, elements []ChainElement, originalLine int, outputLine int) (string, error) {
 	var buf bytes.Buffer
 
-	// Generate IIFE for safe navigation
-	buf.WriteString("func() __INFER__ {\n")
+	// Generate temp variable name (opt, opt1, opt2, ...)
+	optVar := s.getOptVarName()
 
-	currentVar := base
+	// Declare var with __INFER__ type placeholder
+	buf.WriteString(fmt.Sprintf("var %s __INFER__\n", optVar))
 
-	// Track the current type through the chain for proper wrapping
-	currentType := ""
-	if varType, ok := s.typeDetector.varTypes[base]; ok {
-		currentType = varType
-	}
-
-	for i, elem := range elements {
-		// Check if current value is None
-		buf.WriteString(fmt.Sprintf("\tif %s.IsNone() {\n", currentVar))
-		buf.WriteString("\t\treturn __INFER__None()\n")
-		buf.WriteString("\t}\n")
-
-		// Unwrap to get the value
-		// No-number-first pattern
-		tmpVar := ""
-		if s.tmpCounter == 1 {
-			tmpVar = base
-		} else {
-			tmpVar = fmt.Sprintf("%s%d", base, s.tmpCounter-1)
-		}
-		s.tmpCounter++
-		buf.WriteString(fmt.Sprintf("\t%s := %s.Unwrap()\n", tmpVar, currentVar))
-
-		// If last element, return it
-		if i == len(elements)-1 {
-			// Determine the return expression
-			returnExpr := ""
-			if elem.IsMethod {
-				// Method call: call with arguments
-				returnExpr = fmt.Sprintf("%s.%s(%s)", tmpVar, elem.Name, elem.RawArgs)
-			} else {
-				// Property access
-				returnExpr = fmt.Sprintf("%s.%s", tmpVar, elem.Name)
-			}
-
-			// Conditional wrapping based on actual field type
-			fieldType := ""
-			if currentType != "" {
-				// Strip "Option" suffix to get struct type
-				structType := strings.TrimSuffix(currentType, "Option")
-				// Build field key: "StructType.fieldName"
-				fieldKey := structType + "." + elem.Name
-				// Look up in TypeDetector
-				if ft, ok := s.typeDetector.fieldTypes[fieldKey]; ok {
-					fieldType = ft
-				}
-			}
-
-			// Check if field type ends with "Option" (already an Option type)
-			isAlreadyOption := strings.HasSuffix(fieldType, "Option")
-
-			if isAlreadyOption {
-				// Already an Option type, return as-is (no double-wrapping)
-				buf.WriteString(fmt.Sprintf("\treturn %s\n", returnExpr))
-			} else {
-				// Plain type or unknown, wrap in Some()
-				buf.WriteString(fmt.Sprintf("\treturn __INFER__Some(%s)\n", returnExpr))
-			}
-		} else {
-			// Not last - prepare for next iteration
-			if elem.IsMethod {
-				// Method call: assign result to currentVar for next iteration
-				currentVar = fmt.Sprintf("%s.%s(%s)", tmpVar, elem.Name, elem.RawArgs)
-			} else {
-				// Property access
-				currentVar = fmt.Sprintf("%s.%s", tmpVar, elem.Name)
-			}
-
-			// Update currentType for next iteration
-			if currentType != "" {
-				structType := strings.TrimSuffix(currentType, "Option")
-				fieldKey := structType + "." + elem.Name
-				if ft, ok := s.typeDetector.fieldTypes[fieldKey]; ok {
-					currentType = ft
-				}
-			}
-		}
-	}
-
-	buf.WriteString("}()")
+	// Generate if-statement with proper nesting for chains
+	s.generateOptionChain(&buf, base, elements, optVar, 0)
 
 	return buf.String(), nil
 }
 
-// generatePointerMode generates safe navigation for pointer types
+// generateOptionChain recursively generates nested if-statements for chained safe navigation
+func (s *SafeNavASTProcessor) generateOptionChain(buf *bytes.Buffer, currentVar string, elements []ChainElement, optVar string, depth int) {
+	indent := strings.Repeat("\t", depth)
+
+	if len(elements) == 0 {
+		return
+	}
+
+	// Track the current type through the chain for proper wrapping
+	currentType := ""
+	if varType, ok := s.typeDetector.varTypes[currentVar]; ok {
+		currentType = varType
+	}
+
+	elem := elements[0]
+
+	// Check if current value is Some
+	buf.WriteString(fmt.Sprintf("%sif %s.IsSome() {\n", indent, currentVar))
+
+	// Unwrap to get the value
+	tmpVar := s.getTmpVarName()
+	buf.WriteString(fmt.Sprintf("%s\t%s := %s.Unwrap()\n", indent, tmpVar, currentVar))
+
+	if len(elements) == 1 {
+		// Last element - assign to optVar
+		var valueExpr string
+		if elem.IsMethod {
+			valueExpr = fmt.Sprintf("%s.%s(%s)", tmpVar, elem.Name, elem.RawArgs)
+		} else {
+			valueExpr = fmt.Sprintf("%s.%s", tmpVar, elem.Name)
+		}
+
+		// Conditional wrapping based on actual field type
+		fieldType := ""
+		if currentType != "" {
+			structType := strings.TrimSuffix(currentType, "Option")
+			fieldKey := structType + "." + elem.Name
+			if ft, ok := s.typeDetector.fieldTypes[fieldKey]; ok {
+				fieldType = ft
+			}
+		}
+
+		isAlreadyOption := strings.HasSuffix(fieldType, "Option")
+
+		if isAlreadyOption {
+			// Already an Option type, assign as-is
+			buf.WriteString(fmt.Sprintf("%s\t%s = %s\n", indent, optVar, valueExpr))
+		} else {
+			// Plain type, wrap in Some()
+			buf.WriteString(fmt.Sprintf("%s\t%s = __INFER__Some(%s)\n", indent, optVar, valueExpr))
+		}
+	} else {
+		// Not last - recurse for next element
+		var nextVar string
+		if elem.IsMethod {
+			nextVar = fmt.Sprintf("%s.%s(%s)", tmpVar, elem.Name, elem.RawArgs)
+		} else {
+			nextVar = fmt.Sprintf("%s.%s", tmpVar, elem.Name)
+		}
+
+		// Update currentType for recursion
+		if currentType != "" {
+			structType := strings.TrimSuffix(currentType, "Option")
+			fieldKey := structType + "." + elem.Name
+			if ft, ok := s.typeDetector.fieldTypes[fieldKey]; ok {
+				currentType = ft
+			}
+		}
+
+		s.generateOptionChain(buf, nextVar, elements[1:], optVar, depth+1)
+	}
+
+	// Else clause - assign None
+	buf.WriteString(fmt.Sprintf("%s} else {\n", indent))
+	buf.WriteString(fmt.Sprintf("%s\t%s = __INFER__None()\n", indent, optVar))
+	buf.WriteString(fmt.Sprintf("%s}\n", indent))
+}
+
+// getOptVarName returns the next opt variable name (opt, opt1, opt2, ...)
+func (s *SafeNavASTProcessor) getOptVarName() string {
+	if s.optCounter == 1 {
+		s.optCounter++
+		return "opt"
+	}
+	name := fmt.Sprintf("opt%d", s.optCounter-1)
+	s.optCounter++
+	return name
+}
+
+// getTmpVarName returns a temp variable name for unwrapping (tmp, tmp1, tmp2, ...)
+func (s *SafeNavASTProcessor) getTmpVarName() string {
+	if s.tmpCounter == 1 {
+		s.tmpCounter++
+		return "tmp"
+	}
+	name := fmt.Sprintf("tmp%d", s.tmpCounter-1)
+	s.tmpCounter++
+	return name
+}
+
+// generatePointerMode generates safe navigation for pointer types using if-statements
 func (s *SafeNavASTProcessor) generatePointerMode(base string, elements []ChainElement, originalLine int, outputLine int) (string, error) {
 	var buf bytes.Buffer
 
-	// Generate IIFE for safe navigation
-	buf.WriteString("func() __INFER__ {\n")
+	// Generate temp variable name (opt, opt1, opt2, ...)
+	optVar := s.getOptVarName()
 
-	currentVar := base
+	// Declare var with __INFER__ type placeholder
+	buf.WriteString(fmt.Sprintf("var %s __INFER__\n", optVar))
 
-	for i, elem := range elements {
-		// Check if current value is nil
-		buf.WriteString(fmt.Sprintf("\tif %s == nil {\n", currentVar))
-		buf.WriteString("\t\treturn nil\n")
-		buf.WriteString("\t}\n")
-
-		// Access the property or method
-		if i < len(elements)-1 {
-			// Not the last element - create intermediate variable to check next nil
-			// CamelCase pattern without underscores
-			var tmpVar string
-			if i == 0 {
-				tmpVar = base + "Tmp"
-			} else {
-				tmpVar = fmt.Sprintf("%sTmp%d", base, i)
-			}
-			if elem.IsMethod {
-				buf.WriteString(fmt.Sprintf("\t%s := %s.%s(%s)\n", tmpVar, currentVar, elem.Name, elem.RawArgs))
-			} else {
-				buf.WriteString(fmt.Sprintf("\t%s := %s.%s\n", tmpVar, currentVar, elem.Name))
-			}
-			currentVar = tmpVar
-		} else {
-			// Last element - return it
-			if elem.IsMethod {
-				buf.WriteString(fmt.Sprintf("\treturn %s.%s(%s)\n", currentVar, elem.Name, elem.RawArgs))
-			} else {
-				buf.WriteString(fmt.Sprintf("\treturn %s.%s\n", currentVar, elem.Name))
-			}
-		}
-	}
-
-	buf.WriteString("}()")
+	// Generate if-statement with proper nesting for chains
+	s.generatePointerChain(&buf, base, elements, optVar, 0)
 
 	return buf.String(), nil
+}
+
+// generatePointerChain recursively generates nested if-statements for chained pointer safe navigation
+func (s *SafeNavASTProcessor) generatePointerChain(buf *bytes.Buffer, currentVar string, elements []ChainElement, optVar string, depth int) {
+	indent := strings.Repeat("\t", depth)
+
+	if len(elements) == 0 {
+		return
+	}
+
+	elem := elements[0]
+
+	// Check if current value is not nil
+	buf.WriteString(fmt.Sprintf("%sif %s != nil {\n", indent, currentVar))
+
+	if len(elements) == 1 {
+		// Last element - assign to optVar
+		var valueExpr string
+		if elem.IsMethod {
+			valueExpr = fmt.Sprintf("%s.%s(%s)", currentVar, elem.Name, elem.RawArgs)
+		} else {
+			valueExpr = fmt.Sprintf("%s.%s", currentVar, elem.Name)
+		}
+		buf.WriteString(fmt.Sprintf("%s\t%s = %s\n", indent, optVar, valueExpr))
+	} else {
+		// Not last - create intermediate variable and recurse
+		tmpVar := s.getTmpVarName()
+		var valueExpr string
+		if elem.IsMethod {
+			valueExpr = fmt.Sprintf("%s.%s(%s)", currentVar, elem.Name, elem.RawArgs)
+		} else {
+			valueExpr = fmt.Sprintf("%s.%s", currentVar, elem.Name)
+		}
+		buf.WriteString(fmt.Sprintf("%s\t%s := %s\n", indent, tmpVar, valueExpr))
+
+		s.generatePointerChain(buf, tmpVar, elements[1:], optVar, depth+1)
+	}
+
+	// Else clause - assign nil
+	buf.WriteString(fmt.Sprintf("%s} else {\n", indent))
+	buf.WriteString(fmt.Sprintf("%s\t%s = nil\n", indent, optVar))
+	buf.WriteString(fmt.Sprintf("%s}\n", indent))
 }
