@@ -1,0 +1,33 @@
+package main
+
+import "database/sql"
+
+// Custom error type with method call pattern
+type ServiceError struct {
+	Code    string
+	Message string
+}
+
+func (e ServiceError) Error() string {
+	return e.Code + ": " + e.Message
+}
+
+// Constructor method
+func (ServiceError) NewDBError(err: error) ServiceError {
+	return ServiceError{Code: "DB_ERROR", Message: err.Error()}
+}
+
+// Test Type.Method(err) pattern
+func FindUsers(db: *sql.DB) Result<[]string, ServiceError> {
+	let rows = db.Query("SELECT * FROM users")? ServiceError.NewDBError(err)
+	defer rows.Close()
+	return ResultSliceStringServiceErrorOk([]string{"user1", "user2"})
+}
+
+func main() {
+	let db: *sql.DB = nil
+	let result = FindUsers(db)
+	if result.IsErr() {
+		println("Error:", result.err.Error())
+	}
+}

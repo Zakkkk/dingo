@@ -1,0 +1,129 @@
+// Real-world example: User service with Result types and implicit wrapping
+// Shows how Result<T, E> enables clean, explicit error handling
+package main
+
+import (
+	"database/sql"
+	"fmt"
+)
+
+// Domain types
+type User struct {
+	ID    int
+	Name  string
+	Email string
+}
+
+type Order struct {
+	ID     int
+	UserID int
+	Total  float64
+}
+
+// Custom error type with error codes
+type ServiceError struct {
+	Code    string
+	Message string
+}
+
+func (e ServiceError) Error() string {
+	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
+}
+
+// Repository functions returning Result types
+// Implicit wrapping: just return the value or error directly
+func FindUser(db: *sql.DB, id: int) Result<User, ServiceError> {
+	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
+
+	var user User
+	err := row.Scan(&user.ID, &user.Name, &user.Email)
+	if err == sql.ErrNoRows {
+		return ServiceError{Code: "NOT_FOUND", Message: "user not found"}
+	}
+	if err != nil {
+		return ServiceError{Code: "DB_ERROR", Message: err.Error()}
+	}
+
+	return user
+}
+
+func FindOrdersByUser(db: *sql.DB, userID: int) Result<[]Order, ServiceError> {
+	rows := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)?
+		ServiceError{Code: "DB_ERROR", Message: err.Error()}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var order Order
+		// Note: Scan returns only error, not (T, error), so we use explicit error handling
+		if err := rows.Scan(&order.ID, &order.UserID, &order.Total); err != nil {
+			return ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
+		}
+		orders = append(orders, order)
+	}
+	return orders
+}
+
+// Service function chaining multiple Result-returning functions
+// Error propagation pattern: check IsErr, return error, continue with value
+func GetUserOrderTotal(db: *sql.DB, userID: int) Result<float64, ServiceError> {
+	// Get user - propagate error if failed
+	let userResult = FindUser(db, userID)
+	if userResult.IsErr() {
+		return userResult.UnwrapErr()  // Implicit wrapping to Result<float64, ServiceError>
+	}
+	let user = userResult.Unwrap()
+
+	// Get orders - propagate error if failed
+	let ordersResult = FindOrdersByUser(db, user.ID)
+	if ordersResult.IsErr() {
+		return ordersResult.UnwrapErr()
+	}
+	let orders = ordersResult.Unwrap()
+
+	// Calculate total
+	var total float64
+	for _, order := range orders {
+		total += order.Total
+	}
+
+	return total  // Implicit wrapping to Ok
+}
+
+// Another example: transferring funds between users
+// Uses the explicit IsErr/UnwrapErr pattern for Result error propagation
+func TransferFunds(db: *sql.DB, fromID: int, toID: int, amount: float64) Result<bool, ServiceError> {
+	// Find source user
+	let fromResult = FindUser(db, fromID)
+	if fromResult.IsErr() {
+		return fromResult.UnwrapErr()
+	}
+	let fromUser = fromResult.Unwrap()
+
+	// Find destination user
+	let toResult = FindUser(db, toID)
+	if toResult.IsErr() {
+		return toResult.UnwrapErr()
+	}
+	let toUser = toResult.Unwrap()
+
+	fmt.Printf("Transferring $%.2f from %s to %s\n",
+		amount, fromUser.Name, toUser.Name)
+
+	return true
+}
+
+func main() {
+	var db *sql.DB // Would be initialized in real code
+
+	// Using the service with proper error handling
+	result := GetUserOrderTotal(db, 123)
+
+	if result.IsOk() {
+		total := result.Unwrap()
+		fmt.Printf("Total orders: $%.2f\n", total)
+	} else {
+		err := result.UnwrapErr()
+		fmt.Printf("Error [%s]: %s\n", err.Code, err.Message)
+	}
+}

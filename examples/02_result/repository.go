@@ -7,25 +7,19 @@ import (
 	"fmt"
 )
 
-type ResultTag uint8
 
+type ResultTag uint8
 const (
 	ResultTagOk ResultTag = iota
 	ResultTagErr
 )
-
 type ResultUserDBError struct {
 	tag ResultTag
 	ok  *User
 	err *DBError
 }
-
 func ResultUserDBErrorOk(arg0 User) ResultUserDBError {
-	return ResultUserDBError{tag: ResultTagOk,
-
-	// FindUserByID returns a Result that explicitly models success or failure
-	// Caller must handle both cases - no silent nil pointer bugs
-	ok: &arg0}
+	return ResultUserDBError{tag: ResultTagOk, ok: &arg0}
 }
 func ResultUserDBErrorErr(arg0 DBError) ResultUserDBError {
 	return ResultUserDBError{tag: ResultTagErr, err: &arg0}
@@ -42,8 +36,6 @@ func (r ResultUserDBError) Unwrap() User {
 	}
 	if r.ok == nil {
 		panic("Result contains nil Ok value")
-
-		// Use generated constructor: ResultUserDBErrorErr(error)
 	}
 	return *r.ok
 }
@@ -58,17 +50,11 @@ func (r ResultUserDBError) UnwrapErr() DBError {
 		panic("called UnwrapErr on Ok")
 	}
 	if r.err == nil {
-		panic(
-
-		// Use generated constructor: ResultUserDBErrorOk(value)
-		"Result contains nil Err value")
+		panic("Result contains nil Err value")
 	}
 	return *r.err
 }
-func (r ResultUserDBError) UnwrapOrElse(fn func(
-
-// TransferFunds shows Result chaining - each step must succeed
-DBError) User) User {
+func (r ResultUserDBError) UnwrapOrElse(fn func(DBError) User) User {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok
 	}
@@ -77,20 +63,14 @@ DBError) User) User {
 	}
 	panic("Result in invalid state")
 }
-func (r ResultUserDBError) Map(fn func
-
-// Find source user
-(User) interface{}) interface{} {
+func (r ResultUserDBError) Map(fn func(User) interface{}) interface{} {
 	if r.tag == ResultTagOk && r.ok != nil {
 		u := fn(*r.ok)
 		return struct {
 			tag ResultTag
 			ok  *interface{}
 			err *DBError
-		}{tag: ResultTagOk, ok:
-
-		// Find destination user
-		&u}
+		}{tag: ResultTagOk, ok: &u}
 	}
 	return struct {
 		tag ResultTag
@@ -99,8 +79,6 @@ func (r ResultUserDBError) Map(fn func
 	}{tag: r.tag, ok: nil, err: r.err}
 }
 func (r ResultUserDBError) MapErr(fn func(DBError) interface{}) interface{} {
-
-	// In real code: begin transaction, update balances, commit
 	if r.tag == ResultTagErr && r.err != nil {
 		f := fn(*r.err)
 		return struct {
@@ -115,21 +93,13 @@ func (r ResultUserDBError) MapErr(fn func(DBError) interface{}) interface{} {
 		err *interface{}
 	}{tag: r.tag, ok: r.ok, err: nil}
 }
-func
-
-// Example usage showing explicit error handling
-(r ResultUserDBError) Filter(predicate func(User) bool) ResultUserDBError {
-
-	// Would be initialized in real code
+func (r ResultUserDBError) Filter(predicate func(User) bool) ResultUserDBError {
 	if r.tag == ResultTagOk && predicate(*r.ok) {
 		return r
 	}
 	return r
 }
-func (r ResultUserDBError) AndThen(
-
-// Pattern: Must explicitly check and handle both cases
-fn func(User) interface{}) interface{} {
+func (r ResultUserDBError) AndThen(fn func(User) interface{}) interface{} {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return fn(*r.ok)
 	}
@@ -161,7 +131,6 @@ func (r ResultUserDBError) Or(other ResultUserDBError) ResultUserDBError {
 	}
 	return other
 }
-
 type ResultBoolDBError struct {
 	tag ResultTag
 	ok  *bool
@@ -294,13 +263,15 @@ type DBError struct {
 func (e DBError) Error() string {
 	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 }
+
+// FindUserByID returns a Result that explicitly models success or failure
+// Caller must handle both cases - no silent nil pointer bugs
 func FindUserByID(db *sql.DB, id int) ResultUserDBError {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
 	var user User
 	err := row.Scan(&user.ID, &user.Name, &user.Email)
 	if err == sql.ErrNoRows {
-
 		return ResultUserDBErrorErr(DBError{Code: "NOT_FOUND", Message: "user not found"})
 	}
 	if err != nil {
@@ -309,29 +280,34 @@ func FindUserByID(db *sql.DB, id int) ResultUserDBError {
 
 	return ResultUserDBErrorOk(user)
 }
-func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) ResultBoolDBError {
 
+// TransferFunds shows Result chaining - each step must succeed
+func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) ResultBoolDBError {
+	// Find source user - check for errors
 	fromResult := FindUserByID(db, fromID)
 	if fromResult.IsErr() {
-		return ResultBoolDBErrorErr(fromResult.UnwrapErr())
+		return ResultBoolDBErrorErr(fromResult.UnwrapErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
 	}
 
+	// Find destination user
 	toResult := FindUserByID(db, toID)
 	if toResult.IsErr() {
 		return ResultBoolDBErrorErr(toResult.UnwrapErr())
 	}
 
+	// In real code: begin transaction, update balances, commit
 	fmt.Printf("Transferring $%.2f from %s to %s\n",
 		amount, fromResult.Unwrap().Name, toResult.Unwrap().Name)
 
 	return ResultBoolDBErrorOk(true)
 }
 func main() {
-
-	var db *sql.DB
+	// Example usage showing explicit error handling
+	var db *sql.DB // Would be initialized in real code
 
 	result := FindUserByID(db, 123)
 
+	// Pattern: Must explicitly check and handle both cases
 	if result.IsOk() {
 		user := result.Unwrap()
 		fmt.Printf("Found user: %s <%s>\n", user.Name, user.Email)

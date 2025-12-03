@@ -45,13 +45,25 @@ type ResultTypePlugin struct {
 	// Track generic type references (Result[T, E]) that need to be rewritten to concrete types (ResultTE)
 	genericTypeRewrites map[*ast.IndexExpr]string
 	genericListRewrites map[*ast.IndexListExpr]string
+
+	// Track function return types for implicit Result wrapping
+	// Maps FuncDecl/FuncLit to their parsed Result return type info
+	funcResultTypes map[ast.Node]*resultReturnInfo
+}
+
+// resultReturnInfo holds parsed Result<T, E> return type information
+type resultReturnInfo struct {
+	okType         string // The T in Result<T, E>
+	errType        string // The E in Result<T, E>
+	resultTypeName string // The sanitized type name (e.g., "ResultUserDBError")
 }
 
 // NewResultTypePlugin creates a new Result type plugin
 func NewResultTypePlugin() *ResultTypePlugin {
 	return &ResultTypePlugin{
-		emittedTypes: make(map[string]bool),
-		pendingDecls: make([]ast.Decl, 0),
+		emittedTypes:    make(map[string]bool),
+		pendingDecls:    make([]ast.Decl, 0),
+		funcResultTypes: make(map[ast.Node]*resultReturnInfo),
 	}
 }
 
@@ -90,9 +102,15 @@ func (p *ResultTypePlugin) Process(node ast.Node) error {
 		return fmt.Errorf("plugin context not initialized")
 	}
 
-	// Walk the AST to find Result type usage
+	// Walk the AST to find Result type usage and track function return types
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch n := n.(type) {
+		case *ast.FuncDecl:
+			// Track function return type if it's a Result type
+			p.trackFunctionResultType(n, n.Type)
+		case *ast.FuncLit:
+			// Track function literal return type if it's a Result type
+			p.trackFunctionResultType(n, n.Type)
 		case *ast.IndexExpr:
 			// Result<T> or Result<T, E>
 			p.handleGenericResult(n)
@@ -107,6 +125,287 @@ func (p *ResultTypePlugin) Process(node ast.Node) error {
 	})
 
 	return nil
+}
+
+// wrapReturnForResult checks if a return expression needs implicit wrapping
+// and returns the wrapped expression, or nil if no wrapping needed.
+//
+// The logic:
+// 1. If return value is already a Result constructor call (Ok, Err, ResultXOk, ResultXErr) → no wrapping
+// 2. If return value is already a Result type value → no wrapping
+// 3. If return value type matches the error type E → wrap in Err
+// 4. If return value type matches the ok type T → wrap in Ok
+// 5. If we can't determine the type, assume Ok wrapping (compiler will catch mismatches)
+func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturnInfo) ast.Expr {
+	// Skip if already a Result constructor call
+	if p.isResultConstructorCall(expr) {
+		return nil
+	}
+
+	// Skip if it's already a Result type (e.g., variable of Result type)
+	if p.isResultTypeValue(expr, info.resultTypeName) {
+		return nil
+	}
+
+	// Try to determine the type of the expression
+	exprType := p.determineExpressionType(expr)
+
+	// Check if the expression type matches the error type
+	if p.typeMatchesError(expr, exprType, info.errType) {
+		// Wrap in Err constructor
+		p.ctx.Logger.Debugf("Implicit wrapping: return %s → %sErr(...)", FormatExprForDebug(expr), info.resultTypeName)
+		return &ast.CallExpr{
+			Fun:  ast.NewIdent(info.resultTypeName + "Err"),
+			Args: []ast.Expr{expr},
+		}
+	}
+
+	// Check if the expression type matches the ok type (or is unknown)
+	// If we can determine Ok match OR we can't determine at all, wrap as Ok
+	// The Go compiler will catch any type mismatches
+	if p.typeMatchesOk(expr, exprType, info.okType) || exprType == "" {
+		// Wrap in Ok constructor
+		p.ctx.Logger.Debugf("Implicit wrapping: return %s → %sOk(...)", FormatExprForDebug(expr), info.resultTypeName)
+		return &ast.CallExpr{
+			Fun:  ast.NewIdent(info.resultTypeName + "Ok"),
+			Args: []ast.Expr{expr},
+		}
+	}
+
+	// Type is known but doesn't match either - don't wrap, let compiler catch
+	return nil
+}
+
+// isResultConstructorCall checks if expr is a call to Ok(), Err(), or ResultXOk/ResultXErr
+func (p *ResultTypePlugin) isResultConstructorCall(expr ast.Expr) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	switch fun := call.Fun.(type) {
+	case *ast.Ident:
+		name := fun.Name
+		// Check for Ok, Err, or ResultXOk/ResultXErr patterns
+		if name == "Ok" || name == "Err" {
+			return true
+		}
+		if strings.HasPrefix(name, "Result") && (strings.HasSuffix(name, "Ok") || strings.HasSuffix(name, "Err")) {
+			return true
+		}
+	case *ast.IndexExpr:
+		// Ok[Type](...) or Err[Type](...)
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			if ident.Name == "Ok" || ident.Name == "Err" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isResultTypeValue checks if expr is already a Result type value (variable, field, etc.)
+func (p *ResultTypePlugin) isResultTypeValue(expr ast.Expr, resultTypeName string) bool {
+	// Use type inference if available
+	if p.typeInference != nil {
+		if typ, ok := p.typeInference.InferType(expr); ok {
+			typeName := p.typeInference.TypeToString(typ)
+			if strings.HasPrefix(typeName, "Result") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// determineExpressionType tries to determine the type of an expression
+func (p *ResultTypePlugin) determineExpressionType(expr ast.Expr) string {
+	// Use type inference service if available
+	if p.typeInference != nil {
+		if typ, ok := p.typeInference.InferType(expr); ok {
+			return p.typeInference.TypeToString(typ)
+		}
+	}
+
+	// Fallback heuristics
+	switch e := expr.(type) {
+	case *ast.CompositeLit:
+		// Struct literal: DBError{...} → DBError
+		if e.Type != nil {
+			return p.getTypeName(e.Type)
+		}
+	case *ast.Ident:
+		// Check for built-in constants
+		switch e.Name {
+		case "true", "false":
+			return "bool"
+		case "nil":
+			return "nil"
+		}
+		// Variable - would need symbol table lookup
+		// For now, we can't determine
+		return ""
+	case *ast.BasicLit:
+		switch e.Kind {
+		case token.INT:
+			return "int"
+		case token.FLOAT:
+			return "float64"
+		case token.STRING:
+			return "string"
+		}
+	case *ast.UnaryExpr:
+		if e.Op == token.AND {
+			// &value → pointer type
+			innerType := p.determineExpressionType(e.X)
+			if innerType != "" {
+				return "*" + innerType
+			}
+		}
+	case *ast.CallExpr:
+		// Check for Result method calls that return known types
+		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+			methodName := sel.Sel.Name
+			// UnwrapErr() returns the error type - mark as "error-returning"
+			if methodName == "UnwrapErr" {
+				return "__error_type__" // Special marker
+			}
+			// Unwrap() returns the ok type
+			if methodName == "Unwrap" {
+				return "__ok_type__" // Special marker
+			}
+		}
+	}
+	return ""
+}
+
+// typeMatchesError checks if the expression type matches the error type E
+func (p *ResultTypePlugin) typeMatchesError(expr ast.Expr, exprType, errType string) bool {
+	// Check for special marker from UnwrapErr() calls
+	if exprType == "__error_type__" {
+		return true
+	}
+
+	// Direct type match
+	if exprType != "" && exprType == errType {
+		return true
+	}
+
+	// Check for composite literal of error type
+	if lit, ok := expr.(*ast.CompositeLit); ok {
+		if lit.Type != nil {
+			litType := p.getTypeName(lit.Type)
+			if litType == errType {
+				return true
+			}
+		}
+	}
+
+	// Check for error interface - any type implementing error
+	if errType == "error" {
+		// If the type has an Error() method, it implements error
+		// For now, check common patterns
+		if lit, ok := expr.(*ast.CompositeLit); ok {
+			// Any struct literal could implement error
+			// We'd need go/types to be sure, but for custom error types, assume yes
+			if lit.Type != nil {
+				return false // Can't assume struct implements error without checking
+			}
+		}
+	}
+
+	return false
+}
+
+// typeMatchesOk checks if the expression type matches the ok type T
+func (p *ResultTypePlugin) typeMatchesOk(expr ast.Expr, exprType, okType string) bool {
+	// Check for special marker from Unwrap() calls
+	if exprType == "__ok_type__" {
+		return true
+	}
+
+	// Direct type match
+	if exprType != "" && exprType == okType {
+		return true
+	}
+
+	// Check pointer types
+	if strings.HasPrefix(okType, "*") && exprType == okType {
+		return true
+	}
+
+	// Check for composite literal of ok type
+	if lit, ok := expr.(*ast.CompositeLit); ok {
+		if lit.Type != nil {
+			litType := p.getTypeName(lit.Type)
+			if litType == okType {
+				return true
+			}
+		}
+	}
+
+	// Check for identifier (variable) - need type inference
+	if ident, ok := expr.(*ast.Ident); ok {
+		// Use type inference if available
+		if p.typeInference != nil {
+			if typ, ok := p.typeInference.InferType(ident); ok {
+				typeName := p.typeInference.TypeToString(typ)
+				if typeName == okType {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// trackFunctionResultType checks if a function returns a Result type and records the info
+func (p *ResultTypePlugin) trackFunctionResultType(funcNode ast.Node, funcType *ast.FuncType) {
+	if funcType == nil || funcType.Results == nil || len(funcType.Results.List) == 0 {
+		return
+	}
+
+	// Check first return type for Result
+	firstResult := funcType.Results.List[0]
+	if firstResult.Type == nil {
+		return
+	}
+
+	// Check for Result[T, E] (IndexListExpr) or Result[T] (IndexExpr)
+	var okType, errType string
+
+	switch rt := firstResult.Type.(type) {
+	case *ast.IndexListExpr:
+		// Result[T, E] with two type parameters
+		if ident, ok := rt.X.(*ast.Ident); ok && ident.Name == "Result" {
+			if len(rt.Indices) >= 1 {
+				okType = p.getTypeName(rt.Indices[0])
+			}
+			if len(rt.Indices) >= 2 {
+				errType = p.getTypeName(rt.Indices[1])
+			} else {
+				errType = "error"
+			}
+		}
+	case *ast.IndexExpr:
+		// Result[T] with single type parameter (default error type)
+		if ident, ok := rt.X.(*ast.Ident); ok && ident.Name == "Result" {
+			okType = p.getTypeName(rt.Index)
+			errType = "error"
+		}
+	}
+
+	// If we found a Result return type, record it
+	if okType != "" {
+		resultTypeName := fmt.Sprintf("Result%s", SanitizeTypeName(okType, errType))
+		p.funcResultTypes[funcNode] = &resultReturnInfo{
+			okType:         okType,
+			errType:        errType,
+			resultTypeName: resultTypeName,
+		}
+		p.ctx.Logger.Debugf("Implicit wrapping: tracked function returning %s (Ok=%s, Err=%s)", resultTypeName, okType, errType)
+	}
 }
 
 // handleGenericResult processes Result<T> or Result<T, E> syntax (IndexExpr)
@@ -2059,15 +2358,26 @@ func (p *ResultTypePlugin) ClearPendingDeclarations() {
 // This method replaces:
 // 1. Ok() and Err() constructor calls with struct literals
 // 2. Result[T, E] generic syntax with concrete ResultTE types
+// 3. Implicit Result wrapping: `return value` → `return ResultTEOk(value)` or `return ResultTEErr(error)`
 func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 	if p.ctx == nil {
 		return nil, fmt.Errorf("plugin context not initialized")
 	}
 
+	// Stack to track current function context for implicit wrapping
+	var funcStack []ast.Node
+
 	// Use astutil.Apply to walk and transform the AST
 	transformed := astutil.Apply(node,
 		func(cursor *astutil.Cursor) bool {
 			n := cursor.Node()
+
+			// Track function entry for implicit wrapping
+			if fd, ok := n.(*ast.FuncDecl); ok {
+				funcStack = append(funcStack, fd)
+			} else if fl, ok := n.(*ast.FuncLit); ok {
+				funcStack = append(funcStack, fl)
+			}
 
 			// Check for generic type references (Result[T, E]) that need rewriting
 			if indexExpr, ok := n.(*ast.IndexExpr); ok {
@@ -2088,6 +2398,20 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 						Name:    replacement,
 					})
 					return true
+				}
+			}
+
+			// Check for return statements that need implicit wrapping
+			if ret, ok := n.(*ast.ReturnStmt); ok {
+				if len(funcStack) > 0 && len(ret.Results) == 1 {
+					currentFunc := funcStack[len(funcStack)-1]
+					if resultInfo, found := p.funcResultTypes[currentFunc]; found {
+						// Check if the return value needs wrapping
+						wrapped := p.wrapReturnForResult(ret.Results[0], resultInfo)
+						if wrapped != nil {
+							ret.Results[0] = wrapped
+						}
+					}
 				}
 			}
 
@@ -2124,7 +2448,20 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 			}
 			return true
 		},
-		nil, // Post-order not needed
+		func(cursor *astutil.Cursor) bool {
+			n := cursor.Node()
+			// Track function exit (pop from stack)
+			if _, ok := n.(*ast.FuncDecl); ok {
+				if len(funcStack) > 0 {
+					funcStack = funcStack[:len(funcStack)-1]
+				}
+			} else if _, ok := n.(*ast.FuncLit); ok {
+				if len(funcStack) > 0 {
+					funcStack = funcStack[:len(funcStack)-1]
+				}
+			}
+			return true
+		},
 	)
 
 	return transformed, nil

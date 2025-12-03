@@ -214,26 +214,25 @@ func (g *Generator) Generate(file *dingoast.File) ([]byte, error) {
 		}
 	}
 
-	// Step 5: Merge injected type declarations into main AST
-	// This ensures go/printer sees all declarations and comments together
+	// Step 5: Print injected type declarations SEPARATELY
+	// This prevents comment pollution - injected decls have no associated comments
+	var injectedCode string
 	if g.pipeline != nil {
 		injectedAST := g.pipeline.GetInjectedTypesAST()
 		if injectedAST != nil && len(injectedAST.Decls) > 0 {
-			// Insert injected types after imports but before other declarations
-			// Find the position to insert (after last import)
-			insertPos := 0
-			for i, decl := range transformed.Decls {
-				if genDecl, ok := decl.(*ast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-					insertPos = i + 1
-				}
+			var injectedBuf bytes.Buffer
+			cfg := printer.Config{
+				Mode:     printer.TabIndent | printer.UseSpaces,
+				Tabwidth: 8,
 			}
-
-			// Create new declaration slice with injected types
-			newDecls := make([]ast.Decl, 0, len(transformed.Decls)+len(injectedAST.Decls))
-			newDecls = append(newDecls, transformed.Decls[:insertPos]...)
-			newDecls = append(newDecls, injectedAST.Decls...)
-			newDecls = append(newDecls, transformed.Decls[insertPos:]...)
-			transformed.Decls = newDecls
+			// Print each declaration separately to avoid comment pollution
+			for _, decl := range injectedAST.Decls {
+				if err := cfg.Fprint(&injectedBuf, token.NewFileSet(), decl); err != nil {
+					return nil, fmt.Errorf("failed to print injected declaration: %w", err)
+				}
+				injectedBuf.WriteString("\n")
+			}
+			injectedCode = injectedBuf.String()
 		}
 	}
 
@@ -248,6 +247,21 @@ func (g *Generator) Generate(file *dingoast.File) ([]byte, error) {
 
 	if err := cfg.Fprint(&buf, g.fset, transformed); err != nil {
 		return nil, fmt.Errorf("failed to print AST: %w", err)
+	}
+
+	// Step 6.1: Inject the type declarations after imports
+	// Insert injected code after imports but before other declarations
+	if injectedCode != "" {
+		output := buf.String()
+		// Find position after import block
+		importEnd := findImportEnd(output)
+		if importEnd > 0 {
+			buf.Reset()
+			buf.WriteString(output[:importEnd])
+			buf.WriteString("\n\n")
+			buf.WriteString(injectedCode)
+			buf.WriteString(output[importEnd:])
+		}
 	}
 
 	// Step 6: CRITICAL FIX - DO NOT use format.Source()
@@ -740,6 +754,51 @@ func (g *Generator) constructOptionTypeName(concreteType string) string {
 	}
 }
 
+// findImportEnd finds the position in the source code after the import block ends.
+// Returns the byte offset after the closing ) of the import block, or after the
+// last single import statement if no grouped imports exist.
+// If there are no imports, returns the position after the package declaration.
+func findImportEnd(source string) int {
+	lines := strings.Split(source, "\n")
+	inImportBlock := false
+	lastImportEnd := 0
+	packageEnd := 0
+	currentPos := 0
+
+	for _, line := range lines {
+		lineLen := len(line) + 1 // +1 for newline
+		trimmed := strings.TrimSpace(line)
+
+		// Track package declaration position
+		if strings.HasPrefix(trimmed, "package ") {
+			packageEnd = currentPos + lineLen
+		}
+
+		// Check for grouped import start
+		if strings.HasPrefix(trimmed, "import (") {
+			inImportBlock = true
+		}
+
+		// Check for grouped import end
+		if inImportBlock && trimmed == ")" {
+			lastImportEnd = currentPos + lineLen
+			inImportBlock = false
+		}
+
+		// Check for single import
+		if strings.HasPrefix(trimmed, "import \"") || strings.HasPrefix(trimmed, "import `") {
+			lastImportEnd = currentPos + lineLen
+		}
+
+		currentPos += lineLen
+	}
+
+	// If no imports found, insert after package declaration
+	if lastImportEnd == 0 {
+		return packageEnd
+	}
+	return lastImportEnd
+}
 
 // removeBlankLinesAroundDingoMarkers removes extra blank lines before/after // dingo: markers
 // The Go formatter (format.Source) tends to add blank lines around comments for readability,

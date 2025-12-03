@@ -1,34 +1,21 @@
 package main
 
-type
 
-// Test: Tuples with Result and Option types
-// Feature: Integration with Result[T,E] and Option[T]
-// Complexity: intermediate
-ResultTag uint8
-
+type ResultTag uint8
 const (
 	ResultTagOk ResultTag = iota
 	ResultTagErr
 )
-
 type ResultIntString struct {
 	tag ResultTag
 	ok  *int
 	err *string
 }
-
-func ResultIntStringOk(
-
-// Tuple of Options
-arg0 int) ResultIntString {
+func ResultIntStringOk(arg0 int) ResultIntString {
 	return ResultIntString{tag: ResultTagOk, ok: &arg0}
 }
 func ResultIntStringErr(arg0 string) ResultIntString {
-	return ResultIntString{tag: ResultTagErr, err: &
-
-	// Tuple of Results
-	arg0}
+	return ResultIntString{tag: ResultTagErr, err: &arg0}
 }
 func (r ResultIntString) IsOk() bool {
 	return r.tag == ResultTagOk
@@ -36,10 +23,7 @@ func (r ResultIntString) IsOk() bool {
 func (r ResultIntString) IsErr() bool {
 	return r.tag == ResultTagErr
 }
-func (r ResultIntString) Unwrap(
-
-// Tuple with mixed Option types
-) int {
+func (r ResultIntString) Unwrap() int {
 	if r.tag != ResultTagOk {
 		panic("called Unwrap on Err")
 	}
@@ -49,8 +33,6 @@ func (r ResultIntString) Unwrap(
 	return *r.ok
 }
 func (r ResultIntString) UnwrapOr(defaultValue int) int {
-
-	// Tuple of Options - destructure and check separately
 	if r.tag == ResultTagOk {
 		return *r.ok
 	}
@@ -65,10 +47,7 @@ func (r ResultIntString) UnwrapErr() string {
 	}
 	return *r.err
 }
-func (r ResultIntString) UnwrapOrElse(
-
-// Create tuple of Results manually
-fn func(string) int) int {
+func (r ResultIntString) UnwrapOrElse(fn func(string) int) int {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok
 	}
@@ -84,10 +63,7 @@ func (r ResultIntString) Map(fn func(int) interface{}) interface{} {
 			tag ResultTag
 			ok  *interface{}
 			err *string
-		}{tag: ResultTagOk, ok: &
-
-		// Tuple of mixed Options
-		u}
+		}{tag: ResultTagOk, ok: &u}
 	}
 	return struct {
 		tag ResultTag
@@ -148,7 +124,6 @@ func (r ResultIntString) Or(other ResultIntString) ResultIntString {
 	}
 	return other
 }
-
 type ResultIntError struct {
 	tag ResultTag
 	ok  *int
@@ -267,7 +242,6 @@ func (r ResultIntError) Or(other ResultIntError) ResultIntError {
 	}
 	return other
 }
-
 type ResultStringString struct {
 	tag ResultTag
 	ok  *string
@@ -386,7 +360,6 @@ func (r ResultStringString) Or(other ResultStringString) ResultStringString {
 	}
 	return other
 }
-
 type ResultStringError struct {
 	tag ResultTag
 	ok  *string
@@ -505,14 +478,11 @@ func (r ResultStringError) Or(other ResultStringError) ResultStringError {
 	}
 	return other
 }
-
 type OptionTag uint8
-
 const (
 	OptionTagSome OptionTag = iota
 	OptionTagNone
 )
-
 type OptionString struct {
 	tag  OptionTag
 	some *string
@@ -570,7 +540,6 @@ func (o OptionString) Filter(predicate func(string) bool) OptionString {
 	}
 	return OptionString{tag: OptionTagNone}
 }
-
 type OptionInt struct {
 	tag  OptionTag
 	some *int
@@ -628,7 +597,6 @@ func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
 	}
 	return OptionInt{tag: OptionTagNone}
 }
-
 type OptionInterface struct {
 	tag  OptionTag
 	some *interface{}
@@ -686,7 +654,6 @@ func (o OptionInterface) Filter(predicate func(interface{}) bool) OptionInterfac
 	}
 	return OptionInterface{tag: OptionTagNone}
 }
-
 type OptionBool struct {
 	tag  OptionTag
 	some *bool
@@ -744,19 +711,26 @@ func (o OptionBool) Filter(predicate func(bool) bool) OptionBool {
 	}
 	return OptionBool{tag: OptionTagNone}
 }
-
 type Tuple2AnyAny struct {
 	_0 interface {
 	}
 	_1 interface {
 	}
 }
+
+// Test: Tuples with Result and Option types
+// Feature: Integration with Result[T,E] and Option[T]
+// Complexity: intermediate
+
+// Tuple of Options
 func findUser(id int) (OptionString, OptionInt) {
 	if id > 0 {
 		return OptionStringSome("User"), OptionInterfaceSome(id)
 	}
 	return Option_string_None(), Option_int_None()
 }
+
+// Tuple of Results
 func getIntResult() ResultIntString {
 	return ResultIntError{tag: ResultTagOk, ok: func() *int {
 		tmp2 := 42
@@ -764,7 +738,10 @@ func getIntResult() ResultIntString {
 	}()}
 }
 func getStringResult() ResultStringString {
-	return ResultStringError{tag: ResultTagOk, ok: func() *string {
+	return ResultStringError{
+
+	// Tuple with mixed Option types
+	tag: ResultTagOk, ok: func() *string {
 		tmp3 := "hello"
 		return &tmp3
 	}()}
@@ -773,7 +750,7 @@ func getOptions() (OptionInt, OptionString, OptionBool) {
 	return OptionIntSome(10), Option_string_None(), OptionBoolSome(true)
 }
 func main() {
-
+	// Tuple of Options - destructure and check separately
 	tmp := findUser(1)
 	nameOpt, idOpt := tmp._0, tmp._1
 	if nameOpt.IsSome() && idOpt.IsSome() {
@@ -782,6 +759,7 @@ func main() {
 		println("Not found")
 	}
 
+	// Create tuple of Results manually
 	r1 := getIntResult()
 	r2 := getStringResult()
 	results := Tuple2AnyAny{_0: r1, _1: r2}
@@ -794,6 +772,7 @@ func main() {
 		println("At least one failed")
 	}
 
+	// Tuple of mixed Options
 	tmp2 := getOptions()
 	numOpt, strOpt, boolOpt := tmp2._0, tmp2._1, tmp2._2
 	println("Options:", numOpt.IsSome(), strOpt.IsSome(), boolOpt.IsSome())

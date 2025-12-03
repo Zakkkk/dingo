@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/MadAppGang/dingo/pkg/plugin/builtin"
 )
 
 // Package-level compiled regexes - LEGACY, TO BE REPLACED WITH AST
@@ -161,8 +163,48 @@ type ErrorPropProcessor struct {
 
 // funcContext tracks the current function for zero value generation
 type funcContext struct {
-	returnTypes []string
-	zeroValues  []string
+	returnTypes    []string
+	zeroValues     []string
+	// Result type tracking (Phase 11)
+	isResultType   bool   // True if function returns Result<T, E>
+	resultOkType   string // The T in Result<T, E>
+	resultErrType  string // The E in Result<T, E>
+	resultTypeName string // Sanitized type name (e.g., "ResultSliceOrderServiceError")
+}
+
+// ErrorExprType represents the type of error expression after ?
+type ErrorExprType int
+
+const (
+	ErrorExprString     ErrorExprType = iota // "message"
+	ErrorExprStructLit                       // Type{...}
+	ErrorExprMethodCall                      // Type.Method(...)
+	ErrorExprFuncCall                        // Func(...)
+)
+
+// ErrorExpr represents a custom error expression after the ? operator
+type ErrorExpr struct {
+	ExprType     ErrorExprType // Type of error expression
+	RawExpr      string        // Original expression text
+
+	// For String type:
+	Message      string        // Error message string
+
+	// For StructLit type:
+	StructType   string        // Type name (e.g., "ServiceError")
+	StructFields string        // Raw fields text
+
+	// For MethodCall type:
+	ReceiverType string        // Type name (e.g., "ServiceError")
+	MethodName   string        // Method name (e.g., "NewDBError")
+	MethodArgs   string        // Arguments (e.g., "err")
+
+	// For FuncCall type:
+	FuncName     string        // Function name (e.g., "WrapDBError")
+	FuncArgs     string        // Arguments
+
+	// Derived for validation:
+	InferredType string        // The error type this expression produces
 }
 
 // NewErrorPropProcessor creates a new error propagation preprocessor with default config
@@ -283,7 +325,7 @@ func (e *ErrorPropProcessor) GetNeededImports() []string {
 }
 
 
-// extractExpressionAndMessage extracts the expression and optional error message
+// extractExpressionAndMessage extracts the expression and optional error message (legacy)
 // Input: "ReadFile(path)? \"failed to read\"" → ("ReadFile(path)?", "failed to read")
 // Input: "ReadFile(path)?" → ("ReadFile(path)?", "")
 func (e *ErrorPropProcessor) extractExpressionAndMessage(line string) (string, string) {
@@ -297,14 +339,171 @@ func (e *ErrorPropProcessor) extractExpressionAndMessage(line string) (string, s
 	return strings.TrimSpace(line), ""
 }
 
+// extractExpressionAndErrorExpr extracts the expression and error expression after ?
+// Supports three syntax forms:
+// 1. Struct literal: expr? Type{field: value}
+// 2. Method call: expr? Type.Method(args)
+// 3. Function call: expr? Func(args)
+// 4. String message: expr? "message" (legacy)
+func (e *ErrorPropProcessor) extractExpressionAndErrorExpr(line string) (string, ErrorExpr) {
+	trimmed := strings.TrimSpace(line)
 
-// generateReturnStatement generates the return statement with proper zero values
+	// Find the ? operator
+	qPos := strings.Index(trimmed, "?")
+	if qPos == -1 {
+		// No ? found, return empty
+		return trimmed, ErrorExpr{ExprType: ErrorExprString}
+	}
+
+	// Extract the expression before ? (WITHOUT the ? operator)
+	expr := strings.TrimSpace(trimmed[:qPos]) + "?"
+	afterQ := strings.TrimSpace(trimmed[qPos+1:])
+
+	// If nothing after ?, return bare expression
+	if afterQ == "" {
+		return expr, ErrorExpr{ExprType: ErrorExprString, Message: ""}
+	}
+
+	// Pattern 1: String message - expr? "message"
+	if strings.HasPrefix(afterQ, "\"") {
+		// Extract string message (handle escaped quotes)
+		msg := ""
+		if matches := msgPattern.FindStringSubmatch(trimmed); matches != nil {
+			msg = matches[2]
+		}
+		return expr, ErrorExpr{
+			ExprType: ErrorExprString,
+			RawExpr:  afterQ,
+			Message:  msg,
+		}
+	}
+
+	// Pattern 2: Struct literal - expr? Type{...}
+	// Match: Type{...} where Type starts with uppercase
+	structLitPattern := regexp.MustCompile(`^([A-Z]\w*)\s*\{(.*)`)
+	if matches := structLitPattern.FindStringSubmatch(afterQ); matches != nil {
+		typeName := matches[1]
+		fieldsStart := matches[2]
+
+		// Extract full fields (handle multiline, nested braces)
+		fields := e.extractBalancedBraces(fieldsStart)
+
+		return expr, ErrorExpr{
+			ExprType:     ErrorExprStructLit,
+			RawExpr:      afterQ,
+			StructType:   typeName,
+			StructFields: fields,
+			InferredType: typeName,
+		}
+	}
+
+	// Pattern 3: Method call - expr? Type.Method(...)
+	// Match: Type.method(...) where Type starts with uppercase
+	methodCallPattern := regexp.MustCompile(`^([A-Z]\w*)\.(\w+)\s*\((.*)`)
+	if matches := methodCallPattern.FindStringSubmatch(afterQ); matches != nil {
+		receiverType := matches[1]
+		methodName := matches[2]
+		argsStart := matches[3]
+
+		// Extract full arguments (handle nested parens)
+		args := e.extractBalancedParens(argsStart)
+
+		return expr, ErrorExpr{
+			ExprType:     ErrorExprMethodCall,
+			RawExpr:      afterQ,
+			ReceiverType: receiverType,
+			MethodName:   methodName,
+			MethodArgs:   args,
+			InferredType: receiverType, // Assume method returns same type
+		}
+	}
+
+	// Pattern 4: Function call - expr? Func(...)
+	// Match: func(...) - any identifier followed by (
+	funcCallPattern := regexp.MustCompile(`^([A-Z]\w*)\s*\((.*)`)
+	if matches := funcCallPattern.FindStringSubmatch(afterQ); matches != nil {
+		funcName := matches[1]
+		argsStart := matches[2]
+
+		// Extract full arguments (handle nested parens)
+		args := e.extractBalancedParens(argsStart)
+
+		return expr, ErrorExpr{
+			ExprType:     ErrorExprFuncCall,
+			RawExpr:      afterQ,
+			FuncName:     funcName,
+			FuncArgs:     args,
+			InferredType: "", // Cannot infer type from function call
+		}
+	}
+
+	// Fallback: treat as bare expression (no custom error)
+	return expr, ErrorExpr{ExprType: ErrorExprString, Message: ""}
+}
+
+// extractBalancedBraces extracts content until balanced closing brace
+// Input: "field: value}" → "field: value"
+// Input: "field: value" → "field: value" (missing closing brace)
+func (e *ErrorPropProcessor) extractBalancedBraces(text string) string {
+	depth := 1 // We already consumed the opening brace
+	var result strings.Builder
+
+	for _, ch := range text {
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				// Found matching closing brace
+				return result.String()
+			}
+		}
+		result.WriteRune(ch)
+	}
+
+	// No matching closing brace found - return what we have
+	return text
+}
+
+// extractBalancedParens extracts content until balanced closing paren
+// Input: "arg1, arg2)" → "arg1, arg2"
+// Input: "arg1, arg2" → "arg1, arg2" (missing closing paren)
+func (e *ErrorPropProcessor) extractBalancedParens(text string) string {
+	depth := 1 // We already consumed the opening paren
+	var result strings.Builder
+
+	for _, ch := range text {
+		if ch == '(' {
+			depth++
+		} else if ch == ')' {
+			depth--
+			if depth == 0 {
+				// Found matching closing paren
+				return result.String()
+			}
+		}
+		result.WriteRune(ch)
+	}
+
+	// No matching closing paren found - return what we have
+	return text
+}
+
+
+// generateReturnStatement generates the return statement with proper zero values (legacy)
 func (e *ErrorPropProcessor) generateReturnStatement(errVar string, errMsg string) string {
 	// Get zero values for return types
 	var zeroVals []string
 	if e.currentFunc != nil {
-		// Use parsed zero values (may be empty for error-only returns)
+		// Use parsed zero values (may be empty for functions without explicit return types)
 		zeroVals = e.currentFunc.zeroValues
+
+		// CRITICAL FIX: If function has no explicit return type but uses error propagation,
+		// infer that it should return (T, error) where T defaults to nil
+		if len(e.currentFunc.returnTypes) == 0 && len(zeroVals) == 0 {
+			// No return types declared - infer (nil, error) for error propagation
+			zeroVals = []string{"nil"}
+		}
 	} else {
 		// Fallback: assume one return value (nil) when function context unknown
 		zeroVals = []string{"nil"}
@@ -333,6 +532,133 @@ func (e *ErrorPropProcessor) generateReturnStatement(errVar string, errMsg strin
 		// Function returns only error
 		return fmt.Sprintf("return %s", errPart)
 	}
+}
+
+// generateReturnStatementV2 generates the return statement for Result types with ErrorExpr
+func (e *ErrorPropProcessor) generateReturnStatementV2(errVar string, errExpr ErrorExpr) string {
+	// Check if function returns Result<T, E>
+	if e.currentFunc != nil && e.currentFunc.isResultType {
+		return e.generateResultReturnStatement(errVar, errExpr)
+	}
+
+	// Fallback to legacy behavior for (T, error) returns
+	return e.generateReturnStatement(errVar, errExpr.Message)
+}
+
+// generateResultReturnStatement generates Result error constructor call
+func (e *ErrorPropProcessor) generateResultReturnStatement(errVar string, errExpr ErrorExpr) string {
+	typeName := e.currentFunc.resultTypeName
+
+	switch errExpr.ExprType {
+	case ErrorExprStructLit:
+		// return ResultTEErr(Type{fields with err bound})
+		return fmt.Sprintf("return %sErr(%s{%s})",
+			typeName,
+			errExpr.StructType,
+			errExpr.StructFields)
+
+	case ErrorExprMethodCall:
+		// return ResultTEErr(Type.Method(args with err bound))
+		return fmt.Sprintf("return %sErr(%s.%s(%s))",
+			typeName,
+			errExpr.ReceiverType,
+			errExpr.MethodName,
+			errExpr.MethodArgs)
+
+	case ErrorExprFuncCall:
+		// return ResultTEErr(Func(args with err bound))
+		return fmt.Sprintf("return %sErr(%s(%s))",
+			typeName,
+			errExpr.FuncName,
+			errExpr.FuncArgs)
+
+	case ErrorExprString:
+		// return ResultTEErr(fmt.Errorf("message: %w", err))
+		if errExpr.Message != "" {
+			// CRITICAL FIX C1: String messages with custom error types generate fmt.Errorf() (returns error)
+			// but Result expects custom type. Disallow string messages when error type != error.
+			if e.currentFunc != nil && e.currentFunc.resultErrType != "error" {
+				// This should have been caught during validation, but add safety check
+				// Return error placeholder that will fail compilation with clear message
+				return fmt.Sprintf("/* ERROR: String error messages not supported with custom error types (Result<%s, %s>); use struct literal or method call instead */\nreturn %sErr(nil)",
+					e.currentFunc.resultOkType,
+					e.currentFunc.resultErrType,
+					typeName)
+			}
+			// Escape % characters
+			escapedMsg := strings.ReplaceAll(errExpr.Message, "%", "%%")
+			e.needsFmt = true
+			return fmt.Sprintf("return %sErr(fmt.Errorf(\"%s: %%w\", %s))",
+				typeName,
+				escapedMsg,
+				errVar)
+		} else {
+			// Bare error, just wrap it
+			return fmt.Sprintf("return %sErr(%s)", typeName, errVar)
+		}
+
+	default:
+		// Fallback: bare error
+		return fmt.Sprintf("return %sErr(%s)", typeName, errVar)
+	}
+}
+
+// validateErrorExprType validates that the custom error type matches Result's error type
+// Returns error if validation fails, nil if valid
+func (e *ErrorPropProcessor) validateErrorExprType(errExpr ErrorExpr, lineNum int) error {
+	// Skip validation if not a Result type
+	if e.currentFunc == nil || !e.currentFunc.isResultType {
+		return nil
+	}
+
+	// Skip validation for string messages
+	if errExpr.ExprType == ErrorExprString {
+		return nil
+	}
+
+	// Skip validation for function calls (cannot infer return type)
+	if errExpr.ExprType == ErrorExprFuncCall {
+		return nil
+	}
+
+	// Skip validation if Result error type is "error" (interface - any type satisfies it)
+	if e.currentFunc.resultErrType == "error" {
+		return nil
+	}
+
+	// CRITICAL FIX C1: Validate string messages are not used with custom error types
+	if errExpr.ExprType == ErrorExprString && errExpr.Message != "" {
+		return fmt.Errorf(
+			"line %d: string error messages not supported with custom error types (Result<%s, %s>); "+
+				"use struct literal or method call instead\n  Expression: %s",
+			lineNum,
+			e.currentFunc.resultOkType,
+			e.currentFunc.resultErrType,
+			errExpr.RawExpr)
+	}
+
+	// CRITICAL FIX C3: Normalize types for comparison (strip leading * for pointer equivalence)
+	// *ServiceError and ServiceError are compatible in Go
+	inferredNorm := normalizeTypeForValidation(errExpr.InferredType)
+	expectedNorm := normalizeTypeForValidation(e.currentFunc.resultErrType)
+
+	// Validate inferred type matches Result error type
+	if inferredNorm != "" && inferredNorm != expectedNorm {
+		return fmt.Errorf("line %d: error type %q doesn't match function return type Result<%s, %s>\n  Expression: %s",
+			lineNum,
+			errExpr.InferredType,
+			e.currentFunc.resultOkType,
+			e.currentFunc.resultErrType,
+			errExpr.RawExpr)
+	}
+
+	return nil
+}
+
+// normalizeTypeForValidation normalizes a type name for validation comparison
+// CRITICAL FIX C3: Strip leading * for pointer equivalence (*ServiceError and ServiceError are compatible)
+func normalizeTypeForValidation(typ string) string {
+	return strings.TrimPrefix(typ, "*")
 }
 
 // isFunctionDeclaration checks if a line is a function declaration
@@ -369,10 +695,11 @@ func (e *ErrorPropProcessor) parseFunctionSignature(startLine int) *funcContext 
 	}
 
 	if !foundBrace {
-		// No brace found - return safe fallback
+		// No brace found - return context with empty return types
+		// Will be inferred from error propagation usage
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
@@ -381,10 +708,11 @@ func (e *ErrorPropProcessor) parseFunctionSignature(startLine int) *funcContext 
 	src := fmt.Sprintf("package p\n%s}", funcText.String())
 	file, err := parser.ParseFile(fset, "", src, 0)
 	if err != nil {
-		// Failed to parse, use nil fallback
+		// Failed to parse, return empty context
+		// Will be inferred from error propagation usage
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
@@ -392,15 +720,16 @@ func (e *ErrorPropProcessor) parseFunctionSignature(startLine int) *funcContext 
 	if len(file.Decls) == 0 {
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
 	funcDecl, ok := file.Decls[0].(*ast.FuncDecl)
 	if !ok || funcDecl.Type.Results == nil {
+		// No return type declared - will infer from error propagation usage
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
@@ -418,15 +747,63 @@ func (e *ErrorPropProcessor) parseFunctionSignature(startLine int) *funcContext 
 		}
 	}
 
-	// Generate zero values (all except last, which is error)
-	zeroValues := []string{}
-	for i := 0; i < len(returnTypes)-1; i++ {
-		zeroValues = append(zeroValues, getZeroValue(returnTypes[i]))
+	// Check if function returns Result<T, E> (Phase 11)
+	ctx := &funcContext{
+		returnTypes: returnTypes,
+		zeroValues:  []string{},
 	}
 
-	return &funcContext{
-		returnTypes: returnTypes,
-		zeroValues:  zeroValues,
+	if len(returnTypes) == 1 {
+		resultInfo := e.parseResultType(returnTypes[0])
+		if resultInfo != nil {
+			// This is a Result type!
+			ctx.isResultType = true
+			ctx.resultOkType = resultInfo.okType
+			ctx.resultErrType = resultInfo.errType
+			ctx.resultTypeName = resultInfo.typeName
+			// No zero values needed for Result types
+			return ctx
+		}
+	}
+
+	// Generate zero values (all except last, which is error)
+	for i := 0; i < len(returnTypes)-1; i++ {
+		ctx.zeroValues = append(ctx.zeroValues, getZeroValue(returnTypes[i]))
+	}
+
+	return ctx
+}
+
+// parseResultType attempts to parse a Result<T, E> type string
+// Returns nil if not a Result type
+func (e *ErrorPropProcessor) parseResultType(typeStr string) *struct {
+	okType   string
+	errType  string
+	typeName string
+} {
+	// Match Result<T, E> or Result[T, E]
+	// Pattern: Result followed by < or [, then type params
+	resultPattern := regexp.MustCompile(`^Result[<\[]([^,>]+),\s*([^>\]]+)[>\]]$`)
+	matches := resultPattern.FindStringSubmatch(typeStr)
+	if matches == nil {
+		return nil
+	}
+
+	okType := strings.TrimSpace(matches[1])
+	errType := strings.TrimSpace(matches[2])
+
+	// CRITICAL FIX C2: Use authoritative sanitization from Result type plugin
+	// This ensures preprocessor and plugin generate matching type names
+	typeName := "Result" + builtin.SanitizeTypeName(okType, errType)
+
+	return &struct {
+		okType   string
+		errType  string
+		typeName string
+	}{
+		okType:   okType,
+		errType:  errType,
+		typeName: typeName,
 	}
 }
 
@@ -554,16 +931,17 @@ func (e *ErrorPropProcessor) getIndent(line string) string {
 // isTernaryLine checks if the line contains a ternary operator
 func (e *ErrorPropProcessor) isTernaryLine(line string) bool {
 	// Check for ternary pattern: expr ? value : value
-	// Important: Must exclude : inside string literals (e.g., error messages)
+	// Important: Must exclude : inside string literals and struct literals
 	qPos := strings.Index(line, "?")
 	if qPos == -1 {
 		return false
 	}
 
-	// Scan after the ? to find : that's NOT in a string literal
+	// Scan after the ? to find : that's NOT in a string literal or struct literal
 	remainder := line[qPos+1:]
 	inString := false
 	escaped := false
+	braceDepth := 0
 
 	for _, ch := range remainder {
 		if escaped {
@@ -581,8 +959,17 @@ func (e *ErrorPropProcessor) isTernaryLine(line string) bool {
 			continue
 		}
 
-		// Found : outside of string - this is a ternary
-		if ch == ':' && !inString {
+		// Track brace depth to ignore : inside struct literals
+		if !inString {
+			if ch == '{' {
+				braceDepth++
+			} else if ch == '}' {
+				braceDepth--
+			}
+		}
+
+		// Found : outside of string AND outside of braces - this is a ternary
+		if ch == ':' && !inString && braceDepth == 0 {
 			return true
 		}
 	}
@@ -646,11 +1033,12 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 		return line, nil, nil
 	}
 
-	// Pattern: let/var NAME = EXPR? ["message"]
+	// Pattern: let/var NAME = EXPR? [custom_error_expr]
 	if matches := assignPattern.FindStringSubmatch(line); matches != nil {
 		rightSide := matches[3] // Everything after =
 		if strings.Contains(rightSide, "?") {
-			expr, errMsg := e.extractExpressionAndMessage(rightSide)
+			// Use V2 extraction to support all error expression types
+			expr, errExpr := e.extractExpressionAndErrorExpr(rightSide)
 
 			// Track function call for import detection
 			e.trackFunctionCallInExpr(expr)
@@ -676,7 +1064,8 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 				ASTNodeType:     "IfStmt",
 			}
 
-			result, err := e.expandAssignmentWithMarker(matches, expr, errMsg, marker, originalLineNum, outputLineNum)
+			// Use V2 expansion that supports ErrorExpr
+			result, err := e.expandAssignmentWithMarkerV2(matches, expr, errExpr, marker, originalLineNum, outputLineNum)
 			if err != nil {
 				return "", nil, err
 			}
@@ -684,11 +1073,12 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 		}
 	}
 
-	// Pattern: return EXPR? ["message"]
+	// Pattern: return EXPR? [custom_error_expr]
 	if matches := returnPattern.FindStringSubmatch(line); matches != nil {
 		returnPart := matches[1] // Everything after return
 		if strings.Contains(returnPart, "?") {
-			expr, errMsg := e.extractExpressionAndMessage(returnPart)
+			// Use V2 extraction to support all error expression types
+			expr, errExpr := e.extractExpressionAndErrorExpr(returnPart)
 
 			// Track function call for import detection
 			e.trackFunctionCallInExpr(expr)
@@ -714,7 +1104,8 @@ func (e *ErrorPropProcessor) processLineWithMetadata(line string, originalLineNu
 				ASTNodeType:     "IfStmt",
 			}
 
-			result, err := e.expandReturnWithMarker(matches, expr, errMsg, marker, originalLineNum, outputLineNum)
+			// Use V2 expansion that supports ErrorExpr
+			result, err := e.expandReturnWithMarkerV2(matches, expr, errExpr, marker, originalLineNum, outputLineNum)
 			if err != nil {
 				return "", nil, err
 			}
@@ -774,6 +1165,72 @@ func (e *ErrorPropProcessor) expandAssignmentWithMarker(matches []string, expr s
 	buf.WriteString(indent)
 	buf.WriteString("\t")
 	buf.WriteString(e.generateReturnStatement(errVar, errMsg))
+	buf.WriteString("\n")
+
+	// Line 5: }
+	buf.WriteString(indent)
+	buf.WriteString("}\n")
+
+	// Line 6: var varName = tmpN
+	buf.WriteString(indent)
+	buf.WriteString(fmt.Sprintf("var %s = %s", varName, tmpVar))
+
+	return buf.String(), nil
+}
+
+// expandAssignmentWithMarkerV2 expands assignment with ErrorExpr support
+func (e *ErrorPropProcessor) expandAssignmentWithMarkerV2(matches []string, expr string, errExpr ErrorExpr, marker string, originalLine int, startOutputLine int) (string, error) {
+	// Validate error type if function returns Result<T, E>
+	if err := e.validateErrorExprType(errExpr, originalLine); err != nil {
+		return "", err
+	}
+
+	varName := matches[2]
+	exprClean := strings.TrimSpace(strings.TrimSuffix(expr, "?"))
+
+	// Track function call for import detection
+	e.trackFunctionCallInExpr(exprClean)
+
+	// Normalize spaces around dots (DingoPreParser adds spaces)
+	exprClean = normalizeSpaces(exprClean)
+
+	// No-number-first pattern: first occurrence has no number
+	tmpVar := ""
+	if e.tryCounter == 1 {
+		tmpVar = "tmp"
+	} else {
+		tmpVar = fmt.Sprintf("tmp%d", e.tryCounter-1)
+	}
+
+	errVar := ""
+	if e.tryCounter == 1 {
+		errVar = "err"
+	} else {
+		errVar = fmt.Sprintf("err%d", e.tryCounter-1)
+	}
+	e.tryCounter++
+
+	// Generate the expansion
+	var buf bytes.Buffer
+	indent := e.getIndent(matches[0])
+
+	// Line 1: tmpN, errN := expr
+	buf.WriteString(indent)
+	buf.WriteString(fmt.Sprintf("%s, %s := %s\n", tmpVar, errVar, exprClean))
+
+	// Line 2: // dingo:e:N (UNIQUE MARKER)
+	buf.WriteString(indent)
+	buf.WriteString(marker)
+	buf.WriteString("\n")
+
+	// Line 3: if errN != nil {
+	buf.WriteString(indent)
+	buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
+
+	// Line 4: return statement (V2 with ErrorExpr)
+	buf.WriteString(indent)
+	buf.WriteString("\t")
+	buf.WriteString(e.generateReturnStatementV2(errVar, errExpr))
 	buf.WriteString("\n")
 
 	// Line 5: }
@@ -855,6 +1312,150 @@ func (e *ErrorPropProcessor) expandReturnWithMarker(matches []string, expr strin
 	buf.WriteString(indent)
 	buf.WriteString("\t")
 	buf.WriteString(e.generateReturnStatement(errVar, errMsg))
+	buf.WriteString("\n")
+
+	// Line 5: }
+	buf.WriteString(indent)
+	buf.WriteString("}\n")
+
+	// Line 6: return tmp1, tmp2, ..., nil
+	buf.WriteString(indent)
+	returnVals := append([]string{}, tmpVars...)
+	if e.currentFunc != nil && len(e.currentFunc.returnTypes) > 1 {
+		returnVals = append(returnVals, "nil")
+	}
+	buf.WriteString(fmt.Sprintf("return %s", strings.Join(returnVals, ", ")))
+
+	return buf.String(), nil
+}
+
+// expandReturnWithMarkerV2 expands return with ErrorExpr support
+func (e *ErrorPropProcessor) expandReturnWithMarkerV2(matches []string, expr string, errExpr ErrorExpr, marker string, originalLine int, startOutputLine int) (string, error) {
+	// Validate error type if function returns Result<T, E>
+	if err := e.validateErrorExprType(errExpr, originalLine); err != nil {
+		return "", err
+	}
+
+	exprClean := strings.TrimSpace(strings.TrimSuffix(expr, "?"))
+
+	// Track function call for import detection
+	e.trackFunctionCallInExpr(exprClean)
+
+	// Normalize spaces around dots (DingoPreParser adds spaces)
+	exprClean = normalizeSpaces(exprClean)
+
+	// For Result types, we don't need multiple temp variables
+	// Result functions return a single Result<T, E> value
+	if e.currentFunc != nil && e.currentFunc.isResultType {
+		// Simple case: single temp variable
+		tmpVar := ""
+		if e.tryCounter == 1 {
+			tmpVar = "tmp"
+		} else {
+			tmpVar = fmt.Sprintf("tmp%d", e.tryCounter-1)
+		}
+
+		errVar := ""
+		if e.tryCounter == 1 {
+			errVar = "err"
+		} else {
+			errVar = fmt.Sprintf("err%d", e.tryCounter-1)
+		}
+		e.tryCounter++
+
+		// Generate the expansion
+		var buf bytes.Buffer
+		indent := e.getIndent(matches[0])
+
+		// Line 1: tmp, err := expr (expr returns (T, error))
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("%s, %s := %s\n", tmpVar, errVar, exprClean))
+
+		// Line 2: // dingo:e:N (UNIQUE MARKER)
+		buf.WriteString(indent)
+		buf.WriteString(marker)
+		buf.WriteString("\n")
+
+		// Line 3: if err != nil {
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
+
+		// Line 4: return ResultTEErr(customError)
+		buf.WriteString(indent)
+		buf.WriteString("\t")
+		buf.WriteString(e.generateReturnStatementV2(errVar, errExpr))
+		buf.WriteString("\n")
+
+		// Line 5: }
+		buf.WriteString(indent)
+		buf.WriteString("}\n")
+
+		// Line 6: return ResultTEOk(tmp)
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("return %sOk(%s)", e.currentFunc.resultTypeName, tmpVar))
+
+		return buf.String(), nil
+	}
+
+	// Legacy behavior for (T, error) returns
+	// Generate correct number of temporary variables for multi-value returns
+	numNonErrorReturns := 1
+	if e.currentFunc != nil && len(e.currentFunc.returnTypes) > 1 {
+		numNonErrorReturns = len(e.currentFunc.returnTypes) - 1
+
+		// Check config mode
+		if e.config != nil && e.config.MultiValueReturnMode == "single" && numNonErrorReturns > 1 {
+			return "", fmt.Errorf(
+				"multi-value error propagation not allowed in 'single' mode (use --multi-value-return=full): function returns %d values plus error",
+				numNonErrorReturns,
+			)
+		}
+	}
+
+	// Generate temporary variable names
+	baseCounter := e.tryCounter
+	tmpVars := []string{}
+	for i := 0; i < numNonErrorReturns; i++ {
+		var tmpVar string
+		if baseCounter == 1 {
+			tmpVar = "tmp"
+		} else {
+			tmpVar = fmt.Sprintf("tmp%d", baseCounter-1)
+		}
+		tmpVars = append(tmpVars, tmpVar)
+		baseCounter++
+	}
+
+	var errVar string
+	if e.tryCounter == 1 {
+		errVar = "err"
+	} else {
+		errVar = fmt.Sprintf("err%d", e.tryCounter-1)
+	}
+	e.tryCounter++
+
+	// Generate the expansion
+	var buf bytes.Buffer
+	indent := e.getIndent(matches[0])
+
+	// Line 1: tmp1, tmp2, ..., errN := expr
+	buf.WriteString(indent)
+	allVars := append(tmpVars, errVar)
+	buf.WriteString(fmt.Sprintf("%s := %s\n", strings.Join(allVars, ", "), exprClean))
+
+	// Line 2: // dingo:e:N (UNIQUE MARKER)
+	buf.WriteString(indent)
+	buf.WriteString(marker)
+	buf.WriteString("\n")
+
+	// Line 3: if errN != nil {
+	buf.WriteString(indent)
+	buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
+
+	// Line 4: return statement (V2 with ErrorExpr)
+	buf.WriteString(indent)
+	buf.WriteString("\t")
+	buf.WriteString(e.generateReturnStatementV2(errVar, errExpr))
 	buf.WriteString("\n")
 
 	// Line 5: }

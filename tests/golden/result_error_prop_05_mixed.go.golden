@@ -1,0 +1,186 @@
+package main
+
+import (
+	"database/sql"
+	"io"
+)
+
+
+type ResultTag uint8
+const (
+	ResultTagOk ResultTag = iota
+	ResultTagErr
+)
+type ResultStringAppError struct {
+	tag ResultTag
+	ok  *string
+	err *AppError
+}
+func ResultStringAppErrorOk(arg0 string) ResultStringAppError {
+	return ResultStringAppError{tag: ResultTagOk, ok: &arg0}
+}
+func ResultStringAppErrorErr(arg0 AppError) ResultStringAppError {
+	return ResultStringAppError{tag: ResultTagErr, err: &arg0}
+}
+func (r ResultStringAppError) IsOk() bool {
+	return r.tag == ResultTagOk
+}
+func (r ResultStringAppError) IsErr() bool {
+	return r.tag == ResultTagErr
+}
+func (r ResultStringAppError) Unwrap() string {
+	if r.tag != ResultTagOk {
+		panic("called Unwrap on Err")
+	}
+	if r.ok == nil {
+		panic("Result contains nil Ok value")
+	}
+	return *r.ok
+}
+func (r ResultStringAppError) UnwrapOr(defaultValue string) string {
+	if r.tag == ResultTagOk {
+		return *r.ok
+	}
+	return defaultValue
+}
+func (r ResultStringAppError) UnwrapErr() AppError {
+	if r.tag != ResultTagErr {
+		panic("called UnwrapErr on Ok")
+	}
+	if r.err == nil {
+		panic("Result contains nil Err value")
+	}
+	return *r.err
+}
+func (r ResultStringAppError) UnwrapOrElse(fn func(AppError) string) string {
+	if r.tag == ResultTagOk && r.ok != nil {
+		return *r.ok
+	}
+	if r.err != nil {
+		return fn(*r.err)
+	}
+	panic("Result in invalid state")
+}
+func (r ResultStringAppError) Map(fn func(string) interface{}) interface{} {
+	if r.tag == ResultTagOk && r.ok != nil {
+		u := fn(*r.ok)
+		return struct {
+			tag ResultTag
+			ok  *interface{}
+			err *AppError
+		}{tag: ResultTagOk, ok: &u}
+	}
+	return struct {
+		tag ResultTag
+		ok  *interface{}
+		err *AppError
+	}{tag: r.tag, ok: nil, err: r.err}
+}
+func (r ResultStringAppError) MapErr(fn func(AppError) interface{}) interface{} {
+	if r.tag == ResultTagErr && r.err != nil {
+		f := fn(*r.err)
+		return struct {
+			tag ResultTag
+			ok  *string
+			err *interface{}
+		}{tag: ResultTagErr, ok: nil, err: &f}
+	}
+	return struct {
+		tag ResultTag
+		ok  *string
+		err *interface{}
+	}{tag: r.tag, ok: r.ok, err: nil}
+}
+func (r ResultStringAppError) Filter(predicate func(string) bool) ResultStringAppError {
+	if r.tag == ResultTagOk && predicate(*r.ok) {
+		return r
+	}
+	return r
+}
+func (r ResultStringAppError) AndThen(fn func(string) interface{}) interface{} {
+	if r.tag == ResultTagOk && r.ok != nil {
+		return fn(*r.ok)
+	}
+	return struct {
+		tag ResultTag
+		ok  *interface{}
+		err *AppError
+	}{tag: r.tag, ok: nil, err: r.err}
+}
+func (r ResultStringAppError) OrElse(fn func(AppError) interface{}) interface{} {
+	if r.tag == ResultTagErr && r.err != nil {
+		return fn(*r.err)
+	}
+	return struct {
+		tag ResultTag
+		ok  *string
+		err *interface{}
+	}{tag: r.tag, ok: r.ok, err: nil}
+}
+func (r ResultStringAppError) And(other interface{}) interface{} {
+	if r.tag == ResultTagOk {
+		return other
+	}
+	return r
+}
+func (r ResultStringAppError) Or(other ResultStringAppError) ResultStringAppError {
+	if r.tag == ResultTagOk {
+		return r
+	}
+	return other
+}
+
+// Custom error type demonstrating all patterns
+type AppError struct {
+	Code    string
+	Message string
+}
+func (e AppError) Error() string {
+	return e.Code + ": " + e.Message
+}
+func (AppError) NewDBError(err error) AppError {
+	return AppError{Code: "DB_ERROR", Message: err.Error()}
+}
+func WrapIOError(err error) AppError {
+	return AppError{Code: "IO_ERROR", Message: err.Error()}
+}
+
+// Test mixing all three patterns in one function
+func ProcessData(db *sql.DB, reader io.Reader) ResultStringAppError {
+	// Pattern 1: Struct literal
+	tmp, err := db.Query("SELECT * FROM data")
+
+	if err != nil {
+		return ResultStringAppErrorErr(AppError{Code: "DB_ERROR", Message: err.Error()})
+	}
+	var rows = tmp
+	defer rows.Close()
+
+	// Pattern 2: Method call
+	tmp1, err1 := db.Conn(nil)
+
+	if err1 != nil {
+		return ResultStringAppErrorErr(AppError.NewDBError(err))
+	}
+	var conn = tmp1
+	defer conn.Close()
+
+	// Pattern 3: Function call
+	buf := make([]byte, 100)
+	tmp2, err2 := reader.Read(buf)
+
+	if err2 != nil {
+		return ResultStringAppErrorErr(WrapIOError(err))
+	}
+	var n = tmp2
+
+	return ResultStringAppErrorOk("success")
+}
+func main() {
+	var db *sql.DB = nil
+	var reader io.Reader = nil
+	result := ProcessData(db, reader)
+	if result.IsErr() {
+		println("Error:", result.err.Error())
+	}
+}

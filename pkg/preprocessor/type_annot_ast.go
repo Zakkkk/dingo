@@ -180,13 +180,53 @@ func (p *TypeAnnotASTProcessor) transformTypeString(typeBytes []byte) []byte {
 
 // transformParameters transforms parameter type annotations in a function signature
 func (p *TypeAnnotASTProcessor) transformParameters(line []byte) ([]byte, bool) {
-	// Find parameter list: ( ... )
-	openParen := bytes.IndexByte(line, '(')
-	if openParen == -1 {
+	// Find "func" keyword first
+	funcIdx := bytes.Index(line, []byte("func "))
+	if funcIdx == -1 {
 		return line, false
 	}
 
-	// Find matching close paren
+	// Start search after "func "
+	searchStart := funcIdx + 5
+
+	// Check if this is a receiver function: func (Receiver) vs func Name(
+	// Receiver pattern: "func " followed immediately by "("
+	// Regular pattern: "func " followed by identifier, then "("
+	afterFunc := bytes.TrimSpace(line[searchStart:])
+	isReceiverFunc := len(afterFunc) > 0 && afterFunc[0] == '('
+
+	var openParen int
+	if isReceiverFunc {
+		// Receiver function: func (Receiver) Method(params)
+		// Find the receiver's closing ), then find the parameter list (
+		firstParen := bytes.IndexByte(line[searchStart:], '(')
+		if firstParen == -1 {
+			return line, false
+		}
+		firstParenAbsolute := searchStart + firstParen
+
+		closingParen := p.findMatchingParen(line, firstParenAbsolute)
+		if closingParen == -1 {
+			return line, false
+		}
+
+		// Find the parameter list ( after the receiver )
+		nextOpenIdx := bytes.IndexByte(line[closingParen+1:], '(')
+		if nextOpenIdx == -1 {
+			return line, false
+		}
+		openParen = closingParen + 1 + nextOpenIdx
+	} else {
+		// Regular function: func Name(params)
+		// Find the first (
+		firstParen := bytes.IndexByte(line[searchStart:], '(')
+		if firstParen == -1 {
+			return line, false
+		}
+		openParen = searchStart + firstParen
+	}
+
+	// Find matching close paren for the parameter list
 	closeParen := p.findMatchingParen(line, openParen)
 	if closeParen == -1 {
 		return line, false
