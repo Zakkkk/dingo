@@ -302,10 +302,11 @@ func (e *ErrorPropProcessor) extractExpressionAndMessage(line string) (string, s
 func (e *ErrorPropProcessor) generateReturnStatement(errVar string, errMsg string) string {
 	// Get zero values for return types
 	var zeroVals []string
-	if e.currentFunc != nil && len(e.currentFunc.zeroValues) > 0 {
+	if e.currentFunc != nil {
+		// Use parsed zero values (may be empty for error-only returns)
 		zeroVals = e.currentFunc.zeroValues
 	} else {
-		// Fallback: assume one return value (nil)
+		// Fallback: assume one return value (nil) when function context unknown
 		zeroVals = []string{"nil"}
 	}
 

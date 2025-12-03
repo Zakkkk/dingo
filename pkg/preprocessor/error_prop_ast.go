@@ -559,10 +559,11 @@ func (p *ErrorPropASTProcessor) expandReturn(line, expr, errMsg, marker string) 
 func (p *ErrorPropASTProcessor) generateReturnStatement(errVar string, errMsg string) string {
 	// Get zero values for return types
 	var zeroVals []string
-	if p.currentFunc != nil && len(p.currentFunc.zeroValues) > 0 {
+	if p.currentFunc != nil {
+		// Use parsed zero values (may be empty for error-only returns)
 		zeroVals = p.currentFunc.zeroValues
 	} else {
-		// Fallback: assume one return value (nil)
+		// Fallback: assume one return value (nil) when function context unknown
 		zeroVals = []string{"nil"}
 	}
 
@@ -633,10 +634,10 @@ func (p *ErrorPropASTProcessor) parseFunctionSignature(startLine int) *funcConte
 	}
 
 	if !foundBrace {
-		// No brace found - return safe fallback
+		// No brace found - return empty context (will use fallback in generateReturnStatement)
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
@@ -645,10 +646,10 @@ func (p *ErrorPropASTProcessor) parseFunctionSignature(startLine int) *funcConte
 	src := fmt.Sprintf("package p\n%s}", funcText.String())
 	file, err := parser.ParseFile(fset, "", src, 0)
 	if err != nil {
-		// Failed to parse, use nil fallback
+		// Failed to parse - return empty context (will use fallback in generateReturnStatement)
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
@@ -656,15 +657,16 @@ func (p *ErrorPropASTProcessor) parseFunctionSignature(startLine int) *funcConte
 	if len(file.Decls) == 0 {
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
 	funcDecl, ok := file.Decls[0].(*ast.FuncDecl)
 	if !ok || funcDecl.Type.Results == nil {
+		// No return types or not a function - return empty context
 		return &funcContext{
 			returnTypes: []string{},
-			zeroValues:  []string{"nil"},
+			zeroValues:  []string{},
 		}
 	}
 
