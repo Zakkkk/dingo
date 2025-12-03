@@ -247,6 +247,22 @@ func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMet
 		neededImports = append(neededImports, imports...)
 	}
 
+	// ========== TUPLE PROCESSING (After Lambda, Before Expression) ==========
+	// Tuple processor runs after Lambda to avoid matching lambda param lists as tuples
+	// Handles: let (a, b) = expr → destructuring, (x, y) → tuple literals
+	tupleProc := NewTupleProcessor()
+	var tupleProcInterface FeatureProcessor = tupleProc
+	result, err = processOne(tupleProcInterface, result)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("tuple processing: %w", err)
+	}
+
+	// Collect imports from tuple processor
+	if importProvider, ok := tupleProcInterface.(ImportProvider); ok {
+		imports := importProvider.GetNeededImports()
+		neededImports = append(neededImports, imports...)
+	}
+
 	// ========== PASS 2: Expression Transforms ==========
 	// These transforms operate within expressions (error prop, safe nav, null coalesce, ternary)
 	// They process code OUTSIDE lambda bodies (lambda body expressions already processed)

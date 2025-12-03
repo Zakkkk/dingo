@@ -1,7 +1,32 @@
 package main
 
+enum UserOption {
+	Some(User),
+	None,
+}
+
+enum AddressOption {
+	Some(Address),
+	None,
+}
+
+type User struct {
+	name    string
+	address AddressOption
+}
+
+type Address struct {
+	city string
+}
+
+func getUser() UserOption {
+	addr := AddressOptionSome(Address{city: "Boston"})
+	return UserOptionSome(User{name: "Alice", address: addr})
+}
+
 func main() {
 	// Basic safe navigation (smart unwrap mode)
+	user := getUser()
 	let name = user?.name
 	let city = user?.address?.city
 }

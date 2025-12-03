@@ -5,7 +5,15 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.reddit.com)",
       "Bash(mkdir:*)",
-      "Bash(mkdir -p ai-docs/research/golang_missing)"
+      "Bash(mkdir -p ai-docs/research/golang_missing)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(rm:*)",
+      "Bash(for dir in examples/0*/ examples/10*/)",
+      "Bash(do echo '=== $dir ===' rm $dir/*.go 2)",
+      "Bash(/dev/null go run ./cmd/dingo build $dir/*.dingo)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

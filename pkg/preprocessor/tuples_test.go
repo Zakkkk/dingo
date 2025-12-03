@@ -585,17 +585,17 @@ func TestTupleProcessor_GoCompatibility(t *testing.T) {
 		{
 			name:      "return_statement_multi",
 			input:     "	return (42, nil)",
-			wantMatch: "return (42, nil)",
+			wantMatch: "return 42, nil", // Parens stripped for valid Go syntax
 		},
 		{
 			name:      "return_statement_complex",
 			input:     "	return (x + y, err)",
-			wantMatch: "return (x + y, err)",
+			wantMatch: "return x + y, err", // Parens stripped for valid Go syntax
 		},
 		{
 			name:      "return_statement_function_calls",
 			input:     "	return (getData(), getError())",
-			wantMatch: "return (getData(), getError())",
+			wantMatch: "return getData(), getError()", // Parens stripped for valid Go syntax
 		},
 		{
 			name:      "method_return_type",

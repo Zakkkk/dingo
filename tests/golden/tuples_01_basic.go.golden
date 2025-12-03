@@ -1,5 +1,9 @@
 package main
 
+// Test: Basic tuple usage
+// Feature: Tuples for multiple return values
+// Complexity: basic
+
 func divMod(a int, b int) (int, int) {
 	return a / b, a % b
 }
@@ -8,8 +12,11 @@ func getCoordinates() (int, int, int) {
 }
 func main() {
 	// Tuple destructuring
-	quotient, remainder := divMod(17, 5)
-	x, y, z := getCoordinates()
+	tmp := divMod(17, 5)
+	quotient, remainder := tmp._0, tmp._1
+	tmp1 := getCoordinates()
+	x, y, z := tmp1._0, tmp1._1, tmp1._2
+
 	println("Quotient:", quotient, "Remainder:", remainder)
 	println("Coords:", x, y, z)
 }

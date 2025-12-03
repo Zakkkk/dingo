@@ -15,7 +15,7 @@ type User struct {
 }
 
 func main() {
-	let user = &User{name: "Alice", address: nil}
+	var user *User = &User{name: "Alice", address: nil}
 
 	// Chained safe navigation
 	let city = user?.address?.city

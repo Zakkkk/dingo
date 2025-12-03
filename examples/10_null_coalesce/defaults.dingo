@@ -1,0 +1,132 @@
+// Real-world example: Configuration defaults with null coalescing
+// The ?? operator provides fallback values for nil pointers and zero values
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+type AppConfig struct {
+	Host     *string
+	Port     *int
+	Timeout  *int
+	LogLevel *string
+	Debug    *bool
+}
+
+type EnvConfig struct {
+	DatabaseURL *string
+	APIKey      *string
+	Region      *string
+}
+
+// GetHost returns configured host or default
+func GetHost(config: *AppConfig) string {
+	// If config is nil or Host is nil, return default
+	return config?.Host ?? "localhost"
+}
+
+// GetPort returns configured port or default
+func GetPort(config: *AppConfig) int {
+	return config?.Port ?? 8080
+}
+
+// GetTimeout returns timeout with environment override
+func GetTimeout(config: *AppConfig) int {
+	// Check environment first, then config, then default
+	envTimeout := os.Getenv("APP_TIMEOUT")
+	if envTimeout != "" {
+		// Parse would go here in real code
+		return 30
+	}
+	return config?.Timeout ?? 60
+}
+
+// GetLogLevel with chained defaults
+func GetLogLevel(config: *AppConfig) string {
+	return config?.LogLevel ?? os.Getenv("LOG_LEVEL") ?? "info"
+}
+
+// GetDatabaseURL with environment fallback
+func GetDatabaseURL(env: *EnvConfig) string {
+	return env?.DatabaseURL ?? os.Getenv("DATABASE_URL") ?? "postgres://localhost:5432/app"
+}
+
+// GetRegion with multi-level fallback
+func GetRegion(env: *EnvConfig) string {
+	return env?.Region ?? os.Getenv("AWS_REGION") ?? os.Getenv("REGION") ?? "us-east-1"
+}
+
+// LoadConfig demonstrates building config with defaults
+func LoadConfig(appConfig: *AppConfig, envConfig: *EnvConfig) map[string]interface{} {
+	return map[string]interface{}{
+		"host":        GetHost(appConfig),
+		"port":        GetPort(appConfig),
+		"timeout":     GetTimeout(appConfig),
+		"logLevel":    GetLogLevel(appConfig),
+		"databaseURL": GetDatabaseURL(envConfig),
+		"region":      GetRegion(envConfig),
+	}
+}
+
+// Example with Option type
+func GetOptionalSetting(setting: Option<string>) string {
+	// Works with Option<T> via IsSome/Unwrap or unwrapping
+	if setting.IsSome() {
+		return setting.Unwrap()
+	}
+	return "default"
+}
+
+// Chained coalescing for multi-source config
+func GetAPIEndpoint(primary: *string, secondary: *string, tertiary: *string) string {
+	return primary ?? secondary ?? tertiary ?? "https://api.default.com"
+}
+
+func main() {
+	// Fully configured
+	host := "api.example.com"
+	port := 3000
+	timeout := 30
+	logLevel := "debug"
+	fullConfig := &AppConfig{
+		Host:     &host,
+		Port:     &port,
+		Timeout:  &timeout,
+		LogLevel: &logLevel,
+	}
+
+	// Partially configured
+	partialConfig := &AppConfig{
+		Host: &host,
+		// Port, Timeout, LogLevel are nil - will use defaults
+	}
+
+	// No configuration (all defaults)
+	var emptyConfig *AppConfig = nil
+
+	fmt.Println("=== Full Config ===")
+	fmt.Printf("Host: %s\n", GetHost(fullConfig))
+	fmt.Printf("Port: %d\n", GetPort(fullConfig))
+	fmt.Printf("Timeout: %d\n", GetTimeout(fullConfig))
+	fmt.Printf("LogLevel: %s\n", GetLogLevel(fullConfig))
+
+	fmt.Println("\n=== Partial Config ===")
+	fmt.Printf("Host: %s\n", GetHost(partialConfig))
+	fmt.Printf("Port: %d (default)\n", GetPort(partialConfig))
+	fmt.Printf("Timeout: %d (default)\n", GetTimeout(partialConfig))
+	fmt.Printf("LogLevel: %s (default)\n", GetLogLevel(partialConfig))
+
+	fmt.Println("\n=== Empty Config ===")
+	fmt.Printf("Host: %s (default)\n", GetHost(emptyConfig))
+	fmt.Printf("Port: %d (default)\n", GetPort(emptyConfig))
+
+	// Chained example
+	fmt.Println("\n=== Chained Fallback ===")
+	primary := "https://primary.api.com"
+	endpoint1 := GetAPIEndpoint(&primary, nil, nil)
+	endpoint2 := GetAPIEndpoint(nil, nil, nil)
+	fmt.Printf("With primary: %s\n", endpoint1)
+	fmt.Printf("All nil: %s\n", endpoint2)
+}

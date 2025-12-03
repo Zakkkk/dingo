@@ -327,11 +327,21 @@ func (t *TupleProcessor) processTupleLiterals(line string, originalLineNum int, 
 		// Extract the full tuple expression
 		tupleExpr := result[i : closeParen+1]
 
-		// Generate marker
-		marker := t.generateMarker(arity, tupleExpr)
+		// Check if this is a return statement - handle specially
+		// Pattern: "return (x, y)" → "return x, y" (strip parens, no marker)
+		var replacement string
+		before := strings.TrimSpace(result[:i])
+		if strings.HasSuffix(before, "return") {
+			// For return statements, just strip the parens
+			content := tupleExpr[1 : len(tupleExpr)-1] // Remove outer parens
+			replacement = content
+		} else {
+			// Generate marker for other tuple literals
+			marker := t.generateMarker(arity, tupleExpr)
+			replacement = marker
+		}
 
 		// Replace in result
-		replacement := marker
 		result = result[:i] + replacement + result[closeParen+1:]
 
 		// Create mapping
@@ -372,9 +382,21 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 
 		if nonWhitespaceIdx >= 0 {
 			prevChar := line[nonWhitespaceIdx]
-			// If previous character is letter, digit, or underscore → function call
+			// If previous character is letter, digit, or underscore → could be function call
 			if isIdentifierChar(prevChar) {
-				return false, nil, closeParen
+				// Extract the preceding word
+				wordEnd := nonWhitespaceIdx + 1
+				wordStart := nonWhitespaceIdx
+				for wordStart > 0 && isIdentifierChar(line[wordStart-1]) {
+					wordStart--
+				}
+				precedingWord := line[wordStart:wordEnd]
+
+				// Allow "return" keyword - not a function call
+				if precedingWord != "return" {
+					return false, nil, closeParen
+				}
+				// "return (x, y)" is valid - continue to process as tuple
 			}
 			// If previous character is } → IIFE pattern (e.g., }())
 			if prevChar == '}' {
@@ -403,11 +425,9 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 		return false, nil, closeParen
 	}
 
-	// CRITICAL FIX: Check for multi-return "return" statement
-	// Pattern: "return (x, y)" where function signature has multi-return
-	if isMultiReturnStatement(line, startIdx) {
-		return false, nil, closeParen
-	}
+	// NOTE: Multi-return statements like "return (x, y)" are handled by processTupleLiterals
+	// which strips the parens to produce "return x, y"
+	// We mark them as tuples here so they get processed
 
 	// Parse elements
 	elements := parseElements(content)

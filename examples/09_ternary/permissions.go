@@ -1,0 +1,165 @@
+// Real-world example: Permission checks and status formatting
+// Ternary operator for simple conditional expressions
+package main
+
+import "fmt"
+
+type User struct {
+	ID       int
+	Name     string
+	Role     string
+	Active   bool
+	Verified bool
+}
+
+type Document struct {
+	ID       int
+	Title    string
+	OwnerID  int
+	Public   bool
+	Archived bool
+}
+
+// GetStatusBadge returns appropriate badge based on user state
+// Clean inline conditionals instead of if-else blocks
+func GetStatusBadge(user User) string {
+	return func() string {
+		if user.Active {
+			return "active"
+		}
+		return "inactive"
+	}()
+}
+
+// GetRoleDisplay formats role for display
+func GetRoleDisplay(user User) string {
+	return func() string {
+		if user.Role == "admin" {
+			return "Administrator"
+		}
+		return "User"
+	}()
+}
+
+// CanEditDocument checks if user can edit a document
+func CanEditDocument(user User, doc Document) bool {
+	// Admin can edit anything, owner can edit if not archived
+	return func() bool {
+		if user.Role == "admin" {
+			return true
+		}
+		return (doc.OwnerID == user.ID && !doc.Archived)
+	}()
+}
+
+// GetAccessLevel returns numeric access level
+func GetAccessLevel(user User, doc Document) int {
+	// 3 = full, 2 = edit, 1 = view, 0 = none
+	return func() any {
+		if user.Role == "admin" {
+			return 3
+		}
+		return
+	}()
+	func() any {
+		if doc.OwnerID == user.ID {
+			return 2
+		}
+		return
+	}()
+	func() int {
+		if doc.Public {
+			return 1
+		}
+		return 0
+	}()
+}
+
+// FormatUserLine creates display string with multiple conditionals
+func FormatUserLine(user User) string {
+	status := func() string {
+		if user.Active {
+			return "active"
+		}
+		return "inactive"
+	}()
+	verified := func() string {
+		if user.Verified {
+			return "verified"
+		}
+		return "unverified"
+	}()
+	role := func() string {
+		if user.Role == "admin" {
+			return "[ADMIN]"
+		}
+		return ""
+	}()
+
+	return fmt.Sprintf("%s %s (%s, %s)", role, user.Name, status, verified)
+}
+
+// GetDocumentVisibility returns visibility label
+func GetDocumentVisibility(doc Document) string {
+	return func() any {
+		if doc.Archived {
+			return "Archived"
+		}
+		return
+	}()
+	func() string {
+		if doc.Public {
+			return "Public"
+		}
+		return "Private"
+	}()
+}
+
+// CalculatePrice applies conditional discounts
+func CalculatePrice(basePrice float64, isPremium bool, quantity int) float64 {
+	// Premium users get 20% off, bulk (10+) gets 10% off
+	premiumDiscount := func() float64 {
+		if isPremium {
+			return 0.8
+		}
+		return 1.0
+	}()
+	bulkDiscount := func() float64 {
+		if quantity >= 10 {
+			return 0.9
+		}
+		return 1.0
+	}()
+
+	return basePrice * float64(quantity) * premiumDiscount * bulkDiscount
+}
+func main() {
+	admin := User{ID: 1, Name: "Alice", Role: "admin", Active: true, Verified: true}
+	user := User{ID: 2, Name: "Bob", Role: "user", Active: true, Verified: false}
+	inactive := User{ID: 3, Name: "Charlie", Role: "user", Active: false, Verified: true}
+
+	publicDoc := Document{ID: 1, Title: "Public Guide", OwnerID: 2, Public: true}
+	privateDoc := Document{ID: 2, Title: "Private Notes", OwnerID: 2, Public: false}
+	archivedDoc := Document{ID: 3, Title: "Old Report", OwnerID: 2, Archived: true}
+
+	fmt.Println("=== User Status ===")
+	fmt.Println(FormatUserLine(admin))
+	fmt.Println(FormatUserLine(user))
+	fmt.Println(FormatUserLine(inactive))
+
+	fmt.Println("\n=== Document Visibility ===")
+	fmt.Printf("%s: %s\n", publicDoc.Title, GetDocumentVisibility(publicDoc))
+	fmt.Printf("%s: %s\n", privateDoc.Title, GetDocumentVisibility(privateDoc))
+	fmt.Printf("%s: %s\n", archivedDoc.Title, GetDocumentVisibility(archivedDoc))
+
+	fmt.Println("\n=== Access Levels ===")
+	fmt.Printf("Admin -> Private: %d\n", GetAccessLevel(admin, privateDoc))
+	fmt.Printf("User -> Own Doc: %d\n", GetAccessLevel(user, privateDoc))
+	fmt.Printf("User -> Public: %d\n", GetAccessLevel(inactive, publicDoc))
+
+	fmt.Println("\n=== Pricing ===")
+	fmt.Printf("Regular (5 items): $%.2f\n", CalculatePrice(10.0, false, 5))
+	fmt.Printf("Premium (5 items): $%.2f\n", CalculatePrice(10.0, true, 5))
+	fmt.Printf("Regular (15 items): $%.2f\n", CalculatePrice(10.0, false, 15))
+	fmt.Printf("Premium (15 items): $%.2f\n", CalculatePrice(10.0, true, 15))
+}

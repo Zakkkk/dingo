@@ -30,6 +30,9 @@ type LambdaTypeInferencePlugin struct {
 
 	// Track function literals that need type inference
 	untypedLiterals []*funcLiteralContext
+
+	// Track variable declarations needing type inference
+	untypedVars []*varDeclContext
 }
 
 // funcLiteralContext tracks a function literal needing type inference
@@ -40,10 +43,18 @@ type funcLiteralContext struct {
 	pos      token.Pos
 }
 
+// varDeclContext tracks a variable declaration needing type inference
+type varDeclContext struct {
+	varSpec *ast.ValueSpec
+	varName string // Name of the variable
+	pos     token.Pos
+}
+
 // NewLambdaTypeInferencePlugin creates a new lambda type inference plugin
 func NewLambdaTypeInferencePlugin() *LambdaTypeInferencePlugin {
 	return &LambdaTypeInferencePlugin{
 		untypedLiterals: make([]*funcLiteralContext, 0),
+		untypedVars:     make([]*varDeclContext, 0),
 	}
 }
 
@@ -76,7 +87,7 @@ func (p *LambdaTypeInferencePlugin) SetContext(ctx *plugin.Context) {
 	}
 }
 
-// Process processes AST nodes to find and infer lambda parameter types
+// Process processes AST nodes to find and infer lambda parameter types and variable types
 func (p *LambdaTypeInferencePlugin) Process(node ast.Node) error {
 	if p.ctx == nil {
 		return fmt.Errorf("plugin context not initialized")
@@ -85,9 +96,17 @@ func (p *LambdaTypeInferencePlugin) Process(node ast.Node) error {
 	// Phase 1: Discover function literals with untyped parameters
 	p.discoverUntypedLiterals(node)
 
+	// Phase 1b: Discover variable declarations with __TYPE_INFERENCE_NEEDED
+	p.discoverUntypedVars(node)
+
 	// Phase 2: Attempt type inference for each literal
 	for _, ctx := range p.untypedLiterals {
 		p.inferFuncLiteralTypes(ctx)
+	}
+
+	// Phase 3: Attempt type inference for each variable
+	for _, ctx := range p.untypedVars {
+		p.inferVarDeclType(ctx, node)
 	}
 
 	return nil
@@ -138,6 +157,153 @@ func (p *LambdaTypeInferencePlugin) hasUntypedParams(funcLit *ast.FuncLit) bool 
 	}
 
 	return false
+}
+
+// discoverUntypedVars walks the AST to find var declarations with __TYPE_INFERENCE_NEEDED
+func (p *LambdaTypeInferencePlugin) discoverUntypedVars(node ast.Node) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.GenDecl:
+			// Only process var declarations
+			if n.Tok != token.VAR {
+				return true
+			}
+
+			// Check each ValueSpec in the declaration
+			for _, spec := range n.Specs {
+				if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+					// Check if type is __TYPE_INFERENCE_NEEDED
+					if p.needsTypeInference(valueSpec) {
+						// Track each variable name in this spec
+						for _, name := range valueSpec.Names {
+							p.untypedVars = append(p.untypedVars, &varDeclContext{
+								varSpec: valueSpec,
+								varName: name.Name,
+								pos:     name.Pos(),
+							})
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// needsTypeInference checks if a ValueSpec needs type inference
+func (p *LambdaTypeInferencePlugin) needsTypeInference(spec *ast.ValueSpec) bool {
+	// Check if Type is __TYPE_INFERENCE_NEEDED marker
+	if spec.Type == nil {
+		return false
+	}
+
+	if ident, ok := spec.Type.(*ast.Ident); ok {
+		return ident.Name == "__TYPE_INFERENCE_NEEDED"
+	}
+
+	return false
+}
+
+// inferVarDeclType attempts to infer the type for a variable declaration
+func (p *LambdaTypeInferencePlugin) inferVarDeclType(ctx *varDeclContext, root ast.Node) {
+	// Strategy 1: Try go/types first (most accurate)
+	if p.typeInference != nil && p.typeInference.typesInfo != nil {
+		// If go/types is available, try to get type from assignments
+		varType := p.findVarTypeFromAssignments(ctx.varName, root)
+		if varType != nil {
+			// Update the ValueSpec with the inferred type
+			ctx.varSpec.Type = p.typeToAST(varType)
+			p.ctx.Logger.Debugf("Inferred type for var %s: %s", ctx.varName, varType)
+			return
+		}
+	}
+
+	// Strategy 2: Fallback to literal type inference (for basic cases)
+	inferredType := p.inferVarTypeFromLiterals(ctx.varName, root)
+	if inferredType != nil {
+		ctx.varSpec.Type = inferredType
+		p.ctx.Logger.Debugf("Inferred type for var %s from literals", ctx.varName)
+		return
+	}
+
+	// Strategy 3: If no type found, report error
+	p.ctx.Logger.Warnf("Could not infer type for var %s at %v",
+		ctx.varName, p.ctx.FileSet.Position(ctx.pos))
+}
+
+// findVarTypeFromAssignments finds the type of a variable by analyzing assignments
+func (p *LambdaTypeInferencePlugin) findVarTypeFromAssignments(varName string, root ast.Node) types.Type {
+	var inferredType types.Type
+
+	ast.Inspect(root, func(n ast.Node) bool {
+		// Look for assignment statements
+		if assign, ok := n.(*ast.AssignStmt); ok {
+			// Check each LHS to see if it's our variable
+			for i, lhs := range assign.Lhs {
+				if ident, ok := lhs.(*ast.Ident); ok && ident.Name == varName {
+					// Found an assignment to our variable
+					// Get the RHS expression
+					if i < len(assign.Rhs) {
+						rhs := assign.Rhs[i]
+						// Try to infer type from RHS using go/types
+						if p.typeInference != nil {
+							if typ, ok := p.typeInference.InferType(rhs); ok {
+								inferredType = typ
+								return false // Stop searching
+							}
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	return inferredType
+}
+
+// inferVarTypeFromLiterals infers variable type from literal assignments (fallback)
+func (p *LambdaTypeInferencePlugin) inferVarTypeFromLiterals(varName string, root ast.Node) ast.Expr {
+	var inferredType ast.Expr
+
+	ast.Inspect(root, func(n ast.Node) bool {
+		// Look for assignment statements
+		if assign, ok := n.(*ast.AssignStmt); ok {
+			// Check each LHS to see if it's our variable
+			for i, lhs := range assign.Lhs {
+				if ident, ok := lhs.(*ast.Ident); ok && ident.Name == varName {
+					// Found an assignment to our variable
+					if i < len(assign.Rhs) {
+						rhs := assign.Rhs[i]
+						// Infer from basic literal types
+						if lit, ok := rhs.(*ast.BasicLit); ok {
+							inferredType = p.literalToType(lit)
+							return false // Stop searching
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	return inferredType
+}
+
+// literalToType converts a basic literal to its type expression
+func (p *LambdaTypeInferencePlugin) literalToType(lit *ast.BasicLit) ast.Expr {
+	switch lit.Kind {
+	case token.INT:
+		return &ast.Ident{Name: "int"}
+	case token.FLOAT:
+		return &ast.Ident{Name: "float64"}
+	case token.STRING:
+		return &ast.Ident{Name: "string"}
+	case token.CHAR:
+		return &ast.Ident{Name: "rune"}
+	default:
+		return &ast.Ident{Name: "interface{}"}
+	}
 }
 
 // inferFuncLiteralTypes attempts to infer parameter types for a function literal

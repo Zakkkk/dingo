@@ -86,7 +86,7 @@ func main() {
 	expected := `package main
 
 func main() {
-	a, b := getValues ()
+	a, b := getValues()
 	println(a, b)
 }
 `
@@ -145,8 +145,8 @@ func main() {
 	expected := `package main
 
 func main() {
-	var opt Option < int > = None
-	var result Result < string , Error > = Ok ("hello")
+	var opt Option<int> = None
+	var result Result<string, Error> = Ok("hello")
 	println(opt, result)
 }
 `

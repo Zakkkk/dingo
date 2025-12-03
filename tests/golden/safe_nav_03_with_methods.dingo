@@ -17,7 +17,7 @@ func (c *Config) validate() bool {
 }
 
 func main() {
-	let config = &Config{timeout: nil}
+	var config *Config = &Config{timeout: nil}
 
 	// Safe navigation with method calls
 	let timeout = config?.getTimeout()

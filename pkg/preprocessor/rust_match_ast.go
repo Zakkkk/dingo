@@ -576,6 +576,10 @@ func (p *RustMatchASTProcessor) transformMatch(source []byte, match *dingoast.Ma
 	}
 	actualStart += matchStart
 
+	// Find where match expression ends (after the closing brace)
+	// matchText contains the full "match s { ... }" expression
+	matchExprEnd := actualStart + len(matchText)
+
 	// Check if "return" precedes "match" - if so, include it in replacement
 	// This handles "return match { ... }" where the return is part of the statement
 	returnKeyword := []byte("return")
@@ -594,7 +598,8 @@ func (p *RustMatchASTProcessor) transformMatch(source []byte, match *dingoast.Ma
 		}
 	}
 
-	actualEnd := actualStart + len(matchText)
+	// actualEnd is based on where the match expression ends, not actualStart
+	actualEnd := matchExprEnd
 
 	// Create result with replacement
 	var result []byte

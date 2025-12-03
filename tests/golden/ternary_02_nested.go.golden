@@ -1,9 +1,14 @@
 package main
 
+// Test: Nested ternary operators
+// Feature: Ternary operator nesting
+// Complexity: intermediate
+
 func main() {
 	age := 25
 	hasLicense := true
 
+	// Nested ternary
 	canDrive := func() any {
 		if age >= 18 {
 			return func() string {
@@ -16,6 +21,7 @@ func main() {
 		return "too young"
 	}()
 
+	// Ternary in assignment
 	score := 85
 	grade := func() any {
 		if score >= 90 {

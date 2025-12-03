@@ -1,5 +1,9 @@
 package main
 
+// Test: Tuple destructuring patterns
+// Feature: Advanced tuple destructuring
+// Complexity: intermediate
+
 func getUserInfo() (string, int, bool) {
 	return "Alice", 30, true
 }
@@ -8,13 +12,19 @@ func swap(a int, b int) (int, int) {
 }
 func main() {
 	// Basic destructuring
-	name, age, active := getUserInfo()
+	tmp := getUserInfo()
+	name, age, active := tmp._0, tmp._1, tmp._2
+
 	// Ignore some values with _
-	username, _, _ := getUserInfo()
+	tmp1 := getUserInfo()
+	username, _, _ := tmp1._0, tmp1._1, tmp1._2
+
 	// Swap using tuples
 	x := 10
 	y := 20
-	x, y = swap(x, y)
+	tmp2 := swap(x, y)
+	x, y := tmp2._0, tmp2._1
+
 	println("User:", name, age, active)
 	println("Username:", username)
 	println("Swapped:", x, y)

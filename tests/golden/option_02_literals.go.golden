@@ -16,14 +16,13 @@ type OptionInt struct {
 	some *int
 }
 
-func OptionIntSome(arg0 int) OptionInt {
-	return OptionInt{tag: OptionTagSome, some: &arg0}
+func OptionIntSome(arg int) OptionInt {
+	return OptionInt{tag: OptionTagSome, some: &arg}
 }
 func OptionIntNone() OptionInt {
-	return OptionInt{tag:
+	return OptionInt{tag: OptionTagNone}
 
 	// Some() with variables (addressable - no IIFE needed)
-	OptionTagNone}
 }
 func (o OptionInt) IsSome() bool {
 	return o.tag == OptionTagSome
@@ -80,8 +79,8 @@ type OptionString struct {
 	tag  OptionTag
 	some *string
 }
-func OptionStringSome(arg0 string) OptionString {
-	return OptionString{tag: OptionTagSome, some: &arg0}
+func OptionStringSome(arg string) OptionString {
+	return OptionString{tag: OptionTagSome, some: &arg}
 }
 func OptionStringNone() OptionString {
 	return OptionString{tag: OptionTagNone}
@@ -138,8 +137,8 @@ type OptionFloat64 struct {
 	tag  OptionTag
 	some *float64
 }
-func OptionFloat64Some(arg0 float64) OptionFloat64 {
-	return OptionFloat64{tag: OptionTagSome, some: &arg0}
+func OptionFloat64Some(arg float64) OptionFloat64 {
+	return OptionFloat64{tag: OptionTagSome, some: &arg}
 }
 func OptionFloat64None() OptionFloat64 {
 	return OptionFloat64{tag: OptionTagNone}
@@ -196,8 +195,8 @@ type OptionBool struct {
 	tag  OptionTag
 	some *bool
 }
-func OptionBoolSome(arg0 bool) OptionBool {
-	return OptionBool{tag: OptionTagSome, some: &arg0}
+func OptionBoolSome(arg bool) OptionBool {
+	return OptionBool{tag: OptionTagSome, some: &arg}
 }
 func OptionBoolNone() OptionBool {
 	return OptionBool{tag: OptionTagNone}
@@ -254,8 +253,8 @@ type OptionInterface struct {
 	tag  OptionTag
 	some *interface{}
 }
-func OptionInterfaceSome(arg0 interface{}) OptionInterface {
-	return OptionInterface{tag: OptionTagSome, some: &arg0}
+func OptionInterfaceSome(arg interface{}) OptionInterface {
+	return OptionInterface{tag: OptionTagSome, some: &arg}
 }
 func OptionInterfaceNone() OptionInterface {
 	return OptionInterface{tag: OptionTagNone}
@@ -309,13 +308,13 @@ func (o OptionInterface) Filter(predicate func(interface{}) bool) OptionInterfac
 }
 func main() {
 
-	intOpt := Some(42)
-	strOpt := Some("hello")
-	floatOpt := Some(3.14)
-	boolOpt := Some(true)
+	intOpt := OptionIntSome(42)
+	strOpt := OptionStringSome("hello")
+	floatOpt := OptionFloat64Some(3.14)
+	boolOpt := OptionBoolSome(true)
 
 	x := 100
-	varOpt := Some(x)
+	varOpt := OptionInterfaceSome(x)
 
 	if intOpt.IsSome() {
 		fmt.Printf("intOpt: %d\n", intOpt.Unwrap())

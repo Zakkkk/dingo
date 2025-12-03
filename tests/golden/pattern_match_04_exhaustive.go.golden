@@ -46,24 +46,24 @@ func (e Color) IsRGB() bool {
 	return e.tag == ColorTagRGB
 }
 func colorToHex(c Color) string {
-	var __match_result_0 string
+	var matchResult string
 	// DINGO_MATCH_START: c
 	scrutinee := c
 	switch scrutinee.tag {
 	case ColorTagRed:
 		// DINGO_PATTERN: ColorRed
-		__match_result_0 = "#FF0000"
+		matchResult = "#FF0000"
 	case ColorTagGreen:
 		// DINGO_PATTERN: ColorGreen
-		__match_result_0 = "#00FF00"
+		matchResult = "#00FF00"
 	case ColorTagBlue:
 		// DINGO_PATTERN: ColorBlue
-		__match_result_0 = "#0000FF"
+		matchResult = "#0000FF"
 	case ColorTagRGB{r, g, b}:
 		// DINGO_PATTERN: ColorRGB{r, g, b}
-		__match_result_0 = "#" + toHex(r) + toHex(g) + toHex(b)
+		matchResult = "#" + toHex(r) + toHex(g) + toHex(b)
 	}
-	return __match_result_0
+	return matchResult
 	// DINGO_MATCH_END
 
 }

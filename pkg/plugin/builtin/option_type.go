@@ -42,8 +42,8 @@ type OptionTypePlugin struct {
 	// Track generic type references (Option[T]) that need to be rewritten to concrete types (OptionT)
 	genericTypeRewrites map[*ast.IndexExpr]string
 
-	// Track Some() constructor calls that need to be replaced with struct literals
-	someConstructorRewrites map[*ast.CallExpr]*ast.CompositeLit
+	// Track Some() constructor calls that need to be replaced with constructor function calls
+	someConstructorRewrites map[*ast.CallExpr]ast.Expr
 
 	// Track None identifiers that need to be replaced with struct literals
 	noneRewrites map[*ast.Ident]*ast.CompositeLit
@@ -269,44 +269,21 @@ func (p *OptionTypePlugin) handleSomeConstructor(call *ast.CallExpr) {
 		}
 	}
 
-	// Fix A4: Handle addressability for literal values
-	// Check if the argument is addressable
-	var valueExpr ast.Expr
-	if isAddressable(valueArg) {
-		// Direct address-of operator
-		valueExpr = &ast.UnaryExpr{
-			Op: token.AND,
-			X:  valueArg,
-		}
-		p.ctx.Logger.Debugf("Some(%s): value is addressable, using &value", valueType)
-	} else {
-		// Wrap in IIFE to create addressable temporary variable
-		valueExpr = wrapInIIFE(valueArg, valueType, p.ctx)
-		p.ctx.Logger.Debugf("Some(%s): value is non-addressable (literal), wrapping in IIFE", valueType)
-	}
+	// Transform Some(value) → OptionTSome(value)
+	// The constructor function handles addressability internally (arg is addressable in function scope)
+	// This produces idiomatic Go code without IIFE patterns
+	constructorName := fmt.Sprintf("%sSome", optionTypeName)
+	p.ctx.Logger.Debugf("Transforming Some(%s) → %s(value)", valueType, constructorName)
 
-	// Transform the call to a struct literal
-	p.ctx.Logger.Debugf("Transforming Some(%s) → %s{tag: OptionTagSome, some: <addressable-value>}", valueType, optionTypeName)
-
-	// Create the replacement CompositeLit
-	// Some(value) → OptionT{tag: OptionTagSome, some: &value or IIFE}
-	replacement := &ast.CompositeLit{
-		Type: ast.NewIdent(optionTypeName),
-		Elts: []ast.Expr{
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("tag"),
-				Value: ast.NewIdent("OptionTagSome"),
-			},
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("some"),
-				Value: valueExpr,
-			},
-		},
+	// Create the replacement CallExpr: OptionTSome(value)
+	replacement := &ast.CallExpr{
+		Fun:  ast.NewIdent(constructorName),
+		Args: []ast.Expr{valueArg},
 	}
 
 	// Track this Some() call for replacement during Transform phase
 	if p.someConstructorRewrites == nil {
-		p.someConstructorRewrites = make(map[*ast.CallExpr]*ast.CompositeLit)
+		p.someConstructorRewrites = make(map[*ast.CallExpr]ast.Expr)
 	}
 	p.someConstructorRewrites[call] = replacement
 
@@ -443,8 +420,8 @@ func (p *OptionTypePlugin) emitSomeConstructor(optionTypeName, valueType string)
 	funcName := fmt.Sprintf("%sSome", optionTypeName)
 	valueTypeAST := p.typeToAST(valueType, false)
 
-	// func OptionTSome(arg0 T) OptionT {
-	//     return OptionT{tag: OptionTagSome, some: &arg0}
+	// func OptionTSome(arg T) OptionT {
+	//     return OptionT{tag: OptionTagSome, some: &arg}
 	// }
 	constructorFunc := &ast.FuncDecl{
 		Name: &ast.Ident{
@@ -461,7 +438,7 @@ func (p *OptionTypePlugin) emitSomeConstructor(optionTypeName, valueType string)
 						Names: []*ast.Ident{
 							{
 								NamePos: token.NoPos, // Prevent comment grabbing
-								Name:    "arg0",
+								Name:    "arg",
 							},
 						},
 						Type: valueTypeAST,
@@ -518,7 +495,7 @@ func (p *OptionTypePlugin) emitSomeConstructor(optionTypeName, valueType string)
 										Op:    token.AND,
 										X: &ast.Ident{
 											NamePos: token.NoPos, // Prevent comment grabbing
-											Name:    "arg0",
+											Name:    "arg",
 										},
 									},
 								},

@@ -1,0 +1,90 @@
+// Real-world example: Event handler with pattern matching
+// Pattern matching makes complex conditionals readable and exhaustive
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+// Event sum type - all possible events in the system
+enum Event {
+	UserCreated { userID: int, email: string }
+	UserDeleted { userID: int }
+	OrderPlaced { orderID: string, amount: float64, userID: int }
+	OrderShipped { orderID: string, trackingNumber: string }
+	PaymentReceived { orderID: string, amount: float64 }
+	PaymentFailed { orderID: string, reason: string }
+}
+
+// ProcessEvent handles all event types with exhaustive matching
+// The compiler ensures every Event variant is handled
+func ProcessEvent(event: Event) string {
+	return match event {
+		UserCreated { userID, email } =>
+			fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID),
+
+		UserDeleted { userID } =>
+			fmt.Sprintf("User #%d data archived", userID),
+
+		OrderPlaced { orderID, amount, userID } if amount > 1000 =>
+			fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount),
+
+		OrderPlaced { orderID, amount, userID } =>
+			fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID),
+
+		OrderShipped { orderID, trackingNumber } =>
+			fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber),
+
+		PaymentReceived { orderID, amount } =>
+			fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID),
+
+		PaymentFailed { orderID, reason } =>
+			fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason),
+	}
+}
+
+// GetEventPriority uses guards for complex conditions
+func GetEventPriority(event: Event) int {
+	return match event {
+		PaymentFailed { .. } => 1,  // Highest priority
+		OrderPlaced { amount, .. } if amount > 500 => 2,
+		UserCreated { .. } => 3,
+		_ => 4,  // Everything else
+	}
+}
+
+// FilterUserEvents extracts only user-related events
+func FilterUserEvents(events: []Event) []Event {
+	var userEvents []Event
+	for _, event := range events {
+		match event {
+			UserCreated { .. } => userEvents = append(userEvents, event),
+			UserDeleted { .. } => userEvents = append(userEvents, event),
+			_ => {}, // Ignore other events
+		}
+	}
+	return userEvents
+}
+
+func main() {
+	events := []Event{
+		Event.UserCreated{userID: 1, email: "alice@example.com"},
+		Event.OrderPlaced{orderID: "ORD-001", amount: 1500.00, userID: 1},
+		Event.PaymentReceived{orderID: "ORD-001", amount: 1500.00},
+		Event.OrderShipped{orderID: "ORD-001", trackingNumber: "TRK-12345"},
+		Event.PaymentFailed{orderID: "ORD-002", reason: "insufficient funds"},
+	}
+
+	fmt.Println("=== Processing Events ===")
+	for _, event := range events {
+		result := ProcessEvent(event)
+		priority := GetEventPriority(event)
+		fmt.Printf("[P%d] %s\n", priority, result)
+	}
+
+	fmt.Println("\n=== User Events Only ===")
+	for _, event := range FilterUserEvents(events) {
+		fmt.Println(ProcessEvent(event))
+	}
+}

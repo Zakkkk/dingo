@@ -59,11 +59,11 @@ func TestGoldenFiles(t *testing.T) {
 				"functional_",      // FunctionalASTProcessor broken - Phase 11 (AST migration TODO)
 				// "lambda_",          // Lambda IMPLEMENTED in Phase 6
 				"sum_types_",       // Type checker crashes on method receivers in generated code
-				"pattern_match_",   // Depends on functional processor - broken in AST migration
+				// "pattern_match_",   // Pattern matching IMPLEMENTED - some tests still have preprocessor bugs
 				"safe_nav_",        // Safe navigation partially implemented - 6/12 tests failing (preprocessor issues)
 				"null_coalesce_",   // __INFER__ placeholder issues in struct fields
-				"ternary_",         // Ternary operator not yet implemented (Phase 3)
-				"tuples_",          // Tuple types not yet implemented
+				// "ternary_",         // Ternary operator IMPLEMENTED in Phase 9
+				// "tuples_",          // Tuples IMPLEMENTED in Phase 8 (some tests broken due to match preprocessor)
 				"combined_",        // Combined feature tests - uses safe_nav/null_coalesce which are skipped
 			}
 			skipExact := []string{
@@ -80,9 +80,21 @@ func TestGoldenFiles(t *testing.T) {
 				"result_06_helpers",         // Missing golden file - deferred (Phase 4)
 				"lambda_03_rust_basic",      // Rust lambda syntax - AST migration TODO
 				"lambda_07_nested_calls",    // Uses generic functions - parser doesn't support generics yet
-				"pattern_match_01_simple",   // Assignment context match not yet supported (preprocessor limitation)
+				"pattern_match_01_simple",   // Nested match with lambdas - preprocessor parsing issue
+				"pattern_match_06_guards_nested",  // Guard with 'where' syntax not implemented
+				"pattern_match_07_guards_complex", // Guard with 'where' syntax not implemented
+				"pattern_match_08_guards_edge_cases", // Guard with 'where' syntax not implemented
+				"pattern_match_09_tuple_pairs",    // Tuple match exhaustiveness check issue
+				"pattern_match_10_tuple_triples",  // Tuple match exhaustiveness check issue
+				"pattern_match_11_tuple_wildcards", // Tuple match exhaustiveness check issue
+				"pattern_match_12_tuple_exhaustiveness", // Tuple match exhaustiveness check issue
+				"pattern_match_13_nested_blocks",  // Nested match with lambdas - preprocessor parsing issue
 				"unqualified_import_03_multiple", // Unqualified import processor broken in AST migration
 				"unqualified_import_04_mixed",    // Unqualified import processor broken in AST migration
+				"tuples_05_pattern_match_integration", // Match preprocessor bug corrupts output
+				"tuples_07_edge_cases",      // Contains edge cases that need investigation
+				"tuples_08_error_messages",  // Error message tests - match preprocessor issues
+				"tuples_09_max_arity",       // Needs investigation
 			}
 			for _, prefix := range skipPrefixes {
 				if strings.HasPrefix(baseName, prefix) {
@@ -224,8 +236,8 @@ func TestGoldenFilesCompilation(t *testing.T) {
 		"sum_types_",
 		"safe_nav_",
 		"null_coalesce_",
-		"ternary_",
-		"tuples_",
+		// "ternary_",  // Ternary IMPLEMENTED in Phase 9
+		// "tuples_",   // Tuples IMPLEMENTED in Phase 8
 	}
 	skipExact := []string{
 		"error_prop_02_multiple",

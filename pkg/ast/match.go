@@ -299,11 +299,12 @@ func (m *MatchExpr) constructorToTag(name string) string {
 }
 
 // formatMatchResultVar returns the result variable name for a match ID
+// Follows CLAUDE.md naming convention: camelCase, first unnumbered, then numbered from 1
 func formatMatchResultVar(id int) string {
 	if id == 0 {
-		return "__match_result"
+		return "matchResult"
 	}
-	return "__match_result_" + string(rune('0'+id))
+	return "matchResult" + string(rune('0'+id))
 }
 
 // isEnumVariant checks if a name looks like an enum variant

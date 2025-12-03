@@ -1,5 +1,9 @@
 package main
 
+// Test: Complex ternary expressions
+// Feature: Ternary with function calls and expressions
+// Complexity: advanced
+
 func getDiscount(isPremium bool, amount int) int {
 	return func() int {
 		if isPremium {
@@ -12,6 +16,7 @@ func main() {
 	amount := 100
 	isPremium := true
 
+	// Ternary with function calls
 	discount := func() any {
 		if isPremium {
 			return getDiscount(true, amount)
@@ -19,6 +24,7 @@ func main() {
 		return getDiscount(false, amount)
 	}()
 
+	// Ternary with complex expressions
 	price := amount - (func() int {
 		if isPremium {
 			return amount / 5
@@ -26,5 +32,6 @@ func main() {
 		return amount / 10
 	}())
 
+	// Ternary in function argument
 	println("Discount:", discount, "Price:", price)
 }

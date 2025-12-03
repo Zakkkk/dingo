@@ -81,26 +81,24 @@ func (e Value) IsString() bool {
 	return e.tag == ValueTagString
 }
 func processResult(r Result) string {
-	var __match_result_0 string
+	var matchResult __TYPE_INFERENCE_NEEDED
 	// DINGO_MATCH_START: r
 	scrutinee := r
 	switch scrutinee.tag {
-	case ResultTagOk:
-		nestedResultOk := *scrutinee.resultok
-		switch nestedResultOk.tag {
-		case ValueTagInt:
-			n := *nestedResultOk.int
-			__match_result_0 = "Got integer: " + string(n)
-		case ValueTagString:
-			s := *nestedResultOk.string
-			__match_result_0 = "Got string: " + s
-		}
-	case ResultTagErr:
-		e := *scrutinee.err
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(ValueInt(n))
+		ValueInt(n) := scrutinee.ValueInt(n)
+		matchResult = "Got integer: " + string(n)
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(ValueString(s))
+		ValueString(s) := scrutinee.ValueString(s)
+		matchResult = "Got string: " + s
+	case ResultErrTag:
 		// DINGO_PATTERN: ResultErr(e)
-		__match_result_0 = "Error: " + e.Error()
+		e := scrutinee.E
+		matchResult = "Error: " + e.Error()
 	}
-	return __match_result_0
+	return matchResult
 	// DINGO_MATCH_END
 
 }

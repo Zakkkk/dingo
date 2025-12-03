@@ -24,9 +24,10 @@ func processInput(path string, numStr string) {
 	if err != nil {
 		panic(err)
 	}
+	fmt.
 
-	// Should add: import "fmt"
-	fmt.Printf("Read %d bytes, number is %d\n", len(data), num)
+		// Should add: import "fmt"
+		Printf("Read %d bytes, number is %d\n", len(data), num)
 }
 func main() {
 	processInput("data.txt", "42")

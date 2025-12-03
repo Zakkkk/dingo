@@ -55,79 +55,95 @@ func (r Result) AndThen(fn func(int) Result) Result {
 
 // Simple guard on Result type
 func classifyNumber(result Result) string {
-	var __match_result_0 string
+	var matchResult string
 	// DINGO_MATCH_START: result
 	scrutinee := result
 	switch scrutinee.tag {
-	case ResultTagOk:
-		x := *scrutinee.ok
-		// DINGO_PATTERN: ResultOk(x) | DINGO_GUARD: x > 0
-		if x > 0 {
-			__match_result_0 = "positive"
-			// DINGO_PATTERN: ResultOk(x) | DINGO_GUARD: x < 0
-		} else if x < 0 {
-			__match_result_0 = "negative"
-			// DINGO_PATTERN: ResultOk(_)
-		} else {
-			__match_result_0 = "zero"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(x)
+		if !(x > 0) {
+			break // Guard failed
 		}
-	case ResultTagErr:
-		e := *scrutinee.err
+		x := scrutinee.X
+		matchResult = "positive"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(x)
+		if !(x < 0) {
+			break // Guard failed
+		}
+		x := scrutinee.X
+		matchResult = "negative"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(_)
+		_ := scrutinee._
+		matchResult = "zero"
+	case ResultErrTag:
 		// DINGO_PATTERN: ResultErr(e)
-		__match_result_0 = "error"
+		e := scrutinee.E
+		matchResult = "error"
 	}
-	return __match_result_0
+	return matchResult
 	// DINGO_MATCH_END
 
 }
 
 // Guard with multiple conditions
 func validateAge(result Result) string {
-	var __match_result_1 string
+	var matchResult1 string
 	// DINGO_MATCH_START: result
-	scrutinee2 := result
-	switch scrutinee2.tag {
-	case ResultTagOk:
-		age := *scrutinee2.ok
-		// DINGO_PATTERN: ResultOk(age) | DINGO_GUARD: age >= 18 && age < 65
-		if age >= 18 && age < 65 {
-			__match_result_1 = "adult"
-			// DINGO_PATTERN: ResultOk(age) | DINGO_GUARD: age >= 65
-		} else if age >= 65 {
-			__match_result_1 = "senior"
-			// DINGO_PATTERN: ResultOk(_)
-		} else {
-			__match_result_1 = "minor"
+	scrutinee := result
+	switch scrutinee.tag {
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(age)
+		if !(age >= 18 && age < 65) {
+			break // Guard failed
 		}
-	case ResultTagErr:
+		age := scrutinee.Age
+		matchResult1 = "adult"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(age)
+		if !(age >= 65) {
+			break // Guard failed
+		}
+		age := scrutinee.Age
+		matchResult1 = "senior"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(_)
+		_ := scrutinee._
+		matchResult1 = "minor"
+	case ResultErrTag:
 		// DINGO_PATTERN: ResultErr(_)
-		__match_result_1 = "invalid"
+		_ := scrutinee._
+		matchResult1 = "invalid"
 	}
-	return __match_result_1
+	return matchResult1
 	// DINGO_MATCH_END
 
 }
 
 // Guard with function call
 func checkLength(result Result) string {
-	var __match_result_2 string
+	var matchResult2 string
 	// DINGO_MATCH_START: result
-	scrutinee3 := result
-	switch scrutinee3.tag {
-	case ResultTagOk:
-		n := *scrutinee3.ok
-		// DINGO_PATTERN: ResultOk(n) | DINGO_GUARD: isEven(n)
-		if isEven(n) {
-			__match_result_2 = "even"
-			// DINGO_PATTERN: ResultOk(_)
-		} else {
-			__match_result_2 = "odd"
+	scrutinee := result
+	switch scrutinee.tag {
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(n)
+		if !(isEven(n)) {
+			break // Guard failed
 		}
-	case ResultTagErr:
+		n := scrutinee.N
+		matchResult2 = "even"
+	case ResultOkTag:
+		// DINGO_PATTERN: ResultOk(_)
+		_ := scrutinee._
+		matchResult2 = "odd"
+	case ResultErrTag:
 		// DINGO_PATTERN: ResultErr(_)
-		__match_result_2 = "error"
+		_ := scrutinee._
+		matchResult2 = "error"
 	}
-	return __match_result_2
+	return matchResult2
 	// DINGO_MATCH_END
 
 }

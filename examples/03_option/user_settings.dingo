@@ -1,0 +1,95 @@
+// Real-world example: User settings where values may or may not be set
+// Option<T> eliminates nil pointer panics by making absence explicit
+package main
+
+import "fmt"
+
+type UserSettings struct {
+	Theme       Option<string>
+	FontSize    Option<int>
+	Language    Option<string>
+	NotifyEmail Option<bool>
+}
+
+type User struct {
+	ID       int
+	Name     string
+	Settings UserSettings
+}
+
+// GetTheme returns the user's theme or system default
+// No nil checks needed - Option forces explicit handling
+func GetTheme(user: User) string {
+	return user.Settings.Theme.UnwrapOr("system")
+}
+
+// GetFontSize applies validation and returns CSS value
+func GetFontSize(user: User) string {
+	// Map transforms the inner value if present
+	return user.Settings.FontSize
+		.Map(func(size: int) string {
+			if size < 10 {
+				return "10px"
+			}
+			if size > 32 {
+				return "32px"
+			}
+			return fmt.Sprintf("%dpx", size)
+		})
+		.UnwrapOr("16px")
+}
+
+// ShouldSendNotification checks multiple optional settings
+func ShouldSendNotification(user: User, notificationType: string) bool {
+	// Check if email notifications are enabled
+	if user.Settings.NotifyEmail.IsSome() {
+		return user.Settings.NotifyEmail.Unwrap()
+	}
+	// Default behavior based on notification type
+	return notificationType == "critical"
+}
+
+// FindUserByLanguage returns first user with matching language preference
+func FindUserByLanguage(users: []User, lang: string) Option<User> {
+	for _, user := range users {
+		if user.Settings.Language.IsSome() && user.Settings.Language.Unwrap() == lang {
+			return Some(user)
+		}
+	}
+	return None[User]()
+}
+
+func main() {
+	// User with some settings configured
+	alice := User{
+		ID:   1,
+		Name: "Alice",
+		Settings: UserSettings{
+			Theme:    Some("dark"),
+			FontSize: Some(18),
+			Language: None[string](), // Not set - will use system language
+		},
+	}
+
+	// User with minimal settings
+	bob := User{
+		ID:       2,
+		Name:     "Bob",
+		Settings: UserSettings{
+			// All settings use defaults
+			Theme:    None[string](),
+			FontSize: None[int](),
+			Language: Some("es"),
+		},
+	}
+
+	fmt.Printf("Alice's theme: %s\n", GetTheme(alice))      // "dark"
+	fmt.Printf("Bob's theme: %s\n", GetTheme(bob))          // "system"
+	fmt.Printf("Alice's font: %s\n", GetFontSize(alice))    // "18px"
+	fmt.Printf("Bob's font: %s\n", GetFontSize(bob))        // "16px"
+
+	users := []User{alice, bob}
+	if spanish := FindUserByLanguage(users, "es"); spanish.IsSome() {
+		fmt.Printf("Spanish user: %s\n", spanish.Unwrap().Name) // "Bob"
+	}
+}

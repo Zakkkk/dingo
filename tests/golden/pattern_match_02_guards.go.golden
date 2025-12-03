@@ -31,33 +31,41 @@ func (e Value) IsString() bool {
 	return e.tag == ValueTagString
 }
 func describe(v Value) string {
-	var __match_result_0 string
+	var matchResult string
 	// DINGO_MATCH_START: v
 	scrutinee := v
 	switch scrutinee.tag {
 	case ValueTagInt:
-		n := *scrutinee.int
-		// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n > 0
-		if n > 0 {
-			__match_result_0 = "Positive number"
-			// DINGO_PATTERN: ValueInt(n) | DINGO_GUARD: n < 0
-		} else if n < 0 {
-			__match_result_0 = "Negative number"
-			// DINGO_PATTERN: ValueInt(_)
-		} else {
-			__match_result_0 = "Zero"
+		// DINGO_PATTERN: ValueInt(n)
+		if !(n > 0) {
+			break // Guard failed
 		}
+		n := scrutinee.N
+		matchResult = "Positive number"
+	case ValueTagInt:
+		// DINGO_PATTERN: ValueInt(n)
+		if !(n < 0) {
+			break // Guard failed
+		}
+		n := scrutinee.N
+		matchResult = "Negative number"
+	case ValueTagInt:
+		// DINGO_PATTERN: ValueInt(_)
+		_ := scrutinee._
+		matchResult = "Zero"
 	case ValueTagString:
-		s := *scrutinee.string
-		// DINGO_PATTERN: ValueString(s) | DINGO_GUARD: len(s) > 5
-		if len(s) > 5 {
-			__match_result_0 = "Long string"
-			// DINGO_PATTERN: ValueString(_)
-		} else {
-			__match_result_0 = "Short string"
+		// DINGO_PATTERN: ValueString(s)
+		if !(len(s) > 5) {
+			break // Guard failed
 		}
+		s := scrutinee.S
+		matchResult = "Long string"
+	case ValueTagString:
+		// DINGO_PATTERN: ValueString(_)
+		_ := scrutinee._
+		matchResult = "Short string"
 	}
-	return __match_result_0
+	return matchResult
 	// DINGO_MATCH_END
 
 }

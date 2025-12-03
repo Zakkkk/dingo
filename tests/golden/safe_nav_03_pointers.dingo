@@ -30,12 +30,12 @@ func getUser(id int) *User {
 
 func main() {
 	// Test 1: Full pointer chain
-	user := getUser(1)
+	var user *User = getUser(1)
 	cityName := user?.address?.city?.name
 	println("City:", cityName)
 
 	// Test 2: Nil pointer chain
-	nilUser := getUser(0)
+	var nilUser *User = getUser(0)
 	nilCity := nilUser?.address?.city?.name
 	println("Nil City:", nilCity)
 
