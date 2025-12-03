@@ -515,10 +515,7 @@ if user?.isActive {
     println("active")
 }`,
 			contains: []string{
-				"var opt bool",
-				"if user.IsSome()",
-				"opt = false",
-				".isActive",
+				"if user.IsSome() && user.Unwrap().isActive",
 			},
 		},
 		{
@@ -528,9 +525,7 @@ if user?.age > 18 {
     println("adult")
 }`,
 			contains: []string{
-				"var opt __INFER__",
-				"if user != nil",
-				"user.age",
+				"if user != nil && user.age > 18",
 			},
 		},
 		{
@@ -540,18 +535,14 @@ if user?.profile?.isVerified && user?.account?.isActive {
     println("verified and active")
 }`,
 			contains: []string{
-				"var opt bool",
-				"user.IsSome()",
+				"user.IsSome() && user.Unwrap().profile.IsSome() && user.Unwrap().profile.Unwrap().isVerified",
+				"user.IsSome() && user.Unwrap().account.IsSome() && user.Unwrap().account.Unwrap().isActive",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests requiring return type inference from context
-			if tt.name == "safe nav in if condition" || tt.name == "safe nav in complex condition" {
-				t.Skip("Context-aware return type inference not yet supported - use explicit wrapper")
-			}
 			processor := NewSafeNavASTProcessor()
 			output, _, err := processor.ProcessInternal(tt.input)
 			if err != nil {

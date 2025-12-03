@@ -7,6 +7,8 @@ package preprocessor
 import (
 	"bytes"
 	"fmt"
+	goast "go/ast"
+	goparser "go/parser"
 	"go/token"
 	"strings"
 
@@ -23,6 +25,17 @@ type SafeNavASTProcessor struct {
 	tmpCounter     int
 	optCounter     int // Counter for opt variables (opt, opt1, opt2, ...)
 }
+
+// SafeNavContext represents the context where a safe nav expression appears
+type SafeNavContext int
+
+const (
+	ContextAssignment       SafeNavContext = iota // let x = user?.name
+	ContextReturn                                 // return user?.name
+	ContextFunctionArg                            // process(user?.name)
+	ContextBooleanCondition                       // if user?.isActive
+	ContextInline                                 // default inline replacement
+)
 
 // NewSafeNavASTProcessor creates a new AST-based safe navigation processor
 func NewSafeNavASTProcessor() *SafeNavASTProcessor {
@@ -164,11 +177,16 @@ func (s *SafeNavASTProcessor) processLineWithMetadata(line string, originalLineN
 		return line, nil, nil
 	}
 
-	// Check if this is an expression context (assignment, return, function arg)
-	needsHoisting := s.needsStatementHoisting(line, exprs)
+	// Detect the context using AST-based analysis
+	ctx := s.detectContext(line, exprs)
 
-	if needsHoisting {
-		// Generate hoisted if-statements before the line
+	// Handle boolean condition context with short-circuit pattern
+	if ctx == ContextBooleanCondition {
+		return s.processWithBooleanShortCircuit(line, exprs, originalLineNum, outputLineNum, markerCounter)
+	}
+
+	// Handle contexts requiring hoisting (assignment, return, function arg)
+	if ctx == ContextAssignment || ctx == ContextReturn || ctx == ContextFunctionArg {
 		return s.processWithHoisting(line, exprs, originalLineNum, outputLineNum, markerCounter)
 	}
 
@@ -215,30 +233,194 @@ func (s *SafeNavASTProcessor) processLineWithMetadata(line string, originalLineN
 	return result, meta, nil
 }
 
-// needsStatementHoisting determines if safe nav expressions need to be hoisted
-func (s *SafeNavASTProcessor) needsStatementHoisting(line string, exprs []safeNavExprPosition) bool {
+// detectContext uses go/parser to determine the context of a safe nav expression
+func (s *SafeNavASTProcessor) detectContext(line string, exprs []safeNavExprPosition) SafeNavContext {
+	// Quick string-based checks for common cases
 	trimmed := strings.TrimSpace(line)
 
-	// Check for assignment (contains := or =)
-	if strings.Contains(trimmed, ":=") || strings.Contains(trimmed, "=") {
-		return true
+	// Check for if statement - MOST IMPORTANT
+	if strings.HasPrefix(trimmed, "if ") {
+		// If statement always uses boolean context
+		return ContextBooleanCondition
+	}
+
+	// Check for assignment
+	if strings.Contains(trimmed, ":=") || (strings.Contains(trimmed, "=") && !strings.Contains(trimmed, "==") && !strings.Contains(trimmed, "!=")) {
+		return ContextAssignment
 	}
 
 	// Check for return statement
 	if strings.HasPrefix(trimmed, "return ") {
-		return true
+		return ContextReturn
 	}
 
-	// Check for function call (has parentheses and safe nav inside args)
-	// Simple heuristic: if line has ( after safe nav, it's likely a function arg
-	for _, expr := range exprs {
-		afterExpr := line[expr.end:]
-		if strings.Contains(afterExpr, "(") || strings.Contains(afterExpr, ",") {
-			return true
+	// For more complex cases, replace ?. with regular . to make it parseable as Go
+	// This is simpler and avoids position tracking issues
+	parseable := strings.ReplaceAll(line, "?.", ".")
+
+	// Parse the line as a Go statement to detect context
+	// Wrap in minimal valid Go code for parsing
+	wrapped := "package p\nfunc _() {\n" + parseable + "\n}"
+
+	fset := token.NewFileSet()
+	file, err := goparser.ParseFile(fset, "", wrapped, goparser.AllErrors)
+	if err != nil {
+		// Parse failed - fall back to inline
+		return ContextInline
+	}
+
+	// Walk AST to find the context
+	var foundContext SafeNavContext = ContextInline
+
+	goast.Inspect(file, func(n goast.Node) bool {
+		switch stmt := n.(type) {
+		case *goast.IfStmt:
+			// Check if safe nav is in the condition
+			if stmt.Cond != nil {
+				foundContext = ContextBooleanCondition
+				return false
+			}
+		case *goast.CallExpr:
+			// Check if safe nav is in function arguments
+			if len(stmt.Args) > 0 {
+				foundContext = ContextFunctionArg
+				return false
+			}
+		case *goast.BinaryExpr:
+			// Check if safe nav is operand of boolean operator
+			if stmt.Op == token.LAND || stmt.Op == token.LOR {
+				foundContext = ContextBooleanCondition
+				return false
+			}
+		}
+		return true
+	})
+
+	return foundContext
+}
+
+// processWithBooleanShortCircuit generates short-circuit pattern for boolean contexts
+// Input:  if user?.isActive { }
+// Output: if user.IsSome() && user.Unwrap().isActive { }
+func (s *SafeNavASTProcessor) processWithBooleanShortCircuit(line string, exprs []safeNavExprPosition, originalLineNum int, outputLineNum int, markerCounter *int) (string, *TransformMetadata, error) {
+	result := line
+	var meta *TransformMetadata
+	firstTransform := true
+
+	// Process in reverse order to maintain string positions
+	for i := len(exprs) - 1; i >= 0; i-- {
+		exprPos := exprs[i]
+
+		// Detect base type
+		baseType := s.determineBaseType(exprPos.expr.Receiver)
+
+		// Create marker for metadata
+		marker := fmt.Sprintf("// dingo:s:%d", *markerCounter)
+
+		// Generate short-circuit code based on type
+		var replacement string
+		if baseType == TypeOption {
+			// Option type: user?.profile?.verified
+			// Generates: user.IsSome() && user.Unwrap().profile.IsSome() && user.Unwrap().profile.Unwrap().verified
+			replacement = s.generateOptionShortCircuit(exprPos.expr.Receiver, exprPos.chain)
+		} else if baseType == TypePointer {
+			// Pointer type: user?.profile?.verified
+			// Generates: user != nil && user.profile != nil && user.profile.verified
+			replacement = s.generatePointerShortCircuit(exprPos.expr.Receiver, exprPos.chain)
+		} else {
+			// Unknown type - return error
+			return "", nil, fmt.Errorf(
+				"line %d: cannot infer type for '%s' in boolean safe navigation\n\n"+
+					"  Help: Add explicit type annotation (Option<T> or *T)",
+				originalLineNum, exprPos.expr.Receiver)
+		}
+
+		// Create metadata for first transformation only
+		if firstTransform {
+			meta = &TransformMetadata{
+				Type:            "safe_nav",
+				OriginalLine:    originalLineNum,
+				OriginalColumn:  exprPos.startCol + 1,
+				OriginalLength:  2, // length of ?.
+				OriginalText:    "?.",
+				GeneratedMarker: marker,
+				ASTNodeType:     "BinaryExpr",
+			}
+			*markerCounter++
+			firstTransform = false
+		}
+
+		// Replace in result (no marker insertion for inline replacement)
+		result = result[:exprPos.start] + replacement + result[exprPos.end:]
+	}
+
+	return result, meta, nil
+}
+
+// generateOptionShortCircuit generates short-circuit pattern for Option types
+// user?.profile?.verified → user.IsSome() && user.Unwrap().profile.IsSome() && user.Unwrap().profile.Unwrap().verified
+func (s *SafeNavASTProcessor) generateOptionShortCircuit(base string, chain []ChainElement) string {
+	var parts []string
+	currentExpr := base
+
+	for i, elem := range chain {
+		// Add IsSome() check
+		parts = append(parts, fmt.Sprintf("%s.IsSome()", currentExpr))
+
+		// Build the unwrapped access expression
+		if i < len(chain)-1 {
+			// Not the last element - need to access next level
+			if elem.IsMethod {
+				currentExpr = fmt.Sprintf("%s.Unwrap().%s(%s)", currentExpr, elem.Name, elem.RawArgs)
+			} else {
+				currentExpr = fmt.Sprintf("%s.Unwrap().%s", currentExpr, elem.Name)
+			}
+		} else {
+			// Last element - this is the final value access
+			var finalAccess string
+			if elem.IsMethod {
+				finalAccess = fmt.Sprintf("%s.Unwrap().%s(%s)", currentExpr, elem.Name, elem.RawArgs)
+			} else {
+				finalAccess = fmt.Sprintf("%s.Unwrap().%s", currentExpr, elem.Name)
+			}
+			parts = append(parts, finalAccess)
 		}
 	}
 
-	return false
+	return strings.Join(parts, " && ")
+}
+
+// generatePointerShortCircuit generates short-circuit pattern for pointer types
+// user?.profile?.verified → user != nil && user.profile != nil && user.profile.verified
+func (s *SafeNavASTProcessor) generatePointerShortCircuit(base string, chain []ChainElement) string {
+	var parts []string
+	currentExpr := base
+
+	for i, elem := range chain {
+		// Add nil check
+		parts = append(parts, fmt.Sprintf("%s != nil", currentExpr))
+
+		// Build the access expression
+		if i < len(chain)-1 {
+			// Not the last element - need to access next level
+			if elem.IsMethod {
+				currentExpr = fmt.Sprintf("%s.%s(%s)", currentExpr, elem.Name, elem.RawArgs)
+			} else {
+				currentExpr = fmt.Sprintf("%s.%s", currentExpr, elem.Name)
+			}
+		} else {
+			// Last element - this is the final value access
+			var finalAccess string
+			if elem.IsMethod {
+				finalAccess = fmt.Sprintf("%s.%s(%s)", currentExpr, elem.Name, elem.RawArgs)
+			} else {
+				finalAccess = fmt.Sprintf("%s.%s", currentExpr, elem.Name)
+			}
+			parts = append(parts, finalAccess)
+		}
+	}
+
+	return strings.Join(parts, " && ")
 }
 
 // processWithHoisting generates hoisted if-statements before the line
