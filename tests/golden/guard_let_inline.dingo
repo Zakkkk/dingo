@@ -1,0 +1,75 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+enum Result {
+	Ok(int),
+	Err(error),
+}
+
+enum Option {
+	Some(string),
+	None,
+}
+
+func GetValue(id int) Result {
+	if id > 0 {
+		return ResultOk(id * 10)
+	}
+	return ResultErr(errors.New("invalid id"))
+}
+
+func GetName(id int) Option {
+	if id > 0 {
+		return OptionSome(fmt.Sprintf("Item%d", id))
+	}
+	return OptionNone()
+}
+
+// Single-line guard let with Result
+func ProcessValue(id int) Result {
+	guard let val = GetValue(id) else { return err }
+	return ResultOk(val + 100)
+}
+
+// Single-line guard let with Option
+func ProcessName(id int) string {
+	guard let name = GetName(id) else { return "unknown" }
+	return fmt.Sprintf("Name: %s", name)
+}
+
+// Mix of Result and Option inline
+func ProcessBoth(id int) string {
+	guard let val = GetValue(id) else { return "value error" }
+	guard let name = GetName(id) else { return "name not found" }
+	return fmt.Sprintf("%s = %d", name, val)
+}
+
+// Multiple inline guards
+func ChainedGuards(id1 int, id2 int, id3 int) Result {
+	guard let v1 = GetValue(id1) else { return err }
+	guard let v2 = GetValue(id2) else { return err }
+	guard let v3 = GetValue(id3) else { return err }
+	return ResultOk(v1 + v2 + v3)
+}
+
+func main() {
+	result1 := ProcessValue(5)
+	if result1.IsOk() {
+		fmt.Println("Value:", *result1.ok)
+	}
+
+	result2 := ProcessName(10)
+	fmt.Println(result2)
+
+	result3 := ProcessBoth(3)
+	fmt.Println(result3)
+
+	result4 := ChainedGuards(1, 2, 3)
+	if result4.IsOk() {
+		fmt.Println("Sum:", *result4.ok)
+	}
+}

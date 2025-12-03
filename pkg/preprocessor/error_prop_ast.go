@@ -12,7 +12,169 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/plugin/builtin"
+	"github.com/MadAppGang/dingo/pkg/registry"
 )
+
+// TypeRegistry provides type information for enhanced inference
+// This is an optional interface - processor works without it
+// Compatible with registry.TypeRegistry from pkg/registry
+type TypeRegistry interface {
+	// GetVariable looks up a variable's type information
+	GetVariable(name string) (VariableInfo, bool)
+
+	// GetFunction looks up a function's signature
+	GetFunction(name string) (FunctionInfo, bool)
+
+	// LookupMethod looks up a method call pattern (e.g., "rows.Scan" → FunctionInfo)
+	// Handles variable name to type normalization using stdlib patterns
+	LookupMethod(receiver, method string) (FunctionInfo, bool)
+
+	// IsResult returns true if the type is a Result type
+	IsResult(typeName string) bool
+
+	// RegisterVariable registers a new variable with its type
+	RegisterVariable(info VariableInfo)
+
+	// RegisterFunction registers a new function with its signature
+	RegisterFunction(info FunctionInfo)
+}
+
+// RegistryAdapter adapts registry.TypeRegistry to the local TypeRegistry interface
+type RegistryAdapter struct {
+	reg registry.TypeRegistry
+}
+
+// NewRegistryAdapter creates an adapter from registry.TypeRegistry
+func NewRegistryAdapter(reg registry.TypeRegistry) TypeRegistry {
+	return &RegistryAdapter{reg: reg}
+}
+
+// GetVariable adapts registry.GetVariable
+func (a *RegistryAdapter) GetVariable(name string) (VariableInfo, bool) {
+	v, ok := a.reg.GetVariable(name)
+	if !ok {
+		return VariableInfo{}, false
+	}
+	return VariableInfo{
+		Name: v.Name,
+		Type: TypeInfo{
+			Name:      v.Type.Name,
+			IsResult:  v.Type.IsResult(),
+			IsOption:  v.Type.IsOption(),
+			ValueType: v.Type.ValueType,
+			ErrorType: v.Type.ErrorType,
+			Kind:      int(v.Type.Kind),
+		},
+	}, true
+}
+
+// GetFunction adapts registry.GetFunction
+func (a *RegistryAdapter) GetFunction(name string) (FunctionInfo, bool) {
+	f, ok := a.reg.GetFunction(name)
+	if !ok {
+		return FunctionInfo{}, false
+	}
+	results := make([]TypeInfo, len(f.Results))
+	for i, r := range f.Results {
+		results[i] = TypeInfo{
+			Name:      r.Name,
+			IsResult:  r.IsResult(),
+			IsOption:  r.IsOption(),
+			ValueType: r.ValueType,
+			ErrorType: r.ErrorType,
+			Kind:      int(r.Kind),
+		}
+	}
+	return FunctionInfo{
+		Name:    f.Name,
+		Package: f.Package,
+		Results: results,
+	}, true
+}
+
+// IsResult adapts registry.IsResult
+func (a *RegistryAdapter) IsResult(typeName string) bool {
+	return a.reg.IsResult(typeName)
+}
+
+// RegisterVariable adapts registry.RegisterVariable
+func (a *RegistryAdapter) RegisterVariable(info VariableInfo) {
+	a.reg.RegisterVariable(registry.VariableInfo{
+		Name: info.Name,
+		Type: registry.TypeInfo{
+			Kind:      registry.TypeKind(info.Type.Kind),
+			Name:      info.Type.Name,
+			ValueType: info.Type.ValueType,
+			ErrorType: info.Type.ErrorType,
+		},
+	})
+}
+
+// RegisterFunction adapts registry.RegisterFunction
+func (a *RegistryAdapter) RegisterFunction(info FunctionInfo) {
+	results := make([]registry.TypeInfo, len(info.Results))
+	for i, r := range info.Results {
+		results[i] = registry.TypeInfo{
+			Kind:      registry.TypeKind(r.Kind),
+			Name:      r.Name,
+			ValueType: r.ValueType,
+			ErrorType: r.ErrorType,
+		}
+	}
+	a.reg.RegisterFunction(registry.FunctionInfo{
+		Name:    info.Name,
+		Package: info.Package,
+		Results: results,
+	})
+}
+
+// LookupMethod adapts registry.LookupMethod
+func (a *RegistryAdapter) LookupMethod(receiver, method string) (FunctionInfo, bool) {
+	f, ok := a.reg.LookupMethod(receiver, method)
+	if !ok {
+		return FunctionInfo{}, false
+	}
+	results := make([]TypeInfo, len(f.Results))
+	for i, r := range f.Results {
+		results[i] = TypeInfo{
+			Name:      r.Name,
+			IsResult:  r.IsResult(),
+			IsOption:  r.IsOption(),
+			ValueType: r.ValueType,
+			ErrorType: r.ErrorType,
+			Kind:      int(r.Kind),
+		}
+	}
+	return FunctionInfo{
+		Name:    f.Name,
+		Package: f.Package,
+		Results: results,
+	}, true
+}
+
+// VariableInfo holds variable type information
+type VariableInfo struct {
+	Name string
+	Type TypeInfo
+}
+
+// TypeInfo represents type information
+type TypeInfo struct {
+	Name      string
+	IsResult  bool
+	IsOption  bool
+	ValueType string // For Result<T,E> or Option<T>
+	ErrorType string // For Result<T,E> only
+	Kind      int    // TypeKind (0=unknown, see safe_nav.go for values)
+}
+
+// FunctionInfo holds function signature information
+type FunctionInfo struct {
+	Name       string
+	Package    string     // Package path (optional)
+	Parameters []TypeInfo // Parameter types (optional, for enum constructors)
+	Results    []TypeInfo // Return types
+}
 
 // ErrorPropASTProcessor handles the ? operator for error propagation using token-based parsing
 // This replaces the buggy regex-based approach in error_prop.go
@@ -28,12 +190,14 @@ import (
 //   - String literals: getValue("what?")?
 //   - Ternary operators: condition ? true : false
 type ErrorPropASTProcessor struct {
-	tryCounter    int
-	lines         []string
-	currentFunc   *funcContext
-	needsFmt      bool
-	importTracker *ImportTracker
-	config        *Config
+	tryCounter     int
+	lines          []string
+	currentFunc    *funcContext
+	needsFmt       bool
+	importTracker  *ImportTracker
+	config         *Config
+	registry       TypeRegistry    // Optional: for enhanced type inference
+	returnDetector *ReturnDetector // NEW: for return type detection
 }
 
 // NewErrorPropASTProcessor creates a new AST-based error propagation processor
@@ -55,6 +219,18 @@ func NewErrorPropASTProcessorWithConfig(config *Config) *ErrorPropASTProcessor {
 // Name returns the processor name
 func (p *ErrorPropASTProcessor) Name() string {
 	return "error_propagation_ast"
+}
+
+// SetRegistry injects the type registry for enhanced type inference
+// Registry is optional - processor will use fallback heuristics if nil
+func (p *ErrorPropASTProcessor) SetRegistry(registry TypeRegistry) {
+	p.registry = registry
+}
+
+// SetReturnDetector injects the return detector for accurate return type analysis
+// This enables error-only detection (func() error vs func() (T, error))
+func (p *ErrorPropASTProcessor) SetReturnDetector(detector *ReturnDetector) {
+	p.returnDetector = detector
 }
 
 // ProcessBody implements BodyProcessor interface for lambda body processing
@@ -539,52 +715,119 @@ func (p *ErrorPropASTProcessor) expandAssignmentV2(line, varName, expr, errMsg s
 	// Track function call for import detection
 	p.trackFunctionCallInExpr(expr)
 
-	// No-number-first pattern: first occurrence has no number
-	tmpVar := ""
-	if p.tryCounter == 1 {
-		tmpVar = "tmp"
-	} else {
-		tmpVar = fmt.Sprintf("tmp%d", p.tryCounter-1)
+	// Infer expression type from registry if available
+	var exprType TypeInfo
+	if p.registry != nil {
+		// Try to get type from function call
+		funcName := p.extractFunctionNameFromExpr(expr)
+		if funcName != "" {
+			if funcInfo, ok := p.registry.GetFunction(funcName); ok && len(funcInfo.Results) > 0 {
+				exprType = funcInfo.Results[0]
+			}
+		}
 	}
 
+	// Use ReturnDetector to determine if this is error-only or (T, error)
+	var isErrorOnly bool
+	if p.returnDetector != nil {
+		returnInfo, err := p.returnDetector.DetectReturns(expr, "")
+		if err != nil {
+			// Detection failed - fail compilation with clear error
+			return "", fmt.Errorf("failed to detect return type for '%s': %w (ensure function is imported and callable)", expr, err)
+		}
+		isErrorOnly = returnInfo.ErrorOnly
+	} else {
+		// Fallback: assume (T, error) when detector not available
+		isErrorOnly = false
+	}
+
+	// Generate the expansion
+	var buf bytes.Buffer
+	indent := p.getIndent(line)
+
+	// No-number-first pattern: first occurrence has no number
 	errVar := ""
 	if p.tryCounter == 1 {
 		errVar = "err"
 	} else {
 		errVar = fmt.Sprintf("err%d", p.tryCounter-1)
 	}
-	p.tryCounter++
 
-	// Generate the expansion
-	var buf bytes.Buffer
-	indent := p.getIndent(line)
+	if isErrorOnly {
+		// Error-only: err := expr
+		p.tryCounter++
 
-	// Line 1: tmpN, errN := expr
-	buf.WriteString(indent)
-	buf.WriteString(fmt.Sprintf("%s, %s := %s\n", tmpVar, errVar, expr))
+		// Line 1: errN := expr
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("%s := %s\n", errVar, expr))
 
-	// Line 2: // dingo:e:N (UNIQUE MARKER)
-	buf.WriteString(indent)
-	buf.WriteString(marker)
-	buf.WriteString("\n")
+		// Line 2: // dingo:e:N (UNIQUE MARKER)
+		buf.WriteString(indent)
+		buf.WriteString(marker)
+		buf.WriteString("\n")
 
-	// Line 3: if errN != nil {
-	buf.WriteString(indent)
-	buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
+		// Line 3: if errN != nil {
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
 
-	// Line 4: return statement (V2 with ErrorExpr)
-	buf.WriteString(indent)
-	buf.WriteString("\t")
-	buf.WriteString(p.generateReturnStatementV2(errVar, errExpr))
-	buf.WriteString("\n")
+		// Line 4: return statement (V2 with ErrorExpr)
+		buf.WriteString(indent)
+		buf.WriteString("\t")
+		buf.WriteString(p.generateReturnStatementV2(errVar, errExpr))
+		buf.WriteString("\n")
 
-	// Line 5: }
-	buf.WriteString(indent)
-	buf.WriteString("}\n")
+		// Line 5: }
+		buf.WriteString(indent)
+		buf.WriteString("}\n")
 
-	// Line 6: var varName = tmpN
-	buf.WriteString(indent)
-	buf.WriteString(fmt.Sprintf("var %s = %s", varName, tmpVar))
+		// Line 6: // No variable assignment needed for error-only
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("_ = %s // error-only propagation", errVar))
+	} else {
+		// (T, error): tmp, err := expr
+		tmpVar := ""
+		if p.tryCounter == 1 {
+			tmpVar = "tmp"
+		} else {
+			tmpVar = fmt.Sprintf("tmp%d", p.tryCounter-1)
+		}
+		p.tryCounter++
+
+		// Line 1: tmpN, errN := expr
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("%s, %s := %s\n", tmpVar, errVar, expr))
+
+		// Line 2: // dingo:e:N (UNIQUE MARKER)
+		buf.WriteString(indent)
+		buf.WriteString(marker)
+		buf.WriteString("\n")
+
+		// Line 3: if errN != nil {
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("if %s != nil {\n", errVar))
+
+		// Line 4: return statement (V2 with ErrorExpr)
+		buf.WriteString(indent)
+		buf.WriteString("\t")
+		buf.WriteString(p.generateReturnStatementV2(errVar, errExpr))
+		buf.WriteString("\n")
+
+		// Line 5: }
+		buf.WriteString(indent)
+		buf.WriteString("}\n")
+
+		// Line 6: var varName = tmpN
+		buf.WriteString(indent)
+		buf.WriteString(fmt.Sprintf("var %s = %s", varName, tmpVar))
+
+		// Register variable in registry if available
+		if p.registry != nil && varName != "result" {
+			p.registry.RegisterVariable(VariableInfo{
+				Name: varName,
+				Type: exprType,
+			})
+		}
+	}
 
 	return buf.String(), nil
 }
@@ -1015,6 +1258,30 @@ func (p *ErrorPropASTProcessor) trackFunctionCallInExpr(expr string) {
 			p.importTracker.TrackFunctionCall(qualifiedName)
 		}
 	}
+}
+
+// extractFunctionNameFromExpr extracts the function name from an expression
+// Returns empty string if expression is not a function call
+func (p *ErrorPropASTProcessor) extractFunctionNameFromExpr(expr string) string {
+	// Simple extraction: find identifier before '('
+	parenIdx := strings.Index(expr, "(")
+	if parenIdx == -1 {
+		return ""
+	}
+
+	// Get the part before '(' and remove all spaces
+	beforeParen := strings.TrimSpace(expr[:parenIdx])
+	beforeParen = strings.ReplaceAll(beforeParen, " ", "")
+
+	// Split by '.' to handle qualified names (pkg.Func or obj.Method)
+	parts := strings.Split(beforeParen, ".")
+
+	// Return the last part (function name)
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+
+	return ""
 }
 
 // parseResultType attempts to parse a Result<T, E> type string

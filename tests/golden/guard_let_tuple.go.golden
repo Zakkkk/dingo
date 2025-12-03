@@ -1,0 +1,103 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+// Use string Result for simplicity, with structured return
+
+type ResultTag uint8
+
+const (
+	ResultTagOk ResultTag = iota
+	ResultTagErr
+)
+
+type Result struct {
+	tag ResultTag
+	err *error
+	ok  *string
+}
+
+func ResultOk(arg0 string) Result {
+	return Result{tag: ResultTagOk, ok: &arg0}
+}
+func ResultErr(arg0 error) Result {
+	return Result{tag: ResultTagErr, err: &arg0}
+}
+func (e Result) IsOk() bool {
+	return e.tag == ResultTagOk
+}
+func (e Result) IsErr() bool {
+	return e.tag == ResultTagErr
+}
+func (r Result) Map(fn func(string) string) Result {
+	switch r.tag {
+	case ResultTagOk:
+		if r.ok != nil {
+			return ResultOk(fn(*r.ok))
+		}
+	case ResultTagErr:
+		return r
+	}
+	panic("invalid Result state")
+}
+func (r Result) AndThen(fn func(string) Result) Result {
+	switch r.tag {
+	case ResultTagOk:
+		if r.ok != nil {
+			return fn(*r.ok)
+		}
+	case ResultTagErr:
+		return r
+	}
+	panic("invalid Result state")
+}
+
+// Returns a comma-separated pair as string
+func GetPair(id int) Result {
+	if id > 0 {
+		return ResultOk(fmt.Sprintf("%d,%s", id, fmt.Sprintf("Item%d", id)))
+	}
+	return ResultErr(errors.New("invalid id"))
+}
+
+// Guard let with simple variable (tuple destructuring requires tuple type support)
+func ProcessPair(id int) string {
+	tmp := GetPair(id)
+
+	if tmp.IsErr() {
+		err := *tmp.err
+		return fmt.Sprintf("Error: %v", err)
+	}
+	pair := *tmp.ok
+	return fmt.Sprintf("Got pair: %s", pair)
+}
+
+// Multiple guard lets
+func ProcessMultiple(id1 int, id2 int) string {
+	tmp1 := GetPair(id1)
+
+	if tmp1.IsErr() {
+		err := *tmp1.err
+		_ = err
+		return "first failed"
+	}
+	first := *tmp1.ok
+	tmp2 := GetPair(id2)
+
+	if tmp2.IsErr() {
+		err := *tmp2.err
+		_ = err
+		return "second failed"
+	}
+	second := *tmp2.ok
+	return fmt.Sprintf("Got: %s and %s", first, second)
+}
+func main() {
+	fmt.Println(ProcessPair(1))
+	fmt.Println(ProcessPair(-1))
+	fmt.Println(ProcessMultiple(1, 2))
+	fmt.Println(ProcessMultiple(-1, 2))
+}

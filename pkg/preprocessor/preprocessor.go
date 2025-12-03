@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/typeloader"
 )
 
 // Preprocessor orchestrates multiple feature processors to transform
@@ -92,6 +93,73 @@ func NewWithMainConfig(source []byte, cfg *config.Config) *Preprocessor {
 	return newWithConfigAndCache(source, cfg, nil)
 }
 
+// NewWithTypeLoading creates a preprocessor with dynamic type loading
+// Uses BuildCache for efficient multi-file builds
+// Fails fast on any type loading error with clear error message
+func NewWithTypeLoading(source []byte, cfg *config.Config, cache *typeloader.BuildCache) (*Preprocessor, error) {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+
+	// Stage 0: Extract imports from source
+	imports, err := typeloader.ExtractImports(source)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract imports: %w", err)
+	}
+
+	// Stage 0: Load types using cache (or create new loader if no cache)
+	var loadResult *typeloader.LoadResult
+	if cache != nil {
+		loadResult, err = cache.LoadImports(imports)
+		if err != nil {
+			// Fail fast with clear error
+			return nil, fmt.Errorf("type loading failed: %w", err)
+		}
+	} else {
+		// No cache - create loader and load directly
+		loader := typeloader.NewLoader(typeloader.LoaderConfig{
+			WorkingDir: "", // Empty string defaults to current directory
+			FailFast:   true,
+		})
+		loadResult, err = loader.LoadFromImports(imports)
+		if err != nil {
+			return nil, fmt.Errorf("type loading failed: %w", err)
+		}
+	}
+
+	// Parse local functions and merge into result
+	localParser := &typeloader.LocalFuncParser{}
+	localFuncs, _ := localParser.ParseLocalFunctions(source)
+	if localFuncs != nil {
+		// Merge local functions into loadResult
+		if loadResult.LocalFunctions == nil {
+			loadResult.LocalFunctions = make(map[string]*typeloader.FunctionSignature)
+		}
+		for k, v := range localFuncs {
+			loadResult.LocalFunctions[k] = v
+		}
+	}
+
+	// Create preprocessor with standard configuration
+	p := newWithConfigAndCache(source, cfg, nil)
+
+	// Wire LoadResult to ReturnDetector in ErrorPropASTProcessor
+	// Need to find the ErrorPropASTProcessor in the preprocessor's processor list
+	for _, proc := range p.processors {
+		if errorPropProc, ok := proc.(*ErrorPropASTProcessor); ok {
+			// Create ReturnDetector with nil analyzer (will use heuristics)
+			returnDetector := NewReturnDetector(nil)
+			// Wire the loadResult to the detector
+			returnDetector.SetLoadResult(loadResult)
+			// Set the detector on the processor
+			errorPropProc.SetReturnDetector(returnDetector)
+			break
+		}
+	}
+
+	return p, nil
+}
+
 // newWithConfigAndCache is the internal constructor that accepts an optional cache
 func newWithConfigAndCache(source []byte, cfg *config.Config, cache *FunctionExclusionCache) *Preprocessor {
 	return newWithConfigAndCacheAndLegacy(source, cfg, cache, nil)
@@ -141,9 +209,10 @@ func newWithConfigAndCacheAndLegacy(source []byte, cfg *config.Config, cache *Fu
 
 // ProcessWithMetadata runs all feature processors and returns both legacy mappings and metadata
 // ARCHITECTURE: Two-Pass Processing
-//   Pass 1: Structural transforms (enum, tuple, pattern matching) - change code structure
-//   Lambda: Between passes - processes body content with injected expression processors
-//   Pass 2: Expression transforms (?, ?., ??, ? :) - within expressions
+//
+//	Pass 1: Structural transforms (enum, tuple, pattern matching) - change code structure
+//	Lambda: Between passes - processes body content with injected expression processors
+//	Pass 2: Expression transforms (?, ?., ??, ? :) - within expressions
 func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMetadata, error) {
 	// Early bailout optimization (GPT-5.1): If cache indicates no unqualified imports
 	// in this package, skip expensive symbol resolution for unqualified import processors
@@ -171,6 +240,17 @@ func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMet
 				break
 			}
 		}
+	}
+
+	// Wire ReturnDetector into ErrorPropASTProcessor for accurate return type detection
+	// The processor is at index 5 (last one) in expression processors
+	// ReturnDetector enables error-only vs (value, error) distinction
+	if errorPropProc, ok := config.Expression[5].(*ErrorPropASTProcessor); ok {
+		// Create ReturnDetector with nil analyzer (will use heuristics-based detection)
+		// Type-based analysis requires valid Go source, which we don't have yet
+		// Heuristics cover common stdlib patterns (os.Open, rows.Scan, etc.)
+		returnDetector := NewReturnDetector(nil)
+		errorPropProc.SetReturnDetector(returnDetector)
 	}
 
 	// Get body processors for lambda injection (expression processors that implement BodyProcessor)
@@ -608,7 +688,7 @@ func mergeImports(lines []string, newImports []string, start, end int) (string, 
 		result = append(result, lines[start+1:]...)
 
 		// Calculate positions (1-based for return)
-		insertLine := start + 2 // Line after "import ("
+		insertLine := start + 2                    // Line after "import ("
 		endLine := start + 1 + len(allImports) + 1 // Closing )
 
 		return strings.Join(result, "\n"), insertLine, endLine
@@ -630,7 +710,7 @@ func mergeImports(lines []string, newImports []string, start, end int) (string, 
 	result = append(result, lines[end:]...)
 
 	// Calculate positions (1-based for return)
-	insertLine := start + 2      // Line after "import ("
+	insertLine := start + 2              // Line after "import ("
 	endLine := end + len(newImports) + 1 // Adjusted closing )
 
 	return strings.Join(result, "\n"), insertLine, endLine
@@ -655,7 +735,7 @@ func insertImports(lines []string, imports []string, packageLine int) (string, i
 	result = append(result, lines[packageLine+1:]...)
 
 	// Calculate positions (1-based for return)
-	insertLine := packageLine + 2        // Line after package declaration
+	insertLine := packageLine + 2                 // Line after package declaration
 	endLine := packageLine + 1 + len(importBlock) // Last line of import block
 
 	return strings.Join(result, "\n"), insertLine, endLine

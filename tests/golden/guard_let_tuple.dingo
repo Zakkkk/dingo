@@ -1,0 +1,46 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+// Use string Result for simplicity, with structured return
+enum Result {
+	Ok(string),
+	Err(error),
+}
+
+// Returns a comma-separated pair as string
+func GetPair(id int) Result {
+	if id > 0 {
+		return ResultOk(fmt.Sprintf("%d,%s", id, fmt.Sprintf("Item%d", id)))
+	}
+	return ResultErr(errors.New("invalid id"))
+}
+
+// Guard let with simple variable (tuple destructuring requires tuple type support)
+func ProcessPair(id int) string {
+	guard let pair = GetPair(id) else {
+		return fmt.Sprintf("Error: %v", err)
+	}
+	return fmt.Sprintf("Got pair: %s", pair)
+}
+
+// Multiple guard lets
+func ProcessMultiple(id1 int, id2 int) string {
+	guard let first = GetPair(id1) else {
+		return "first failed"
+	}
+	guard let second = GetPair(id2) else {
+		return "second failed"
+	}
+	return fmt.Sprintf("Got: %s and %s", first, second)
+}
+
+func main() {
+	fmt.Println(ProcessPair(1))
+	fmt.Println(ProcessPair(-1))
+	fmt.Println(ProcessMultiple(1, 2))
+	fmt.Println(ProcessMultiple(-1, 2))
+}

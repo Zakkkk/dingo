@@ -1,0 +1,82 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+enum Result {
+	Ok(string),
+	Err(error),
+}
+
+func FindUser(id int) Result {
+	if id > 0 {
+		return ResultOk(fmt.Sprintf("User%d", id))
+	}
+	return ResultErr(errors.New("user not found"))
+}
+
+func FindOrder(userID int) Result {
+	if userID == 1 {
+		return ResultOk("Order123")
+	}
+	return ResultErr(errors.New("order not found"))
+}
+
+// Basic guard let with Result
+func GetUserOrder(userID int) Result {
+	let userResult = FindUser(userID)
+	guard let user = userResult else {
+		return err
+	}
+
+	let orderResult = FindOrder(userID)
+	guard let order = orderResult else {
+		return err
+	}
+
+	return ResultOk(fmt.Sprintf("%s has %s", user, order))
+}
+
+// Multiple guard lets in sequence
+func ProcessUserOrders(userID int) Result {
+	guard let user = FindUser(userID) else {
+		return err
+	}
+
+	guard let order = FindOrder(userID) else {
+		return err
+	}
+
+	fmt.Printf("Processing: %s, %s\n", user, order)
+	return ResultOk("success")
+}
+
+// Custom error handling in else block
+func GetUserWithLogging(userID int) Result {
+	guard let user = FindUser(userID) else {
+		fmt.Printf("Failed to find user %d: %v\n", userID, err)
+		return ResultErr(fmt.Errorf("user lookup failed: %w", err))
+	}
+
+	fmt.Printf("Found user: %s\n", user)
+	return ResultOk(user)
+}
+
+func main() {
+	result := GetUserOrder(1)
+	if result.IsOk() {
+		fmt.Println(*result.ok)
+	}
+
+	result2 := ProcessUserOrders(1)
+	if result2.IsOk() {
+		fmt.Println(*result2.ok)
+	}
+
+	result3 := GetUserWithLogging(0)
+	if result3.IsErr() {
+		fmt.Println("Error:", *result3.err)
+	}
+}

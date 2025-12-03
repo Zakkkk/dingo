@@ -68,12 +68,23 @@ type DebugConfig struct {
 	KeepMarkers bool `toml:"keep_markers"`
 }
 
+// BuildConfig contains build-related configuration
+type BuildConfig struct {
+	// OutDir specifies the default output directory for transpiled files
+	// When set, all .go and .dmap files are written to this directory
+	// and source directory structure is mirrored. Pure .go files are
+	// automatically copied to maintain a buildable output tree.
+	// Empty string (default) means output files are placed alongside source files.
+	OutDir string `toml:"outdir"`
+}
+
 // Config represents the complete Dingo project configuration
 type Config struct {
 	Features  FeatureConfig   `toml:"features"`
 	Match     MatchConfig     `toml:"match"`
 	SourceMap SourceMapConfig `toml:"sourcemaps"`
 	Debug     DebugConfig     `toml:"debug"`
+	Build     BuildConfig     `toml:"build"`
 }
 
 // ResultTypeConfig controls Result<T, E> type behavior
@@ -241,6 +252,42 @@ func Load(overrides *Config) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// FindConfig walks up the directory tree from startDir looking for dingo.toml
+// Returns the loaded config, the directory containing dingo.toml, and any error
+// If no dingo.toml is found, returns (nil, "", nil) - not an error
+func FindConfig(startDir string) (*Config, string, error) {
+	absStart, err := filepath.Abs(startDir)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to resolve start directory: %w", err)
+	}
+
+	currentDir := absStart
+	for {
+		configPath := filepath.Join(currentDir, "dingo.toml")
+		if _, err := os.Stat(configPath); err == nil {
+			// Found dingo.toml, load it
+			cfg := DefaultConfig()
+			if _, err := toml.DecodeFile(configPath, cfg); err != nil {
+				return nil, "", fmt.Errorf("failed to parse %s: %w", configPath, err)
+			}
+
+			if err := cfg.Validate(); err != nil {
+				return nil, "", fmt.Errorf("invalid configuration in %s: %w", configPath, err)
+			}
+
+			return cfg, currentDir, nil
+		}
+
+		// Move up one directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			// Reached filesystem root, no dingo.toml found
+			return nil, "", nil
+		}
+		currentDir = parentDir
+	}
 }
 
 // loadConfigFile loads a TOML configuration file into the provided config
