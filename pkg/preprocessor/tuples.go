@@ -414,11 +414,6 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 		return true, []string{}, closeParen
 	}
 
-	// Must contain comma to be a tuple (otherwise it's grouping)
-	if !strings.Contains(content, ",") {
-		return false, nil, closeParen
-	}
-
 	// CRITICAL FIX: Check for function return type signature
 	// Pattern: "func name() (type1, type2)" or just ") (type1, type2)"
 	if isFunctionReturnType(line, startIdx) {
@@ -429,7 +424,7 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 	// which strips the parens to produce "return x, y"
 	// We mark them as tuples here so they get processed
 
-	// Parse elements
+	// Parse elements - this respects nested braces, parens, brackets
 	elements := parseElements(content)
 
 	// Filter out empty elements (e.g., from trailing comma)
@@ -447,14 +442,22 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 		}
 	}
 
+	// Must have at least 2 elements to be a tuple (otherwise it's just grouping)
+	// This check happens AFTER parsing to correctly handle struct literals with commas
+	if len(filtered) < 2 {
+		return false, nil, closeParen
+	}
+
 	return true, filtered, closeParen
 }
 
-// parseElements splits tuple content by commas, respecting nested parens and strings
+// parseElements splits tuple content by commas, respecting nested parens, braces, and strings
 func parseElements(content string) []string {
 	elements := []string{}
 	current := ""
 	parenDepth := 0
+	braceDepth := 0
+	bracketDepth := 0
 	inString := false
 	escaped := false
 
@@ -488,7 +491,7 @@ func parseElements(content string) []string {
 			continue
 		}
 
-		// Not in string - track paren depth
+		// Not in string - track nesting depth for parens, braces, and brackets
 		if ch == '(' {
 			parenDepth++
 			current += string(ch)
@@ -501,8 +504,32 @@ func parseElements(content string) []string {
 			continue
 		}
 
-		// Comma at depth 0 → element separator
-		if ch == ',' && parenDepth == 0 {
+		if ch == '{' {
+			braceDepth++
+			current += string(ch)
+			continue
+		}
+
+		if ch == '}' {
+			braceDepth--
+			current += string(ch)
+			continue
+		}
+
+		if ch == '[' {
+			bracketDepth++
+			current += string(ch)
+			continue
+		}
+
+		if ch == ']' {
+			bracketDepth--
+			current += string(ch)
+			continue
+		}
+
+		// Comma at depth 0 (not inside parens, braces, or brackets) → element separator
+		if ch == ',' && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 {
 			elements = append(elements, current)
 			current = ""
 			continue

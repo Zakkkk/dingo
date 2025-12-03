@@ -30,13 +30,15 @@ func FindUserByID(db: *sql.DB, id: int) Result<User, DBError> {
 	var user User
 	err := row.Scan(&user.ID, &user.Name, &user.Email)
 	if err == sql.ErrNoRows {
-		return Err[User](DBError{Code: "NOT_FOUND", Message: "user not found"})
+		// Use generated constructor: ResultUserDBErrorErr(error)
+		return ResultUserDBErrorErr(DBError{Code: "NOT_FOUND", Message: "user not found"})
 	}
 	if err != nil {
-		return Err[User](DBError{Code: "SCAN_ERROR", Message: err.Error()})
+		return ResultUserDBErrorErr(DBError{Code: "SCAN_ERROR", Message: err.Error()})
 	}
 
-	return Ok[DBError](user)
+	// Use generated constructor: ResultUserDBErrorOk(value)
+	return ResultUserDBErrorOk(user)
 }
 
 // TransferFunds shows Result chaining - each step must succeed
@@ -44,20 +46,20 @@ func TransferFunds(db: *sql.DB, fromID: int, toID: int, amount: float64) Result<
 	// Find source user
 	let fromResult = FindUserByID(db, fromID)
 	if fromResult.IsErr() {
-		return Err[bool](fromResult.UnwrapErr())
+		return ResultBoolDBErrorErr(fromResult.UnwrapErr())
 	}
 
 	// Find destination user
 	let toResult = FindUserByID(db, toID)
 	if toResult.IsErr() {
-		return Err[bool](toResult.UnwrapErr())
+		return ResultBoolDBErrorErr(toResult.UnwrapErr())
 	}
 
 	// In real code: begin transaction, update balances, commit
 	fmt.Printf("Transferring $%.2f from %s to %s\n",
 		amount, fromResult.Unwrap().Name, toResult.Unwrap().Name)
 
-	return Ok[DBError](true)
+	return ResultBoolDBErrorOk(true)
 }
 
 func main() {

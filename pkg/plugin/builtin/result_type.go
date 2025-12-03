@@ -231,17 +231,35 @@ func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
 // This method detects Ok() and Err() calls and transforms them into
 // Result struct literals with the appropriate tag and field values.
 //
+// Handles both:
+// - Ok(value), Err(error) - plain calls
+// - Ok[ErrType](value), Err[OkType](error) - calls with explicit type parameter
+//
 // Type inference strategy:
 // 1. Check for explicit type annotation (e.g., let x: Result<int, error> = Ok(42))
 // 2. Infer from argument type for T, default error for E
 // 3. Use context from surrounding expression (assignment, return, etc.)
 func (p *ResultTypePlugin) handleConstructorCall(call *ast.CallExpr) {
+	// Case 1: Ok(value) or Err(error) - plain identifier
 	if ident, ok := call.Fun.(*ast.Ident); ok {
 		switch ident.Name {
 		case "Ok":
 			p.transformOkConstructor(call)
 		case "Err":
 			p.transformErrConstructor(call)
+		}
+		return
+	}
+
+	// Case 2: Ok[ErrType](value) or Err[OkType](error) - IndexExpr with type parameter
+	if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
+		if ident, ok := indexExpr.X.(*ast.Ident); ok {
+			switch ident.Name {
+			case "Ok":
+				p.transformOkConstructorWithType(call, indexExpr.Index)
+			case "Err":
+				p.transformErrConstructorWithType(call, indexExpr.Index)
+			}
 		}
 	}
 }
@@ -400,6 +418,124 @@ func (p *ResultTypePlugin) transformErrConstructor(call *ast.CallExpr) ast.Expr 
 				Key:   ast.NewIdent("err"),
 				Value: errValue,
 			},
+		},
+	}
+
+	return replacement
+}
+
+// transformOkConstructorWithType transforms Ok[ErrType](value) → Result_T_E{tag: ResultTagOk, ok: &value}
+//
+// The error type is explicitly provided via the type parameter.
+// The ok type is inferred from the value argument.
+func (p *ResultTypePlugin) transformOkConstructorWithType(call *ast.CallExpr, errTypeExpr ast.Expr) ast.Expr {
+	if len(call.Args) != 1 {
+		p.ctx.Logger.Warnf("Ok[E]() expects exactly one argument, found %d", len(call.Args))
+		return call
+	}
+
+	valueArg := call.Args[0]
+
+	// Infer okType from the value argument
+	okType, err := p.inferTypeFromExpr(valueArg)
+	if err != nil {
+		p.ctx.Logger.Warnf("Type inference failed for Ok[E](%s): %v, using interface{} fallback", FormatExprForDebug(valueArg), err)
+		okType = "interface{}"
+	}
+	if okType == "" {
+		okType = "interface{}"
+	}
+
+	// Get errType from the explicit type parameter
+	errType := p.getTypeName(errTypeExpr)
+	if errType == "" {
+		errType = "error"
+	}
+
+	// Generate unique Result type name
+	resultTypeName := fmt.Sprintf("Result%s", SanitizeTypeName(okType, errType))
+
+	// Ensure the Result type is declared
+	if !p.emittedTypes[resultTypeName] {
+		p.emitResultDeclaration(okType, errType, resultTypeName)
+		p.emittedTypes[resultTypeName] = true
+	}
+
+	p.ctx.Logger.Debugf("transformOkConstructorWithType: Ok[%s](%s) → %s", errType, FormatExprForDebug(valueArg), resultTypeName)
+
+	// Handle addressability
+	var okValue ast.Expr
+	if isAddressable(valueArg) {
+		okValue = &ast.UnaryExpr{Op: token.AND, X: valueArg}
+	} else {
+		okValue = wrapInIIFE(valueArg, okType, p.ctx)
+	}
+
+	// Create replacement
+	replacement := &ast.CompositeLit{
+		Type: ast.NewIdent(resultTypeName),
+		Elts: []ast.Expr{
+			&ast.KeyValueExpr{Key: ast.NewIdent("tag"), Value: ast.NewIdent("ResultTagOk")},
+			&ast.KeyValueExpr{Key: ast.NewIdent("ok"), Value: okValue},
+		},
+	}
+
+	return replacement
+}
+
+// transformErrConstructorWithType transforms Err[OkType](error) → Result_T_E{tag: ResultTagErr, err: &error}
+//
+// The ok type is explicitly provided via the type parameter.
+// The error type is inferred from the error argument.
+func (p *ResultTypePlugin) transformErrConstructorWithType(call *ast.CallExpr, okTypeExpr ast.Expr) ast.Expr {
+	if len(call.Args) != 1 {
+		p.ctx.Logger.Warnf("Err[T]() expects exactly one argument, found %d", len(call.Args))
+		return call
+	}
+
+	errorArg := call.Args[0]
+
+	// Get okType from the explicit type parameter
+	okType := p.getTypeName(okTypeExpr)
+	if okType == "" {
+		okType = "interface{}"
+	}
+
+	// Infer errType from the error argument
+	errType, err := p.inferTypeFromExpr(errorArg)
+	if err != nil {
+		p.ctx.Logger.Warnf("Type inference failed for Err[T](%s): %v, defaulting to 'error'", FormatExprForDebug(errorArg), err)
+		errType = "error"
+	}
+	if errType == "" {
+		errType = "error"
+	}
+
+	// Generate unique Result type name
+	resultTypeName := fmt.Sprintf("Result%s", SanitizeTypeName(okType, errType))
+
+	// Ensure the Result type is declared
+	if !p.emittedTypes[resultTypeName] {
+		p.emitResultDeclaration(okType, errType, resultTypeName)
+		p.emittedTypes[resultTypeName] = true
+	}
+
+	p.ctx.Logger.Debugf("transformErrConstructorWithType: Err[%s](%s) → %s", okType, FormatExprForDebug(errorArg), resultTypeName)
+
+	// Handle addressability
+	var errValue ast.Expr
+	if isAddressable(errorArg) {
+		errValue = &ast.UnaryExpr{Op: token.AND, X: errorArg}
+	} else {
+		errValue = wrapInIIFE(errorArg, errType, p.ctx)
+	}
+
+	// Create replacement
+	replacement := &ast.CompositeLit{
+		Type: ast.NewIdent(resultTypeName),
+		Elts: []ast.Expr{
+			&ast.KeyValueExpr{Key: ast.NewIdent("tag"), Value: ast.NewIdent("ResultTagErr")},
+			&ast.KeyValueExpr{Key: ast.NewIdent("err"), Value: errValue},
 		},
 	}
 
@@ -1957,19 +2093,33 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 
 			// Check if this is a CallExpr we need to transform
 			if call, ok := n.(*ast.CallExpr); ok {
+				var replacement ast.Expr
+
+				// Case 1: Ok(value) or Err(error) - plain identifier
 				if ident, ok := call.Fun.(*ast.Ident); ok {
-					var replacement ast.Expr
 					switch ident.Name {
 					case "Ok":
 						replacement = p.transformOkConstructor(call)
 					case "Err":
 						replacement = p.transformErrConstructor(call)
 					}
+				}
 
-					// Replace the node if transformation occurred
-					if replacement != nil && replacement != call {
-						cursor.Replace(replacement)
+				// Case 2: Ok[ErrType](value) or Err[OkType](error) - IndexExpr with type param
+				if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
+					if ident, ok := indexExpr.X.(*ast.Ident); ok {
+						switch ident.Name {
+						case "Ok":
+							replacement = p.transformOkConstructorWithType(call, indexExpr.Index)
+						case "Err":
+							replacement = p.transformErrConstructorWithType(call, indexExpr.Index)
+						}
 					}
+				}
+
+				// Replace the node if transformation occurred
+				if replacement != nil && replacement != call {
+					cursor.Replace(replacement)
 				}
 			}
 			return true

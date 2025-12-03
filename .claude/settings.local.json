@@ -13,7 +13,9 @@
       "Bash(do echo '=== $dir ===' rm $dir/*.go 2)",
       "Bash(/dev/null go run ./cmd/dingo build $dir/*.dingo)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(for i in 01 02 03 04 05 06 07 08 09 10)",
+      "Bash(do echo \"=== $i ===\" go run ./cmd/dingo build examples/$i_*/*.dingo)"
     ],
     "deny": [],
     "ask": []
