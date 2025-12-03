@@ -31,7 +31,7 @@ func GetName(id int) Option {
 
 // Single-line guard let with Result
 func ProcessValue(id int) Result {
-	guard let val = GetValue(id) else { return err }
+	guard let val = GetValue(id) else |err| { return err }
 	return ResultOk(val + 100)
 }
 
@@ -43,16 +43,16 @@ func ProcessName(id int) string {
 
 // Mix of Result and Option inline
 func ProcessBoth(id int) string {
-	guard let val = GetValue(id) else { return "value error" }
+	guard let val = GetValue(id) else |err| { return "value error" }
 	guard let name = GetName(id) else { return "name not found" }
 	return fmt.Sprintf("%s = %d", name, val)
 }
 
 // Multiple inline guards
 func ChainedGuards(id1 int, id2 int, id3 int) Result {
-	guard let v1 = GetValue(id1) else { return err }
-	guard let v2 = GetValue(id2) else { return err }
-	guard let v3 = GetValue(id3) else { return err }
+	guard let v1 = GetValue(id1) else |err| { return err }
+	guard let v2 = GetValue(id2) else |err| { return err }
+	guard let v3 = GetValue(id3) else |err| { return err }
 	return ResultOk(v1 + v2 + v3)
 }
 

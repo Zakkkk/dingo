@@ -27,12 +27,12 @@ func FindOrder(userID int) Result {
 // Basic guard let with Result
 func GetUserOrder(userID int) Result {
 	let userResult = FindUser(userID)
-	guard let user = userResult else {
+	guard let user = userResult else |err| {
 		return err
 	}
 
 	let orderResult = FindOrder(userID)
-	guard let order = orderResult else {
+	guard let order = orderResult else |err| {
 		return err
 	}
 
@@ -41,11 +41,11 @@ func GetUserOrder(userID int) Result {
 
 // Multiple guard lets in sequence
 func ProcessUserOrders(userID int) Result {
-	guard let user = FindUser(userID) else {
+	guard let user = FindUser(userID) else |err| {
 		return err
 	}
 
-	guard let order = FindOrder(userID) else {
+	guard let order = FindOrder(userID) else |err| {
 		return err
 	}
 
@@ -55,7 +55,7 @@ func ProcessUserOrders(userID int) Result {
 
 // Custom error handling in else block
 func GetUserWithLogging(userID int) Result {
-	guard let user = FindUser(userID) else {
+	guard let user = FindUser(userID) else |err| {
 		fmt.Printf("Failed to find user %d: %v\n", userID, err)
 		return ResultErr(fmt.Errorf("user lookup failed: %w", err))
 	}

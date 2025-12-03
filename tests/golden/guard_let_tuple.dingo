@@ -21,7 +21,7 @@ func GetPair(id int) Result {
 
 // Guard let with simple variable (tuple destructuring requires tuple type support)
 func ProcessPair(id int) string {
-	guard let pair = GetPair(id) else {
+	guard let pair = GetPair(id) else |err| {
 		return fmt.Sprintf("Error: %v", err)
 	}
 	return fmt.Sprintf("Got pair: %s", pair)

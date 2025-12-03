@@ -1,0 +1,121 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+enum Result {
+	Ok(string),
+	Err(error),
+}
+
+enum Option {
+	Some(int),
+	None,
+}
+
+func FindUser(id int) Result {
+	if id > 0 {
+		return ResultOk(fmt.Sprintf("User%d", id))
+	}
+	return ResultErr(errors.New("user not found"))
+}
+
+func GetCount(id int) Option {
+	if id > 0 {
+		return OptionSome(id * 10)
+	}
+	return OptionNone()
+}
+
+// Test explicit |err| binding
+func TestExplicitErrBinding(id int) Result {
+	guard let user = FindUser(id) else |err| {
+		return ResultErr(err)
+	}
+	return ResultOk(user)
+}
+
+// Test custom |e| binding
+func TestCustomBinding(id int) Result {
+	guard let user = FindUser(id) else |e| {
+		fmt.Printf("Custom error: %v\n", e)
+		return ResultErr(fmt.Errorf("wrapped: %w", e))
+	}
+	return ResultOk(user)
+}
+
+// Test no binding with Result (but not using err)
+func TestNoBindingResult(id int) string {
+	guard let user = FindUser(id) else {
+		return "failed"
+	}
+	return user
+}
+
+// Test no binding with Option
+func TestNoBindingOption(id int) string {
+	guard let count = GetCount(id) else {
+		return "no count"
+	}
+	return fmt.Sprintf("Count: %d", count)
+}
+
+// Test complex else body with custom binding name
+func TestComplexElseBody(id int) Result {
+	guard let user = FindUser(id) else |failure| {
+		fmt.Printf("Operation failed with: %v\n", failure)
+		if id < 0 {
+			return ResultErr(fmt.Errorf("negative id: %w", failure))
+		}
+		return ResultErr(fmt.Errorf("zero id: %w", failure))
+	}
+
+	guard let count = GetCount(id) else {
+		return ResultErr(errors.New("count not available"))
+	}
+
+	return ResultOk(fmt.Sprintf("%s has count %d", user, count))
+}
+
+// Test multiple bindings with different names
+func TestMultipleBindings(id1 int, id2 int) string {
+	guard let user1 = FindUser(id1) else |err1| {
+		fmt.Printf("First error: %v\n", err1)
+		return "first failed"
+	}
+
+	guard let user2 = FindUser(id2) else |err2| {
+		fmt.Printf("Second error: %v\n", err2)
+		return "second failed"
+	}
+
+	return fmt.Sprintf("Got: %s and %s", user1, user2)
+}
+
+func main() {
+	result1 := TestExplicitErrBinding(1)
+	if result1.IsOk() {
+		fmt.Println(*result1.ok)
+	}
+
+	result2 := TestCustomBinding(0)
+	if result2.IsErr() {
+		fmt.Println("Error:", *result2.err)
+	}
+
+	result3 := TestNoBindingResult(1)
+	fmt.Println(result3)
+
+	result4 := TestNoBindingOption(5)
+	fmt.Println(result4)
+
+	result5 := TestComplexElseBody(1)
+	if result5.IsOk() {
+		fmt.Println(*result5.ok)
+	}
+
+	result6 := TestMultipleBindings(1, 2)
+	fmt.Println(result6)
+}

@@ -3,6 +3,7 @@ package preprocessor
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -46,14 +47,17 @@ func (p *GuardLetASTProcessor) SetRegistry(r interface{}) {
 
 // GuardLetMatch represents a parsed guard let statement
 type GuardLetMatch struct {
-	VarNames      []string // Single var or tuple destructuring
-	Expr          string   // Expression to unwrap
-	ElseBody      string   // Body of else block
-	ExprType      ExprType // Result, Option, or Unknown
-	IsInline      bool     // Single-line syntax
-	Indent        string   // Leading whitespace
-	Line          int      // For source mapping
-	ConsumedLines int      // Number of lines consumed (for multiline)
+	VarNames       []string // Single var or tuple destructuring
+	Expr           string   // Expression to unwrap
+	ElseBody       string   // Body of else block
+	ExprType       ExprType // Result, Option, or Unknown
+	IsInline       bool     // Single-line syntax
+	Indent         string   // Leading whitespace
+	Line           int      // For source mapping
+	ConsumedLines  int      // Number of lines consumed (for multiline)
+	ErrorBinding   string   // The name from |name|, empty if not specified
+	HasPipeBinding bool     // True if |name| syntax was used
+	ParseError     error    // Error from parsing (e.g., malformed pipe binding)
 }
 
 // ExprType indicates the monadic type
@@ -87,8 +91,18 @@ func (p *GuardLetASTProcessor) ProcessInternal(code string) (string, []Transform
 
 		match := p.parseGuardLet(line, lines, i)
 		if match != nil {
+			// Check for parse errors first
+			if match.ParseError != nil {
+				return "", nil, fmt.Errorf("line %d: %w", match.Line, match.ParseError)
+			}
+
 			// Determine expression type from registry
 			match.ExprType = p.inferExpressionType(match.Expr)
+
+			// Validate guard let against pipe binding rules
+			if err := p.validateGuardLet(match); err != nil {
+				return "", nil, fmt.Errorf("line %d: %w", match.Line, err)
+			}
 
 			// Generate transformation
 			transformed, meta := p.generateTransform(match, &markerCounter)
@@ -153,17 +167,36 @@ func (p *GuardLetASTProcessor) parseGuardLet(line string, lines []string, lineId
 	expr := strings.TrimSpace(afterEq[:elseIdx])
 	afterElse := strings.TrimSpace(afterEq[elseIdx+6:]) // skip " else "
 
+	// Parse pipe binding if present
+	binding, restAfterPipe, err := p.parsePipeBinding(afterElse)
+	if err != nil {
+		// Invalid pipe binding syntax - store error for reporting
+		return &GuardLetMatch{
+			Line:       lineIdx + 1,
+			ParseError: fmt.Errorf("pipe binding syntax error: %w\n    hint: Use format |name| (e.g., |err| or |e|)", err),
+		}
+	}
+
+	hasPipeBinding := binding != ""
+
 	// Parse else block (inline or multiline)
-	elseBody, consumedLines, isInline := p.parseElseBlock(afterElse, lines, lineIdx)
+	// Use restAfterPipe if we found a binding, otherwise use original afterElse
+	elseBlockInput := afterElse
+	if hasPipeBinding {
+		elseBlockInput = restAfterPipe
+	}
+	elseBody, consumedLines, isInline := p.parseElseBlock(elseBlockInput, lines, lineIdx)
 
 	return &GuardLetMatch{
-		VarNames:      varNames,
-		Expr:          expr,
-		ElseBody:      elseBody,
-		IsInline:      isInline,
-		Indent:        indent,
-		Line:          lineIdx + 1,
-		ConsumedLines: consumedLines,
+		VarNames:       varNames,
+		Expr:           expr,
+		ElseBody:       elseBody,
+		IsInline:       isInline,
+		Indent:         indent,
+		Line:           lineIdx + 1,
+		ConsumedLines:  consumedLines,
+		ErrorBinding:   binding,
+		HasPipeBinding: hasPipeBinding,
 	}
 }
 
@@ -191,6 +224,7 @@ func (p *GuardLetASTProcessor) parseVarNames(varPart string) []string {
 }
 
 // parseElseBlock parses the else block (inline or multiline)
+// Now returns pipe binding information as well
 func (p *GuardLetASTProcessor) parseElseBlock(afterElse string, lines []string, lineIdx int) (body string, consumed int, isInline bool) {
 	// Check for inline syntax: else { <single-statement> }
 	if strings.HasPrefix(afterElse, "{") {
@@ -204,18 +238,40 @@ func (p *GuardLetASTProcessor) parseElseBlock(afterElse string, lines []string, 
 		// Multiline: closing brace on next line(s)
 		var bodyLines []string
 		consumed = 1 // Current line
+		var baseIndent string
+		braceDepth := 1 // We've seen the opening brace
 
 		// Skip opening brace line
 		for i := lineIdx + 1; i < len(lines); i++ {
 			line := lines[i]
 			trimmed := strings.TrimSpace(line)
 
-			if trimmed == "}" {
+			// Track brace depth to handle nested blocks
+			openCount := strings.Count(trimmed, "{")
+			closeCount := strings.Count(trimmed, "}")
+			braceDepth += openCount - closeCount
+
+			// When depth reaches 0, we've found the matching closing brace
+			if braceDepth == 0 && trimmed == "}" {
 				consumed = i - lineIdx + 1
 				break
 			}
 
-			bodyLines = append(bodyLines, strings.TrimSpace(line))
+			// Preserve relative indentation by detecting base indent from first non-empty line
+			if baseIndent == "" && trimmed != "" {
+				baseIndent = getIndent(line)
+			}
+
+			// Remove base indent but preserve any additional indentation
+			lineContent := line
+			if baseIndent != "" && strings.HasPrefix(line, baseIndent) {
+				lineContent = line[len(baseIndent):]
+			} else {
+				// Line has less indentation than base - just trim leading whitespace
+				lineContent = strings.TrimLeft(line, " \t")
+			}
+
+			bodyLines = append(bodyLines, lineContent)
 		}
 
 		body = strings.Join(bodyLines, "\n")
@@ -223,6 +279,119 @@ func (p *GuardLetASTProcessor) parseElseBlock(afterElse string, lines []string, 
 	}
 
 	return "", 1, false
+}
+
+// parsePipeBinding extracts |name| binding from after "else"
+// Returns binding name and remaining string after |name|
+func (p *GuardLetASTProcessor) parsePipeBinding(s string) (binding string, rest string, err error) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "|") {
+		return "", s, nil // No pipe binding
+	}
+
+	// Find closing |
+	closeIdx := strings.Index(s[1:], "|")
+	if closeIdx == -1 {
+		return "", s, fmt.Errorf("unclosed pipe binding: missing closing |")
+	}
+
+	binding = strings.TrimSpace(s[1 : closeIdx+1])
+	if binding == "" {
+		return "", s, fmt.Errorf("empty pipe binding")
+	}
+
+	// Validate binding is valid identifier
+	if !isValidIdentifier(binding) {
+		return "", s, fmt.Errorf("invalid identifier in pipe binding: %s", binding)
+	}
+
+	rest = strings.TrimSpace(s[closeIdx+2:])
+	return binding, rest, nil
+}
+
+// goKeywords contains all Go reserved keywords
+var goKeywords = map[string]bool{
+	"break": true, "case": true, "chan": true, "const": true,
+	"continue": true, "default": true, "defer": true, "else": true,
+	"fallthrough": true, "for": true, "func": true, "go": true,
+	"goto": true, "if": true, "import": true, "interface": true,
+	"map": true, "package": true, "range": true, "return": true,
+	"select": true, "struct": true, "switch": true, "type": true,
+	"var": true,
+}
+
+// isValidIdentifier checks if a string is a valid Go identifier
+func isValidIdentifier(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+
+	// Check for Go keywords
+	if goKeywords[name] {
+		return false
+	}
+
+	// First character must be letter or underscore
+	first := rune(name[0])
+	if !unicode.IsLetter(first) && first != '_' {
+		return false
+	}
+	// Remaining characters must be letter, digit, or underscore
+	for _, ch := range name[1:] {
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+// validateGuardLet validates guard let match against pipe binding rules
+func (p *GuardLetASTProcessor) validateGuardLet(match *GuardLetMatch) error {
+	switch match.ExprType {
+	case ExprTypeResult:
+		// Check if body uses "err" without explicit binding
+		if !match.HasPipeBinding && p.usesErrorInBody(match.ElseBody, "err") {
+			return fmt.Errorf("implicit 'err' not allowed: use explicit binding |err| or |e|\n    hint: Change: else { return err } -> else |err| { return err }")
+		}
+
+	case ExprTypeOption:
+		// Option types cannot have pipe binding
+		if match.HasPipeBinding {
+			return fmt.Errorf("pipe binding not allowed on Option types (no error to bind)\n    hint: Option types only have Some/None, not an error value")
+		}
+	}
+	return nil
+}
+
+// usesErrorInBody checks if the else body references a specific error variable name
+func (p *GuardLetASTProcessor) usesErrorInBody(body string, varName string) bool {
+	// Remove comments (both // and /* */)
+	body = removeComments(body)
+
+	// Remove string literals
+	body = removeStringLiterals(body)
+
+	// Pattern: varName as standalone identifier (word boundary)
+	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	return pattern.MatchString(body)
+}
+
+// removeComments removes both single-line and multi-line comments from source code
+func removeComments(s string) string {
+	// Remove single-line comments
+	s = regexp.MustCompile(`//.*`).ReplaceAllString(s, "")
+	// Remove multi-line comments
+	s = regexp.MustCompile(`/\*.*?\*/`).ReplaceAllString(s, "")
+	return s
+}
+
+// removeStringLiterals removes string literals from source code
+func removeStringLiterals(s string) string {
+	// Remove double-quoted strings
+	s = regexp.MustCompile(`"[^"]*"`).ReplaceAllString(s, `""`)
+	// Remove backtick strings
+	s = regexp.MustCompile("`[^`]*`").ReplaceAllString(s, "``")
+	return s
 }
 
 // scanFunctionSignatures scans the source code for function signatures and builds return type map
@@ -381,6 +550,12 @@ func (p *GuardLetASTProcessor) generateTransform(match *GuardLetMatch, markerCou
 //   }
 //   var := expr.Unwrap()
 func (p *GuardLetASTProcessor) generateResultGuard(match *GuardLetMatch, marker string) (string, *TransformMetadata) {
+	// Validation first
+	if err := p.validateGuardLet(match); err != nil {
+		// Return error as comment in generated code
+		return fmt.Sprintf("%s// ERROR: %v\n", match.Indent, err), nil
+	}
+
 	var buf bytes.Buffer
 	indent := match.Indent
 
@@ -401,20 +576,34 @@ func (p *GuardLetASTProcessor) generateResultGuard(match *GuardLetMatch, marker 
 	// if expr.IsErr() {
 	buf.WriteString(fmt.Sprintf("%sif %s.IsErr() {\n", indent, exprVar))
 
-	// err := *expr.err
-	buf.WriteString(fmt.Sprintf("%s\terr := *%s.err\n", indent, exprVar))
+	// Generate error binding ONLY if explicit pipe binding provided
+	if match.HasPipeBinding {
+		errVarName := match.ErrorBinding
+		buf.WriteString(fmt.Sprintf("%s\t%s := *%s.err\n", indent, errVarName, exprVar))
 
-	// else body (with err available)
-	// Transform "return err" to "return ResultErr(err)" for Result types
-	elseBody := p.transformElseBody(match.ElseBody, match.ExprType)
-	elseBody = strings.TrimSpace(elseBody)
-	if match.IsInline {
-		buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, elseBody))
+		// Transform else body: replace "return <binding>" with "return ResultErr(<binding>)"
+		transformedBody := p.transformReturnStatements(match.ElseBody, errVarName)
+		transformedBody = strings.TrimSpace(transformedBody)
+		if match.IsInline {
+			buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, transformedBody))
+		} else {
+			// Multiline: indent each line
+			bodyLines := strings.Split(transformedBody, "\n")
+			for _, line := range bodyLines {
+				buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, line))
+			}
+		}
 	} else {
-		// Multiline: indent each line
-		bodyLines := strings.Split(elseBody, "\n")
-		for _, line := range bodyLines {
-			buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, line))
+		// No binding - body cannot reference error
+		elseBody := strings.TrimSpace(match.ElseBody)
+		if match.IsInline {
+			buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, elseBody))
+		} else {
+			// Multiline: indent each line
+			bodyLines := strings.Split(elseBody, "\n")
+			for _, line := range bodyLines {
+				buf.WriteString(fmt.Sprintf("%s\t%s\n", indent, line))
+			}
 		}
 	}
 
@@ -452,6 +641,12 @@ func (p *GuardLetASTProcessor) generateResultGuard(match *GuardLetMatch, marker 
 //   }
 //   var := expr.Unwrap()
 func (p *GuardLetASTProcessor) generateOptionGuard(match *GuardLetMatch, marker string) (string, *TransformMetadata) {
+	// Validation first
+	if err := p.validateGuardLet(match); err != nil {
+		// Return error as comment in generated code
+		return fmt.Sprintf("%s// ERROR: %v\n", match.Indent, err), nil
+	}
+
 	var buf bytes.Buffer
 	indent := match.Indent
 
@@ -499,19 +694,36 @@ func (p *GuardLetASTProcessor) generateOptionGuard(match *GuardLetMatch, marker 
 	return buf.String(), meta
 }
 
-// transformElseBody transforms the else block body for guard let
-// For Result types: "return err" -> "return ResultErr(err)"
-// For Option types: no transformation needed
-func (p *GuardLetASTProcessor) transformElseBody(elseBody string, exprType ExprType) string {
-	if exprType != ExprTypeResult {
-		return elseBody
+// transformReturnStatements wraps bare error returns with ResultErr()
+// Handles: return e -> return ResultErr(e)
+// Handles: return fmt.Errorf(...) -> unchanged (already error type)
+func (p *GuardLetASTProcessor) transformReturnStatements(body string, boundVar string) string {
+	lines := strings.Split(body, "\n")
+	result := make([]string, len(lines))
+
+	// Pattern: "return <boundVar>" at end of line (with optional whitespace/comment)
+	// Uses word boundaries to avoid matching "return err.Error()" or "return myerr"
+	pattern := regexp.MustCompile(`\breturn\s+` + regexp.QuoteMeta(boundVar) + `\s*($|//|/\*)`)
+	replacement := "return ResultErr(" + boundVar + ")"
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip if already wrapped
+		if strings.Contains(trimmed, "ResultErr("+boundVar+")") {
+			result[i] = line
+			continue
+		}
+
+		// Only transform bare "return <boundVar>" at end of line
+		if pattern.MatchString(trimmed) {
+			result[i] = pattern.ReplaceAllString(line, replacement+"$1")
+		} else {
+			result[i] = line
+		}
 	}
 
-	// Transform "return err" -> "return ResultErr(err)"
-	// This is a simple heuristic - matches common pattern
-	elseBody = strings.ReplaceAll(elseBody, "return err", "return ResultErr(err)")
-
-	return elseBody
+	return strings.Join(result, "\n")
 }
 
 // generateUnknownGuard generates an error comment for unknown types

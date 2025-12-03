@@ -80,16 +80,12 @@ func ProcessMultiple(id1 int, id2 int) string {
 	tmp1 := GetPair(id1)
 
 	if tmp1.IsErr() {
-		err := *tmp1.err
-		_ = err
 		return "first failed"
 	}
 	first := *tmp1.ok
 	tmp2 := GetPair(id2)
 
 	if tmp2.IsErr() {
-		err := *tmp2.err
-		_ = err
 		return "second failed"
 	}
 	second := *tmp2.ok
