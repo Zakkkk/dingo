@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "tests/golden/error_prop_07_special_chars.dingo",
-  "go_file": "tests/golden/error_prop_07_special_chars.go",
+  "dingo_file": "error_prop_07_special_chars.dingo",
+  "go_file": "error_prop_07_special_chars.go",
   "mappings": [
     {
       "generated_line": 1,
@@ -50,12 +50,12 @@
     },
     {
       "generated_line": 9,
-      "generated_column": 1,
-      "original_line": 9,
-      "original_column": 1,
+      "generated_column": 2,
+      "original_line": 6,
+      "original_column": 26,
       "processor_input_line": 0,
-      "length": 0,
-      "name": "identity"
+      "length": 1,
+      "name": "error_prop"
     },
     {
       "generated_line": 13,

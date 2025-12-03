@@ -430,8 +430,13 @@ func (t *TernaryProcessor) findExpressionStart(line string, qPos int) int {
 				// Check for !=, :=, <=, >= (look behind)
 				if i > 0 {
 					prevCh := line[i-1]
-					if prevCh == '!' || prevCh == ':' || prevCh == '<' || prevCh == '>' {
-						// This is part of comparison/walrus - keep scanning
+					if prevCh == ':' {
+						// This is := (walrus/short assignment) - STOP HERE
+						// The condition starts after :=
+						return i + 1
+					}
+					if prevCh == '!' || prevCh == '<' || prevCh == '>' {
+						// This is part of comparison (!=, <=, >=) - keep scanning
 						continue
 					}
 				}

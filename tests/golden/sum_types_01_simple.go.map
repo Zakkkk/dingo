@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "tests/golden/sum_types_01_simple.dingo",
-  "go_file": "tests/golden/sum_types_01_simple.go",
+  "dingo_file": "sum_types_01_simple.dingo",
+  "go_file": "sum_types_01_simple.go",
   "mappings": [
     {
       "generated_line": 1,

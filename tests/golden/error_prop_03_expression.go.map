@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "tests/golden/error_prop_03_expression.dingo",
-  "go_file": "tests/golden/error_prop_03_expression.go",
+  "dingo_file": "error_prop_03_expression.dingo",
+  "go_file": "error_prop_03_expression.go",
   "mappings": [
     {
       "generated_line": 1,
@@ -38,6 +38,15 @@
       "processor_input_line": 0,
       "length": 0,
       "name": "identity"
+    },
+    {
+      "generated_line": 8,
+      "generated_column": 2,
+      "original_line": 4,
+      "original_column": 16,
+      "processor_input_line": 0,
+      "length": 1,
+      "name": "error_prop"
     },
     {
       "generated_line": 12,
