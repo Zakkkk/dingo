@@ -428,7 +428,7 @@ func TestRustMatchASTProcessor_ExpressionContext(t *testing.T) {
 				2 => "two",
 				_ => "other",
 			}`,
-			expect: "__match_result",
+			expect: "matchResult",
 		},
 		{
 			name: "match in return",
@@ -436,7 +436,7 @@ func TestRustMatchASTProcessor_ExpressionContext(t *testing.T) {
 				Ok(v) => v,
 				Err(_) => 0,
 			}`,
-			expect: "__match_result",
+			expect: "matchResult",
 		},
 		{
 			name: "match in function argument",
@@ -444,7 +444,7 @@ func TestRustMatchASTProcessor_ExpressionContext(t *testing.T) {
 				Some(v) => v,
 				None => 0,
 			})`,
-			expect: "__match_result",
+			expect: "matchResult",
 		},
 	}
 
@@ -734,7 +734,7 @@ func TestRustMatchASTProcessor_RealWorldExamples(t *testing.T) {
 				500 => "Internal Server Error",
 				_ => "Unknown",
 			}`,
-			expect: "__match_result",
+			expect: "matchResult",
 		},
 		{
 			name: "Result with error handling",

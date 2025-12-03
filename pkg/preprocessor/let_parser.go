@@ -100,6 +100,7 @@ func parseTypeAnnotation(l *lexer.Lexer) (string, error) {
 	angleDepth := 0
 	parenDepth := 0
 	bracketDepth := 0
+	lastTokenType := lexer.ILLEGAL
 
 	for {
 		tok = l.PeekToken()
@@ -118,7 +119,58 @@ func parseTypeAnnotation(l *lexer.Lexer) (string, error) {
 		// Consume token
 		tok = l.NextToken()
 
-		// Track bracket depths
+		// Smart spacing for type annotations
+		if typeBuilder.Len() > 2 { // More than ": "
+			needSpace := true
+
+			// No space before <
+			if tok.Type == lexer.LANGLE {
+				needSpace = false
+			}
+			// No space after <
+			if lastTokenType == lexer.LANGLE {
+				needSpace = false
+			}
+			// No space before >
+			if tok.Type == lexer.RANGLE {
+				needSpace = false
+			}
+			// No space before comma
+			if tok.Type == lexer.COMMA {
+				needSpace = false
+			}
+			// No space before (
+			if tok.Type == lexer.LPAREN {
+				needSpace = false
+			}
+			// No space after (
+			if lastTokenType == lexer.LPAREN {
+				needSpace = false
+			}
+			// No space before )
+			if tok.Type == lexer.RPAREN {
+				needSpace = false
+			}
+			// No space before [
+			if tok.Type == lexer.LBRACKET {
+				needSpace = false
+			}
+			// No space after [
+			if lastTokenType == lexer.LBRACKET {
+				needSpace = false
+			}
+			// No space before ]
+			if tok.Type == lexer.RBRACKET {
+				needSpace = false
+			}
+
+			if needSpace {
+				typeBuilder.WriteString(" ")
+			}
+		}
+		typeBuilder.WriteString(tok.Literal)
+
+		// Track bracket depths AFTER spacing logic
 		switch tok.Type {
 		case lexer.LANGLE:
 			angleDepth++
@@ -134,11 +186,7 @@ func parseTypeAnnotation(l *lexer.Lexer) (string, error) {
 			bracketDepth--
 		}
 
-		// Add token to type string
-		if typeBuilder.Len() > 2 { // More than ": "
-			typeBuilder.WriteString(" ")
-		}
-		typeBuilder.WriteString(tok.Literal)
+		lastTokenType = tok.Type
 	}
 
 	return strings.TrimSpace(typeBuilder.String()), nil
@@ -156,6 +204,7 @@ func parseValueExpr(l *lexer.Lexer) (string, error) {
 	braceDepth := 0
 
 	lastTokenType := lexer.ILLEGAL
+	lastLiteral := ""
 
 	for {
 		tok := l.PeekToken()
@@ -173,7 +222,66 @@ func parseValueExpr(l *lexer.Lexer) (string, error) {
 		// Consume token
 		tok = l.NextToken()
 
-		// Track bracket depths
+		// Add token to value string with smart spacing
+		// Note: We check spacing BEFORE updating bracket depths so we can detect generics
+		if valueBuilder.Len() > 0 {
+			// Don't add space before/after certain tokens
+			needSpace := true
+
+			// Don't add space before closing parens/brackets
+			if tok.Type == lexer.RPAREN || tok.Type == lexer.RBRACKET {
+				needSpace = false
+			}
+			// Don't add space after opening parens/brackets
+			if lastTokenType == lexer.LPAREN || lastTokenType == lexer.LBRACKET {
+				needSpace = false
+			}
+			// Don't add space before ( for function calls (after IDENT or RPAREN)
+			if tok.Type == lexer.LPAREN && (lastTokenType == lexer.IDENT || lastTokenType == lexer.RPAREN || lastTokenType == lexer.RANGLE) {
+				needSpace = false
+			}
+			// Don't add space before comma
+			if tok.Type == lexer.COMMA {
+				needSpace = false
+			}
+			// Don't add space before = if previous token forms compound operator (>=, <=, :=, ==)
+			if tok.Type == lexer.ASSIGN {
+				if lastTokenType == lexer.RANGLE || lastTokenType == lexer.LANGLE ||
+					lastTokenType == lexer.COLON || lastTokenType == lexer.ASSIGN {
+					needSpace = false
+				}
+			}
+			// Don't add space before > if previous token is = (lambda arrow =>)
+			if tok.Type == lexer.RANGLE && lastTokenType == lexer.ASSIGN {
+				needSpace = false
+			}
+			// Don't add space before > if previous token is - (return type arrow ->)
+			if tok.Type == lexer.RANGLE && lastLiteral == "-" {
+				needSpace = false
+			}
+			// Handle angle brackets for generics: Option<T>, Result<T, E>
+			// Don't add space after < or before > when used as generics (angleDepth > 0)
+			if tok.Type == lexer.RANGLE && angleDepth > 0 {
+				needSpace = false
+			}
+			if lastTokenType == lexer.LANGLE && angleDepth > 0 {
+				needSpace = false
+			}
+			// Don't add space between consecutive ? characters (preserve ?? null coalescing operator)
+			if tok.Literal == "?" && lastLiteral == "?" {
+				needSpace = false
+			}
+			// Don't add space between ? and . (preserve ?. safe navigation operator)
+			if tok.Literal == "." && lastLiteral == "?" {
+				needSpace = false
+			}
+
+			if needSpace {
+				valueBuilder.WriteString(" ")
+			}
+		}
+
+		// Track bracket depths AFTER spacing logic
 		switch tok.Type {
 		case lexer.LANGLE:
 			angleDepth++
@@ -196,26 +304,6 @@ func parseValueExpr(l *lexer.Lexer) (string, error) {
 			braceDepth--
 		}
 
-		// Add token to value string with smart spacing
-		if valueBuilder.Len() > 0 {
-			// Don't add space before closing brackets or after opening brackets
-			needSpace := true
-			if tok.Type == lexer.RPAREN || tok.Type == lexer.RBRACKET || tok.Type == lexer.RANGLE {
-				needSpace = false
-			}
-			if lastTokenType == lexer.LPAREN || lastTokenType == lexer.LBRACKET || lastTokenType == lexer.LANGLE {
-				needSpace = false
-			}
-			// Don't add space before comma
-			if tok.Type == lexer.COMMA {
-				needSpace = false
-			}
-
-			if needSpace {
-				valueBuilder.WriteString(" ")
-			}
-		}
-
 		// Handle string literals - need to add quotes back with original quote type
 		if tok.Type == lexer.STRING {
 			if tok.QuoteType == '`' {
@@ -232,6 +320,7 @@ func parseValueExpr(l *lexer.Lexer) (string, error) {
 		}
 
 		lastTokenType = tok.Type
+		lastLiteral = tok.Literal
 	}
 
 	return strings.TrimSpace(valueBuilder.String()), nil

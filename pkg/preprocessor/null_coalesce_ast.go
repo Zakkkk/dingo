@@ -274,7 +274,7 @@ func (n *NullCoalesceASTProcessor) parseNullCoalesce(line string) (*ast.NullCoal
 	// For simplicity, we'll handle chains by collecting all operands
 	var operands []string
 
-	// Check if this is a let/var declaration and extract RHS
+	// Check if this is a let/var declaration or short declaration and extract RHS
 	rhsStart := 0
 	trimmed := strings.TrimSpace(searchLine)
 	if strings.HasPrefix(trimmed, "let ") || strings.HasPrefix(trimmed, "var ") {
@@ -283,6 +283,13 @@ func (n *NullCoalesceASTProcessor) parseNullCoalesce(line string) (*ast.NullCoal
 		if eqIndex != -1 {
 			// Start parsing from after the =
 			rhsStart = eqIndex + 1
+		}
+	} else if strings.Contains(trimmed, ":=") {
+		// Short declaration: varName := expr ?? default
+		colonEqIndex := strings.Index(searchLine, ":=")
+		if colonEqIndex != -1 {
+			// Start parsing from after the :=
+			rhsStart = colonEqIndex + 2
 		}
 	}
 
@@ -401,15 +408,14 @@ func (n *NullCoalesceASTProcessor) findCoalesceOperators(line string) []operator
 	return positions
 }
 
-// extractLetPattern checks if line matches "let varName = ..." pattern
+// extractLetPattern checks if line matches assignment pattern with ??
+// Supports:
+//   - "let varName = ..." (original Dingo)
+//   - "var varName Type = ..." (after DingoPreParser with type)
+//   - "varName := ..." (short declaration after DingoPreParser without type)
 // Returns: (matched, varName, indent)
 func (n *NullCoalesceASTProcessor) extractLetPattern(line string) (bool, string, string) {
 	trimmed := strings.TrimSpace(line)
-
-	// Match: let varName = ...
-	if !strings.HasPrefix(trimmed, "let ") && !strings.HasPrefix(trimmed, "var ") {
-		return false, "", ""
-	}
 
 	// Extract indent
 	indent := ""
@@ -424,23 +430,66 @@ func (n *NullCoalesceASTProcessor) extractLetPattern(line string) (bool, string,
 		}
 	}
 
-	// Find variable name
-	parts := strings.Fields(trimmed)
-	if len(parts) < 4 {
-		// Minimum: "let x = value"
-		return false, "", ""
+	// Pattern 1: let varName = ... or var varName = ...
+	if strings.HasPrefix(trimmed, "let ") || strings.HasPrefix(trimmed, "var ") {
+		parts := strings.Fields(trimmed)
+		if len(parts) < 4 {
+			// Minimum: "let x = value"
+			return false, "", ""
+		}
+
+		// Extract variable name (parts[1])
+		varName := parts[1]
+
+		// Check for type annotation: let x: Type = ...
+		if strings.Contains(varName, ":") {
+			// Remove type annotation
+			varName = strings.Split(varName, ":")[0]
+		}
+
+		return true, varName, indent
 	}
 
-	// Extract variable name (parts[1])
-	varName := parts[1]
-
-	// Check for type annotation: let x: Type = ...
-	if strings.Contains(varName, ":") {
-		// Remove type annotation
-		varName = strings.Split(varName, ":")[0]
+	// Pattern 2: varName := ... (short declaration)
+	if strings.Contains(trimmed, ":=") {
+		// Find := position
+		colonIdx := strings.Index(trimmed, ":=")
+		if colonIdx > 0 {
+			// Extract variable name(s) before :=
+			varPart := strings.TrimSpace(trimmed[:colonIdx])
+			// Handle multiple variables: a, b := ...
+			if strings.Contains(varPart, ",") {
+				// Multiple vars - take first one
+				varPart = strings.TrimSpace(strings.Split(varPart, ",")[0])
+			}
+			// Validate it looks like an identifier
+			if len(varPart) > 0 && isValidIdent(varPart) {
+				return true, varPart, indent
+			}
+		}
 	}
 
-	return true, varName, indent
+	return false, "", ""
+}
+
+// isValidIdent checks if a string looks like a valid Go identifier
+func isValidIdent(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	// First char must be letter or underscore
+	first := s[0]
+	if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_') {
+		return false
+	}
+	// Rest must be letter, digit, or underscore
+	for i := 1; i < len(s); i++ {
+		ch := s[i]
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // generateLetAssignment generates if-else block for let assignment

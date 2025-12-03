@@ -25,10 +25,10 @@ arg0 int) ResultIntString {
 	return ResultIntString{tag: ResultTagOk, ok: &arg0}
 }
 func ResultIntStringErr(arg0 string) ResultIntString {
-	return ResultIntString{tag: ResultTagErr,
+	return ResultIntString{tag: ResultTagErr, err: &
 
 	// Tuple of Results
-	err: &arg0}
+	arg0}
 }
 func (r ResultIntString) IsOk() bool {
 	return r.tag == ResultTagOk
@@ -48,10 +48,9 @@ func (r ResultIntString) Unwrap(
 	}
 	return *r.ok
 }
-func (r ResultIntString) UnwrapOr(
+func (r ResultIntString) UnwrapOr(defaultValue int) int {
 
-// Tuple of Options - destructure and check separately
-defaultValue int) int {
+	// Tuple of Options - destructure and check separately
 	if r.tag == ResultTagOk {
 		return *r.ok
 	}
@@ -65,10 +64,11 @@ func (r ResultIntString) UnwrapErr() string {
 		panic("Result contains nil Err value")
 	}
 	return *r.err
-
-	// Create tuple of Results manually
 }
-func (r ResultIntString) UnwrapOrElse(fn func(string) int) int {
+func (r ResultIntString) UnwrapOrElse(
+
+// Create tuple of Results manually
+fn func(string) int) int {
 	if r.tag == ResultTagOk && r.ok != nil {
 		return *r.ok
 	}
@@ -83,11 +83,11 @@ func (r ResultIntString) Map(fn func(int) interface{}) interface{} {
 		return struct {
 			tag ResultTag
 			ok  *interface{}
-			err *
+			err *string
+		}{tag: ResultTagOk, ok: &
 
-			// Tuple of mixed Options
-			string
-		}{tag: ResultTagOk, ok: &u}
+		// Tuple of mixed Options
+		u}
 	}
 	return struct {
 		tag ResultTag
@@ -517,8 +517,8 @@ type OptionString struct {
 	tag  OptionTag
 	some *string
 }
-func OptionStringSome(arg0 string) OptionString {
-	return OptionString{tag: OptionTagSome, some: &arg0}
+func OptionStringSome(arg string) OptionString {
+	return OptionString{tag: OptionTagSome, some: &arg}
 }
 func OptionStringNone() OptionString {
 	return OptionString{tag: OptionTagNone}
@@ -575,8 +575,8 @@ type OptionInt struct {
 	tag  OptionTag
 	some *int
 }
-func OptionIntSome(arg0 int) OptionInt {
-	return OptionInt{tag: OptionTagSome, some: &arg0}
+func OptionIntSome(arg int) OptionInt {
+	return OptionInt{tag: OptionTagSome, some: &arg}
 }
 func OptionIntNone() OptionInt {
 	return OptionInt{tag: OptionTagNone}
@@ -633,8 +633,8 @@ type OptionInterface struct {
 	tag  OptionTag
 	some *interface{}
 }
-func OptionInterfaceSome(arg0 interface{}) OptionInterface {
-	return OptionInterface{tag: OptionTagSome, some: &arg0}
+func OptionInterfaceSome(arg interface{}) OptionInterface {
+	return OptionInterface{tag: OptionTagSome, some: &arg}
 }
 func OptionInterfaceNone() OptionInterface {
 	return OptionInterface{tag: OptionTagNone}
@@ -691,8 +691,8 @@ type OptionBool struct {
 	tag  OptionTag
 	some *bool
 }
-func OptionBoolSome(arg0 bool) OptionBool {
-	return OptionBool{tag: OptionTagSome, some: &arg0}
+func OptionBoolSome(arg bool) OptionBool {
+	return OptionBool{tag: OptionTagSome, some: &arg}
 }
 func OptionBoolNone() OptionBool {
 	return OptionBool{tag: OptionTagNone}
@@ -751,26 +751,26 @@ type Tuple2AnyAny struct {
 	_1 interface {
 	}
 }
-func findUser(id int) (Option[string], Option[int]) {
+func findUser(id int) (OptionString, OptionInt) {
 	if id > 0 {
-		return Some("User"), Some(id)
+		return OptionStringSome("User"), OptionInterfaceSome(id)
 	}
-	return OptionStringNone(), OptionIntNone()
+	return Option_string_None(), Option_int_None()
 }
-func getIntResult() Result[int, string] {
+func getIntResult() ResultIntString {
 	return ResultIntError{tag: ResultTagOk, ok: func() *int {
-		tmp4 := 42
-		return &tmp4
+		tmp2 := 42
+		return &tmp2
 	}()}
 }
-func getStringResult() Result[string, string] {
+func getStringResult() ResultStringString {
 	return ResultStringError{tag: ResultTagOk, ok: func() *string {
-		tmp5 := "hello"
-		return &tmp5
+		tmp3 := "hello"
+		return &tmp3
 	}()}
 }
-func getOptions() (Option[int], Option[string], Option[bool]) {
-	return Some(10), OptionStringNone(), Some(true)
+func getOptions() (OptionInt, OptionString, OptionBool) {
+	return OptionIntSome(10), Option_string_None(), OptionBoolSome(true)
 }
 func main() {
 
