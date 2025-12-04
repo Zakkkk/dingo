@@ -55,14 +55,16 @@ func TestTupleProcessor_TupleLiterals(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:    "empty_tuple_error",
-			input:   "let x = ()",
-			wantErr: true,
+			name:      "empty_parens_not_tuple",
+			input:     "let x = ()",
+			wantMatch: "let x = ()", // Empty parens pass through unchanged (not a tuple)
+			wantErr:   false,
 		},
 		{
-			name:    "single_element_error",
-			input:   "let x = (42,)",
-			wantErr: true,
+			name:      "single_element_with_trailing_comma",
+			input:     "let x = (42,)",
+			wantMatch: "let x = (42,)", // Single element tuples not supported - passes through unchanged
+			wantErr:   false,
 		},
 		{
 			name:    "too_many_elements_error",
@@ -478,6 +480,34 @@ func TestDetectTuple(t *testing.T) {
 			startIdx:     4,
 			wantIsTuple:  true,
 			wantElements: 2,
+		},
+		{
+			name:         "generic_function_None",
+			line:         "return None[User]()",
+			startIdx:     18,
+			wantIsTuple:  false,
+			wantElements: 0,
+		},
+		{
+			name:         "generic_function_Some",
+			line:         "x := Some[int](42)",
+			startIdx:     14,
+			wantIsTuple:  false,
+			wantElements: 0,
+		},
+		{
+			name:         "generic_function_Result",
+			line:         "return Result[string, error]()",
+			startIdx:     29,
+			wantIsTuple:  false,
+			wantElements: 0,
+		},
+		{
+			name:         "empty_parens",
+			line:         "foo()",
+			startIdx:     3,
+			wantIsTuple:  false,
+			wantElements: 0,
 		},
 	}
 

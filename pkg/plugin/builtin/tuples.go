@@ -123,24 +123,12 @@ func (p *TuplePlugin) handleTupleMarker(call *ast.CallExpr) {
 		return
 	}
 
-	// Perform type inference on each element
-	elementTypes := make([]types.Type, arity)
-	elementTypeNames := make([]string, arity)
+	// Generate canonical type name using recursive detection
+	// This handles both simple types and nested tuple markers
+	typeName := p.generateTypeNameRecursive(call.Args)
 
-	for i, arg := range call.Args {
-		inferredType, ok := p.inferElementType(arg)
-		if !ok {
-			p.ctx.Logger.Warnf("Failed to infer type for tuple element %d", i)
-			// Fallback to interface{} for failed inference
-			elementTypeNames[i] = "interface{}"
-			continue
-		}
-		elementTypes[i] = inferredType
-		elementTypeNames[i] = p.typeToString(inferredType)
-	}
-
-	// Generate canonical type name
-	typeName := p.generateTypeName(arity, elementTypeNames)
+	// Build element type names for struct field generation
+	elementTypeNames := p.extractTypeNames(call.Args)
 
 	// Emit type declaration if not already emitted
 	if !p.emittedTypes[typeName] {
@@ -148,6 +136,47 @@ func (p *TuplePlugin) handleTupleMarker(call *ast.CallExpr) {
 		p.emittedTypes[typeName] = true
 		p.ctx.Logger.Debugf("Generated tuple type: %s", typeName)
 	}
+}
+
+// isNestedTupleMarker detects if an expression is a nested tuple marker call
+// Returns the CallExpr and true if it's a tuple marker, nil and false otherwise
+func (p *TuplePlugin) isNestedTupleMarker(expr ast.Expr) (*ast.CallExpr, bool) {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return nil, false
+	}
+	ident, ok := call.Fun.(*ast.Ident)
+	if !ok {
+		return nil, false
+	}
+	if p.markerPattern.MatchString(ident.Name) {
+		return call, true
+	}
+	return nil, false
+}
+
+// extractTypeNames extracts type names from arguments for struct field generation
+// Handles nested tuples by recursively processing nested markers
+func (p *TuplePlugin) extractTypeNames(args []ast.Expr) []string {
+	typeNames := make([]string, len(args))
+
+	for i, arg := range args {
+		if nestedCall, isNested := p.isNestedTupleMarker(arg); isNested {
+			// For nested tuple, use the generated type name
+			nestedTypeName := p.generateTypeNameRecursive(nestedCall.Args)
+			typeNames[i] = nestedTypeName
+		} else {
+			// For regular expression, infer its type
+			inferredType, ok := p.inferElementType(arg)
+			if !ok {
+				typeNames[i] = "interface{}"
+			} else {
+				typeNames[i] = p.typeToString(inferredType)
+			}
+		}
+	}
+
+	return typeNames
 }
 
 // inferElementType performs type inference on a tuple element expression
@@ -174,29 +203,69 @@ func (p *TuplePlugin) typeToString(t types.Type) string {
 	return types.TypeString(t, nil)
 }
 
-// generateTypeName creates canonical tuple type name following Go conventions
-// Pattern: Tuple{N}{Type1}{Type2}...{TypeN} (CamelCase without underscores)
-// Example: Tuple2IntString, Tuple3UserErrorBool
-//
-// Note: In extremely rare cases, type name collisions are theoretically possible
-// (e.g., (UserError, Bool) and (User, ErrorBool) both → Tuple2UserErrorBool).
-// In practice, this is vanishingly rare and detected at compile time if it occurs.
-func (p *TuplePlugin) generateTypeName(arity int, elementTypes []string) string {
-	parts := []string{fmt.Sprintf("Tuple%d", arity)}
+// maxTupleDepth limits recursion depth to prevent stack overflow
+const maxTupleDepth = 10
 
-	for _, typeName := range elementTypes {
+// generateTypeNameRecursive creates type names for potentially nested tuples
+// Handles recursive detection of nested tuple markers to build correct type names
+// Example: ((int, int), string) → Tuple2_Tuple2_Int_Int_String
+//
+// CRITICAL FIX (2025-12-05): Added recursion depth limit to prevent stack overflow
+func (p *TuplePlugin) generateTypeNameRecursive(args []ast.Expr) string {
+	return p.generateTypeNameWithDepth(args, 0)
+}
+
+// generateTypeNameWithDepth implements recursive type name generation with depth tracking
+func (p *TuplePlugin) generateTypeNameWithDepth(args []ast.Expr, depth int) string {
+	if depth > maxTupleDepth {
+		p.ctx.Logger.Error(fmt.Sprintf("Tuple nesting exceeds maximum depth %d", maxTupleDepth))
+		return "interface{}" // Fallback to avoid crash
+	}
+
+	typeNames := make([]string, len(args))
+
+	for i, arg := range args {
+		if nestedCall, isNested := p.isNestedTupleMarker(arg); isNested {
+			// Recursive case: nested tuple marker (with depth+1)
+			nestedTypeName := p.generateTypeNameWithDepth(nestedCall.Args, depth+1)
+			typeNames[i] = nestedTypeName
+		} else {
+			// Base case: regular expression - infer its type
+			inferredType, ok := p.inferElementType(arg)
+			if !ok {
+				typeNames[i] = "interface{}"
+			} else {
+				typeNames[i] = p.typeToString(inferredType)
+			}
+		}
+	}
+
+	return p.generateTypeName(len(args), typeNames)
+}
+
+// generateTypeName creates canonical tuple type name following Go conventions
+// Pattern: Tuple{N}_{Type1}_{Type2}_..._{TypeN} (with underscores for uniqueness)
+// Example: Tuple2_Int_String, Tuple3_User_Error_Bool
+//
+// CRITICAL FIX (2025-12-05): Added underscores between type names to prevent collisions
+// - Before: (UserError, Bool) and (User, ErrorBool) both → Tuple2UserErrorBool (COLLISION)
+// - After: (UserError, Bool) → Tuple2_UserError_Bool, (User, ErrorBool) → Tuple2_User_ErrorBool (DISTINCT)
+func (p *TuplePlugin) generateTypeName(arity int, elementTypes []string) string {
+	sanitizedNames := make([]string, len(elementTypes))
+
+	for i, typeName := range elementTypes {
 		sanitized := sanitizeTupleTypeName(typeName)
 		// Ensure first letter is capitalized for clear CamelCase boundaries
 		capitalized := capitalize(sanitized)
-		parts = append(parts, capitalized)
+		sanitizedNames[i] = capitalized
 	}
 
-	// Join without delimiters for idiomatic Go CamelCase
-	// e.g., (int, string) → Tuple2IntString
-	//       (User, Error) → Tuple2UserError
-	fullName := strings.Join(parts, "")
-
-	return fullName
+	// Use underscore separators to prevent collisions
+	// e.g., (int, string) → Tuple2_Int_String
+	//       (User, Error) → Tuple2_User_Error
+	//       (UserError, Bool) → Tuple2_UserError_Bool
+	//       (User, ErrorBool) → Tuple2_User_ErrorBool (distinct!)
+	return fmt.Sprintf("Tuple%d_%s", arity, strings.Join(sanitizedNames, "_"))
 }
 
 // capitalize capitalizes the first letter of a string
@@ -449,19 +518,8 @@ func (p *TuplePlugin) transformTupleMarker(call *ast.CallExpr) ast.Expr {
 		return nil
 	}
 
-	// Infer element types to reconstruct type name
-	elementTypeNames := make([]string, arity)
-	for i, arg := range call.Args {
-		inferredType, ok := p.inferElementType(arg)
-		if !ok {
-			elementTypeNames[i] = "interface{}"
-		} else {
-			elementTypeNames[i] = p.typeToString(inferredType)
-		}
-	}
-
-	// Generate type name (must match what was emitted in Process phase)
-	typeName := p.generateTypeName(arity, elementTypeNames)
+	// Generate type name using recursive detection (must match what was emitted in Process phase)
+	typeName := p.generateTypeNameRecursive(call.Args)
 
 	// Create struct literal: TupleNType{_0: arg0, _1: arg1, ...}
 	elts := make([]ast.Expr, 0, arity)

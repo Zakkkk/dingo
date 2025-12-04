@@ -17,6 +17,14 @@ import (
 //   - 1 element → error: "Single-element tuples not supported"
 //   - 2-12 elements → ok (Tuple2 through Tuple12)
 //   - >12 elements → error: "Maximum 12 elements"
+//
+// TODO(ast-migration): This preprocessor uses regex-based text transformation,
+// which is legacy architecture. Future versions will use proper AST-based
+// detection and transformation. See CLAUDE.md section "AST-Based Architecture"
+// and ai-docs/AST_MIGRATION.md for migration plan.
+//
+// INCREMENTAL PROGRESS: Phase 9 improved nested tuple support and fixed critical
+// generic call detection bugs. Full AST migration scheduled for Phase 10.
 type TupleProcessor struct {
 	counter           int       // For temporary variable generation (starts at 1, first var is "tmp", then "tmp1", "tmp2"...)
 	mappings          []Mapping // Source map tracking
@@ -364,6 +372,11 @@ func (t *TupleProcessor) processTupleLiterals(line string, originalLineNum int, 
 
 // detectTuple determines if a '(' starts a tuple literal
 // Returns: (isTuple, elements, closeParenIndex)
+//
+// TODO(ast-migration): Migrate tuple detection from regex to AST-based parsing
+// Current implementation uses string scanning for simplicity. This is acceptable
+// as incremental progress toward full AST-based preprocessing (see CLAUDE.md).
+// Target migration: Phase 10 (after nested tuple support stabilizes)
 func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string, int) {
 	// Find matching closing paren
 	closeParen := findMatchingParen(line, startIdx)
@@ -382,6 +395,12 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 
 		if nonWhitespaceIdx >= 0 {
 			prevChar := line[nonWhitespaceIdx]
+
+			// CRITICAL: Reject ] (generic function call like None[User]())
+			if prevChar == ']' {
+				return false, nil, closeParen
+			}
+
 			// If previous character is letter, digit, or underscore → could be function call
 			if isIdentifierChar(prevChar) {
 				// Extract the preceding word
@@ -409,9 +428,9 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 	content := line[startIdx+1 : closeParen]
 	trimmed := strings.TrimSpace(content)
 
-	// Empty parens → not a tuple (will be caught by arity validation)
+	// Empty parens → not a tuple (e.g., function call with no args)
 	if trimmed == "" {
-		return true, []string{}, closeParen
+		return false, nil, closeParen
 	}
 
 	// CRITICAL FIX: Check for function return type signature
@@ -452,6 +471,9 @@ func (t *TupleProcessor) detectTuple(line string, startIdx int) (bool, []string,
 }
 
 // parseElements splits tuple content by commas, respecting nested parens, braces, and strings
+//
+// TODO(ast-migration): Replace character-by-character parsing with AST traversal
+// This manual parsing is error-prone. AST-based approach will be more robust.
 func parseElements(content string) []string {
 	elements := []string{}
 	current := ""
