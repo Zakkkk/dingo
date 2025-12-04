@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/plugin"
+	"github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -32,6 +33,9 @@ import (
 // - Helper methods (IsOk, IsErr, Unwrap, UnwrapOr, etc.)
 type ResultTypePlugin struct {
 	ctx *plugin.Context
+
+	// Reference to the current file being transformed (for comment stripping)
+	file *ast.File
 
 	// Track which Result types we've already emitted to avoid duplicates
 	emittedTypes map[string]bool
@@ -79,7 +83,7 @@ func (p *ResultTypePlugin) SetContext(ctx *plugin.Context) {
 	// Initialize type inference service with go/types integration (Fix A5)
 	if ctx != nil && ctx.FileSet != nil {
 		// Create type inference service
-		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger)
+		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger, registry.NewRegistryWithFileSet("builtin", ctx.FileSet))
 		if err != nil {
 			ctx.Logger.Warnf("Failed to create type inference service: %v", err)
 		} else {
@@ -127,16 +131,51 @@ func (p *ResultTypePlugin) Process(node ast.Node) error {
 	return nil
 }
 
+// stripCommentsNearExpr is a helper that safely strips comments near an expression
+// before wrapping it in a Result constructor. This prevents comment misplacement.
+func (p *ResultTypePlugin) stripCommentsNearExpr(expr ast.Expr, stmt ast.Node) {
+	if p.ctx == nil || p.ctx.CurrentFile == nil {
+		return
+	}
+
+	// Use the file directly without type assertion since Transform already has it
+	// The ctx.CurrentFile should be set by the Pipeline when it's passed
+	file := p.file
+	if file == nil {
+		return
+	}
+
+	stripper := NewCommentStripper(file, p.ctx)
+	stripper.StripCommentsNearExpr(expr, stmt)
+}
+
+// findParentStmt finds the parent statement node for a given expression
+// by using the shared helper from comment_util.go
+func (p *ResultTypePlugin) findParentStmt(expr ast.Expr) ast.Node {
+	// Validate parent map is available
+	if p.ctx == nil || p.ctx.GetParentMap() == nil {
+		if p.ctx != nil && p.ctx.Logger != nil {
+			p.ctx.Logger.Warnf("Parent map not built - comment stripping may fail. Call BuildParentMap() before Transform phase.")
+		}
+		return nil
+	}
+
+	return FindContainingStatement(p.ctx, expr)
+}
+
 // wrapReturnForResult checks if a return expression needs implicit wrapping
 // and returns the wrapped expression, or nil if no wrapping needed.
 //
 // The logic:
-// 1. If return value is already a Result constructor call (Ok, Err, ResultXOk, ResultXErr) → no wrapping
+// 1. If return value is already a Result constructor call (Ok, Err, dgo.Ok, dgo.Err) → no wrapping
 // 2. If return value is already a Result type value → no wrapping
-// 3. If return value type matches the error type E → wrap in Err
-// 4. If return value type matches the ok type T → wrap in Ok
+// 3. If return value type matches the error type E → wrap in dgo.Err[T, E]
+// 4. If return value type matches the ok type T → wrap in dgo.Ok[T, E]
 // 5. If we can't determine the type, assume Ok wrapping (compiler will catch mismatches)
-func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturnInfo) ast.Expr {
+//
+// IMPORTANT: This method strips comments near the expression before wrapping to prevent
+// comment misplacement inside generic type parameters (AST-level fix for comment positioning).
+func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturnInfo, stmt *ast.ReturnStmt) ast.Expr {
 	// Skip if already a Result constructor call
 	if p.isResultConstructorCall(expr) {
 		return nil
@@ -147,16 +186,30 @@ func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturn
 		return nil
 	}
 
+	// Strip comments near the expression before wrapping
+	// They'll be reattached as trailing comments after all transformations
+	p.stripCommentsNearExpr(expr, stmt)
+
 	// Try to determine the type of the expression
 	exprType := p.determineExpressionType(expr)
 
 	// Check if the expression type matches the error type
 	if p.typeMatchesError(expr, exprType, info.errType) {
-		// Wrap in Err constructor
-		p.ctx.Logger.Debugf("Implicit wrapping: return %s → %sErr(...)", FormatExprForDebug(expr), info.resultTypeName)
+		// Wrap in dgo.Err[T](value) - T explicit, E inferred from argument
+		p.ctx.Logger.Debugf("Implicit wrapping: return %s → dgo.Err[%s](...)", FormatExprForDebug(expr), info.okType)
 		return &ast.CallExpr{
-			Fun:  ast.NewIdent(info.resultTypeName + "Err"),
-			Args: []ast.Expr{expr},
+			Fun: &ast.IndexExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("dgo"),
+					Sel: ast.NewIdent("Err"),
+				},
+				Lbrack: expr.Pos(),
+				Index:  ast.NewIdent(info.okType),
+				Rbrack: expr.Pos(),
+			},
+			Lparen: expr.Pos(),
+			Args:   []ast.Expr{expr},
+			Rparen: expr.End(),
 		}
 	}
 
@@ -164,11 +217,24 @@ func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturn
 	// If we can determine Ok match OR we can't determine at all, wrap as Ok
 	// The Go compiler will catch any type mismatches
 	if p.typeMatchesOk(expr, exprType, info.okType) || exprType == "" {
-		// Wrap in Ok constructor
-		p.ctx.Logger.Debugf("Implicit wrapping: return %s → %sOk(...)", FormatExprForDebug(expr), info.resultTypeName)
+		// Wrap in dgo.Ok[T, E](value) - both type args required (E is second, can't skip T)
+		p.ctx.Logger.Debugf("Implicit wrapping: return %s → dgo.Ok[%s, %s](...)", FormatExprForDebug(expr), info.okType, info.errType)
 		return &ast.CallExpr{
-			Fun:  ast.NewIdent(info.resultTypeName + "Ok"),
-			Args: []ast.Expr{expr},
+			Fun: &ast.IndexListExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("dgo"),
+					Sel: ast.NewIdent("Ok"),
+				},
+				Lbrack: expr.Pos(),
+				Indices: []ast.Expr{
+					ast.NewIdent(info.okType),
+					ast.NewIdent(info.errType),
+				},
+				Rbrack: expr.Pos(),
+			},
+			Lparen: expr.Pos(),
+			Args:   []ast.Expr{expr},
+			Rparen: expr.End(),
 		}
 	}
 
@@ -176,7 +242,7 @@ func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturn
 	return nil
 }
 
-// isResultConstructorCall checks if expr is a call to Ok(), Err(), or ResultXOk/ResultXErr
+// isResultConstructorCall checks if expr is a call to Ok(), Err(), dgo.Ok[], dgo.Err[], or ResultXOk/ResultXErr
 func (p *ResultTypePlugin) isResultConstructorCall(expr ast.Expr) bool {
 	call, ok := expr.(*ast.CallExpr)
 	if !ok {
@@ -199,6 +265,52 @@ func (p *ResultTypePlugin) isResultConstructorCall(expr ast.Expr) bool {
 			if ident.Name == "Ok" || ident.Name == "Err" {
 				return true
 			}
+		}
+		// dgo.Ok[T](...) or dgo.Err[T](...)
+		if sel, ok := fun.X.(*ast.SelectorExpr); ok {
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" {
+				if sel.Sel.Name == "Ok" || sel.Sel.Name == "Err" {
+					return true
+				}
+			}
+		}
+	case *ast.IndexListExpr:
+		// dgo.Ok[T, E](...) or dgo.Err[T, E](...)
+		if sel, ok := fun.X.(*ast.SelectorExpr); ok {
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" {
+				if sel.Sel.Name == "Ok" || sel.Sel.Name == "Err" {
+					return true
+				}
+			}
+		}
+		// Ok[T, E](...) or Err[T, E](...)
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			if ident.Name == "Ok" || ident.Name == "Err" {
+				return true
+			}
+		}
+	case *ast.SelectorExpr:
+		// dgo.Ok(...) or dgo.Err(...)
+		if pkg, ok := fun.X.(*ast.Ident); ok && pkg.Name == "dgo" {
+			if fun.Sel.Name == "Ok" || fun.Sel.Name == "Err" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isResultType checks if an expression represents the Result type
+// Handles both "Result" (Ident) and "dgo.Result" (SelectorExpr)
+func (p *ResultTypePlugin) isResultType(expr ast.Expr) bool {
+	// Case 1: Plain "Result" identifier
+	if ident, ok := expr.(*ast.Ident); ok && ident.Name == "Result" {
+		return true
+	}
+	// Case 2: "dgo.Result" selector expression
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Result" {
+			return true
 		}
 	}
 	return false
@@ -242,6 +354,12 @@ func (p *ResultTypePlugin) determineExpressionType(expr ast.Expr) string {
 		case "nil":
 			return "nil"
 		}
+		// Check for common error variable naming conventions
+		// Go convention: err, err1, err2, etc.
+		name := e.Name
+		if name == "err" || (strings.HasPrefix(name, "err") && len(name) > 3 && name[3] >= '0' && name[3] <= '9') {
+			return "error"
+		}
 		// Variable - would need symbol table lookup
 		// For now, we can't determine
 		return ""
@@ -266,6 +384,11 @@ func (p *ResultTypePlugin) determineExpressionType(expr ast.Expr) string {
 		// Check for Result method calls that return known types
 		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
 			methodName := sel.Sel.Name
+			pkgName := ""
+			if pkg, ok := sel.X.(*ast.Ident); ok {
+				pkgName = pkg.Name
+			}
+
 			// UnwrapErr() returns the error type - mark as "error-returning"
 			if methodName == "UnwrapErr" {
 				return "__error_type__" // Special marker
@@ -273,6 +396,14 @@ func (p *ResultTypePlugin) determineExpressionType(expr ast.Expr) string {
 			// Unwrap() returns the ok type
 			if methodName == "Unwrap" {
 				return "__ok_type__" // Special marker
+			}
+
+			// Known error-returning functions
+			if pkgName == "errors" && (methodName == "New" || methodName == "Wrap" || methodName == "Wrapf") {
+				return "error"
+			}
+			if pkgName == "fmt" && methodName == "Errorf" {
+				return "error"
 			}
 		}
 	}
@@ -288,6 +419,13 @@ func (p *ResultTypePlugin) typeMatchesError(expr ast.Expr, exprType, errType str
 
 	// Direct type match
 	if exprType != "" && exprType == errType {
+		return true
+	}
+
+	// If expression is an error type, it should be wrapped with Err
+	// regardless of the specific error type in the Result signature.
+	// The Go compiler will catch any type mismatches.
+	if exprType == "error" {
 		return true
 	}
 
@@ -373,12 +511,13 @@ func (p *ResultTypePlugin) trackFunctionResultType(funcNode ast.Node, funcType *
 	}
 
 	// Check for Result[T, E] (IndexListExpr) or Result[T] (IndexExpr)
+	// Handle both "Result" (Ident) and "dgo.Result" (SelectorExpr)
 	var okType, errType string
 
 	switch rt := firstResult.Type.(type) {
 	case *ast.IndexListExpr:
 		// Result[T, E] with two type parameters
-		if ident, ok := rt.X.(*ast.Ident); ok && ident.Name == "Result" {
+		if p.isResultType(rt.X) {
 			if len(rt.Indices) >= 1 {
 				okType = p.getTypeName(rt.Indices[0])
 			}
@@ -390,7 +529,7 @@ func (p *ResultTypePlugin) trackFunctionResultType(funcNode ast.Node, funcType *
 		}
 	case *ast.IndexExpr:
 		// Result[T] with single type parameter (default error type)
-		if ident, ok := rt.X.(*ast.Ident); ok && ident.Name == "Result" {
+		if p.isResultType(rt.X) {
 			okType = p.getTypeName(rt.Index)
 			errType = "error"
 		}
@@ -410,142 +549,72 @@ func (p *ResultTypePlugin) trackFunctionResultType(funcNode ast.Node, funcType *
 
 // handleGenericResult processes Result<T> or Result<T, E> syntax (IndexExpr)
 func (p *ResultTypePlugin) handleGenericResult(expr *ast.IndexExpr) {
-	// Check if the base type is "Result"
+	// With Go 1.18+ generics, we keep Result[T] as-is
+	// The preprocessor already adds runtime. prefix (Result[T] → dgo.Result[T])
+	// No type rewriting needed - the runtime package provides the generic type
+
+	// Check if the base type is "Result" or "dgo.Result"
+	isResult := false
 	if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "Result" {
-		var typeName string
-		var resultType string
-		// This is a Result<T> (single type parameter)
-		// Default error type to "error"
-
-		// Check if type inference is available
-		if p.typeInference != nil {
-			telemType, ok := p.typeInference.InferType(expr.Index)
-			if ok && telemType != nil {
-				typeName = p.typeInference.TypeToString(telemType)
-				resultType = fmt.Sprintf("Result%s", SanitizeTypeName(typeName, "error"))
-			} else {
-				p.ctx.Logger.Warnf("ResultTypePlugin: Could not infer type for Result<T> element. Falling back to heuristic.")
-				// Fallback to old heuristic if type inference fails
-				typeName = p.getTypeName(expr.Index)
-				resultType = fmt.Sprintf("Result%s", SanitizeTypeName(typeName, "error"))
-			}
-		} else {
-			// No type inference service - use heuristic
-			typeName = p.getTypeName(expr.Index)
-			resultType = fmt.Sprintf("Result%s", SanitizeTypeName(typeName, "error"))
-		}
-
-		if !p.emittedTypes[resultType] {
-			p.emitResultDeclaration(typeName, "error", resultType)
-			p.emittedTypes[resultType] = true
-		}
-
-		// Track this IndexExpr for replacement during Transform phase
-		if p.genericTypeRewrites == nil {
-			p.genericTypeRewrites = make(map[*ast.IndexExpr]string)
-		}
-		p.genericTypeRewrites[expr] = resultType
+		isResult = true
 	}
+	if sel, ok := expr.X.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Result" {
+			isResult = true
+		}
+	}
+
+	if !isResult {
+		return
+	}
+
+	// Log but don't rewrite - keep the generic syntax
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Found Result[T], keeping as-is (no rewrite)")
+
+	// NOTE: With Go 1.18+ generics, we do NOT:
+	// - Generate type declarations (runtime package provides Result[T, E])
+	// - Rewrite Result[T, E] to ResultTE (keep generic syntax)
 }
 
 // handleGenericResultList processes Result[T, E] syntax (IndexListExpr for Go 1.18+)
 func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
-	// Check if the base type is "Result"
+	// With Go 1.18+ generics, we keep Result[T, E] as-is
+	// The preprocessor already adds runtime. prefix (Result[T, E] → dgo.Result[T, E])
+	// No type rewriting needed - the runtime package provides the generic type
+
+	// Check if the base type is "Result" or "dgo.Result"
+	isResult := false
 	if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "Result" {
-		var resultType string
-
-		if len(expr.Indices) == 2 {
-			var okType, errType string
-			// Result<T, E> with explicit error type
-
-			// Check if type inference is available
-			if p.typeInference != nil {
-				okElemType, ok := p.typeInference.InferType(expr.Indices[0])
-				if !ok || okElemType == nil {
-					p.ctx.Logger.Warnf("ResultTypePlugin: Could not infer 'Ok' type for Result<T,E>. Falling back to heuristic.")
-					okType = p.getTypeName(expr.Indices[0])
-				} else {
-					okType = p.typeInference.TypeToString(okElemType)
-				}
-
-				errElemType, ok := p.typeInference.InferType(expr.Indices[1])
-				if !ok || errElemType == nil {
-					p.ctx.Logger.Warnf("ResultTypePlugin: Could not infer 'Err' type for Result<T,E>. Falling back to heuristic.")
-					errType = p.getTypeName(expr.Indices[1])
-				} else {
-					errType = p.typeInference.TypeToString(errElemType)
-				}
-			} else {
-				// No type inference service - use heuristic
-				okType = p.getTypeName(expr.Indices[0])
-				errType = p.getTypeName(expr.Indices[1])
-			}
-
-			resultType = fmt.Sprintf("Result%s",
-				SanitizeTypeName(okType, errType))
-
-			if !p.emittedTypes[resultType] {
-				p.emitResultDeclaration(okType, errType, resultType)
-				p.emittedTypes[resultType] = true
-			}
-		} else if len(expr.Indices) == 1 {
-			var okType string
-			// Result<T> with default error type
-
-			// Check if type inference is available
-			if p.typeInference != nil {
-				okElemType, ok := p.typeInference.InferType(expr.Indices[0])
-				if !ok || okElemType == nil {
-					p.ctx.Logger.Warnf("ResultTypePlugin: Could not infer 'Ok' type for Result<T>. Falling back to heuristic.")
-					okType = p.getTypeName(expr.Indices[0])
-				} else {
-					okType = p.typeInference.TypeToString(okElemType)
-				}
-			} else {
-				// No type inference service - use heuristic
-				okType = p.getTypeName(expr.Indices[0])
-			}
-			resultType = fmt.Sprintf("Result%s", SanitizeTypeName(okType, "error"))
-
-			if !p.emittedTypes[resultType] {
-				p.emitResultDeclaration(okType, "error", resultType)
-				p.emittedTypes[resultType] = true
-			}
-		}
-
-		// Track this IndexListExpr for replacement during Transform phase
-		if resultType != "" {
-			if p.genericListRewrites == nil {
-				p.genericListRewrites = make(map[*ast.IndexListExpr]string)
-			}
-			p.genericListRewrites[expr] = resultType
+		isResult = true
+	}
+	if sel, ok := expr.X.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Result" {
+			isResult = true
 		}
 	}
+
+	if !isResult {
+		return
+	}
+
+	// Log but don't rewrite - keep the generic syntax
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Found Result[T, E], keeping as-is (no rewrite)")
+
+	// NOTE: With Go 1.18+ generics, we do NOT:
+	// - Generate type declarations (runtime package provides Result[T, E])
+	// - Rewrite Result[T, E] to ResultTE (keep generic syntax)
 }
 
-// handleConstructorCall processes Ok(value) and Err(error) calls
+// handleConstructorCall processes Ok(value) and Err(error) calls during discovery phase
 //
-// Task 1.2: Transform constructor calls to struct literals
-//
-// This method detects Ok() and Err() calls and transforms them into
-// Result struct literals with the appropriate tag and field values.
-//
-// Handles both:
-// - Ok(value), Err(error) - plain calls
-// - Ok[ErrType](value), Err[OkType](error) - calls with explicit type parameter
-//
-// Type inference strategy:
-// 1. Check for explicit type annotation (e.g., let x: Result<int, error> = Ok(42))
-// 2. Infer from argument type for T, default error for E
-// 3. Use context from surrounding expression (assignment, return, etc.)
+// This is the discovery phase - just logs that we found constructor calls.
+// Actual transformation happens in Transform() phase where we have function context.
 func (p *ResultTypePlugin) handleConstructorCall(call *ast.CallExpr) {
 	// Case 1: Ok(value) or Err(error) - plain identifier
 	if ident, ok := call.Fun.(*ast.Ident); ok {
 		switch ident.Name {
-		case "Ok":
-			p.transformOkConstructor(call)
-		case "Err":
-			p.transformErrConstructor(call)
+		case "Ok", "Err":
+			p.ctx.Logger.Debugf("Discovery: Found %s() constructor call", ident.Name)
 		}
 		return
 	}
@@ -554,22 +623,20 @@ func (p *ResultTypePlugin) handleConstructorCall(call *ast.CallExpr) {
 	if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
 		if ident, ok := indexExpr.X.(*ast.Ident); ok {
 			switch ident.Name {
-			case "Ok":
-				p.transformOkConstructorWithType(call, indexExpr.Index)
-			case "Err":
-				p.transformErrConstructorWithType(call, indexExpr.Index)
+			case "Ok", "Err":
+				p.ctx.Logger.Debugf("Discovery: Found %s[T]() constructor call", ident.Name)
 			}
 		}
 	}
 }
 
-// transformOkConstructor transforms Ok(value) → Result_T_E{tag: ResultTagOk, ok: &value}
+// transformOkConstructor transforms Ok(value) → dgo.Ok(value) or dgo.Ok[T, E](value)
 //
-// Fix A5: Uses TypeInferenceService for accurate type resolution
-// Fix A4: Wraps non-addressable expressions (literals) in IIFE
+// When enclosing function's return type is known (resultInfo != nil), omits type
+// arguments since Go can infer them from context. Otherwise uses explicit types.
 //
 // Returns the replacement node, or the original call if transformation fails
-func (p *ResultTypePlugin) transformOkConstructor(call *ast.CallExpr) ast.Expr {
+func (p *ResultTypePlugin) transformOkConstructor(call *ast.CallExpr, resultInfo *resultReturnInfo) ast.Expr {
 	if len(call.Args) != 1 {
 		p.ctx.Logger.Warnf("Ok() expects exactly one argument, found %d", len(call.Args))
 		return call // Return unchanged
@@ -577,78 +644,74 @@ func (p *ResultTypePlugin) transformOkConstructor(call *ast.CallExpr) ast.Expr {
 
 	valueArg := call.Args[0]
 
-	// CRITICAL FIX #3: Check error from inferTypeFromExpr
-	// CRITICAL FIX #5 (Code Review): Use interface{} fallback instead of returning unchanged
-	okType, err := p.inferTypeFromExpr(valueArg)
-	if err != nil {
-		// Type inference failed - use interface{} as fallback
-		p.ctx.Logger.Warnf("Type inference failed for Ok(%s): %v, using interface{} fallback", FormatExprForDebug(valueArg), err)
-		okType = "interface{}"
+	// Strip comments near the argument expression before wrapping
+	if stmt := p.findParentStmt(call); stmt != nil {
+		p.stripCommentsNearExpr(valueArg, stmt)
 	}
 
-	// CRITICAL FIX #3: Validate okType is not empty
-	// CRITICAL FIX #5 (Code Review): Use interface{} fallback instead of returning unchanged
-	if okType == "" {
-		p.ctx.Logger.Warnf("Type inference returned empty string for Ok(%s), using interface{} fallback", FormatExprForDebug(valueArg))
-		okType = "interface{}"
-	}
-
-	errType := "error" // Default error type
-
-	// Generate unique Result type name
-	resultTypeName := fmt.Sprintf("Result%s",
-		SanitizeTypeName(okType, errType))
-
-	// Ensure the Result type is declared
-	if !p.emittedTypes[resultTypeName] {
-		p.emitResultDeclaration(okType, errType, resultTypeName)
-		p.emittedTypes[resultTypeName] = true
-	}
-
-	// Log transformation with type inference details
-	p.ctx.Logger.Debugf("Fix A5: Inferred type for Ok(%s) → %s", FormatExprForDebug(valueArg), okType)
-
-	// Fix A4: Handle addressability - wrap literals in IIFE if needed
-	var okValue ast.Expr
-	if isAddressable(valueArg) {
-		// Direct address-of for addressable expressions
-		okValue = &ast.UnaryExpr{
-			Op: token.AND,
-			X:  valueArg,
-		}
-		p.ctx.Logger.Debugf("Fix A4: Expression is addressable, using &expr")
+	// Determine type arguments - use resultInfo if available, otherwise infer
+	var okType, errType string
+	if resultInfo != nil {
+		// Use types from enclosing function's return type
+		okType = resultInfo.okType
+		errType = resultInfo.errType
 	} else {
-		// Non-addressable (literal, function call, etc.) - wrap in IIFE
-		okValue = wrapInIIFE(valueArg, okType, p.ctx)
-		p.ctx.Logger.Debugf("Fix A4: Expression is non-addressable, wrapping in IIFE (temp var: __tmp%d)", p.ctx.TempVarCounter-1)
+		// Infer types from expression
+		var err error
+		okType, err = p.inferTypeFromExpr(valueArg)
+		if err != nil {
+			p.ctx.Logger.Warnf("Type inference failed for Ok(%s): %v, using any fallback", FormatExprForDebug(valueArg), err)
+			okType = "any"
+		}
+		if okType == "" {
+			p.ctx.Logger.Warnf("Type inference returned empty string for Ok(%s), using any fallback", FormatExprForDebug(valueArg))
+			okType = "any"
+		}
+		errType = "error" // Default error type
 	}
 
-	// Create the replacement CompositeLit
-	// Ok(value) → Result_T_E{tag: ResultTagOk, ok: &value or IIFE}
-	replacement := &ast.CompositeLit{
-		Type: ast.NewIdent(resultTypeName),
-		Elts: []ast.Expr{
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("tag"),
-				Value: ast.NewIdent("ResultTagOk"),
-			},
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("ok"),
-				Value: okValue,
-			},
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Ok(%s) → dgo.Ok[%s, %s](...)", FormatExprForDebug(valueArg), okType, errType)
+
+	// Create: dgo.Ok[T, E] - both type args required for Ok (E is second, can't be specified alone)
+	runtimeOk := &ast.SelectorExpr{
+		X:   ast.NewIdent("dgo"),
+		Sel: ast.NewIdent("Ok"),
+	}
+
+	// Create generic instantiation: dgo.Ok[T, E]
+	//
+	// POSITION STRATEGY: We copy positions from the original call expression to all
+	// synthetic AST nodes. This is intentional - go/printer uses token positions to
+	// determine line breaks. By giving all nodes the same position (or positions on
+	// the same line), we force go/printer to keep the entire expression on one line.
+	genericOk := &ast.IndexListExpr{
+		X:      runtimeOk,
+		Lbrack: call.Lparen, // Position hint for go/printer (forces same line)
+		Indices: []ast.Expr{
+			ast.NewIdent(okType),
+			ast.NewIdent(errType),
 		},
+		Rbrack: call.Lparen, // Same position = same line
+	}
+
+	// Create call: dgo.Ok[T, E](value)
+	replacement := &ast.CallExpr{
+		Fun:    genericOk,
+		Lparen: call.Lparen,
+		Args:   []ast.Expr{valueArg},
+		Rparen: call.Rparen,
 	}
 
 	return replacement
 }
 
-// transformErrConstructor transforms Err(error) → Result_T_E{tag: ResultTagErr, err: &error}
+// transformErrConstructor transforms Err(error) → dgo.Err(error) or dgo.Err[T, E](error)
 //
-// Fix A5: Uses TypeInferenceService for accurate type resolution
-// Fix A4: Wraps non-addressable expressions (literals) in IIFE
+// When enclosing function's return type is known (resultInfo != nil), omits type
+// arguments since Go can infer them from context. Otherwise uses explicit types.
 //
 // Returns the replacement node, or the original call if transformation fails
-func (p *ResultTypePlugin) transformErrConstructor(call *ast.CallExpr) ast.Expr {
+func (p *ResultTypePlugin) transformErrConstructor(call *ast.CallExpr, resultInfo *resultReturnInfo) ast.Expr {
 	if len(call.Args) != 1 {
 		p.ctx.Logger.Warnf("Err() expects exactly one argument, found %d", len(call.Args))
 		return call // Return unchanged
@@ -656,74 +719,61 @@ func (p *ResultTypePlugin) transformErrConstructor(call *ast.CallExpr) ast.Expr 
 
 	errorArg := call.Args[0]
 
-	// CRITICAL FIX #3: Check error from inferTypeFromExpr
-	errType, err := p.inferTypeFromExpr(errorArg)
-	if err != nil {
-		// Type inference failed - default to "error"
-		p.ctx.Logger.Warnf("Type inference failed for Err(%s): %v, defaulting to 'error'", FormatExprForDebug(errorArg), err)
-		errType = "error"
+	// Strip comments near the argument expression before wrapping
+	if stmt := p.findParentStmt(call); stmt != nil {
+		p.stripCommentsNearExpr(errorArg, stmt)
 	}
 
-	// CRITICAL FIX #3: Validate errType is not empty
-	if errType == "" {
-		p.ctx.Logger.Warnf("Type inference returned empty string for Err(%s), defaulting to 'error'", FormatExprForDebug(errorArg))
-		errType = "error"
-	}
-
-	// For Err(), the Ok type must be inferred from context
-	// This is a limitation without full type inference
-	// For now, we'll use "interface{}" as a placeholder
-	// TODO(Phase 4): Context-based type inference for Err()
-	okType := "interface{}" // Will be refined with type inference
-
-	// Generate unique Result type name
-	resultTypeName := fmt.Sprintf("Result%s",
-		SanitizeTypeName(okType, errType))
-
-	// Ensure the Result type is declared
-	if !p.emittedTypes[resultTypeName] {
-		p.emitResultDeclaration(okType, errType, resultTypeName)
-		p.emittedTypes[resultTypeName] = true
-	}
-
-	// Log transformation with type inference details
-	p.ctx.Logger.Debugf("Fix A5: Inferred error type for Err(%s) → %s", FormatExprForDebug(errorArg), errType)
-
-	// Fix A4: Handle addressability - wrap literals in IIFE if needed
-	var errValue ast.Expr
-	if isAddressable(errorArg) {
-		// Direct address-of for addressable expressions
-		errValue = &ast.UnaryExpr{
-			Op: token.AND,
-			X:  errorArg,
-		}
-		p.ctx.Logger.Debugf("Fix A4: Error expression is addressable, using &expr")
+	// Determine type arguments - use resultInfo if available, otherwise infer
+	var okType, errType string
+	if resultInfo != nil {
+		// Use types from enclosing function's return type
+		okType = resultInfo.okType
+		errType = resultInfo.errType
 	} else {
-		// Non-addressable (literal, function call, etc.) - wrap in IIFE
-		errValue = wrapInIIFE(errorArg, errType, p.ctx)
-		p.ctx.Logger.Debugf("Fix A4: Error expression is non-addressable, wrapping in IIFE (temp var: __tmp%d)", p.ctx.TempVarCounter-1)
+		// Infer types from expression
+		var err error
+		errType, err = p.inferTypeFromExpr(errorArg)
+		if err != nil {
+			p.ctx.Logger.Warnf("Type inference failed for Err(%s): %v, defaulting to 'error'", FormatExprForDebug(errorArg), err)
+			errType = "error"
+		}
+		if errType == "" {
+			p.ctx.Logger.Warnf("Type inference returned empty string for Err(%s), defaulting to 'error'", FormatExprForDebug(errorArg))
+			errType = "error"
+		}
+		okType = "any" // For Err() without context, use "any" for Ok type
 	}
 
-	// Create the replacement CompositeLit
-	// Err(error) → Result_T_E{tag: ResultTagErr, err: &error or IIFE}
-	replacement := &ast.CompositeLit{
-		Type: ast.NewIdent(resultTypeName),
-		Elts: []ast.Expr{
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("tag"),
-				Value: ast.NewIdent("ResultTagErr"),
-			},
-			&ast.KeyValueExpr{
-				Key:   ast.NewIdent("err"),
-				Value: errValue,
-			},
-		},
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Err(%s) → dgo.Err[%s](...) (E=%s inferred from arg)", FormatExprForDebug(errorArg), okType, errType)
+
+	// Create: dgo.Err[T] - only T is explicit, E is inferred from argument
+	runtimeErr := &ast.SelectorExpr{
+		X:   ast.NewIdent("dgo"),
+		Sel: ast.NewIdent("Err"),
+	}
+
+	// Create generic instantiation: dgo.Err[T]
+	// See POSITION STRATEGY comment in transformOkConstructor for rationale
+	genericErr := &ast.IndexExpr{
+		X:      runtimeErr,
+		Lbrack: call.Lparen, // Position hint for go/printer (forces same line)
+		Index:  ast.NewIdent(okType),
+		Rbrack: call.Lparen, // Same position = same line
+	}
+
+	// Create call: dgo.Err[T](error)
+	replacement := &ast.CallExpr{
+		Fun:    genericErr,
+		Lparen: call.Lparen,
+		Args:   []ast.Expr{errorArg},
+		Rparen: call.Rparen,
 	}
 
 	return replacement
 }
 
-// transformOkConstructorWithType transforms Ok[ErrType](value) → Result_T_E{tag: ResultTagOk, ok: &value}
+// transformOkConstructorWithType transforms Ok[ErrType](value) → dgo.Ok[T, E](value)
 //
 // The error type is explicitly provided via the type parameter.
 // The ok type is inferred from the value argument.
@@ -735,14 +785,19 @@ func (p *ResultTypePlugin) transformOkConstructorWithType(call *ast.CallExpr, er
 
 	valueArg := call.Args[0]
 
+	// Strip comments near the argument expression before wrapping
+	if stmt := p.findParentStmt(call); stmt != nil {
+		p.stripCommentsNearExpr(valueArg, stmt)
+	}
+
 	// Infer okType from the value argument
 	okType, err := p.inferTypeFromExpr(valueArg)
 	if err != nil {
-		p.ctx.Logger.Warnf("Type inference failed for Ok[E](%s): %v, using interface{} fallback", FormatExprForDebug(valueArg), err)
-		okType = "interface{}"
+		p.ctx.Logger.Warnf("Type inference failed for Ok[E](%s): %v, using any fallback", FormatExprForDebug(valueArg), err)
+		okType = "any"
 	}
 	if okType == "" {
-		okType = "interface{}"
+		okType = "any"
 	}
 
 	// Get errType from the explicit type parameter
@@ -751,41 +806,37 @@ func (p *ResultTypePlugin) transformOkConstructorWithType(call *ast.CallExpr, er
 		errType = "error"
 	}
 
-	// Generate unique Result type name
-	resultTypeName := fmt.Sprintf("Result%s", SanitizeTypeName(okType, errType))
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Ok[%s](%s) → dgo.Ok[%s, %s](...)", errType, FormatExprForDebug(valueArg), okType, errType)
 
-	// Ensure the Result type is declared
-	if !p.emittedTypes[resultTypeName] {
-		p.emitResultDeclaration(okType, errType, resultTypeName)
-		p.emittedTypes[resultTypeName] = true
+	// Create: dgo.Ok[T, E](value) - both type args required (E is second, can't skip T)
+	// See POSITION STRATEGY comment in transformOkConstructor for rationale
+	runtimeOk := &ast.SelectorExpr{
+		X:   ast.NewIdent("dgo"),
+		Sel: ast.NewIdent("Ok"),
 	}
-
-	p.ctx.Logger.Debugf("transformOkConstructorWithType: Ok[%s](%s) → %s", errType, FormatExprForDebug(valueArg), resultTypeName)
-
-	// Handle addressability
-	var okValue ast.Expr
-	if isAddressable(valueArg) {
-		okValue = &ast.UnaryExpr{Op: token.AND, X: valueArg}
-	} else {
-		okValue = wrapInIIFE(valueArg, okType, p.ctx)
-	}
-
-	// Create replacement
-	replacement := &ast.CompositeLit{
-		Type: ast.NewIdent(resultTypeName),
-		Elts: []ast.Expr{
-			&ast.KeyValueExpr{Key: ast.NewIdent("tag"), Value: ast.NewIdent("ResultTagOk")},
-			&ast.KeyValueExpr{Key: ast.NewIdent("ok"), Value: okValue},
+	genericOk := &ast.IndexListExpr{
+		X:      runtimeOk,
+		Lbrack: call.Lparen, // Position hint for go/printer (forces same line)
+		Indices: []ast.Expr{
+			ast.NewIdent(okType),
+			ast.NewIdent(errType),
 		},
+		Rbrack: call.Lparen, // Same position = same line
+	}
+	replacement := &ast.CallExpr{
+		Fun:    genericOk,
+		Lparen: call.Lparen,
+		Args:   []ast.Expr{valueArg},
+		Rparen: call.Rparen,
 	}
 
 	return replacement
 }
 
-// transformErrConstructorWithType transforms Err[OkType](error) → Result_T_E{tag: ResultTagErr, err: &error}
+// transformErrConstructorWithType transforms Err[OkType](error) → dgo.Err[T](error)
 //
-// The ok type is explicitly provided via the type parameter.
-// The error type is inferred from the error argument.
+// The ok type (T) is explicitly provided via the type parameter.
+// The error type (E) is inferred from the error argument by Go.
 func (p *ResultTypePlugin) transformErrConstructorWithType(call *ast.CallExpr, okTypeExpr ast.Expr) ast.Expr {
 	if len(call.Args) != 1 {
 		p.ctx.Logger.Warnf("Err[T]() expects exactly one argument, found %d", len(call.Args))
@@ -794,48 +845,36 @@ func (p *ResultTypePlugin) transformErrConstructorWithType(call *ast.CallExpr, o
 
 	errorArg := call.Args[0]
 
+	// Strip comments near the argument expression before wrapping
+	if stmt := p.findParentStmt(call); stmt != nil {
+		p.stripCommentsNearExpr(errorArg, stmt)
+	}
+
 	// Get okType from the explicit type parameter
 	okType := p.getTypeName(okTypeExpr)
 	if okType == "" {
-		okType = "interface{}"
+		okType = "any"
 	}
 
-	// Infer errType from the error argument
-	errType, err := p.inferTypeFromExpr(errorArg)
-	if err != nil {
-		p.ctx.Logger.Warnf("Type inference failed for Err[T](%s): %v, defaulting to 'error'", FormatExprForDebug(errorArg), err)
-		errType = "error"
+	p.ctx.Logger.Debugf("Go 1.18+ generics: Err[%s](%s) → dgo.Err[%s](...) (E inferred from arg)", okType, FormatExprForDebug(errorArg), okType)
+
+	// Create: dgo.Err[T](error) - E is inferred from argument
+	// See POSITION STRATEGY comment in transformOkConstructor for rationale
+	runtimeErr := &ast.SelectorExpr{
+		X:   ast.NewIdent("dgo"),
+		Sel: ast.NewIdent("Err"),
 	}
-	if errType == "" {
-		errType = "error"
+	genericErr := &ast.IndexExpr{
+		X:      runtimeErr,
+		Lbrack: call.Lparen, // Position hint for go/printer (forces same line)
+		Index:  ast.NewIdent(okType),
+		Rbrack: call.Lparen, // Same position = same line
 	}
-
-	// Generate unique Result type name
-	resultTypeName := fmt.Sprintf("Result%s", SanitizeTypeName(okType, errType))
-
-	// Ensure the Result type is declared
-	if !p.emittedTypes[resultTypeName] {
-		p.emitResultDeclaration(okType, errType, resultTypeName)
-		p.emittedTypes[resultTypeName] = true
-	}
-
-	p.ctx.Logger.Debugf("transformErrConstructorWithType: Err[%s](%s) → %s", okType, FormatExprForDebug(errorArg), resultTypeName)
-
-	// Handle addressability
-	var errValue ast.Expr
-	if isAddressable(errorArg) {
-		errValue = &ast.UnaryExpr{Op: token.AND, X: errorArg}
-	} else {
-		errValue = wrapInIIFE(errorArg, errType, p.ctx)
-	}
-
-	// Create replacement
-	replacement := &ast.CompositeLit{
-		Type: ast.NewIdent(resultTypeName),
-		Elts: []ast.Expr{
-			&ast.KeyValueExpr{Key: ast.NewIdent("tag"), Value: ast.NewIdent("ResultTagErr")},
-			&ast.KeyValueExpr{Key: ast.NewIdent("err"), Value: errValue},
-		},
+	replacement := &ast.CallExpr{
+		Fun:    genericErr,
+		Lparen: call.Lparen,
+		Args:   []ast.Expr{errorArg},
+		Rparen: call.Rparen,
 	}
 
 	return replacement
@@ -1003,20 +1042,38 @@ func (p *ResultTypePlugin) exprToTypeString(expr ast.Expr) string {
 	return "interface{}"
 }
 
-// emitResultDeclaration generates the Result type declaration and helper methods
+// emitResultDeclaration is a no-op with Go 1.18+ generics
+// Type declarations are provided by the runtime package (github.com/MadAppGang/dingo/pkg/dgo)
+// We only need to register types for type inference, not generate AST declarations
 func (p *ResultTypePlugin) emitResultDeclaration(okType, errType, resultTypeName string) {
 	if p.ctx == nil {
 		return
 	}
-	// FileSet is only needed for position information (token.NoPos), not for type generation
 
-	// Normalize type names to camelCase (e.g., Option_int → OptionInt)
-	// This ensures type references are consistent with generated type names
+	// Normalize type names for type inference registration
 	okType = NormalizeTypeName(okType)
 	errType = NormalizeTypeName(errType)
 
+	// Register type with type inference service (for compile-time checking)
+	if p.typeInference != nil {
+		okTypeObj := p.typeInference.makeBasicType(okType)
+		errTypeObj := p.typeInference.makeBasicType(errType)
+		p.typeInference.RegisterResultType(resultTypeName, okTypeObj, errTypeObj, okType, errType)
+	}
+
+	// Mark as emitted (to avoid duplicate registrations)
+	p.emittedTypes[resultTypeName] = true
+
+	// NOTE: No AST declarations are generated
+	// The generic Result[T, E] type is provided by runtime package
+	return
+
+	// ---- LEGACY CODE BELOW (disabled) ----
+	// This code generated per-type declarations, no longer needed with Go 1.18+ generics
+	_ = p.emittedTypes // Keep compiler happy
+
 	// Generate ResultTag enum (only once)
-	if !p.emittedTypes["ResultTag"] {
+	if false && !p.emittedTypes["ResultTag"] {
 		p.emitResultTagEnum()
 		p.emittedTypes["ResultTag"] = true
 	}
@@ -2364,6 +2421,11 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 		return nil, fmt.Errorf("plugin context not initialized")
 	}
 
+	// Store reference to file for comment stripping
+	if file, ok := node.(*ast.File); ok {
+		p.file = file
+	}
+
 	// Stack to track current function context for implicit wrapping
 	var funcStack []ast.Node
 
@@ -2407,7 +2469,7 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 					currentFunc := funcStack[len(funcStack)-1]
 					if resultInfo, found := p.funcResultTypes[currentFunc]; found {
 						// Check if the return value needs wrapping
-						wrapped := p.wrapReturnForResult(ret.Results[0], resultInfo)
+						wrapped := p.wrapReturnForResult(ret.Results[0], resultInfo, ret)
 						if wrapped != nil {
 							ret.Results[0] = wrapped
 						}
@@ -2419,13 +2481,20 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 			if call, ok := n.(*ast.CallExpr); ok {
 				var replacement ast.Expr
 
+				// Get result info from enclosing function if available
+				var resultInfo *resultReturnInfo
+				if len(funcStack) > 0 {
+					currentFunc := funcStack[len(funcStack)-1]
+					resultInfo = p.funcResultTypes[currentFunc]
+				}
+
 				// Case 1: Ok(value) or Err(error) - plain identifier
 				if ident, ok := call.Fun.(*ast.Ident); ok {
 					switch ident.Name {
 					case "Ok":
-						replacement = p.transformOkConstructor(call)
+						replacement = p.transformOkConstructor(call, resultInfo)
 					case "Err":
-						replacement = p.transformErrConstructor(call)
+						replacement = p.transformErrConstructor(call, resultInfo)
 					}
 				}
 
@@ -2437,6 +2506,34 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 							replacement = p.transformOkConstructorWithType(call, indexExpr.Index)
 						case "Err":
 							replacement = p.transformErrConstructorWithType(call, indexExpr.Index)
+						}
+					}
+				}
+
+				// Case 3: dgo.Err[T, E](error) from preprocessor - simplify to dgo.Err[T](error)
+				// E can be inferred from argument, so we only need to specify T
+				if indexListExpr, ok := call.Fun.(*ast.IndexListExpr); ok {
+					if selExpr, ok := indexListExpr.X.(*ast.SelectorExpr); ok {
+						if pkgIdent, ok := selExpr.X.(*ast.Ident); ok && pkgIdent.Name == "dgo" {
+							if selExpr.Sel.Name == "Err" && len(indexListExpr.Indices) == 2 {
+								// Simplify dgo.Err[T, E](...) → dgo.Err[T](...)
+								p.ctx.Logger.Debugf("Simplifying dgo.Err[T, E](...) → dgo.Err[T](...)")
+								replacement = &ast.CallExpr{
+									Fun: &ast.IndexExpr{
+										X: &ast.SelectorExpr{
+											X:   ast.NewIdent("dgo"),
+											Sel: ast.NewIdent("Err"),
+										},
+										Lbrack: call.Lparen,
+										Index:  indexListExpr.Indices[0], // Keep only T
+										Rbrack: call.Lparen,
+									},
+									Lparen: call.Lparen,
+									Args:   call.Args,
+									Rparen: call.Rparen,
+								}
+							}
+							// Note: dgo.Ok[T, E] stays as-is because E is second param and can't be skipped
 						}
 					}
 				}

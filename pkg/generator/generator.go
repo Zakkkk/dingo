@@ -16,6 +16,7 @@ import (
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/plugin"
 	"github.com/MadAppGang/dingo/pkg/plugin/builtin"
+	typereg "github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -126,7 +127,8 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 		if !ok {
 			return nil, fmt.Errorf("invalid FileSet type")
 		}
-		return builtin.NewTypeInferenceService(fset, file, loggerInterface)
+		reg := typereg.NewRegistryWithFileSet("builtin", fset)
+		return builtin.NewTypeInferenceService(fset, file, loggerInterface, reg)
 	})
 
 	return &Generator{

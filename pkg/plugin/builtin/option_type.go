@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/plugin"
+	"github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 // OptionTypePlugin generates Option<T> type declarations and transformations
@@ -47,6 +48,9 @@ type OptionTypePlugin struct {
 
 	// Track None identifiers that need to be replaced with struct literals
 	noneRewrites map[*ast.Ident]*ast.CompositeLit
+
+	// Current file being processed (for comment stripping)
+	file *ast.File
 }
 
 // NewOptionTypePlugin creates a new Option type plugin
@@ -68,7 +72,7 @@ func (p *OptionTypePlugin) SetContext(ctx *plugin.Context) {
 
 	if ctx != nil && ctx.FileSet != nil {
 		// Create type inference service
-		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger)
+		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger, registry.NewRegistryWithFileSet("builtin", ctx.FileSet))
 		if err != nil {
 			ctx.Logger.Warnf("Failed to create type inference service: %v", err)
 		} else {
@@ -100,6 +104,11 @@ func (p *OptionTypePlugin) SetTypeInference(service *TypeInferenceService) {
 func (p *OptionTypePlugin) Process(node ast.Node) error {
 	if p.ctx == nil {
 		return fmt.Errorf("plugin context not initialized")
+	}
+
+	// Store file reference for comment stripping
+	if file, ok := node.(*ast.File); ok {
+		p.file = file
 	}
 
 	// Walk the AST to find Option type usage
@@ -206,6 +215,15 @@ func (p *OptionTypePlugin) handleNoneExpression(ident *ast.Ident) {
 		p.emittedTypes[optionTypeName] = true
 	}
 
+	// Strip comments near the None identifier before wrapping
+	if p.file != nil && p.ctx != nil {
+		stmt := p.findContainingStatement(ident)
+		if stmt != nil {
+			stripper := NewCommentStripper(p.file, p.ctx)
+			stripper.StripCommentsNearExpr(ident, stmt)
+		}
+	}
+
 	// Create the replacement CompositeLit
 	// None → OptionT{tag: OptionTagNone}
 	replacement := &ast.CompositeLit{
@@ -269,6 +287,15 @@ func (p *OptionTypePlugin) handleSomeConstructor(call *ast.CallExpr) {
 		}
 	}
 
+	// Strip comments near the Some() call before wrapping
+	if p.file != nil && p.ctx != nil {
+		stmt := p.findContainingStatement(call)
+		if stmt != nil {
+			stripper := NewCommentStripper(p.file, p.ctx)
+			stripper.StripCommentsNearExpr(call, stmt)
+		}
+	}
+
 	// Transform Some(value) → OptionTSome(value)
 	// The constructor function handles addressability internally (arg is addressable in function scope)
 	// This produces idiomatic Go code without IIFE patterns
@@ -276,9 +303,15 @@ func (p *OptionTypePlugin) handleSomeConstructor(call *ast.CallExpr) {
 	p.ctx.Logger.Debugf("Transforming Some(%s) → %s(value)", valueType, constructorName)
 
 	// Create the replacement CallExpr: OptionTSome(value)
+	//
+	// POSITION STRATEGY: Copy positions from original call to force go/printer to keep
+	// the expression on one line. These positions are formatting hints, not semantically
+	// accurate. See result_type.go transformOkConstructor for full rationale.
 	replacement := &ast.CallExpr{
-		Fun:  ast.NewIdent(constructorName),
-		Args: []ast.Expr{valueArg},
+		Fun:    ast.NewIdent(constructorName),
+		Lparen: call.Lparen, // Position hint for go/printer (forces same line)
+		Args:   []ast.Expr{valueArg},
+		Rparen: call.Rparen,
 	}
 
 	// Track this Some() call for replacement during Transform phase
@@ -1111,7 +1144,7 @@ func (p *OptionTypePlugin) inferNoneTypeFromContext(noneIdent *ast.Ident) (strin
 	// This requires access to the full file AST with parent tracking
 
 	// For now, use TypeInferenceService if available (it has go/types context)
-	if p.typeInference != nil && p.typeInference.typesInfo != nil {
+	if p.typeInference != nil && p.typeInference.GetTypesInfo() != nil {
 		// Try to use go/types to infer expected type
 		if typ, ok := p.typeInference.InferTypeFromContext(noneIdent); ok {
 			// Check if it's an Option type
@@ -1327,4 +1360,18 @@ func (p *OptionTypePlugin) GetPendingDeclarations() []ast.Decl {
 // ClearPendingDeclarations clears the pending declarations list
 func (p *OptionTypePlugin) ClearPendingDeclarations() {
 	p.pendingDecls = make([]ast.Decl, 0)
+}
+
+// findContainingStatement finds the parent statement node for a given expression
+// by using the shared helper from comment_util.go
+func (p *OptionTypePlugin) findContainingStatement(expr ast.Expr) ast.Node {
+	// Validate parent map is available
+	if p.ctx == nil || p.ctx.GetParentMap() == nil {
+		if p.ctx != nil && p.ctx.Logger != nil {
+			p.ctx.Logger.Warnf("Parent map not built - comment stripping may fail. Call BuildParentMap() before Transform phase.")
+		}
+		return nil
+	}
+
+	return FindContainingStatement(p.ctx, expr)
 }

@@ -56,30 +56,21 @@ func FindOrdersByUser(db: *sql.DB, userID: int) Result<[]Order, ServiceError> {
 	for rows.Next() {
 		var order Order
 		// Note: Scan returns only error, not (T, error), so we use explicit error handling
-		if err := rows.Scan(&order.ID, &order.UserID, &order.Total); err != nil {
-			return ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
-		}
+		rows.Scan(&order.ID, &order.UserID, &order.Total)?
+			 ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
 		orders = append(orders, order)
 	}
 	return orders
 }
 
 // Service function chaining multiple Result-returning functions
-// Error propagation pattern: check IsErr, return error, continue with value
+// Guard let with pipe binding: explicit |err| for error access
 func GetUserOrderTotal(db: *sql.DB, userID: int) Result<float64, ServiceError> {
-	// Get user - propagate error if failed
-	let userResult = FindUser(db, userID)
-	if userResult.IsErr() {
-		return userResult.UnwrapErr()  // Implicit wrapping to Result<float64, ServiceError>
-	}
-	let user = userResult.Unwrap()
+	// Get user - guard let unwraps or returns error
+	guard let user = FindUser(db, userID) else |err| { return Err(err) }
 
-	// Get orders - propagate error if failed
-	let ordersResult = FindOrdersByUser(db, user.ID)
-	if ordersResult.IsErr() {
-		return ordersResult.UnwrapErr()
-	}
-	let orders = ordersResult.Unwrap()
+	// Get orders - same pattern, clean and readable
+	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err(err) }
 
 	// Calculate total
 	var total float64
@@ -91,21 +82,13 @@ func GetUserOrderTotal(db: *sql.DB, userID: int) Result<float64, ServiceError> {
 }
 
 // Another example: transferring funds between users
-// Uses the explicit IsErr/UnwrapErr pattern for Result error propagation
+// Guard let makes the happy path clear and linear
 func TransferFunds(db: *sql.DB, fromID: int, toID: int, amount: float64) Result<bool, ServiceError> {
 	// Find source user
-	let fromResult = FindUser(db, fromID)
-	if fromResult.IsErr() {
-		return fromResult.UnwrapErr()
-	}
-	let fromUser = fromResult.Unwrap()
+	guard let fromUser = FindUser(db, fromID) else |err| { return Err(err) }
 
 	// Find destination user
-	let toResult = FindUser(db, toID)
-	if toResult.IsErr() {
-		return toResult.UnwrapErr()
-	}
-	let toUser = toResult.Unwrap()
+	guard let toUser = FindUser(db, toID) else |err| { return Err(err) }
 
 	fmt.Printf("Transferring $%.2f from %s to %s\n",
 		amount, fromUser.Name, toUser.Name)
