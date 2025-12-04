@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/plugin"
-	"github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 // OptionTypePlugin generates Option<T> type declarations and transformations
@@ -51,13 +50,34 @@ type OptionTypePlugin struct {
 
 	// Current file being processed (for comment stripping)
 	file *ast.File
+
+	// Track if we need the dgo import (for Option types using runtime package)
+	needsDgoImport bool
+
+	// Track Option[T] nodes that need dgo. prefix (AST-based rewriting)
+	optionTypeRewrites map[*ast.IndexExpr]bool
+
+	// Track None[T]() calls that need to be rewritten to dgo.None[T]()
+	genericNoneRewrites map[*ast.CallExpr]*ast.IndexExpr
+
+	// Track Some[T](value) calls that need to be rewritten to dgo.Some[T](value)
+	genericSomeRewrites map[*ast.CallExpr]*ast.IndexExpr
+
+	// Track None/Some idents that are part of generic calls (to skip bare identifier handling)
+	genericCallIdents map[*ast.Ident]bool
 }
 
 // NewOptionTypePlugin creates a new Option type plugin
 func NewOptionTypePlugin() *OptionTypePlugin {
 	return &OptionTypePlugin{
-		emittedTypes: make(map[string]bool),
-		pendingDecls: make([]ast.Decl, 0),
+		emittedTypes:            make(map[string]bool),
+		pendingDecls:            make([]ast.Decl, 0),
+		optionTypeRewrites:      make(map[*ast.IndexExpr]bool),
+		genericNoneRewrites:     make(map[*ast.CallExpr]*ast.IndexExpr),
+		genericSomeRewrites:     make(map[*ast.CallExpr]*ast.IndexExpr),
+		genericCallIdents:       make(map[*ast.Ident]bool),
+		someConstructorRewrites: make(map[*ast.CallExpr]ast.Expr),
+		noneRewrites:            make(map[*ast.Ident]*ast.CompositeLit),
 	}
 }
 
@@ -66,13 +86,22 @@ func (p *OptionTypePlugin) Name() string {
 	return "option_type"
 }
 
+// GetRequiredImports implements plugin.ImportProvider
+// Returns the dgo import path if Option types were detected
+func (p *OptionTypePlugin) GetRequiredImports() []string {
+	if p.needsDgoImport {
+		return []string{dgoImportPath}
+	}
+	return nil
+}
+
 // SetContext sets the plugin context (ContextAware interface)
 func (p *OptionTypePlugin) SetContext(ctx *plugin.Context) {
 	p.ctx = ctx
 
 	if ctx != nil && ctx.FileSet != nil {
 		// Create type inference service
-		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger, registry.NewRegistryWithFileSet("builtin", ctx.FileSet))
+		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger)
 		if err != nil {
 			ctx.Logger.Warnf("Failed to create type inference service: %v", err)
 		} else {
@@ -127,6 +156,16 @@ func (p *OptionTypePlugin) Process(node ast.Node) error {
 			if ident, ok := n.Fun.(*ast.Ident); ok && ident.Name == "Some" {
 				p.handleSomeConstructor(n)
 			}
+			// None[T]() generic constructor call
+			if indexExpr, ok := n.Fun.(*ast.IndexExpr); ok {
+				if ident, ok := indexExpr.X.(*ast.Ident); ok && ident.Name == "None" {
+					p.handleGenericNoneConstructor(n, indexExpr)
+				}
+				// Some[T](value) generic constructor call
+				if ident, ok := indexExpr.X.(*ast.Ident); ok && ident.Name == "Some" {
+					p.handleGenericSomeConstructor(n, indexExpr)
+				}
+			}
 		}
 		return true
 	})
@@ -134,40 +173,137 @@ func (p *OptionTypePlugin) Process(node ast.Node) error {
 	return nil
 }
 
-// handleGenericOption processes Option<T> syntax
-// It generates the concrete OptionT type and marks the IndexExpr for replacement
+// handleGenericOption processes Option<T> syntax (IndexExpr for single type param)
+// Tracks nodes that need to be converted to generated OptionT types
 func (p *OptionTypePlugin) handleGenericOption(expr *ast.IndexExpr) {
-	// Check if the base type is "Option"
+	// Check if the base type is "Option" - needs to become generated OptionT
 	if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "Option" {
-		var typeName string
-		// This is an Option<T> type
-		telemType, ok := p.typeInference.InferType(expr.Index)
-		if !ok || telemType == nil {
-			p.ctx.Logger.Warnf("OptionTypePlugin: Could not infer type for Option<T> element. Falling back to heuristic.")
-			typeName = p.getTypeName(expr.Index)
-		} else {
-			typeName = p.typeInference.TypeToString(telemType)
-		}
-		optionType := fmt.Sprintf("Option%s", SanitizeTypeName(typeName))
-
-		if !p.emittedTypes[optionType] {
-			p.emitOptionDeclaration(typeName, optionType)
-			p.emittedTypes[optionType] = true
-
-			// Register with type inference service
-			if p.typeInference != nil {
-				valueType := p.typeInference.makeBasicType(typeName)
-				// CRITICAL FIX #1: Pass original type string
-				p.typeInference.RegisterOptionType(optionType, valueType, typeName)
-			}
-		}
-
-		// Track this IndexExpr for replacement during Transform phase
-		if p.genericTypeRewrites == nil {
-			p.genericTypeRewrites = make(map[*ast.IndexExpr]string)
-		}
-		p.genericTypeRewrites[expr] = optionType
+		// Track this node for rewriting: Option[T] → OptionT
+		p.optionTypeRewrites[expr] = true
+		p.ctx.Logger.Debugf("Discovery: Found Option[T], will convert to generated type in Transform phase")
+		return
 	}
+
+	// Already has dgo. prefix - convert to generated type as well for consistency
+	if sel, ok := expr.X.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Option" {
+			p.optionTypeRewrites[expr] = true
+			p.ctx.Logger.Debugf("Discovery: Found dgo.Option[T], will convert to generated type")
+			return
+		}
+	}
+
+	// Not an Option type, ignore
+}
+
+// handleGenericNoneConstructor processes None[T]() syntax
+// Converts to OptionTNone() for consistency with generated Option types
+func (p *OptionTypePlugin) handleGenericNoneConstructor(call *ast.CallExpr, indexExpr *ast.IndexExpr) {
+	// Extract the type parameter T from None[T]
+	typeExpr := indexExpr.Index
+
+	// Get the type as string
+	var typeStr string
+	switch t := typeExpr.(type) {
+	case *ast.Ident:
+		typeStr = t.Name
+	case *ast.SelectorExpr:
+		if pkg, ok := t.X.(*ast.Ident); ok {
+			typeStr = pkg.Name + "." + t.Sel.Name
+		} else {
+			typeStr = t.Sel.Name
+		}
+	case *ast.StarExpr:
+		// Pointer type - extract inner type
+		if inner, ok := t.X.(*ast.Ident); ok {
+			typeStr = "*" + inner.Name
+		} else {
+			typeStr = "interface{}"
+		}
+	default:
+		typeStr = "interface{}"
+	}
+
+	p.ctx.Logger.Debugf("Discovery: Found None[%s]() generic constructor, will rewrite to Option%sNone()", typeStr, SanitizeTypeName(typeStr))
+
+	// Mark the None ident as part of a generic call (to skip bare identifier handling)
+	if ident, ok := indexExpr.X.(*ast.Ident); ok {
+		p.genericCallIdents[ident] = true
+	}
+
+	// Ensure the Option type is declared
+	optionTypeName := fmt.Sprintf("Option%s", SanitizeTypeName(typeStr))
+	if !p.emittedTypes[optionTypeName] {
+		p.emitOptionDeclaration(typeStr, optionTypeName)
+		p.emittedTypes[optionTypeName] = true
+	}
+
+	// Create the replacement: None[T]() → OptionTNone()
+	constructorName := fmt.Sprintf("%sNone", optionTypeName)
+	replacement := &ast.CallExpr{
+		Fun:    ast.NewIdent(constructorName),
+		Lparen: call.Lparen,
+		Args:   []ast.Expr{}, // None takes no args
+		Rparen: call.Rparen,
+	}
+
+	// Store for transformation
+	p.someConstructorRewrites[call] = replacement
+}
+
+// handleGenericSomeConstructor processes Some[T](value) syntax
+// Converts to OptionTSome(value) for consistency with generated Option types
+func (p *OptionTypePlugin) handleGenericSomeConstructor(call *ast.CallExpr, indexExpr *ast.IndexExpr) {
+	// Extract the type parameter T from Some[T]
+	typeExpr := indexExpr.Index
+
+	// Get the type as string
+	var typeStr string
+	switch t := typeExpr.(type) {
+	case *ast.Ident:
+		typeStr = t.Name
+	case *ast.SelectorExpr:
+		if pkg, ok := t.X.(*ast.Ident); ok {
+			typeStr = pkg.Name + "." + t.Sel.Name
+		} else {
+			typeStr = t.Sel.Name
+		}
+	case *ast.StarExpr:
+		// Pointer type - extract inner type
+		if inner, ok := t.X.(*ast.Ident); ok {
+			typeStr = "*" + inner.Name
+		} else {
+			typeStr = "interface{}"
+		}
+	default:
+		typeStr = "interface{}"
+	}
+
+	p.ctx.Logger.Debugf("Discovery: Found Some[%s](...) generic constructor, will rewrite to Option%sSome(...)", typeStr, SanitizeTypeName(typeStr))
+
+	// Mark the Some ident as part of a generic call
+	if ident, ok := indexExpr.X.(*ast.Ident); ok {
+		p.genericCallIdents[ident] = true
+	}
+
+	// Ensure the Option type is declared
+	optionTypeName := fmt.Sprintf("Option%s", SanitizeTypeName(typeStr))
+	if !p.emittedTypes[optionTypeName] {
+		p.emitOptionDeclaration(typeStr, optionTypeName)
+		p.emittedTypes[optionTypeName] = true
+	}
+
+	// Create the replacement: Some[T](value) → OptionTSome(value)
+	constructorName := fmt.Sprintf("%sSome", optionTypeName)
+	replacement := &ast.CallExpr{
+		Fun:    ast.NewIdent(constructorName),
+		Lparen: call.Lparen,
+		Args:   call.Args, // Pass through the arguments
+		Rparen: call.Rparen,
+	}
+
+	// Store for transformation (reuse someConstructorRewrites map)
+	p.someConstructorRewrites[call] = replacement
 }
 
 // handleNoneExpression processes None singleton
@@ -185,6 +321,12 @@ func (p *OptionTypePlugin) handleGenericOption(expr *ast.IndexExpr) {
 // If type cannot be inferred, generates a clear error message.
 func (p *OptionTypePlugin) handleNoneExpression(ident *ast.Ident) {
 	if p.ctx == nil {
+		return
+	}
+
+	// Skip if this ident is part of a generic call like None[T]()
+	// (already handled by handleGenericNoneConstructor)
+	if p.genericCallIdents[ident] {
 		return
 	}
 
@@ -215,14 +357,8 @@ func (p *OptionTypePlugin) handleNoneExpression(ident *ast.Ident) {
 		p.emittedTypes[optionTypeName] = true
 	}
 
-	// Strip comments near the None identifier before wrapping
-	if p.file != nil && p.ctx != nil {
-		stmt := p.findContainingStatement(ident)
-		if stmt != nil {
-			stripper := NewCommentStripper(p.file, p.ctx)
-			stripper.StripCommentsNearExpr(ident, stmt)
-		}
-	}
+	// Comment stripping removed - handled by go/printer
+	// The go/printer package automatically handles comment positioning
 
 	// Create the replacement CompositeLit
 	// None → OptionT{tag: OptionTagNone}
@@ -288,13 +424,8 @@ func (p *OptionTypePlugin) handleSomeConstructor(call *ast.CallExpr) {
 	}
 
 	// Strip comments near the Some() call before wrapping
-	if p.file != nil && p.ctx != nil {
-		stmt := p.findContainingStatement(call)
-		if stmt != nil {
-			stripper := NewCommentStripper(p.file, p.ctx)
-			stripper.StripCommentsNearExpr(call, stmt)
-		}
-	}
+	// Comment stripping removed - handled by go/printer
+	// The go/printer package automatically handles comment positioning
 
 	// Transform Some(value) → OptionTSome(value)
 	// The constructor function handles addressability internally (arg is addressable in function scope)
@@ -1144,7 +1275,7 @@ func (p *OptionTypePlugin) inferNoneTypeFromContext(noneIdent *ast.Ident) (strin
 	// This requires access to the full file AST with parent tracking
 
 	// For now, use TypeInferenceService if available (it has go/types context)
-	if p.typeInference != nil && p.typeInference.GetTypesInfo() != nil {
+	if p.typeInference != nil && p.typeInference.typesInfo != nil {
 		// Try to use go/types to infer expected type
 		if typ, ok := p.typeInference.InferTypeFromContext(noneIdent); ok {
 			// Check if it's an Option type
@@ -1308,7 +1439,7 @@ func (p *OptionTypePlugin) inferTypeFromExpr(expr ast.Expr) (string, error) {
 // 2. Some(value) constructor calls to struct literals
 // 3. None identifiers to struct literals
 func (p *OptionTypePlugin) Transform(node ast.Node) (ast.Node, error) {
-	if len(p.genericTypeRewrites) == 0 && len(p.someConstructorRewrites) == 0 && len(p.noneRewrites) == 0 {
+	if len(p.optionTypeRewrites) == 0 && len(p.genericTypeRewrites) == 0 && len(p.someConstructorRewrites) == 0 && len(p.noneRewrites) == 0 {
 		return node, nil // No transformations needed
 	}
 
@@ -1317,8 +1448,49 @@ func (p *OptionTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 		func(cursor *astutil.Cursor) bool {
 			n := cursor.Node()
 
-			// Check if this is an IndexExpr we need to replace (Option[T] → OptionT)
+			// Check if this is an IndexExpr we need to replace
 			if indexExpr, ok := n.(*ast.IndexExpr); ok {
+				// Check for Option[T] that needs to become OptionT
+				if p.optionTypeRewrites[indexExpr] {
+					// Extract type T from Option[T]
+					var typeStr string
+					switch t := indexExpr.Index.(type) {
+					case *ast.Ident:
+						typeStr = t.Name
+					case *ast.SelectorExpr:
+						if pkg, ok := t.X.(*ast.Ident); ok {
+							typeStr = pkg.Name + "." + t.Sel.Name
+						} else {
+							typeStr = t.Sel.Name
+						}
+					case *ast.StarExpr:
+						if inner, ok := t.X.(*ast.Ident); ok {
+							typeStr = "*" + inner.Name
+						} else {
+							typeStr = "interface{}"
+						}
+					default:
+						typeStr = "interface{}"
+					}
+
+					// Generate concrete type name: Option[T] → OptionT
+					optionTypeName := fmt.Sprintf("Option%s", SanitizeTypeName(typeStr))
+
+					// Ensure the Option type is declared
+					if !p.emittedTypes[optionTypeName] {
+						p.emitOptionDeclaration(typeStr, optionTypeName)
+						p.emittedTypes[optionTypeName] = true
+					}
+
+					cursor.Replace(&ast.Ident{
+						NamePos: indexExpr.Pos(),
+						Name:    optionTypeName,
+					})
+					p.ctx.Logger.Debugf("Transform: Option[%s] → %s", typeStr, optionTypeName)
+					return true
+				}
+
+				// Legacy: Check for concrete type rewrite (Option[T] → OptionT)
 				if replacement, found := p.genericTypeRewrites[indexExpr]; found {
 					cursor.Replace(&ast.Ident{
 						NamePos: indexExpr.Pos(),
@@ -1334,6 +1506,11 @@ func (p *OptionTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 					cursor.Replace(replacement)
 					return true
 				}
+
+				// Note: None[T]() and Some[T](value) generic calls are now handled
+				// via someConstructorRewrites in the Discovery phase, converting them
+				// to OptionTNone() and OptionTSome(value) for consistency with
+				// generated Option types.
 			}
 
 			// Check if this is a None identifier we need to replace
@@ -1362,16 +1539,4 @@ func (p *OptionTypePlugin) ClearPendingDeclarations() {
 	p.pendingDecls = make([]ast.Decl, 0)
 }
 
-// findContainingStatement finds the parent statement node for a given expression
-// by using the shared helper from comment_util.go
-func (p *OptionTypePlugin) findContainingStatement(expr ast.Expr) ast.Node {
-	// Validate parent map is available
-	if p.ctx == nil || p.ctx.GetParentMap() == nil {
-		if p.ctx != nil && p.ctx.Logger != nil {
-			p.ctx.Logger.Warnf("Parent map not built - comment stripping may fail. Call BuildParentMap() before Transform phase.")
-		}
-		return nil
-	}
-
-	return FindContainingStatement(p.ctx, expr)
-}
+// findContainingStatement is no longer needed - comment stripping handled by go/printer

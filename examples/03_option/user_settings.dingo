@@ -25,18 +25,18 @@ func GetTheme(user: User) string {
 
 // GetFontSize applies validation and returns CSS value
 func GetFontSize(user: User) string {
-	// Map transforms the inner value if present
-	return user.Settings.FontSize
-		.Map(func(size: int) string {
-			if size < 10 {
-				return "10px"
-			}
-			if size > 32 {
-				return "32px"
-			}
-			return fmt.Sprintf("%dpx", size)
-		})
-		.UnwrapOr("16px")
+	// Check if font size is set and apply validation
+	if user.Settings.FontSize.IsSome() {
+		size := user.Settings.FontSize.Unwrap()
+		if size < 10 {
+			return "10px"
+		}
+		if size > 32 {
+			return "32px"
+		}
+		return fmt.Sprintf("%dpx", size)
+	}
+	return "16px"
 }
 
 // ShouldSendNotification checks multiple optional settings
@@ -53,7 +53,7 @@ func ShouldSendNotification(user: User, notificationType: string) bool {
 func FindUserByLanguage(users: []User, lang: string) Option<User> {
 	for _, user := range users {
 		if user.Settings.Language.IsSome() && user.Settings.Language.Unwrap() == lang {
-			return Some(user)
+			return Some[User](user)
 		}
 	}
 	return None[User]()
