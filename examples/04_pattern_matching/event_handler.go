@@ -1,129 +1,146 @@
-// Generated Go code from event_handler.dingo
-// Pattern matching becomes type switches with struct field extraction
+// Real-world example: Event handler with pattern matching
+// Pattern matching makes complex conditionals readable and exhaustive
 package main
 
 import (
 	"fmt"
 )
 
-// Event is the interface for the sum type
-type Event interface {
-	isEvent()
+// Event sum type - all possible events in the system
+type Event interface{ isEvent() }
+
+type EventUserCreated struct {
+	userID int
+	email  string
 }
 
-// Event variants as structs
-type UserCreated struct {
-	UserID int
-	Email  string
+func (EventUserCreated) isEvent() {}
+func NewEventUserCreated(userID int, email string) Event {
+	return EventUserCreated{userID: userID, email: email}
 }
 
-func (UserCreated) isEvent() {}
+type EventUserDeleted struct{ userID int }
 
-type UserDeleted struct {
-	UserID int
+func (EventUserDeleted) isEvent()          {}
+func NewEventUserDeleted(userID int) Event { return EventUserDeleted{userID: userID} }
+
+type EventOrderPlaced struct {
+	orderID string
+	amount  float64
+	userID  int
 }
 
-func (UserDeleted) isEvent() {}
-
-type OrderPlaced struct {
-	OrderID string
-	Amount  float64
-	UserID  int
+func (EventOrderPlaced) isEvent() {}
+func NewEventOrderPlaced(orderID string, amount float64, userID int) Event {
+	return EventOrderPlaced{orderID: orderID, amount: amount, userID: userID}
 }
 
-func (OrderPlaced) isEvent() {}
-
-type OrderShipped struct {
-	OrderID        string
-	TrackingNumber string
+type EventOrderShipped struct {
+	orderID        string
+	trackingNumber string
 }
 
-func (OrderShipped) isEvent() {}
-
-type PaymentReceived struct {
-	OrderID string
-	Amount  float64
+func (EventOrderShipped) isEvent() {}
+func NewEventOrderShipped(orderID string, trackingNumber string) Event {
+	return EventOrderShipped{orderID: orderID, trackingNumber: trackingNumber}
 }
 
-func (PaymentReceived) isEvent() {}
-
-type PaymentFailed struct {
-	OrderID string
-	Reason  string
+type EventPaymentReceived struct {
+	orderID string
+	amount  float64
 }
 
-func (PaymentFailed) isEvent() {}
+func (EventPaymentReceived) isEvent() {}
+func NewEventPaymentReceived(orderID string, amount float64) Event {
+	return EventPaymentReceived{orderID: orderID, amount: amount}
+}
+
+type EventPaymentFailed struct {
+	orderID string
+	reason  string
+}
+
+func (EventPaymentFailed) isEvent() {}
+func NewEventPaymentFailed(orderID string, reason string) Event {
+	return EventPaymentFailed{orderID: orderID, reason: reason}
+}
 
 // ProcessEvent handles all event types with exhaustive matching
 // The compiler ensures every Event variant is handled
 func ProcessEvent(event Event) string {
-	switch e := event.(type) {
-	case UserCreated:
-		userID := e.UserID
-		email := e.Email
-		return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID)
-
-	case UserDeleted:
-		userID := e.UserID
-		return fmt.Sprintf("User #%d data archived", userID)
-
-	case OrderPlaced:
-		orderID := e.OrderID
-		amount := e.Amount
-		userID := e.UserID
-		if amount > 1000 {
-			return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount)
+	return func() string {
+		switch __matchVal := (event).(type) {
+		case EventUserCreated:
+			userID := __matchVal.userID
+			email := __matchVal.email
+			return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID)
+		case EventUserDeleted:
+			userID := __matchVal.userID
+			return fmt.Sprintf("User #%d data archived", userID)
+		case EventOrderPlaced:
+			orderID := __matchVal.orderID
+			amount := __matchVal.amount
+			userID := __matchVal.userID
+			if amount > 1000 {
+				return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount)
+			} else {
+				return fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID)
+			}
+		case EventOrderShipped:
+			orderID := __matchVal.orderID
+			trackingNumber := __matchVal.trackingNumber
+			return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber)
+		case EventPaymentReceived:
+			orderID := __matchVal.orderID
+			amount := __matchVal.amount
+			return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID)
+		case EventPaymentFailed:
+			orderID := __matchVal.orderID
+			reason := __matchVal.reason
+			return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason)
 		}
-		return fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID)
-
-	case OrderShipped:
-		orderID := e.OrderID
-		trackingNumber := e.TrackingNumber
-		return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber)
-
-	case PaymentReceived:
-		orderID := e.OrderID
-		amount := e.Amount
-		return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID)
-
-	case PaymentFailed:
-		orderID := e.OrderID
-		reason := e.Reason
-		return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason)
-
-	default:
-		panic("non-exhaustive match")
-	}
+		panic("exhaustive match failed")
+	}()
 }
 
 // GetEventPriority uses guards for complex conditions
 func GetEventPriority(event Event) int {
-	switch e := event.(type) {
-	case PaymentFailed:
-		return 1 // Highest priority
-	case OrderPlaced:
-		if e.Amount > 500 {
+	return func() int {
+		switch __matchVal := (event).(type) {
+		case EventPaymentFailed:
+			return 1
+		case EventOrderPlaced:
+			amount := __matchVal.amount
+			if !(amount > 500) {
+				break
+			}
 			return 2
+		case EventUserCreated:
+			return 3
+		default:
+			return 4
 		}
-		return 4
-	case UserCreated:
-		return 3
-	default:
-		return 4 // Everything else
-	}
+		panic("exhaustive match failed")
+	}()
 }
 
 // FilterUserEvents extracts only user-related events
 func FilterUserEvents(events []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
-		switch event.(type) {
-		case UserCreated:
+		isUserEvent := func() bool {
+			switch (event).(type) {
+			case EventUserCreated:
+				return true
+			case EventUserDeleted:
+				return true
+			default:
+				return false
+			}
+			panic("exhaustive match failed")
+		}()
+		if isUserEvent {
 			userEvents = append(userEvents, event)
-		case UserDeleted:
-			userEvents = append(userEvents, event)
-		default:
-			// Ignore other events
 		}
 	}
 	return userEvents
@@ -131,11 +148,11 @@ func FilterUserEvents(events []Event) []Event {
 
 func main() {
 	events := []Event{
-		UserCreated{UserID: 1, Email: "alice@example.com"},
-		OrderPlaced{OrderID: "ORD-001", Amount: 1500.00, UserID: 1},
-		PaymentReceived{OrderID: "ORD-001", Amount: 1500.00},
-		OrderShipped{OrderID: "ORD-001", TrackingNumber: "TRK-12345"},
-		PaymentFailed{OrderID: "ORD-002", Reason: "insufficient funds"},
+		NewEventUserCreated(1, "alice@example.com"),
+		NewEventOrderPlaced("ORD-001", 1500.00, 1),
+		NewEventPaymentReceived("ORD-001", 1500.00),
+		NewEventOrderShipped("ORD-001", "TRK-12345"),
+		NewEventPaymentFailed("ORD-002", "insufficient funds"),
 	}
 
 	fmt.Println("=== Processing Events ===")

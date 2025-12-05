@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 )
 
 // Event sum type - all possible events in the system
@@ -21,25 +20,25 @@ enum Event {
 // The compiler ensures every Event variant is handled
 func ProcessEvent(event: Event) string {
 	return match event {
-		UserCreated { userID, email } =>
+		UserCreated(userID, email) =>
 			fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID),
 
-		UserDeleted { userID } =>
+		UserDeleted(userID) =>
 			fmt.Sprintf("User #%d data archived", userID),
 
-		OrderPlaced { orderID, amount, userID } if amount > 1000 =>
+		OrderPlaced(orderID, amount, userID) if amount > 1000 =>
 			fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount),
 
-		OrderPlaced { orderID, amount, userID } =>
+		OrderPlaced(orderID, amount, userID) =>
 			fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID),
 
-		OrderShipped { orderID, trackingNumber } =>
+		OrderShipped(orderID, trackingNumber) =>
 			fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber),
 
-		PaymentReceived { orderID, amount } =>
+		PaymentReceived(orderID, amount) =>
 			fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID),
 
-		PaymentFailed { orderID, reason } =>
+		PaymentFailed(orderID, reason) =>
 			fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason),
 	}
 }
@@ -47,9 +46,9 @@ func ProcessEvent(event: Event) string {
 // GetEventPriority uses guards for complex conditions
 func GetEventPriority(event: Event) int {
 	return match event {
-		PaymentFailed { .. } => 1,  // Highest priority
-		OrderPlaced { amount, .. } if amount > 500 => 2,
-		UserCreated { .. } => 3,
+		PaymentFailed(_, _) => 1,  // Highest priority
+		OrderPlaced(_, amount, _) if amount > 500 => 2,
+		UserCreated(_, _) => 3,
 		_ => 4,  // Everything else
 	}
 }
@@ -58,10 +57,13 @@ func GetEventPriority(event: Event) int {
 func FilterUserEvents(events: []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
-		match event {
-			UserCreated { .. } => userEvents = append(userEvents, event),
-			UserDeleted { .. } => userEvents = append(userEvents, event),
-			_ => {}, // Ignore other events
+		isUserEvent := match event {
+			UserCreated(_, _) => true,
+			UserDeleted(_) => true,
+			_ => false,
+		}
+		if isUserEvent {
+			userEvents = append(userEvents, event)
 		}
 	}
 	return userEvents
@@ -69,11 +71,11 @@ func FilterUserEvents(events: []Event) []Event {
 
 func main() {
 	events := []Event{
-		Event.UserCreated{userID: 1, email: "alice@example.com"},
-		Event.OrderPlaced{orderID: "ORD-001", amount: 1500.00, userID: 1},
-		Event.PaymentReceived{orderID: "ORD-001", amount: 1500.00},
-		Event.OrderShipped{orderID: "ORD-001", trackingNumber: "TRK-12345"},
-		Event.PaymentFailed{orderID: "ORD-002", reason: "insufficient funds"},
+		EventUserCreated(1, "alice@example.com"),
+		EventOrderPlaced("ORD-001", 1500.00, 1),
+		EventPaymentReceived("ORD-001", 1500.00),
+		EventOrderShipped("ORD-001", "TRK-12345"),
+		EventPaymentFailed("ORD-002", "insufficient funds"),
 	}
 
 	fmt.Println("=== Processing Events ===")
