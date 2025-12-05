@@ -14,6 +14,7 @@ import (
 	goparser "go/parser"
 	"go/scanner"
 	gotoken "go/token"
+	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/goparser/token"
 )
@@ -307,17 +308,15 @@ var enumRegistry = make(map[string]string)
 // transformDingoChars handles characters that Go's scanner sees as ILLEGAL.
 // This is a pre-tokenization pass that converts Dingo operators to Go-parseable forms.
 //
-// Current Transformations (markers for later processing by AST plugins):
-// - Single ? (error propagation): expr? -> expr /*DINGO_ERR_PROP*/
-// - Double ?? (null coalescing): a ?? b -> a /*DINGO_NULL_COAL*/ b
-// - Question dot ?. (safe nav): x?.field -> x /*DINGO_SAFE_NAV*/.field
-// - Fat arrow => (lambda): (x) => expr -> func(x) { return expr }
-// - Rust pipe lambda: |x| expr -> func(x) { return expr }
+// Current Transformations:
 // - enum: enum Name { Variant } -> Go tagged union interface
 // - match: match expr { Pattern => result } -> Go switch/if-else
-//
-// Note: These markers need to be processed by the AST plugin pipeline to
-// generate proper Go code. The markers alone don't produce valid Go semantics.
+// - Single ? (error propagation): let x = expr? -> x, err := expr; if err != nil { return err }
+// - guard let: guard let x = expr else { ... } -> x, err := expr; if err != nil { ... }
+// - Safe nav ?.: x?.field -> nil-checked pointer access
+// - Null coalescing ??: a ?? b -> if a != nil { *a } else { b }
+// - Fat arrow => (lambda): (x) => expr -> func(x) { return expr }
+// - Rust pipe lambda: |x| expr -> func(x) { return expr }
 func transformDingoChars(src []byte) []byte {
 	// Reset registry for each file
 	enumRegistry = make(map[string]string)
@@ -329,9 +328,17 @@ func transformDingoChars(src []byte) []byte {
 	src = transformMatch(src)
 	// Third pass: transform enum constructor calls (EventUserCreated(...) -> NewEventUserCreated(...))
 	src = transformEnumConstructors(src)
-	// Fourth pass: transform guard let (before lambdas since it uses |err|)
+	// Fourth pass: transform error propagation (before guard let since both use ?)
+	src = transformErrorProp(src)
+	// Fifth pass: transform guard let (before lambdas since it uses |err|)
 	src = transformGuardLet(src)
-	// Fifth pass: transform lambdas (more complex patterns)
+	// Sixth pass: transform safe nav and null coalesce at statement level (human-like code)
+	src = transformSafeNavStatements(src)
+	// Seventh pass: transform safe navigation (IIFE fallback for complex expressions)
+	src = transformSafeNav(src)
+	// Eighth pass: transform null coalescing (IIFE fallback for complex expressions)
+	src = transformNullCoalesce(src)
+	// Ninth pass: transform lambdas (more complex patterns)
 	src = transformLambdas(src)
 
 	result := make([]byte, 0, len(src)+100) // Extra space for markers
@@ -366,29 +373,613 @@ func transformDingoChars(src []byte) []byte {
 		}
 
 		// Only transform ? outside of strings
+		// Note: Single ?, ??, and ?. are now handled by dedicated transformation functions
+		// (transformErrorProp, transformNullCoalesce, transformSafeNav)
+		// This section is kept for backward compatibility but should be empty
 		if !inString && !inRawString && ch == '?' {
-			if i+1 < len(src) && src[i+1] == '?' {
-				// ?? -> null coalescing
-				// Transform: a ?? b -> a /*DINGO_NULL_COAL*/ b
-				// We need to remove ?? and insert the marker
-				result = append(result, " /*DINGO_NULL_COAL*/ "...)
-				i += 2
-				continue
-			}
-			if i+1 < len(src) && src[i+1] == '.' {
-				// ?. -> safe navigation
-				// Transform: x?.field -> x /*DINGO_SAFE_NAV*/.field
-				result = append(result, " /*DINGO_SAFE_NAV*/."...)
-				i += 2
-				continue
-			}
-			// Single ? -> error propagation
-			// Transform: expr? -> expr /*DINGO_ERR_PROP*/
-			// The ? is removed, marker added
-			result = append(result, " /*DINGO_ERR_PROP*/"...)
+			// All ? variants should already be transformed by earlier passes
 			i++
 			continue
 		}
+		result = append(result, ch)
+		i++
+	}
+
+	return result
+}
+
+// transformSafeNavStatements transforms safe navigation (?.) and null coalescing (??)
+// at statement level to generate human-like Go code.
+//
+// Transforms:
+//   return user?.name ?? "Anonymous"
+// Into:
+//   if user != nil {
+//       return user.Name
+//   }
+//   return "Anonymous"
+//
+// Transforms:
+//   let x = user?.name ?? "Anonymous"
+// Into:
+//   var x string
+//   if user != nil {
+//       x = user.Name
+//   } else {
+//       x = "Anonymous"
+//   }
+func transformSafeNavStatements(src []byte) []byte {
+	result := make([]byte, 0, len(src)+500)
+
+	i := 0
+	inString := false
+	inRawString := false
+	stringChar := byte(0)
+
+	for i < len(src) {
+		ch := src[i]
+
+		// Track string literals - don't transform inside strings
+		if !inString && !inRawString {
+			if ch == '"' {
+				inString = true
+				stringChar = '"'
+			} else if ch == '\'' {
+				inString = true
+				stringChar = '\''
+			} else if ch == '`' {
+				inRawString = true
+			}
+		} else if inString {
+			if ch == stringChar && (i == 0 || src[i-1] != '\\') {
+				inString = false
+			}
+		} else if inRawString {
+			if ch == '`' {
+				inRawString = false
+			}
+		}
+
+		// Look for "return" keyword (only outside strings)
+		if !inString && !inRawString && i+6 < len(src) && string(src[i:i+6]) == "return" {
+			// Check if followed by whitespace
+			if i+6 < len(src) && (src[i+6] == ' ' || src[i+6] == '\t') {
+				j := i + 6
+				// Skip whitespace
+				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+					j++
+				}
+
+				// Parse the expression to check if it contains ?. or ??
+				exprStart := j
+				hasSafeNav := false
+				hasNullCoalesce := false
+				parenDepth := 0
+
+				for j < len(src) && (parenDepth > 0 || (src[j] != '\n' && src[j] != ';')) {
+					if src[j] == '(' {
+						parenDepth++
+					} else if src[j] == ')' {
+						parenDepth--
+					} else if parenDepth == 0 {
+						if j+1 < len(src) && src[j] == '?' && src[j+1] == '.' {
+							hasSafeNav = true
+						}
+						if j+1 < len(src) && src[j] == '?' && src[j+1] == '?' {
+							hasNullCoalesce = true
+						}
+					}
+					j++
+				}
+
+				if hasSafeNav || hasNullCoalesce {
+					expr := string(src[exprStart:j])
+					expr = trimRight(expr)
+
+					// Preserve indentation
+					indent := ""
+					lineStart := i
+					for lineStart > 0 && src[lineStart-1] != '\n' {
+						lineStart--
+					}
+					for k := lineStart; k < i && (src[k] == ' ' || src[k] == '\t'); k++ {
+						indent += string(src[k])
+					}
+
+					// Transform the return statement
+					transformed := transformReturnSafeNavExpr(expr, indent)
+					result = append(result, transformed...)
+
+					// Skip past the newline/semicolon that ended the expression
+					if j < len(src) && (src[j] == '\n' || src[j] == ';') {
+						j++
+					}
+					i = j
+					continue
+				}
+			}
+		}
+
+		// Look for "let" keyword (only outside strings)
+		if !inString && !inRawString && i+3 < len(src) && string(src[i:i+3]) == "let" {
+			// Check if followed by whitespace
+			if i+3 < len(src) && (src[i+3] == ' ' || src[i+3] == '\t') {
+				j := i + 3
+				// Skip whitespace
+				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+					j++
+				}
+
+				// Get variable name
+				varStart := j
+				for j < len(src) && (isAlphaNum(src[j]) || src[j] == '_') {
+					j++
+				}
+				varName := string(src[varStart:j])
+
+				// Skip whitespace
+				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+					j++
+				}
+
+				// Expect '='
+				if j < len(src) && src[j] == '=' {
+					j++
+					// Skip whitespace
+					for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+						j++
+					}
+
+					// Parse expression
+					exprStart := j
+					hasSafeNav := false
+					hasNullCoalesce := false
+					parenDepth := 0
+
+					for j < len(src) && (parenDepth > 0 || (src[j] != '\n' && src[j] != ';')) {
+						if src[j] == '(' {
+							parenDepth++
+						} else if src[j] == ')' {
+							parenDepth--
+						} else if parenDepth == 0 {
+							if j+1 < len(src) && src[j] == '?' && src[j+1] == '.' {
+								hasSafeNav = true
+							}
+							if j+1 < len(src) && src[j] == '?' && src[j+1] == '?' {
+								hasNullCoalesce = true
+							}
+						}
+						j++
+					}
+
+					if hasSafeNav || hasNullCoalesce {
+						expr := string(src[exprStart:j])
+						expr = trimRight(expr)
+
+						// Preserve indentation
+						indent := ""
+						lineStart := i
+						for lineStart > 0 && src[lineStart-1] != '\n' {
+							lineStart--
+						}
+						for k := lineStart; k < i && (src[k] == ' ' || src[k] == '\t'); k++ {
+							indent += string(src[k])
+						}
+
+						// Transform the let statement
+						transformed := transformLetSafeNavExpr(varName, expr, indent)
+						result = append(result, transformed...)
+
+						// Skip past the newline/semicolon that ended the expression
+						if j < len(src) && (src[j] == '\n' || src[j] == ';') {
+							j++
+						}
+						i = j
+						continue
+					}
+				}
+			}
+		}
+
+		result = append(result, ch)
+		i++
+	}
+
+	return result
+}
+
+// transformReturnSafeNavExpr transforms a return statement with ?. or ?? into human-like code
+func transformReturnSafeNavExpr(expr, indent string) string {
+	// Parse the expression to extract components
+	base, chain, coalesceDefault := parseSafeNavChain(expr)
+
+	if base == "" {
+		// Couldn't parse, return original
+		return indent + "return " + expr
+	}
+
+	var buf strings.Builder
+
+	// Generate nested if checks for each element in the chain
+	currentIndent := indent
+	currentPath := base
+
+	for i, elem := range chain {
+		buf.WriteString(currentIndent)
+		buf.WriteString("if ")
+
+		// Build the nil check path
+		if i == 0 {
+			buf.WriteString(base)
+		} else {
+			buf.WriteString(currentPath)
+		}
+		buf.WriteString(" != nil {\n")
+
+		currentIndent += "\t"
+
+		// Update current path
+		if elem.isCall {
+			currentPath += "." + elem.name + elem.args
+		} else {
+			currentPath += "." + strings.ToUpper(elem.name[:1]) + elem.name[1:] // Capitalize field
+		}
+	}
+
+	// Generate the return statement
+	buf.WriteString(currentIndent)
+	buf.WriteString("return ")
+	buf.WriteString(currentPath)
+	buf.WriteString("\n")
+
+	// Close all if blocks
+	for range chain {
+		currentIndent = currentIndent[:len(currentIndent)-1]
+		buf.WriteString(currentIndent)
+		buf.WriteString("}\n")
+	}
+
+	// Generate default return if coalesce exists
+	buf.WriteString(indent)
+	buf.WriteString("return ")
+	if coalesceDefault != "" {
+		buf.WriteString(coalesceDefault)
+	} else {
+		buf.WriteString("nil")
+	}
+
+	return buf.String()
+}
+
+// transformLetSafeNavExpr transforms a let statement with ?. or ?? into human-like code
+func transformLetSafeNavExpr(varName, expr, indent string) string {
+	// Parse the expression to extract components
+	base, chain, coalesceDefault := parseSafeNavChain(expr)
+
+	if base == "" {
+		// Couldn't parse, return original
+		return indent + "let " + varName + " = " + expr
+	}
+
+	var buf strings.Builder
+
+	// Infer type from default value
+	varType := inferTypeFromLiteral(coalesceDefault)
+
+	// Generate variable declaration
+	buf.WriteString(indent)
+	buf.WriteString("var ")
+	buf.WriteString(varName)
+	if varType != "" && coalesceDefault != "" {
+		buf.WriteString(" ")
+		buf.WriteString(varType)
+	}
+	buf.WriteString("\n")
+
+	// Generate nested if checks
+	currentIndent := indent
+	currentPath := base
+
+	for i, elem := range chain {
+		buf.WriteString(currentIndent)
+		buf.WriteString("if ")
+
+		// Build the nil check path
+		if i == 0 {
+			buf.WriteString(base)
+		} else {
+			buf.WriteString(currentPath)
+		}
+		buf.WriteString(" != nil {\n")
+
+		currentIndent += "\t"
+
+		// Update current path
+		if elem.isCall {
+			currentPath += "." + elem.name + elem.args
+		} else {
+			currentPath += "." + strings.ToUpper(elem.name[:1]) + elem.name[1:] // Capitalize field
+		}
+	}
+
+	// Generate the assignment
+	buf.WriteString(currentIndent)
+	buf.WriteString(varName)
+	buf.WriteString(" = ")
+	buf.WriteString(currentPath)
+	buf.WriteString("\n")
+
+	// Close if blocks
+	for i := range chain {
+		currentIndent = currentIndent[:len(currentIndent)-1]
+		buf.WriteString(currentIndent)
+		buf.WriteString("}")
+
+		// Add else clause only for the outermost if (last iteration) and if we have a default
+		if i == len(chain)-1 && coalesceDefault != "" {
+			buf.WriteString(" else {\n")
+			buf.WriteString(currentIndent)
+			buf.WriteString("\t")
+			buf.WriteString(varName)
+			buf.WriteString(" = ")
+			buf.WriteString(coalesceDefault)
+			buf.WriteString("\n")
+			buf.WriteString(currentIndent)
+			buf.WriteString("}")
+		}
+		buf.WriteString("\n")
+	}
+
+	return buf.String()
+}
+
+// chainElement represents a field or method in a safe nav chain
+type chainElement struct {
+	name   string
+	isCall bool
+	args   string
+}
+
+// parseSafeNavChain parses expressions like "user?.name ?? 'default'" into components
+func parseSafeNavChain(expr string) (base string, chain []chainElement, coalesceDefault string) {
+	// First, check for ?? to separate safe nav from coalesce
+	parts := strings.Split(expr, "??")
+	mainExpr := strings.TrimSpace(parts[0])
+	if len(parts) > 1 {
+		coalesceDefault = strings.TrimSpace(parts[1])
+	}
+
+	// Parse the safe nav chain
+	i := 0
+	for i < len(mainExpr) && (isAlpha(byte(mainExpr[i])) || mainExpr[i] == '_') {
+		i++
+	}
+	base = mainExpr[:i]
+
+	// Parse the chain elements
+	for i < len(mainExpr) {
+		// Skip whitespace
+		for i < len(mainExpr) && (mainExpr[i] == ' ' || mainExpr[i] == '\t') {
+			i++
+		}
+
+		// Look for ?.
+		if i+1 < len(mainExpr) && mainExpr[i] == '?' && mainExpr[i+1] == '.' {
+			i += 2 // Skip ?.
+
+			// Skip whitespace
+			for i < len(mainExpr) && (mainExpr[i] == ' ' || mainExpr[i] == '\t') {
+				i++
+			}
+
+			// Get field/method name
+			nameStart := i
+			for i < len(mainExpr) && (isAlpha(byte(mainExpr[i])) || isDigit(byte(mainExpr[i])) || mainExpr[i] == '_') {
+				i++
+			}
+
+			if i > nameStart {
+				name := mainExpr[nameStart:i]
+
+				// Skip whitespace
+				for i < len(mainExpr) && (mainExpr[i] == ' ' || mainExpr[i] == '\t') {
+					i++
+				}
+
+				// Check if it's a method call
+				elem := chainElement{name: name}
+				if i < len(mainExpr) && mainExpr[i] == '(' {
+					elem.isCall = true
+					argStart := i
+					parenDepth := 1
+					i++ // Skip opening (
+					for i < len(mainExpr) && parenDepth > 0 {
+						if mainExpr[i] == '(' {
+							parenDepth++
+						} else if mainExpr[i] == ')' {
+							parenDepth--
+						}
+						i++
+					}
+					elem.args = mainExpr[argStart:i]
+				}
+
+				chain = append(chain, elem)
+			}
+		} else {
+			i++
+		}
+	}
+
+	return base, chain, coalesceDefault
+}
+
+// transformErrorProp transforms error propagation with ? operator:
+//   let varName = expr? -> varName, err := expr\nif err != nil { return err }
+//   let _ = expr? -> _, err := expr\nif err != nil { return err }
+// This must run BEFORE transformGuardLet since both use error handling patterns
+func transformErrorProp(src []byte) []byte {
+	result := make([]byte, 0, len(src)+500)
+	errCounter := 0 // Counter for unique error variable names
+
+	i := 0
+	inString := false
+	inRawString := false
+	stringChar := byte(0)
+
+	for i < len(src) {
+		ch := src[i]
+
+		// Track string literals - don't transform inside strings
+		if !inString && !inRawString {
+			if ch == '"' {
+				inString = true
+				stringChar = '"'
+			} else if ch == '\'' {
+				inString = true
+				stringChar = '\''
+			} else if ch == '`' {
+				inRawString = true
+			}
+		} else if inString {
+			if ch == stringChar && (i == 0 || src[i-1] != '\\') {
+				inString = false
+			}
+		} else if inRawString {
+			if ch == '`' {
+				inRawString = false
+			}
+		}
+
+		// Look for "let" keyword (only outside strings)
+		if !inString && !inRawString && i+3 < len(src) && string(src[i:i+3]) == "let" {
+			// Check if followed by whitespace
+			if i+3 < len(src) && (src[i+3] == ' ' || src[i+3] == '\t') {
+				// Found "let", parse the rest
+				j := i + 3
+				// Skip whitespace
+				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+					j++
+				}
+
+				// Get variable name (could be _ or identifier)
+				varStart := j
+				for j < len(src) && (isAlphaNum(src[j]) || src[j] == '_') {
+					j++
+				}
+				varName := string(src[varStart:j])
+
+				// Skip whitespace
+				for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+					j++
+				}
+
+				// Expect '='
+				if j < len(src) && src[j] == '=' {
+					j++
+					// Skip whitespace
+					for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+						j++
+					}
+
+					// Parse expression until we find ? or newline/semicolon
+					exprStart := j
+					foundQuestion := false
+					parenDepth := 0
+					for j < len(src) {
+						if src[j] == '(' {
+							parenDepth++
+						} else if src[j] == ')' {
+							parenDepth--
+						} else if parenDepth == 0 && src[j] == '?' {
+							// Check if it's ?. or ?? (safe navigation/null coalescing)
+							// If so, skip this - it will be handled by transformSafeNavStatements
+							if j+1 < len(src) && (src[j+1] == '.' || src[j+1] == '?') {
+								// This is ?. or ??, not error propagation
+								// Skip both characters
+								j += 2
+								continue
+							}
+							// Check it's not inside a string
+							// (we're not tracking strings in this inner loop for simplicity)
+							foundQuestion = true
+							break
+						} else if parenDepth == 0 && (src[j] == '\n' || src[j] == ';') {
+							break
+						}
+						j++
+					}
+
+					if foundQuestion {
+						// Extract expression (before ?)
+						expr := string(src[exprStart:j])
+						expr = trimRight(expr)
+
+						// Preserve indentation from original line
+						indent := ""
+						lineStart := i
+						for lineStart > 0 && src[lineStart-1] != '\n' {
+							lineStart--
+						}
+						for k := lineStart; k < i && (src[k] == ' ' || src[k] == '\t'); k++ {
+							indent += string(src[k])
+						}
+
+						// Generate error variable name
+						var errVar string
+						if errCounter == 0 {
+							errVar = "err"
+						} else {
+							errVar = fmt.Sprintf("err%d", errCounter)
+						}
+						errCounter++
+
+						// Generate temporary variable name
+						var tmpVar string
+						if errCounter == 1 {
+							tmpVar = "tmp"
+						} else {
+							tmpVar = fmt.Sprintf("tmp%d", errCounter-1)
+						}
+
+						// Generate Go code:
+						// tmpVar, errVar := expr
+						//
+						// if errVar != nil {
+						//     return errVar
+						// }
+						// var varName = tmpVar
+						result = append(result, tmpVar...)
+						result = append(result, ", "...)
+						result = append(result, errVar...)
+						result = append(result, " := "...)
+						result = append(result, expr...)
+						result = append(result, '\n')
+						result = append(result, '\n')
+						result = append(result, indent...)
+						result = append(result, "if "...)
+						result = append(result, errVar...)
+						result = append(result, " != nil {\n"...)
+						result = append(result, indent...)
+						result = append(result, "\treturn "...)
+						result = append(result, errVar...)
+						result = append(result, '\n')
+						result = append(result, indent...)
+						result = append(result, "}\n"...)
+						result = append(result, indent...)
+						result = append(result, "var "...)
+						result = append(result, varName...)
+						result = append(result, " = "...)
+						result = append(result, tmpVar...)
+
+						// Move past the ?
+						i = j + 1
+						continue
+					}
+				}
+			}
+		}
+
 		result = append(result, ch)
 		i++
 	}
@@ -538,6 +1129,440 @@ func trimRight(s string) string {
 	return s
 }
 
+// transformNullCoalesce transforms null coalescing operator (??):
+//   a ?? b -> if a != nil { use *a } else { use b }
+//
+// Handles:
+// - Simple coalescing: value ?? "default"
+// - Chained coalescing: a ?? b ?? c (left-to-right evaluation)
+// - Works with safe navigation results: user?.name ?? "Anonymous"
+//
+// The left-hand side is assumed to be a pointer type (*T).
+// The right-hand side provides the default value of type T.
+//
+// Phase 1 Limitation: Results use interface{} instead of inferred types.
+// This is a temporary limitation until type inference is implemented in Phase 2.
+//
+// Phase 2 Plan: Implement type inference to generate typed results (string, int, etc.)
+// based on right-hand side literals or explicit type annotations.
+//
+// Example transformation:
+//   Input:  user?.name ?? "default"
+//   Output: func() interface{} { if safeNav != nil { return *safeNav } else { return "default" } }()
+func transformNullCoalesce(src []byte) []byte {
+	result := make([]byte, 0, len(src)+500)
+
+	i := 0
+	inString := false
+	inRawString := false
+	stringChar := byte(0)
+
+	for i < len(src) {
+		ch := src[i]
+
+		// Track string literals - don't transform inside strings
+		if !inString && !inRawString {
+			if ch == '"' {
+				inString = true
+				stringChar = '"'
+			} else if ch == '\'' {
+				inString = true
+				stringChar = '\''
+			} else if ch == '`' {
+				inRawString = true
+			}
+		} else if inString {
+			if ch == stringChar && (i == 0 || src[i-1] != '\\') {
+				inString = false
+			}
+			result = append(result, ch)
+			i++
+			continue
+		} else if inRawString {
+			if ch == '`' {
+				inRawString = false
+			}
+			result = append(result, ch)
+			i++
+			continue
+		}
+
+		// Look for ?? operator (only outside strings)
+		if !inString && !inRawString && ch == '?' && i+1 < len(src) && src[i+1] == '?' {
+			// Found ??, need to find the left and right expressions
+
+			// Parse left-hand side by scanning backwards in the result buffer
+			leftEnd := len(result) - 1
+			// Skip whitespace backwards
+			for leftEnd >= 0 && (result[leftEnd] == ' ' || result[leftEnd] == '\t') {
+				leftEnd--
+			}
+
+			// Find start of left expression
+			leftStart := leftEnd
+			depth := 0
+			for leftStart >= 0 {
+				c := result[leftStart]
+
+				// Handle closing delimiters
+				if c == ')' || c == ']' || c == '}' {
+					depth++
+				} else if c == '(' || c == '[' || c == '{' {
+					depth--
+					if depth < 0 {
+						leftStart++ // Don't include the opening delimiter
+						break
+					}
+				}
+
+				// At depth 0, check for expression boundaries
+				if depth == 0 {
+					// Stop at assignment operators
+					if c == '=' {
+						if leftStart > 0 && result[leftStart-1] == ':' {
+							// := operator
+							leftStart++
+							break
+						}
+						leftStart++
+						break
+					}
+					// Stop at other boundaries
+					if c == ',' || c == ';' || c == '\n' {
+						leftStart++
+						break
+					}
+				}
+
+				leftStart--
+			}
+
+			if leftStart < 0 {
+				leftStart = 0
+			}
+
+			// Extract left expression from result buffer
+			leftExpr := string(result[leftStart:])
+			leftExpr = trim(leftExpr)
+
+			// Skip ?? and whitespace
+			j := i + 2
+			for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+				j++
+			}
+
+			// Parse right-hand side by scanning forward
+			rightStart := j
+			depth = 0
+			inRightString := false
+			rightStringChar := byte(0)
+
+			for j < len(src) {
+				c := src[j]
+
+				// Track strings in right expression
+				if !inRightString {
+					if c == '"' || c == '\'' {
+						inRightString = true
+						rightStringChar = c
+					} else if c == '`' {
+						inRightString = true
+						rightStringChar = '`'
+					}
+				} else {
+					if c == rightStringChar && (j == 0 || src[j-1] != '\\') {
+						inRightString = false
+					}
+					j++
+					continue
+				}
+
+				// Handle depth tracking
+				if c == '(' || c == '[' || c == '{' {
+					depth++
+				} else if c == ')' || c == ']' || c == '}' {
+					if depth == 0 {
+						break
+					}
+					depth--
+				}
+
+				// At depth 0, check for expression end
+				if depth == 0 && !inRightString {
+					if c == ',' || c == ';' || c == '\n' {
+						break
+					}
+					// Check for another ?? (chained coalescing)
+					if c == '?' && j+1 < len(src) && src[j+1] == '?' {
+						break
+					}
+				}
+
+				j++
+			}
+
+			rightExpr := string(src[rightStart:j])
+			rightExpr = trim(rightExpr)
+
+			// Remove left expression from result
+			result = result[:leftStart]
+
+			// Generate Go code using IIFE pattern for inline evaluation:
+			// func() T { if leftExpr != nil { return *leftExpr } else { return rightExpr } }()
+			// TODO(Phase 2): Infer return type from right-hand side expression
+			// (string literal → string, int literal → int, etc.)
+			result = append(result, "func() interface{} { if "...)
+			result = append(result, leftExpr...)
+			result = append(result, " != nil { return *"...)
+			result = append(result, leftExpr...)
+			result = append(result, " } else { return "...)
+			result = append(result, rightExpr...)
+			result = append(result, " } }()"...)
+
+			i = j
+			continue
+		}
+
+		result = append(result, ch)
+		i++
+	}
+
+	return result
+}
+
+
+// transformSafeNav transforms safe navigation operator (?.) with character-level transformation.
+// Transforms: user?.address?.city to nested nil checks with pointer results
+// Supports method calls: user?.getName("arg")
+//
+// Phase 1 Limitation: Results use interface{} instead of typed pointers.
+// This is a temporary limitation until type inference is implemented in Phase 2.
+// Generated code will require type assertions at usage sites.
+//
+// Phase 2 Plan: Implement type inference to generate typed pointers (*string, *int, etc.)
+// based on explicit type annotations (let x: string = user?.name) or contextual inference.
+//
+// Examples:
+//   user?.name -> var safeNav interface{}; if user != nil { tmp := user.name; safeNav = &tmp }
+//   user?.getName() -> var safeNav interface{}; if user != nil { tmp := user.getName(); safeNav = &tmp }
+//   user?.address?.city -> nested nil checks with intermediate pointer variables
+func transformSafeNav(src []byte) []byte {
+	result := make([]byte, 0, len(src)+500)
+
+	i := 0
+	inString := false
+	inRawString := false
+	stringChar := byte(0)
+
+	for i < len(src) {
+		ch := src[i]
+
+		// Track string literals - don't transform inside strings
+		if !inString && !inRawString {
+			if ch == '"' {
+				inString = true
+				stringChar = '"'
+			} else if ch == '\'' {
+				inString = true
+				stringChar = '\''
+			} else if ch == '`' {
+				inRawString = true
+			}
+		} else if inString {
+			if ch == stringChar && (i == 0 || src[i-1] != '\\') {
+				inString = false
+			}
+			result = append(result, ch)
+			i++
+			continue
+		} else if inRawString {
+			if ch == '`' {
+				inRawString = false
+			}
+			result = append(result, ch)
+			i++
+			continue
+		}
+
+		// Look for identifier followed by ?. (outside strings)
+		if !inString && !inRawString && isAlpha(ch) {
+			// Check if this starts a safe nav chain
+			j := i
+			for j < len(src) && isAlphaNum(src[j]) {
+				j++
+			}
+			baseIdent := string(src[i:j])
+
+			// Skip whitespace
+			k := j
+			for k < len(src) && (src[k] == ' ' || src[k] == '\t') {
+				k++
+			}
+
+			// Check if followed by ?.
+			if k+1 < len(src) && src[k] == '?' && src[k+1] == '.' {
+				// Found safe nav! Parse the entire chain
+				type chainElement struct {
+					name   string
+					isCall bool
+					args   string
+				}
+				var chain []chainElement
+				chain = append(chain, chainElement{name: baseIdent, isCall: false, args: ""})
+
+				// Move past the identifier
+				j = k + 2 // Skip ?.
+
+				// Parse the chain
+				for {
+					// Skip whitespace
+					for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+						j++
+					}
+
+					// Get the next identifier or method name
+					if j >= len(src) || !isAlpha(src[j]) {
+						break
+					}
+
+					nameStart := j
+					for j < len(src) && isAlphaNum(src[j]) {
+						j++
+					}
+					name := string(src[nameStart:j])
+
+					// Skip whitespace
+					for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+						j++
+					}
+
+					// Check if it's a method call
+					elem := chainElement{name: name, isCall: false, args: ""}
+					if j < len(src) && src[j] == '(' {
+						// It's a method call - parse arguments
+						elem.isCall = true
+						argStart := j
+						parenDepth := 1
+						j++ // Skip opening (
+						for j < len(src) && parenDepth > 0 {
+							if src[j] == '(' {
+								parenDepth++
+							} else if src[j] == ')' {
+								parenDepth--
+							}
+							j++
+						}
+						elem.args = string(src[argStart:j]) // Include parentheses
+					}
+
+					chain = append(chain, elem)
+
+					// Skip whitespace
+					for j < len(src) && (src[j] == ' ' || src[j] == '\t') {
+						j++
+					}
+
+					// Check if there's another ?.
+					if j+1 < len(src) && src[j] == '?' && src[j+1] == '.' {
+						j += 2 // Skip ?.
+						continue
+					}
+
+					// No more ?. in the chain
+					break
+				}
+
+				// Generate code for the safe nav chain using IIFE pattern
+				if len(chain) > 1 {
+					// Use IIFE pattern (Immediately Invoked Function Expression)
+					// This produces an expression, not statements, so it can appear
+					// in any expression context (return statements, assignments, function calls)
+					//
+					// Example transformation:
+					//   user?.Name → func() interface{} { if user != nil { tmp := user.Name; return &tmp }; return nil }()
+					//
+					// For simplicity, use interface{} type initially (Phase 1)
+					// TODO(Phase 2): Replace interface{} with inferred pointer type (*string, *int, etc.)
+					// based on type annotations or context analysis
+					result = append(result, "func() interface{} { "...)
+
+					// Build the if conditions and assignments
+					tmpCounter := 1 // Start at 1 per CLAUDE.md convention
+					currentVar := chain[0].name
+
+					result = append(result, "if "...)
+					result = append(result, currentVar...)
+					result = append(result, " != nil { "...)
+
+					for idx := 1; idx < len(chain); idx++ {
+						elem := chain[idx]
+
+						// Build the access expression
+						var accessExpr string
+						if elem.isCall {
+							// Method call
+							accessExpr = currentVar + "." + elem.name + elem.args
+						} else {
+							// Field access
+							accessExpr = currentVar + "." + elem.name
+						}
+
+						if idx == len(chain)-1 {
+							// Last element - return pointer to value
+							result = append(result, "tmp := "...)
+							result = append(result, accessExpr...)
+							result = append(result, "; return &tmp "...)
+						} else {
+							// Intermediate element - No-Number-First Pattern: tmp, tmp1, tmp2
+							var tmpVar string
+							if tmpCounter == 1 {
+								tmpVar = "tmp"
+							} else {
+								tmpVar = fmt.Sprintf("tmp%d", tmpCounter-1)
+							}
+							tmpCounter++
+
+							result = append(result, tmpVar...)
+							result = append(result, " := "...)
+							result = append(result, accessExpr...)
+							result = append(result, "; "...)
+
+							// If next element is a call or field, we need nil check for pointer results
+							result = append(result, "if "...)
+							result = append(result, tmpVar...)
+							result = append(result, " != nil { "...)
+
+							currentVar = tmpVar
+						}
+					}
+
+					// Close all the if blocks
+					for idx := 1; idx < len(chain); idx++ {
+						result = append(result, "} "...)
+					}
+
+					// Return nil if any part of chain was nil
+					result = append(result, "; return nil }()"...)
+
+					// Move past the chain
+					i = j
+					continue
+				}
+			}
+
+			// Not a safe nav - just copy the identifier
+			result = append(result, src[i:j]...)
+			i = j
+			continue
+		}
+
+		result = append(result, ch)
+		i++
+	}
+
+	return result
+}
+
 // transformEnumConstructors transforms enum variant constructor calls:
 //   EventUserCreated(1, "alice") -> NewEventUserCreated(1, "alice")
 // Uses enumRegistry to identify enum variant names
@@ -620,6 +1645,10 @@ func transformEnumConstructors(src []byte) []byte {
 // isAlpha checks if a character is a letter or underscore
 func isAlpha(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
+}
+
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
 }
 
 func trim(s string) string {

@@ -2,9 +2,10 @@
 
 This document provides a comprehensive overview of all planned features for the Dingo language, organized by priority, complexity, and implementation status.
 
-**Last Updated:** 2025-11-30
-**Phase:** Phase 9 Complete - Ternary Operator (v1.0-BETA Ready)
-**Status Source of Truth:** See CLAUDE.md for current implementation phase and test results (99.0% passing rate, 711/718 tests)
+**Last Updated:** 2025-12-05
+**Phase:** Phase 10 - Token-Based Parser Architecture
+**Status Source of Truth:** See CLAUDE.md for current implementation phase
+**Architecture:** New token-based parser (`pkg/goparser/`) - replaces old regex preprocessor
 **Philosophy:** As a meta-language, Dingo can implement features Go rejected, as long as they transpile cleanly
 
 ---
@@ -42,32 +43,32 @@ This document provides a comprehensive overview of all planned features for the 
 
 | Priority | Feature | Complexity | Timeline | Community Demand | Status | File |
 |----------|---------|------------|----------|------------------|--------|------|
-| **ARCH** | Type Annotations (`param: Type`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 1) | Preprocessor-based |
-| **ARCH** | Generic Syntax (`<T>` → `[T]`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 2) | Rust-style generics |
-| **ARCH** | Keywords (`let`, `use`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 1) | Preprocessor-based |
-| **ARCH** | Source Maps | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 5) | LSP position mapping |
-| **ARCH** | Workspace Builds | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 5) | Multi-package support |
-| **ARCH** | Unqualified Imports | 🟢 Low | 1 week | ⭐⭐⭐⭐ | ✅ Implemented (Phase 5) | Stdlib function resolution |
-| **ARCH** | File Organization | 🟡 Medium | 4 weeks (Phase 1) | ⭐⭐⭐⭐⭐ | ✅ Designed | [file-organization.md](./file-organization.md) |
-| **ARCH** | Parser Architecture | 🟠 High | 5-6 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 2) | [architecture-plan.md](./architecture-plan.md) |
+| **ARCH** | Type Annotations (`param: Type`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
+| **ARCH** | Generic Syntax (`<T>` → `[T]`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
+| **ARCH** | Keywords (`let`, `use`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
+| **ARCH** | Source Maps | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | TokenMapping |
+| **ARCH** | Workspace Builds | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | Multi-package |
+| **ARCH** | Token-Based Parser | 🟠 High | 5-6 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 10) | `pkg/goparser/` |
+| **ARCH** | File Organization | 🟡 Medium | 4 weeks | ⭐⭐⭐⭐⭐ | ✅ Designed | [file-organization.md](./file-organization.md) |
 
 ### Language Features
 
 | Priority | Feature | Complexity | Timeline | Community Demand | Status | File |
 |----------|---------|------------|----------|------------------|--------|------|
-| **P0** | Result Type | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐⭐ (#1 issue) | ✅ Implemented (Phase 2) | [result-type.md](./result-type.md) |
-| **P0** | Error Propagation (`?`) | 🟢 Low | 1-2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 2) | [error-propagation.md](./error-propagation.md) |
-| **P0** | Option Type | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 2) | [option-type.md](./option-type.md) |
-| **P0** | Pattern Matching | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 4) | [pattern-matching.md](./pattern-matching.md) |
-| **P0** | Sum Types | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ (996+ 👍) | ✅ Implemented (Phase 3) | [sum-types.md](./sum-types.md) |
-| **P1** | Type-Safe Enums | 🟡 Medium | 1-2 weeks | ⭐⭐⭐⭐⭐ (900+ 👍) | ✅ Implemented (Phase 3) | [enums.md](./enums.md) |
-| **P1** | Lambda/Arrow Functions | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐ (750+ 👍) | ✅ Implemented (Phase 6) | [lambdas.md](./lambdas.md) |
-| **P1** | Null Safety (`?.`) | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐ | 🔴 Not Started | [null-safety.md](./null-safety.md) |
-| **P2** | Functional Utilities | 🟢 Low | 1 week | ⭐⭐⭐ | ✅ Implemented (Phase 9) | [functional-utilities.md](./functional-utilities.md) |
-| **P2** | Tuples | 🟡 Medium | 1-2 weeks | ⭐⭐⭐ | ✅ Implemented (Phase 8) | [tuples.md](./tuples.md) |
-| **P2** | Null Coalescing (`??`) | 🟢 Low | 2-3 days | ⭐⭐⭐ | ⚠️ Partial (parser refinement needed) | [null-coalescing.md](./null-coalescing.md) |
+| **P0** | Result Type | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐⭐ (#1 issue) | ✅ Implemented | [result-type.md](./result-type.md) |
+| **P0** | Error Propagation (`?`) | 🟢 Low | 1-2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 10) | [error-propagation.md](./error-propagation.md) |
+| **P0** | Option Type | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | [option-type.md](./option-type.md) |
+| **P0** | Pattern Matching | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 10) | [pattern-matching.md](./pattern-matching.md) |
+| **P0** | Sum Types | 🟠 High | 3-4 weeks | ⭐⭐⭐⭐⭐ (996+ 👍) | ✅ Implemented (Phase 10) | [sum-types.md](./sum-types.md) |
+| **P1** | Type-Safe Enums | 🟡 Medium | 1-2 weeks | ⭐⭐⭐⭐⭐ (900+ 👍) | ✅ Implemented (Phase 10) | [enums.md](./enums.md) |
+| **P1** | Lambda/Arrow Functions | 🟡 Medium | 2-3 weeks | ⭐⭐⭐⭐ (750+ 👍) | ✅ Implemented (Phase 10) | [lambdas.md](./lambdas.md) |
+| **P1** | Null Safety (`?.`) | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐ | ⚠️ Partial (marker-based) | [null-safety.md](./null-safety.md) |
+| **P2** | Functional Utilities | 🟢 Low | 1 week | ⭐⭐⭐ | ✅ Implemented | [functional-utilities.md](./functional-utilities.md) |
+| **P2** | Tuples | 🟡 Medium | 1-2 weeks | ⭐⭐⭐ | ✅ Implemented | [tuples.md](./tuples.md) |
+| **P2** | Null Coalescing (`??`) | 🟢 Low | 2-3 days | ⭐⭐⭐ | ⚠️ Partial (marker-based) | [null-coalescing.md](./null-coalescing.md) |
 | **P2** | Immutability | 🔴 Very High | 4+ weeks | ⭐⭐⭐ | 🔴 Not Started | [immutability.md](./immutability.md) |
-| **P3** | Ternary Operator | 🟢 Low | 2-3 days | ⭐⭐ | ✅ Implemented (Phase 9) | [ternary-operator.md](./ternary-operator.md) |
+| **P3** | Ternary Operator | 🟢 Low | 2-3 days | ⭐⭐ | ✅ Implemented | [ternary-operator.md](./ternary-operator.md) |
+| **P3** | Guard Let | 🟡 Medium | 1 week | ⭐⭐⭐ | ✅ Implemented (Phase 10) | [guard_let.md](./guard_let.md) |
 | **P3** | Default Parameters | 🟡 Medium | 2 weeks | ⭐⭐ | 🔴 Not Started | [default-parameters.md](./default-parameters.md) |
 | **P4** | Function Overloading | 🟠 High | 3 weeks | ⭐⭐ | 🔴 Not Started | [function-overloading.md](./function-overloading.md) |
 | **P4** | Operator Overloading | 🟡 Medium | 2 weeks | ⭐⭐ | 🔴 Not Started | [operator-overloading.md](./operator-overloading.md) |

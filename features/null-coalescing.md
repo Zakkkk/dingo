@@ -1,7 +1,8 @@
 # Null Coalescing Operator (`??`)
 
 **Priority:** P2 (Medium - Syntax sugar)
-**Status:** 🔴 Not Started
+**Status:** ⚠️ Partial (Marker-based, needs full transformation)
+**Implementation:** Token-level pass leaves `/*DINGO_NULL_COAL*/` marker
 **Community Demand:** ⭐⭐⭐
 **Inspiration:** Swift, C#, Kotlin
 

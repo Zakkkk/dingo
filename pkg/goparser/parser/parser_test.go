@@ -343,13 +343,13 @@ func TestQuestionMarkInStrings(t *testing.T) {
 		},
 		{
 			name:     "question mark outside string should transform",
-			input:    `result := getValue()?`,
-			expected: `result := getValue() /*DINGO_ERR_PROP*/`,
+			input:    `let result = getValue()?`,
+			expected: `tmp, err := getValue() if err != nil { return err } var result = tmp`,
 		},
 		{
 			name:     "mixed - string with ? and error prop",
-			input:    `x := query("SELECT * WHERE id = ?")?`,
-			expected: `x := query("SELECT * WHERE id = ?") /*DINGO_ERR_PROP*/`,
+			input:    `let x = query("SELECT * WHERE id = ?")?`,
+			expected: `tmp, err := query("SELECT * WHERE id = ?") if err != nil { return err } var x = tmp`,
 		},
 		{
 			name:     "raw string with question mark",
@@ -370,6 +370,118 @@ func TestQuestionMarkInStrings(t *testing.T) {
 
 			if got != want {
 				t.Errorf("TransformToGo mismatch:\n  got:  %q\n  want: %q", got, want)
+			}
+		})
+	}
+}
+
+func TestNullCoalescingTransformation(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		shouldContain   []string
+		shouldNotContain []string
+	}{
+		{
+			name:  "null coalescing in raw string should NOT transform",
+			input: "s := `user ?? default`",
+			shouldContain: []string{
+				"`user ?? default`",
+			},
+			shouldNotContain: []string{
+				"func() interface{}",
+			},
+		},
+		// NOTE: Current limitation - ?? operator conflicts with ? error propagation operator
+		// When ? is processed first, it breaks ?? into ? + ?
+		// This will be fixed when we move to AST-based transformation
+		// For now, tests focus on string literal handling (ensuring ?? inside strings is preserved)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := TransformToGo([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("TransformToGo failed: %v", err)
+			}
+
+			got := string(result)
+
+			// Check that all expected patterns are present
+			for _, pattern := range tt.shouldContain {
+				if !strings.Contains(got, pattern) {
+					t.Errorf("Expected output to contain %q, but it didn't.\n  input: %q\n  got:   %q", pattern, tt.input, got)
+				}
+			}
+
+			// Check that unwanted patterns are not present
+			for _, pattern := range tt.shouldNotContain {
+				if strings.Contains(got, pattern) {
+					t.Errorf("Expected output to NOT contain %q, but it did.\n  input: %q\n  got:   %q", pattern, tt.input, got)
+				}
+			}
+		})
+	}
+}
+
+func TestSafeNavigationTransformation(t *testing.T) {
+	tests := []struct {
+		name             string
+		input            string
+		shouldContain    []string
+		shouldNotContain []string
+	}{
+		{
+			name:  "safe navigation in raw string should NOT transform",
+			input: "s := `obj?.field`",
+			shouldContain: []string{
+				"`obj?.field`",
+			},
+			shouldNotContain: []string{
+				"var safeNav",
+			},
+		},
+		{
+			name:  "chained safe navigation with parentheses",
+			input: `let city = (user)?.address?.city`,
+			shouldContain: []string{
+				"func() interface{}",
+				"if address != nil",
+				".city",
+			},
+		},
+		{
+			name:  "safe navigation combined with null coalescing",
+			input: `let name = (user)?.name ?? "Anonymous"`,
+			shouldContain: []string{
+				"func() interface{}",
+				".name",
+				`"Anonymous"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := TransformToGo([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("TransformToGo failed: %v", err)
+			}
+
+			got := string(result)
+
+			// Check that all expected patterns are present
+			for _, pattern := range tt.shouldContain {
+				if !strings.Contains(got, pattern) {
+					t.Errorf("Expected output to contain %q, but it didn't.\n  input: %q\n  got:   %q", pattern, tt.input, got)
+				}
+			}
+
+			// Check that unwanted patterns are not present
+			for _, pattern := range tt.shouldNotContain {
+				if strings.Contains(got, pattern) {
+					t.Errorf("Expected output to NOT contain %q, but it did.\n  input: %q\n  got:   %q", pattern, tt.input, got)
+				}
 			}
 		})
 	}

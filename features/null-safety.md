@@ -1,7 +1,8 @@
 # Null Safety Operators
 
 **Priority:** P1 (High - Prevents nil pointer bugs)
-**Status:** 🔴 Not Started
+**Status:** ⚠️ Partial (Marker-based, needs full transformation)
+**Implementation:** Token-level pass leaves `/*DINGO_SAFE_NAV*/` marker for `?.`
 **Community Demand:** ⭐⭐⭐⭐
 **Inspiration:** Swift, Kotlin, C#, TypeScript
 
