@@ -12,3 +12,11 @@ type File struct {
 type DingoNode interface {
 	Node()
 }
+
+// ExprWrapper wraps a Dingo Expr to implement DingoNode
+type ExprWrapper struct {
+	DingoExpr Expr // Dingo ast.Expr
+}
+
+// Node implements DingoNode
+func (e *ExprWrapper) Node() {}

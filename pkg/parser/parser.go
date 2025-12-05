@@ -1,16 +1,18 @@
-// Package parser provides the interface for parsing Dingo source code
+// Package parser provides AST-based parsing for Dingo source code.
+// It uses a Pratt parser for expressions and extends it for statements
+// and declarations.
 package parser
 
 import (
 	"go/token"
+
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/tokenizer"
 )
 
 // Parser is the interface that all Dingo parsers must implement
-// This allows us to swap parser implementations (participle -> tree-sitter later)
 type Parser interface {
 	// ParseFile parses a single Dingo source file
-	// Returns a dingoast.File which wraps go/ast.File and contains Dingo-specific nodes
 	ParseFile(fset *token.FileSet, filename string, src []byte) (*dingoast.File, error)
 
 	// ParseExpr parses a single expression (useful for REPL, testing)
@@ -29,11 +31,6 @@ const (
 
 	// AllErrors reports all errors (not just the first 10)
 	AllErrors
-
-	// SkipPreprocess tells the parser to skip preprocessing
-	// Use this when the source has already been preprocessed by cmd/dingo
-	// This avoids double-preprocessing which can corrupt := to = in IIFEs
-	SkipPreprocess
 )
 
 // ParseFile is a convenience function that uses the default parser
@@ -49,8 +46,50 @@ func ParseExpr(fset *token.FileSet, expr string) (dingoast.DingoNode, error) {
 }
 
 // NewParser creates a new parser instance with the given mode
-// For now, this returns a participle-based parser
-// Later, we can switch to tree-sitter or other implementations
 func NewParser(mode Mode) Parser {
-	return newParticipleParser(mode)
+	return &astParser{mode: mode}
+}
+
+// astParser implements Parser using the AST-based Pratt parser
+type astParser struct {
+	mode Mode
+}
+
+func (p *astParser) ParseFile(fset *token.FileSet, filename string, src []byte) (*dingoast.File, error) {
+	// Create tokenizer for source
+	tok := tokenizer.New(src)
+
+	// Create statement parser (which includes expression parsing via Pratt)
+	stmtParser := NewStmtParser(tok, fset)
+
+	// Parse the file
+	goFile, err := stmtParser.ParseFile()
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap in Dingo file
+	return &dingoast.File{File: goFile}, nil
+}
+
+func (p *astParser) ParseExpr(fset *token.FileSet, expr string) (dingoast.DingoNode, error) {
+	// Create tokenizer for expression
+	tok := tokenizer.New([]byte(expr))
+
+	// Create Pratt parser for expression parsing
+	pratt := NewPrattParser(tok)
+
+	// Parse expression
+	result := pratt.ParseExpression(PrecLowest)
+	if len(pratt.errors) > 0 {
+		return nil, ErrorList(pratt.errors)
+	}
+
+	// Wrap ast.Expr in a DingoNode wrapper if needed
+	if dn, ok := result.(dingoast.DingoNode); ok {
+		return dn, nil
+	}
+
+	// For standard Go expressions, wrap in a generic node
+	return &dingoast.ExprWrapper{DingoExpr: result}, nil
 }
