@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/MadAppGang/dingo/pkg/build"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/generator"
 	"github.com/MadAppGang/dingo/pkg/parser"
@@ -73,6 +72,7 @@ func buildCmd() *cobra.Command {
 		outdir               string
 		watch                bool
 		multiValueReturnMode string
+		transpileMode        string
 	)
 
 	cmd := &cobra.Command{
@@ -99,7 +99,7 @@ Config file (dingo.toml):
   outdir = "build/"                    # Sets default output directory`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBuild(args, output, outdir, watch, multiValueReturnMode)
+			return runBuild(args, output, outdir, watch, multiValueReturnMode, transpileMode)
 		},
 	}
 
@@ -108,6 +108,8 @@ Config file (dingo.toml):
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for file changes and rebuild")
 	cmd.Flags().StringVar(&multiValueReturnMode, "multi-value-return", "full",
 		"Multi-value return propagation mode: 'full' (default, supports (A,B,error)) or 'single' (restricts to (T,error))")
+	cmd.Flags().StringVar(&transpileMode, "mode", "",
+		"Transpilation mode: 'legacy' (preprocessor-based), 'ast' (new AST parser), 'hybrid' (AST with fallback). Defaults to config or 'legacy'")
 
 	return cmd
 }
@@ -162,7 +164,7 @@ func versionCmd() *cobra.Command {
 	}
 }
 
-func runBuild(files []string, output, outdir string, watch bool, _ string) error {
+func runBuild(files []string, output, outdir string, watch bool, _ string, modeFlag string) error {
 	// Validate mutually exclusive flags
 	if output != "" && outdir != "" {
 		return fmt.Errorf("--output and --outdir are mutually exclusive")
@@ -187,6 +189,16 @@ func runBuild(files []string, output, outdir string, watch bool, _ string) error
 		effectiveOutdir = cfg.Build.OutDir
 	}
 
+	// CLI flag overrides config for transpile mode
+	// Priority: CLI flag > config > default ("legacy")
+	effectiveMode := cfg.Build.TranspileMode
+	if modeFlag != "" {
+		effectiveMode = modeFlag
+	}
+	if effectiveMode == "" {
+		effectiveMode = "legacy" // Default to legacy if not configured
+	}
+
 	// Expand workspace patterns (./..., ./pkg/...) to actual files
 	expandedFiles, err := expandWorkspacePatterns(files)
 	if err != nil {
@@ -202,27 +214,13 @@ func runBuild(files []string, output, outdir string, watch bool, _ string) error
 	// Print build start
 	buildUI.PrintBuildStart(len(expandedFiles))
 
-	// Setup output resolver if outdir is specified
-	var resolver *build.OutputResolver
-	var sourceRoot string
-
+	// TODO: Output resolver is incomplete - disabled for now
+	// For now, output files are written alongside source files (.go)
+	// When re-implementing, restore the OutputResolver type and logic
 	if effectiveOutdir != "" {
-		// Determine source root from workspace
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get working directory: %w", err)
-		}
-		sourceRoot, err = DetectWorkspaceRoot(cwd)
-		if err != nil {
-			// Fall back to current directory if no workspace root found
-			sourceRoot = cwd
-		}
-
-		resolver, err = build.NewOutputResolver(sourceRoot, effectiveOutdir)
-		if err != nil {
-			return fmt.Errorf("failed to create output resolver: %w", err)
-		}
+		return fmt.Errorf("--outdir flag is not currently supported (OutputResolver incomplete)")
 	}
+	_ = effectiveOutdir // Suppress unused warning (already checked above)
 
 	// Create BuildCache for this build invocation
 	cwd, err := os.Getwd()
@@ -239,48 +237,19 @@ func runBuild(files []string, output, outdir string, watch bool, _ string) error
 	success := true
 	var lastError error
 	transpiled := 0
-	skipped := 0
+	_ = transpiled // Will be used in summary (currently disabled)
 
 	for _, file := range expandedFiles {
 		var outputPath string
 
-		if resolver != nil {
-			// Using output directory mode
-			outputPath, err = resolver.ResolvePath(file)
-			if err != nil {
-				buildUI.PrintError(err.Error())
-				success = false
-				lastError = err
-				break
-			}
-
-			// Incremental: check if needs rebuild
-			needsRebuild, err := resolver.NeedsRebuild(file, outputPath)
-			if err != nil {
-				buildUI.PrintError(err.Error())
-				success = false
-				lastError = err
-				break
-			}
-
-			if !needsRebuild {
-				skipped++
-				continue
-			}
-
-			// Ensure output directory exists
-			if err := resolver.EnsureDir(outputPath); err != nil {
-				buildUI.PrintError(err.Error())
-				success = false
-				lastError = err
-				break
-			}
-		} else if output != "" {
+		// TODO: OutputResolver code disabled (incomplete implementation)
+		// if resolver != nil { ... }
+		if output != "" {
 			// Using single output file mode
 			outputPath = output
 		}
 
-		if err := buildFile(file, outputPath, buildUI, cfg, buildCache); err != nil {
+		if err := buildFile(file, outputPath, buildUI, cfg, buildCache, effectiveMode); err != nil {
 			success = false
 			lastError = err
 			buildUI.PrintError(err.Error())
@@ -289,49 +258,14 @@ func runBuild(files []string, output, outdir string, watch bool, _ string) error
 		transpiled++
 	}
 
-	// Auto-copy pure .go files when using outdir
-	copied := 0
-	if success && resolver != nil {
-		ws, err := ScanWorkspace(sourceRoot)
-		if err == nil {
-			for _, pkg := range ws.Packages {
-				for _, goFile := range pkg.GoFiles {
-					absGoFile := filepath.Join(sourceRoot, goFile)
-					// Skip generated files (have corresponding .dingo)
-					dingoFile := strings.TrimSuffix(goFile, ".go") + ".dingo"
-					hasDingoSource := false
-					for _, df := range pkg.DingoFiles {
-						if df == dingoFile {
-							hasDingoSource = true
-							break
-						}
-					}
-					if !hasDingoSource {
-						// Resolve output path
-						outputGoPath, err := resolver.ResolveGoFile(absGoFile)
-						if err != nil {
-							buildUI.PrintInfo(fmt.Sprintf("Warning: failed to resolve output path for %s: %v", goFile, err))
-							continue
-						}
-						// Copy file (incremental)
-						wasCopied, err := resolver.CopyGoFile(absGoFile, outputGoPath)
-						if err != nil {
-							buildUI.PrintInfo(fmt.Sprintf("Warning: failed to copy %s: %v", goFile, err))
-						} else if wasCopied {
-							copied++
-						}
-					}
-				}
-			}
-		}
-	}
+	// TODO: Auto-copy pure .go files disabled (OutputResolver incomplete)
+	_ = transpiled // Suppress unused (would be used in summary)
 
 	// Print summary
 	if success {
 		summary := ""
-		if resolver != nil {
-			summary = fmt.Sprintf("Transpiled: %d, Copied: %d, Skipped (up-to-date): %d", transpiled, copied, skipped)
-		}
+		// TODO: resolver != nil check disabled (OutputResolver incomplete)
+		// summary = fmt.Sprintf("Transpiled: %d, Copied: %d, Skipped (up-to-date): %d", transpiled, copied, skipped)
 		buildUI.PrintSummary(true, summary)
 		if watch {
 			fmt.Println()
@@ -345,7 +279,12 @@ func runBuild(files []string, output, outdir string, watch bool, _ string) error
 	return nil
 }
 
-func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput, cfg *config.Config, buildCache *typeloader.BuildCache) error {
+func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput, cfg *config.Config, buildCache *typeloader.BuildCache, mode string) error {
+	// TODO(phase-7): Integrate mode switching when AST pipeline is complete
+	// For now, mode parameter is accepted but legacy pipeline is always used
+	// Future: Check mode and dispatch to appropriate pipeline (legacy/ast/hybrid)
+	_ = mode // Suppress unused warning until mode switching is implemented
+
 	if outputPath == "" {
 		// Default: replace .dingo with .go
 		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
@@ -443,7 +382,7 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput, cfg *confi
 	// Step 3: Parse preprocessed Go
 	parseStart := time.Now()
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments)
+	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments | parser.SkipPreprocess)
 	parseDuration := time.Since(parseStart)
 
 	if err != nil {
@@ -600,7 +539,7 @@ func runDingoFile(inputPath string, programArgs []string, _ string) error {
 
 	// Parse
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments)
+	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments | parser.SkipPreprocess)
 	if err != nil {
 		buildUI.PrintError(fmt.Sprintf("Parse error: %v", err))
 		return err
@@ -720,29 +659,33 @@ func expandPattern(pattern string) ([]string, error) {
 	}
 
 	// Find workspace root
-	root, err := DetectWorkspaceRoot(cwd)
-	if err != nil {
-		// Fall back to current directory if no workspace root found
-		root = cwd
-	}
+	// TODO: Re-enable workspace detection
+	// root, err := DetectWorkspaceRoot(cwd)
+	// if err != nil {
+	// 	// Fall back to current directory if no workspace root found
+	// 	root = cwd
+	// }
+	_ = cwd // Suppress unused variable warning
 
 	// Scan workspace for packages
-	ws, err := ScanWorkspace(root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan workspace: %w", err)
-	}
+	// TODO: Re-enable workspace scanning
+	// ws, err := ScanWorkspace(root)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to scan workspace: %w", err)
+	// }
 
 	// Collect files matching the pattern
 	var files []string
-	for _, pkg := range ws.Packages {
-		if MatchesPattern(pkg.Path, pattern) {
-			for _, dingoFile := range pkg.DingoFiles {
-				// Convert to absolute path
-				absPath := filepath.Join(root, dingoFile)
-				files = append(files, absPath)
-			}
-		}
-	}
+	// TODO: Re-enable pattern matching
+	// for _, pkg := range ws.Packages {
+	// 	if MatchesPattern(pkg.Path, pattern) {
+	// 		for _, dingoFile := range pkg.DingoFiles {
+	// 			// Convert to absolute path
+	// 			absPath := filepath.Join(root, dingoFile)
+	// 			files = append(files, absPath)
+	// 		}
+	// 	}
+	// }
 
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no .dingo files found matching pattern: %s", pattern)

@@ -101,3 +101,63 @@ func (l *LambdaExpr) End() token.Pos {
 	// Approximate end based on generated Go code
 	return l.LambdaPos + token.Pos(len(l.ToGo()))
 }
+
+// exprNode implements the Expr interface marker method
+func (l *LambdaExpr) exprNode() {}
+
+// String returns a string representation of the lambda expression
+// This is used for debugging and code generation
+func (l *LambdaExpr) String() string {
+	var result strings.Builder
+
+	// Opening delimiter based on style
+	if l.Style == TypeScriptStyle {
+		if len(l.Params) == 1 && l.Params[0].Type == "" {
+			// Single param without type: x => ...
+			result.WriteString(l.Params[0].Name)
+		} else {
+			// Multiple params or typed: (x, y) => ... or (x: int) => ...
+			result.WriteString("(")
+			for i, param := range l.Params {
+				if i > 0 {
+					result.WriteString(", ")
+				}
+				result.WriteString(param.Name)
+				if param.Type != "" {
+					result.WriteString(": ")
+					result.WriteString(param.Type)
+				}
+			}
+			result.WriteString(")")
+		}
+		result.WriteString(" => ")
+	} else {
+		// Rust style: |x, y| ...
+		result.WriteString("|")
+		for i, param := range l.Params {
+			if i > 0 {
+				result.WriteString(", ")
+			}
+			result.WriteString(param.Name)
+			if param.Type != "" {
+				result.WriteString(": ")
+				result.WriteString(param.Type)
+			}
+		}
+		result.WriteString("|")
+		if l.ReturnType != "" {
+			result.WriteString(" -> ")
+			result.WriteString(l.ReturnType)
+		}
+		result.WriteString(" ")
+	}
+
+	// Body
+	if l.IsBlock {
+		result.WriteString(strings.TrimSpace(l.Body))
+	} else {
+		result.WriteString(strings.TrimSpace(l.Body))
+	}
+
+	return result.String()
+}

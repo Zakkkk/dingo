@@ -1,0 +1,148 @@
+// P0 Feature: Nested patterns
+// Match expressions should support nested patterns like Ok(Some(x))
+package main
+
+import (
+	"fmt"
+	"github.com/MadAppGang/dingo/pkg/dgo"
+)
+
+
+type OptionTag uint8
+const (
+	OptionTagSome OptionTag = iota
+	OptionTagNone
+)
+type OptionInt struct {
+	tag  OptionTag
+	some *int
+}
+func OptionIntSome(arg int) OptionInt {
+	return OptionInt{tag: OptionTagSome, some: &arg}
+}
+func OptionIntNone() OptionInt {
+	return OptionInt{tag: OptionTagNone}
+}
+func (o OptionInt) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionInt) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionInt) Unwrap() int {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionInt) UnwrapOr(defaultValue int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionInt) UnwrapOrElse(fn func() int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionInt) Map(fn func(int) interface{}) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(int)
+	return OptionInt{tag: OptionTagSome, some: &result}
+}
+func (o OptionInt) AndThen(fn func(int) OptionInt) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionInt{tag: OptionTagNone}
+}
+
+// WrappedValue demonstrates nested Result and Option types
+type WrappedValue = dgo.Result[OptionInt, error]
+
+func unwrapValue(wrapped WrappedValue) int {
+	tmp := wrapped
+	switch tmp.tag {
+	case dgo.ResultTagOk:
+		tmp1 := *tmp.Ok
+		switch tmp1.tag {
+		case dgo.OptionTagSome:
+			value := *tmp1.Some
+		default:
+			break // Inner pattern didn't match
+		}
+		return value // dingo:M:1
+	case dgo.ResultTagOk:
+		tmp2 := *tmp.Ok
+		switch tmp2.tag {
+		case dgo.OptionTagNone:
+		default:
+			break // Inner pattern didn't match
+		}
+		return 0 // dingo:M:1
+	case dgo.ResultTagErr:
+		e := *tmp.Err
+		return -1 // dingo:M:1
+	}
+	panic("non-exhaustive match")
+
+}
+func processNested(wrapped WrappedValue) string {
+	tmp := wrapped
+	switch tmp.tag {
+	case dgo.ResultTagOk:
+		tmp1 := *tmp.Ok
+		switch tmp1.tag {
+		case dgo.OptionTagSome:
+			x := *tmp1.Some
+		default:
+			break // Inner pattern didn't match
+		}
+		if x > 100 {
+			return fmt.Sprintf("High value: %d", x) // dingo:M:1
+		} else {
+			return fmt.Sprintf("Value: %d", x) // dingo:M:1
+		}
+	case dgo.ResultTagOk:
+		tmp2 := *tmp.Ok
+		switch tmp2.tag {
+		case dgo.OptionTagNone:
+		default:
+			break // Inner pattern didn't match
+		}
+		return "No value" // dingo:M:1
+	case dgo.ResultTagErr:
+		e := *tmp.Err
+		return fmt.Sprintf("Error: %v", e) // dingo:M:1
+	}
+	panic("non-exhaustive match")
+
+}
+func main() {
+	// Test nested patterns
+	val1 := Ok[OptionInt, error](OptionIntSome(42))
+	val2 := Ok[OptionInt, error](OptionIntNone())
+	val3 := Err[OptionInt, error](fmt.Errorf("failed"))
+
+	fmt.Println(unwrapValue(val1)) // 42
+	fmt.Println(unwrapValue(val2)) // 0
+	fmt.Println(unwrapValue(val3)) // -1
+
+	fmt.Println(processNested(val1)) // Value: 42
+	fmt.Println(processNested(val2)) // No value
+	fmt.Println(processNested(val3)) // Error: failed
+}

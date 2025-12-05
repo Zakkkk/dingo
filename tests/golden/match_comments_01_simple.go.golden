@@ -1,0 +1,27 @@
+// P0 Bug Fix: Comments in match arms
+// Previously, inline comments after match arms would break parsing
+package main
+
+import (
+	"fmt"
+	"github.com/MadAppGang/dingo/pkg/dgo"
+)
+
+func processResult(result dgo.Result[int, error]) int {
+	tmp := result
+	switch tmp.tag {
+	case dgo.ResultTagOk:
+		value := *tmp.Ok
+		return value // dingo:M:1
+	case dgo.ResultTagErr:
+		e := *tmp.Err
+		return 0 // dingo:M:1
+	}
+	panic("non-exhaustive match")
+
+}
+func main() {
+	result := Ok[int, error](42)
+	value := processResult(result)
+	fmt.Println(value)
+}

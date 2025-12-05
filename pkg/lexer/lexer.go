@@ -203,6 +203,20 @@ func (l *Lexer) nextTokenImpl() Token {
 		} else {
 			tok = l.makeToken(COLON, string(l.ch), startCol)
 		}
+	case '?':
+		// Check for ?? or ?.
+		next := l.peekChar()
+		if next == '?' {
+			ch := l.ch
+			l.readChar()
+			tok = l.makeToken(QUESTION_QUESTION, string(ch)+string(l.ch), startCol)
+		} else if next == '.' {
+			ch := l.ch
+			l.readChar()
+			tok = l.makeToken(QUESTION_DOT, string(ch)+string(l.ch), startCol)
+		} else {
+			tok = l.makeToken(QUESTION, string(l.ch), startCol)
+		}
 	case ',':
 		tok = l.makeToken(COMMA, string(l.ch), startCol)
 	case '(':

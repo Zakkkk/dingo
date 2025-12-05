@@ -6,7 +6,7 @@ import "strings"
 // Feature: Guards with complex boolean logic, field access, and method calls
 // Complexity: advanced
 
-
+// dingo:n:1
 type RequestTag uint8
 
 const (
@@ -42,7 +42,7 @@ func (e Request) IsDelete() bool {
 	return e.tag == RequestTagDelete
 }
 
-
+// dingo:n:0
 type StatusTag uint8
 
 const (
@@ -77,7 +77,7 @@ func (e Status) IsStopped() bool {
 
 // Mixed if/where keywords in same match
 func routeRequest(req Request) string {
-	var __match_result_0 string
+	var result string
 	// DINGO_MATCH_START: req
 	scrutinee := req
 	switch scrutinee.tag {
@@ -85,42 +85,43 @@ func routeRequest(req Request) string {
 		path := *scrutinee.get
 		// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: strings.HasPrefix(path, "/api/")
 		if strings.HasPrefix(path, "/api/") {
-			__match_result_0 = "API endpoint"
+			result = "API endpoint"
 			// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: len(path) > 0
 		} else if len(path) > 0 {
-			__match_result_0 = "static resource"
+			result = "static resource"
 		}
 	case RequestTagPost:
 		path := *scrutinee.post
 		body := *scrutinee.post1
 		// DINGO_PATTERN: RequestPost(path, body) | DINGO_GUARD: len(body) > 100 && strings.Contains(path, "upload")
 		if len(body) > 100 && strings.Contains(path, "upload") {
-			__match_result_0 = "large upload"
+			result = "large upload"
 			// DINGO_PATTERN: RequestPost(_, body) | DINGO_GUARD: len(body) > 0
 		} else if len(body) > 0 {
-			__match_result_0 = "post request"
+			result = "post request"
 		}
 	case RequestTagDelete:
 		path := *scrutinee.delete
 		// DINGO_PATTERN: RequestDelete(path) | DINGO_GUARD: isProtected(path)
 		if isProtected(path) {
-			__match_result_0 = "forbidden"
+			result = "forbidden"
 			// DINGO_PATTERN: RequestDelete(_)
 		} else {
-			__match_result_0 = "delete request"
+			result = "delete request"
 		}
 	default:
 		// DINGO_PATTERN: _
-		__match_result_0 = "unknown"
+		result = "unknown"
 	}
-	return __match_result_0
+	return result
+	panic("unreachable: match is exhaustive")
 	// DINGO_MATCH_END
 
 }
 
 // Guards with logical operators
 func classifyStatus(status Status) string {
-	var __match_result_1 string
+	var result2 string
 	// DINGO_MATCH_START: status
 	scrutinee2 := status
 	switch scrutinee2.tag {
@@ -128,28 +129,29 @@ func classifyStatus(status Status) string {
 		count := *scrutinee2.active
 		// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count > 1000 || count < 0
 		if count > 1000 || count < 0 {
-			__match_result_1 = "unusual"
+			result2 = "unusual"
 			// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count >= 100 && count <= 1000
 		} else if count >= 100 && count <= 1000 {
-			__match_result_1 = "normal"
+			result2 = "normal"
 			// DINGO_PATTERN: StatusActive(_)
 		} else {
-			__match_result_1 = "low activity"
+			result2 = "low activity"
 		}
 	case StatusTagPaused:
 		duration := *scrutinee2.paused
 		// DINGO_PATTERN: StatusPaused(duration) | DINGO_GUARD: duration > 3600
 		if duration > 3600 {
-			__match_result_1 = "long pause"
+			result2 = "long pause"
 			// DINGO_PATTERN: StatusPaused(_) | DINGO_GUARD: true
 		} else if true {
-			__match_result_1 = "short pause"
+			result2 = "short pause"
 		}
 	case StatusTagStopped:
 		// DINGO_PATTERN: StatusStopped
-		__match_result_1 = "stopped"
+		result2 = "stopped"
 	}
-	return __match_result_1
+	return result2
+	panic("unreachable: match is exhaustive")
 	// DINGO_MATCH_END
 
 }

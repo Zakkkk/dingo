@@ -248,7 +248,7 @@ type Tuple2_Any_Any struct {
 // Complexity: intermediate
 
 // Tuple of Options
-func findUser(id int) (dgo.Option[string], dgo.Option[int]) {
+func findUser(id int) (OptionString, OptionInt) {
 	if id > 0 {
 		return OptionStringSome("User"), OptionInterfaceSome(id)
 	}
@@ -264,7 +264,7 @@ func getStringResult() dgo.Result[string, string] {
 }
 
 // Tuple with mixed Option types
-func getOptions() (dgo.Option[int], dgo.Option[string], dgo.Option[bool]) {
+func getOptions() (OptionInt, OptionString, OptionBool) {
 	return OptionIntSome(10), Option_string_None(), OptionBoolSome(true)
 }
 func main() {

@@ -110,12 +110,10 @@ func RemoveDebugMarkers(content []byte) []byte {
 			// Line has marker + other content - remove just the marker
 			cleaned := markerPattern.ReplaceAllString(line, "")
 
-			// Normalize multiple spaces within the line (e.g., "//  text" → "// text")
-			// But preserve indentation at the beginning
-			cleaned = regexp.MustCompile(`\s{2,}`).ReplaceAllString(cleaned, " ")
+			// Normalize "//  " to "// " (double space after comment start)
+			cleaned = strings.ReplaceAll(cleaned, "//  ", "// ")
 
-			// Clean up: remove empty comment suffixes like "// " at end of line
-			// But preserve indentation and non-marker comments
+			// Clean up trailing "// " left after marker removal
 			cleaned = strings.TrimRight(cleaned, " \t")
 
 			// If the line now ends with just "//", remove it

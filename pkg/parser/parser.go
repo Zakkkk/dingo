@@ -29,6 +29,11 @@ const (
 
 	// AllErrors reports all errors (not just the first 10)
 	AllErrors
+
+	// SkipPreprocess tells the parser to skip preprocessing
+	// Use this when the source has already been preprocessed by cmd/dingo
+	// This avoids double-preprocessing which can corrupt := to = in IIFEs
+	SkipPreprocess
 )
 
 // ParseFile is a convenience function that uses the default parser

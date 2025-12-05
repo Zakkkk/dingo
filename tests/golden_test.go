@@ -152,7 +152,7 @@ func TestGoldenFiles(t *testing.T) {
 			preprocessed, _, err := preprocessorInst.Process()
 			require.NoError(t, err, "Failed to preprocess Dingo file: %s", dingoFile)
 
-			dingoAST, err := parser.ParseFile(fset, dingoFile, []byte(preprocessed), parser.ParseComments)
+			dingoAST, err := parser.ParseFile(fset, dingoFile, []byte(preprocessed), parser.ParseComments|parser.SkipPreprocess)
 			require.NoError(t, err, "Failed to parse preprocessed Dingo file: %s", dingoFile)
 
 			// Create generator (plugins are registered internally)

@@ -36,22 +36,19 @@ func (e Status) IsComplete() bool {
 	return e.tag == StatusTagComplete
 }
 func getStatusMessage(s Status) string {
-	var matchResult string
-	// DINGO_MATCH_START: s
-	scrutinee := s
-	switch scrutinee.tag {
-	case StatusTagPending:
-		// DINGO_PATTERN: StatusPending
-		matchResult = "Waiting to start"
-	case StatusTagActive:
-		// DINGO_PATTERN: StatusActive
-		matchResult = "Currently running"
-	case StatusTagComplete:
-		// DINGO_PATTERN: StatusComplete
-		matchResult = "Finished"
+	tmp := s
+	switch tmp.tag {
+	default:
+		StatusPending := tmp
+		return "Waiting to start" // dingo:M:1
+	default:
+		StatusActive := tmp
+		return "Currently running" // dingo:M:1
+	default:
+		StatusComplete := tmp
+		return "Finished" // dingo:M:1
 	}
-	return matchResult
-	// DINGO_MATCH_END
+	panic("non-exhaustive match")
 
 }
 func main() {

@@ -69,20 +69,26 @@ func NewDefaultPassConfig() *PassConfig {
 		//    Transforms: Result<T,E> → Result[T,E]
 		NewGenericSyntaxProcessor(),
 
-		// 3. Guard let (guard let x = expr else { ... }) - AST-based
+		// 3. Type annotations (: → space) - MUST run BEFORE match/enum/lambda
+		//    Transforms: param: Type → param Type
+		//    CRITICAL: Must run early so match/enum processors receive valid Go-like syntax
+		//    and their output (which is valid Go) doesn't get mangled by this processor
+		NewTypeAnnotProcessor(),
+
+		// 4. Guard let (guard let x = expr else { ... }) - AST-based
 		//    Transforms: guard let x = Result() else { return } → if Result.IsErr() { ... }
 		//    MUST run BEFORE pattern matching (both use similar control flow patterns)
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewGuardLetASTProcessor(),
 
-		// 4. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
+		// 5. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
 		//    Match arms: Pattern => Expression (structural context)
 		//    Lambdas: params => expression (expression context)
 		//    MIGRATED TO AST: New MatchProcessor uses tokenizer + parser + generator
 		//    P0 FIXES: Comments in arms, nested patterns Ok(Some(x))
 		NewMatchProcessor(),
 
-		// 5. Enums (enum Name { ... }) - AST-based
+		// 6. Enums (enum Name { ... }) - AST-based
 		//    Transforms: enum Result { Ok, Err } → struct types + constructors
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewEnumASTProcessor(),
@@ -101,29 +107,26 @@ func NewDefaultPassConfig() *PassConfig {
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewFunctionalASTProcessor(),
 
-		// 1. Type annotations (: → space) - Text-based (MUST be text-based to handle invalid Go)
-		//    Transforms: param: Type → param Type
-		//    NOTE: Using text-based processor because AST-based requires valid Go,
-		//    but type annotations make code invalid until processed
-		NewTypeAnnotProcessor(),
+		// NOTE: Type annotations moved to Pass 1 (before match/enum)
+		// to prevent mangling valid Go output from structural transforms
 
-		// 2. Safe navigation (?.) - AST-based
+		// 1. Safe navigation (?.) - AST-based
 		//    Transforms: user?.name → conditional access pattern
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewSafeNavASTProcessor(),
 
-		// 3. Null coalescing (??) - AST-based
+		// 2. Null coalescing (??) - AST-based
 		//    Transforms: x ?? default → ternary with nil check
 		//    CRITICAL: Must run BEFORE TernaryProcessor and ErrorPropProcessor
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewNullCoalesceASTProcessor(),
 
-		// 4. Ternary operator (? :)
+		// 3. Ternary operator (? :)
 		//    Transforms: condition ? trueVal : falseVal → IIFE pattern
 		//    Process ternary BEFORE error prop to cleanly separate ? : from single ?
 		NewTernaryProcessor(),
 
-		// 5. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
+		// 4. Error propagation (expr?) - AST-based, AFTER ternary (handles remaining ?)
 		//    Transforms: x? → if err != nil { return ... }
 		NewErrorPropASTProcessor(),
 	}

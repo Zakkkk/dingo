@@ -82,7 +82,7 @@ func main() {
 	fmt.Println("Age 70:", result11) // Output: 4
 
 	// Lambda used in higher-order function
-	applyTwice := func(n int, f func(int) int) int {
+	applyTwice = func(n int, f func(int) int) int {
 		return f(f(n))
 	}
 	increment := func(x int) int {

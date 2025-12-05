@@ -86,8 +86,45 @@ func (p *MatchProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 		// Detect if match is used as expression (return, assignment, function arg)
 		matchExpr.IsExpr = p.isExpressionContext(result, region)
 
+		// Detect if match is in "return match" context (no IIFE needed)
+		isReturnContext := p.isReturnContext(result, region)
+
+		// Calculate replacement start position and initial indentation
+		// The approach differs based on context:
+		// - Return context: Replace "return match" and leading whitespace, generator handles indent
+		// - IIFE context: Replace only "match {...}", IIFE starts inline after "="
+		replaceStart := region.start
+		initialIndent := p.calculateIndentLevel(result, region.start)
+
+		if isReturnContext {
+			// For "return match" context:
+			// 1. Find and replace the "return " keyword
+			// 2. Consume leading whitespace (generator will re-add proper indent)
+			pos := region.start - 1
+			for pos >= 0 && (result[pos] == ' ' || result[pos] == '\t') {
+				pos--
+			}
+			// Check for "return" keyword (6 chars)
+			if pos >= 5 {
+				keyword := string(result[pos-5 : pos+1])
+				if keyword == "return" {
+					replaceStart = pos - 5
+				}
+			}
+
+			// Include leading whitespace in replacement to prevent double-indentation
+			// (generated code already includes proper indentation)
+			for replaceStart > 0 && (result[replaceStart-1] == ' ' || result[replaceStart-1] == '\t') {
+				replaceStart--
+			}
+		}
+		// For IIFE context (assignment), replaceStart stays at region.start
+		// Generator will handle inline first line (no indent on func() but proper indent inside)
+
 		// Generate Go code
 		gen := generator.NewMatchGenerator(p.matchIDCounter)
+		gen.SetReturnContext(isReturnContext)
+		gen.SetInitialIndent(initialIndent)
 		goCode, genMappings := gen.Generate(matchExpr)
 		p.matchIDCounter++
 
@@ -103,8 +140,8 @@ func (p *MatchProcessor) Process(source []byte) ([]byte, []Mapping, error) {
 			allMappings = append(allMappings, mapping)
 		}
 
-		// Replace in result
-		result = append(result[:region.start], append([]byte(goCode), result[region.end:]...)...)
+		// Replace in result (replaceStart was calculated earlier)
+		result = append(result[:replaceStart], append([]byte(goCode), result[region.end:]...)...)
 	}
 
 	return result, allMappings, nil
@@ -223,6 +260,47 @@ func (p *MatchProcessor) isExpressionContext(source []byte, region matchRegion) 
 	}
 
 	return false
+}
+
+// isReturnContext determines if match is directly after 'return' keyword
+// In this context, we don't need IIFE wrapping - just switch with returns
+func (p *MatchProcessor) isReturnContext(source []byte, region matchRegion) bool {
+	// Look backwards from match start to find context
+	// Skip whitespace and newlines
+	pos := region.start - 1
+	for pos >= 0 && (source[pos] == ' ' || source[pos] == '\t' || source[pos] == '\n' || source[pos] == '\r') {
+		pos--
+	}
+
+	if pos < 5 {
+		return false
+	}
+
+	// Check for "return" keyword
+	keyword := string(source[pos-5 : pos+1])
+	return keyword == "return"
+}
+
+// calculateIndentLevel calculates the indentation level at a given position
+// by counting tabs from the start of the line
+func (p *MatchProcessor) calculateIndentLevel(source []byte, pos int) int {
+	// Find start of line
+	lineStart := pos
+	for lineStart > 0 && source[lineStart-1] != '\n' {
+		lineStart--
+	}
+
+	// Count leading tabs
+	tabCount := 0
+	for i := lineStart; i < pos && i < len(source); i++ {
+		if source[i] == '\t' {
+			tabCount++
+		} else if source[i] != ' ' {
+			break
+		}
+	}
+
+	return tabCount
 }
 
 // Compile-time interface check

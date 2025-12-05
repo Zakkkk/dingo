@@ -17,14 +17,25 @@ func newParticipleParser(mode Mode) Parser {
 }
 
 func (p *simpleParser) ParseFile(fset *token.FileSet, filename string, src []byte) (*dingoast.File, error) {
-	// Step 1: Preprocess Dingo syntax to valid Go
-	prep := preprocessor.New(src)
-	goCode, _, err := prep.Process()
-	if err != nil {
-		return nil, err
+	var goCode []byte
+
+	// Check if caller has disabled preprocessing (SkipPreprocess mode)
+	// This is used when the caller (cmd/dingo) has already preprocessed the source
+	if p.mode&SkipPreprocess != 0 {
+		// Source is already valid Go - use directly
+		goCode = src
+	} else {
+		// Preprocess Dingo syntax to valid Go
+		// This is the default for backward compatibility with tests
+		prep := preprocessor.New(src)
+		goSource, _, err := prep.Process()
+		if err != nil {
+			return nil, err
+		}
+		goCode = []byte(goSource)
 	}
 
-	// Step 2: Use go/parser to parse the preprocessed Go code
+	// Use go/parser to parse the Go code
 	var parserMode parser.Mode
 	if p.mode&ParseComments != 0 {
 		parserMode |= parser.ParseComments
@@ -33,7 +44,7 @@ func (p *simpleParser) ParseFile(fset *token.FileSet, filename string, src []byt
 		parserMode |= parser.AllErrors
 	}
 
-	file, err := parser.ParseFile(fset, filename, []byte(goCode), parserMode)
+	file, err := parser.ParseFile(fset, filename, goCode, parserMode)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,6 @@ import (
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/plugin"
 	"github.com/MadAppGang/dingo/pkg/plugin/builtin"
-	typereg "github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -127,8 +126,7 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 		if !ok {
 			return nil, fmt.Errorf("invalid FileSet type")
 		}
-		reg := typereg.NewRegistryWithFileSet("builtin", fset)
-		return builtin.NewTypeInferenceService(fset, file, loggerInterface, reg)
+		return builtin.NewTypeInferenceService(fset, file, loggerInterface)
 	})
 
 	return &Generator{
@@ -213,6 +211,16 @@ func (g *Generator) Generate(file *dingoast.File) ([]byte, error) {
 				errMsg.WriteString("\n")
 			}
 			return nil, fmt.Errorf("%s", errMsg.String())
+		}
+
+		// Step 4.5: Inject required imports from plugins (AST-based)
+		// This adds imports for runtime packages like dgo
+		requiredImports := g.pipeline.GetRequiredImports()
+		for _, imp := range requiredImports {
+			added := astutil.AddImport(g.fset, transformed, imp)
+			if added && g.logger != nil {
+				g.logger.Debugf("Added import: %s", imp)
+			}
 		}
 	}
 

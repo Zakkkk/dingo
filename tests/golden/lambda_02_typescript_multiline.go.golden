@@ -51,7 +51,7 @@ func main() {
 
 	// Nested function call in lambda body
 	transform := func(val int) {
-		helper := func(x int) int {
+		helper = func(x int) int {
 			return x * 3
 		}
 		return helper(val) + 1

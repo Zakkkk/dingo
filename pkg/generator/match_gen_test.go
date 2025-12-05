@@ -30,7 +30,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 					},
 				},
 			},
-			expected: "tmp := result\nswitch tmp.Tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\treturn x // dingo:M:1\n}\n",
+			expected: "tmp := result\nswitch tmp.tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\treturn x // dingo:M:1\n}\n",
 		},
 		{
 			name: "Wildcard pattern",
@@ -43,7 +43,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 					},
 				},
 			},
-			expected: "tmp := value\nswitch tmp.Tag {\n\tdefault:\n\t\treturn 0 // dingo:M:1\n}\n",
+			expected: "tmp := value\nswitch tmp.tag {\n\tdefault:\n\t\treturn 0 // dingo:M:1\n}\n",
 		},
 		{
 			name: "Multiple arms",
@@ -70,7 +70,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 					},
 				},
 			},
-			expected: "tmp := result\nswitch tmp.Tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\treturn x // dingo:M:1\n\tcase dgo.ResultTagErr:\n\t\te := *tmp.Err\n\t\treturn 0 // dingo:M:1\n}\n",
+			expected: "tmp := result\nswitch tmp.tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\treturn x // dingo:M:1\n\tcase dgo.ResultTagErr:\n\t\te := *tmp.Err\n\t\treturn 0 // dingo:M:1\n}\n",
 		},
 	}
 
@@ -131,7 +131,7 @@ func TestMatchGenerator_NestedPatterns(t *testing.T) {
 					},
 				},
 			},
-			expected: "tmp := wrapped\nswitch tmp.Tag {\n\tcase dgo.ResultTagOk:\n\t\ttmp1 := *tmp.Ok\n\t\tswitch tmp1.Tag {\n\t\t\tcase dgo.OptionTagSome:\n\t\t\t\tx := *tmp1.Some\n\t\t\tdefault:\n\t\t\t\tbreak // Inner pattern didn't match\n\t\t}\n\t\treturn x // dingo:M:1\n\tcase dgo.ResultTagOk:\n\t\ttmp2 := *tmp.Ok\n\t\tswitch tmp2.Tag {\n\t\t\tcase dgo.OptionTagNone:\n\t\t\tdefault:\n\t\t\t\tbreak // Inner pattern didn't match\n\t\t}\n\t\treturn 0 // dingo:M:1\n\tcase dgo.ResultTagErr:\n\t\te := *tmp.Err\n\t\treturn -1 // dingo:M:1\n}\n",
+			expected: "tmp := wrapped\nswitch tmp.tag {\n\tcase dgo.ResultTagOk:\n\t\ttmp1 := *tmp.Ok\n\t\tswitch tmp1.tag {\n\t\t\tcase dgo.OptionTagSome:\n\t\t\t\tx := *tmp1.Some\n\t\t\tdefault:\n\t\t\t\tbreak // Inner pattern didn't match\n\t\t}\n\t\treturn x // dingo:M:1\n\tcase dgo.ResultTagOk:\n\t\ttmp2 := *tmp.Ok\n\t\tswitch tmp2.tag {\n\t\t\tcase dgo.OptionTagNone:\n\t\t\tdefault:\n\t\t\t\tbreak // Inner pattern didn't match\n\t\t}\n\t\treturn 0 // dingo:M:1\n\tcase dgo.ResultTagErr:\n\t\te := *tmp.Err\n\t\treturn -1 // dingo:M:1\n}\n",
 		},
 	}
 
@@ -174,7 +174,7 @@ func TestMatchGenerator_Guards(t *testing.T) {
 					},
 				},
 			},
-			expected: "tmp := result\nswitch tmp.Tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\tif x > 0 {\n\t\t\treturn x * 2 // dingo:M:1\n\t\t}\n\tdefault:\n\t\treturn 0 // dingo:M:1\n}\n",
+			expected: "tmp := result\nswitch tmp.tag {\n\tcase dgo.ResultTagOk:\n\t\tx := *tmp.Ok\n\t\tif x > 0 {\n\t\t\treturn x * 2 // dingo:M:1\n\t\t}\n\tdefault:\n\t\treturn 0 // dingo:M:1\n}\n",
 		},
 	}
 
@@ -332,7 +332,7 @@ func TestMatchGenerator_LiteralPatterns(t *testing.T) {
 	gen := NewMatchGenerator(0)
 	code, _ := gen.Generate(match)
 
-	expected := "tmp := status\nswitch tmp.Tag {\n\tcase 200:\n\t\treturn \"OK\" // dingo:M:1\n\tcase 404:\n\t\treturn \"Not Found\" // dingo:M:1\n\tdefault:\n\t\treturn \"Unknown\" // dingo:M:1\n}\n"
+	expected := "tmp := status\nswitch tmp.tag {\n\tcase 200:\n\t\treturn \"OK\" // dingo:M:1\n\tcase 404:\n\t\treturn \"Not Found\" // dingo:M:1\n\tdefault:\n\t\treturn \"Unknown\" // dingo:M:1\n}\n"
 
 	if code != expected {
 		t.Errorf("Literal pattern generation mismatch\nGot:\n%s\nExpected:\n%s", code, expected)

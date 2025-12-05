@@ -81,25 +81,31 @@ func (e Value) IsString() bool {
 	return e.tag == ValueTagString
 }
 func processResult(r Result) string {
-	var matchResult __TYPE_INFERENCE_NEEDED
-	// DINGO_MATCH_START: r
-	scrutinee := r
-	switch scrutinee.tag {
-	case ResultOkTag:
-		// DINGO_PATTERN: ResultOk(ValueInt(n))
-		ValueInt(n) := scrutinee.ValueInt(n)
-		matchResult = "Got integer: " + string(n)
-	case ResultOkTag:
-		// DINGO_PATTERN: ResultOk(ValueString(s))
-		ValueString(s) := scrutinee.ValueString(s)
-		matchResult = "Got string: " + s
-	case ResultErrTag:
-		// DINGO_PATTERN: ResultErr(e)
-		e := scrutinee.E
-		matchResult = "Error: " + e.Error()
+	tmp := r
+	switch tmp.tag {
+	case RTagResultOk:
+		tmp1 := *tmp.resultok_param0
+		switch tmp1.tag {
+		case ValueTagInt:
+			n := *tmp1.value_int_n
+		default:
+			break // Inner pattern didn't match
+		}
+		return "Got integer: " + string(n) // dingo:M:1
+	case RTagResultOk:
+		tmp2 := *tmp.resultok_param0
+		switch tmp2.tag {
+		case ValueTagString:
+			s := *tmp2.value_string_s
+		default:
+			break // Inner pattern didn't match
+		}
+		return "Got string: " + s // dingo:M:1
+	case RTagResultErr:
+		e := *tmp.resulterr_e
+		return "Error: " + e.Error() // dingo:M:1
 	}
-	return matchResult
-	// DINGO_MATCH_END
+	panic("non-exhaustive match")
 
 }
 func main() {

@@ -24,7 +24,7 @@ import (
 //   - Complex nested: x: map[string][]func() error
 // Strategy: Match everything up to next comma or closing paren, handling nested brackets/parens
 var (
-	paramPattern      = regexp.MustCompile(`(\w+)\s*:\s*([^,)]+)`)
+	paramPattern       = regexp.MustCompile(`(\w+)\s*:\s*([^,)]+)`)
 	returnArrowPattern = regexp.MustCompile(`\)\s*->\s*(.+?)\s*\{`)
 )
 
@@ -60,8 +60,12 @@ func (t *TypeAnnotProcessor) ProcessInternal(code string) (string, []TransformMe
 	for lineIdx, line := range lines {
 		lineNum := lineIdx + 1
 
-		// Check if this line contains a function declaration
-		if bytes.Contains(line, []byte("func ")) {
+		// Check if this line contains type annotations (: pattern)
+		// This handles:
+		//   - Top-level functions: func name(x: Type) {...}
+		//   - Inline lambdas: .Map(func(x: Type) {...})
+		//   - Multiple lambdas on same line
+		if bytes.Contains(line, []byte("func(")) || bytes.Contains(line, []byte("func ")) {
 			// Track if we made any transformations on this line
 			hadTransformation := false
 
@@ -83,29 +87,11 @@ func (t *TypeAnnotProcessor) ProcessInternal(code string) (string, []TransformMe
 				})
 			}
 
-			// Find the parameter list
-			openParen := bytes.IndexByte(line, '(')
-			closeParen := bytes.IndexByte(line, ')')
-
-			if openParen != -1 && closeParen != -1 && closeParen > openParen {
-				// Check if params contain : pattern
-				params := line[openParen+1:closeParen]
-				if bytes.Contains(params, []byte(":")) {
-					hadTransformation = true
-				}
-
-				// Process only the parameter list
-				before := line[:openParen+1]
-				after := line[closeParen:]
-
-				// Replace : with space in parameters
-				params = t.replaceColonInParams(params)
-
-				var lineResult bytes.Buffer
-				lineResult.Write(before)
-				lineResult.Write(params)
-				lineResult.Write(after)
-				line = lineResult.Bytes()
+			// Use regex to replace ALL parameter type annotations on this line
+			// This handles multiple func(...) patterns on the same line
+			if bytes.Contains(line, []byte(":")) {
+				hadTransformation = true
+				line = paramPattern.ReplaceAll(line, []byte("$1 $2"))
 			}
 
 			// If we made a transformation, emit metadata
@@ -161,4 +147,10 @@ func (t *TypeAnnotProcessor) replaceColonInParams(params []byte) []byte {
 
 		return buf.Bytes()
 	})
+}
+
+// ProcessBody implements BodyProcessor interface (for lambda body processing)
+func (t *TypeAnnotProcessor) ProcessBody(body []byte) ([]byte, error) {
+	result, _, err := t.Process(body)
+	return result, err
 }

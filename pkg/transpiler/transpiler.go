@@ -21,21 +21,48 @@ import (
 // Transpiler handles transpilation of .dingo files to .go files
 type Transpiler struct {
 	config *config.Config
+	mode   TranspileMode
 }
 
 // New creates a new Transpiler instance with default configuration
+// Defaults to Legacy mode for backward compatibility
 func New() (*Transpiler, error) {
 	cfg, err := config.Load(nil)
 	if err != nil {
 		// Fall back to defaults on error
 		cfg = config.DefaultConfig()
 	}
-	return &Transpiler{config: cfg}, nil
+	return &Transpiler{
+		config: cfg,
+		mode:   ModeLegacy, // Default to legacy for backward compatibility
+	}, nil
 }
 
 // NewWithConfig creates a new Transpiler with custom configuration
+// Defaults to Legacy mode
 func NewWithConfig(cfg *config.Config) *Transpiler {
-	return &Transpiler{config: cfg}
+	return &Transpiler{
+		config: cfg,
+		mode:   ModeLegacy,
+	}
+}
+
+// NewWithMode creates a new Transpiler with custom configuration and mode
+func NewWithMode(cfg *config.Config, mode TranspileMode) *Transpiler {
+	return &Transpiler{
+		config: cfg,
+		mode:   mode,
+	}
+}
+
+// SetMode sets the transpilation mode
+func (t *Transpiler) SetMode(mode TranspileMode) {
+	t.mode = mode
+}
+
+// GetMode returns the current transpilation mode
+func (t *Transpiler) GetMode() TranspileMode {
+	return t.mode
 }
 
 // TranspileFile transpiles a single .dingo file to .go with source maps

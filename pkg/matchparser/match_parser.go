@@ -224,13 +224,16 @@ func (p *MatchParser) parsePattern() (ast.Pattern, error) {
 		}, nil
 
 	case tokenizer.IDENT:
-		// Could be: variable, constructor (with parens), or enum variant
+		// Could be: variable, constructor (with parens/braces), or enum variant
 		ident := tok
 		p.tok.Advance()
 
-		// Check for constructor pattern: Ident(...)
+		// Check for constructor pattern: Ident(...) or Ident{...}
 		if p.tok.Current().Kind == tokenizer.LPAREN {
 			return p.parseConstructorPattern(ident)
+		}
+		if p.tok.Current().Kind == tokenizer.LBRACE {
+			return p.parseStructPattern(ident)
 		}
 
 		// Check for known constructors without params
@@ -301,6 +304,54 @@ func (p *MatchParser) parseConstructorPattern(nameTok tokenizer.Token) (ast.Patt
 		LParen:  lparen.Pos,
 		Params:  params,
 		RParen:  rparen.Pos,
+	}, nil
+}
+
+// parseStructPattern parses struct-like patterns: Color_RGB{r, g, b}
+func (p *MatchParser) parseStructPattern(nameTok tokenizer.Token) (ast.Pattern, error) {
+	lbrace, err := p.tok.Expect(tokenizer.LBRACE)
+	if err != nil {
+		return nil, err
+	}
+
+	var params []ast.Pattern
+
+	for p.tok.Current().Kind != tokenizer.RBRACE {
+		// Skip newlines inside struct
+		for p.tok.Match(tokenizer.NEWLINE) {
+		}
+
+		if p.tok.Current().Kind == tokenizer.RBRACE {
+			break
+		}
+
+		param, err := p.parsePattern() // RECURSIVE
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, param)
+
+		// Skip newlines after pattern
+		for p.tok.Match(tokenizer.NEWLINE) {
+		}
+
+		if !p.tok.Match(tokenizer.COMMA) {
+			break
+		}
+	}
+
+	rbrace, err := p.tok.Expect(tokenizer.RBRACE)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reuse ConstructorPattern for struct patterns
+	return &ast.ConstructorPattern{
+		NamePos: nameTok.Pos,
+		Name:    nameTok.Lit,
+		LParen:  lbrace.Pos, // Using LParen/RParen fields for brace positions
+		Params:  params,
+		RParen:  rbrace.Pos,
 	}, nil
 }
 

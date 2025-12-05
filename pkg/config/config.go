@@ -76,6 +76,14 @@ type BuildConfig struct {
 	// automatically copied to maintain a buildable output tree.
 	// Empty string (default) means output files are placed alongside source files.
 	OutDir string `toml:"outdir"`
+
+	// TranspileMode selects the transpilation strategy
+	// Valid values: "legacy", "ast", "hybrid"
+	// - "legacy": Preprocessor-based (current production implementation)
+	// - "ast": New AST parser + transformer (under development)
+	// - "hybrid": Try AST first, fall back to legacy on error
+	// Default: "legacy" for backward compatibility
+	TranspileMode string `toml:"transpile_mode"`
 }
 
 // Config represents the complete Dingo project configuration
@@ -211,6 +219,10 @@ func DefaultConfig() *Config {
 		},
 		Debug: DebugConfig{
 			KeepMarkers: false, // Default to clean output for production
+		},
+		Build: BuildConfig{
+			OutDir:        "",       // Default to placing output alongside source
+			TranspileMode: "legacy", // Default to legacy mode for stability
 		},
 	}
 }
@@ -400,6 +412,17 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("invalid sourcemap format: %q (must be 'inline', 'separate', 'both', or 'none')",
 			c.SourceMap.Format)
+	}
+
+	// Validate transpile mode
+	if c.Build.TranspileMode != "" {
+		switch c.Build.TranspileMode {
+		case "legacy", "ast", "hybrid":
+			// Valid
+		default:
+			return fmt.Errorf("invalid build.transpile_mode: %q (must be 'legacy', 'ast', or 'hybrid')",
+				c.Build.TranspileMode)
+		}
 	}
 
 	return nil

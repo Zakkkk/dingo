@@ -6,7 +6,7 @@ import "errors"
 // Feature: Match expression containing nested match expressions in arms
 // Complexity: advanced
 
-
+// dingo:n:1
 type MyResultTag uint8
 
 const (
@@ -33,7 +33,7 @@ func (e MyResult) IsMyErr() bool {
 	return e.tag == MyResultTagMyErr
 }
 
-
+// dingo:n:0
 type MyOptionTag uint8
 
 const (
@@ -58,7 +58,7 @@ func (e MyOption) IsMyNone() bool {
 	return e.tag == MyOptionTagMyNone
 }
 func processNestedMatch(result MyResult) int {
-	var __match_result_0 interface{}
+	var result interface{}
 	// DINGO_MATCH_START: result
 	scrutinee := result
 	switch scrutinee.tag {
@@ -76,15 +76,15 @@ func processNestedMatch(result MyResult) int {
 			// DINGO_PATTERN: MyNone
 			0
 		}
-		panic("unreachable: match is exhaustive")
 	// DINGO_MATCH_END
 
 	case MyResultTagMyErr:
 		e := *scrutinee.myerr
 		// DINGO_PATTERN: MyErr(e)
-		__match_result_0 = -1
+		result = -1
 	}
-	return __match_result_0
+	return result
+	panic("unreachable: match is exhaustive")
 	// DINGO_MATCH_END
 
 }

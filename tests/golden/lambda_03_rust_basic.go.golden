@@ -3,7 +3,7 @@ package main
 import "fmt"
 
 // Test: Basic Rust pipe syntax for lambdas
-// Feature: Rust-style lambda functions with func(param __TYPE_INFERENCE_NEEDED) { return syntax }
+// Feature: Rust-style lambda functions with |param| syntax
 // Complexity: basic
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 	fmt.Println("Is -5 positive:", result7) // Output: false
 
 	// Lambda passed as function argument
-	process := func(n int, f func(int) int) int {
+	process = func(n int, f func(int) int) int {
 		return f(n)
 	}
 	result8 := process(10, func(x int) int { return x + 5 })

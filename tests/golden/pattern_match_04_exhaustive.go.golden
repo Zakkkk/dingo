@@ -4,7 +4,7 @@ package main
 // Feature: Compiler ensures all cases covered
 // Complexity: intermediate
 
-
+// dingo:n:0
 type ColorTag uint8
 
 const (
@@ -46,24 +46,25 @@ func (e Color) IsRGB() bool {
 	return e.tag == ColorTagRGB
 }
 func colorToHex(c Color) string {
-	var matchResult string
+	var result string
 	// DINGO_MATCH_START: c
 	scrutinee := c
 	switch scrutinee.tag {
 	case ColorTagRed:
 		// DINGO_PATTERN: ColorRed
-		matchResult = "#FF0000"
+		result = "#FF0000"
 	case ColorTagGreen:
 		// DINGO_PATTERN: ColorGreen
-		matchResult = "#00FF00"
+		result = "#00FF00"
 	case ColorTagBlue:
 		// DINGO_PATTERN: ColorBlue
-		matchResult = "#0000FF"
+		result = "#0000FF"
 	case ColorTagRGB{r, g, b}:
 		// DINGO_PATTERN: ColorRGB{r, g, b}
-		matchResult = "#" + toHex(r) + toHex(g) + toHex(b)
+		result = "#" + toHex(r) + toHex(g) + toHex(b)
 	}
-	return matchResult
+	return result
+	panic("unreachable: match is exhaustive")
 	// DINGO_MATCH_END
 
 }

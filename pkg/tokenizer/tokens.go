@@ -31,6 +31,7 @@ const (
 	LBRACKET   // [
 	RBRACKET   // ]
 	COLON      // :
+	SEMICOLON  // ;
 	UNDERSCORE // _
 	PIPE       // |  (for future or-patterns)
 
@@ -38,6 +39,9 @@ const (
 	MATCH // match
 	IF    // if (for guards)
 	WHERE // where (alternate guard syntax)
+	VAR   // var
+	LET   // let
+	CONST // const
 
 	// Compound operators (needed for expression parsing)
 	EQ     // ==
@@ -50,6 +54,7 @@ const (
 	OR     // ||
 	NOT    // !
 	ASSIGN // =
+	DEFINE // :=
 
 	// For expression parsing
 	PLUS     // +
@@ -58,6 +63,16 @@ const (
 	SLASH    // /
 	DOT      // .
 	QUESTION // ?
+
+	// Dingo-specific operators
+	QUESTION_QUESTION // ?? (null coalescing)
+	QUESTION_DOT      // ?. (safe navigation)
+	FAT_ARROW         // => (already exists as ARROW, keeping for clarity)
+	THIN_ARROW        // -> (Rust-style lambda)
+
+	// Dingo keywords
+	ENUM  // enum (sum types)
+	GUARD // guard (pattern matching guards)
 
 	// Boundaries (help with expression extraction)
 	NEWLINE // explicit newline tracking for position accuracy
@@ -81,11 +96,15 @@ var tokenKindStrings = map[TokenKind]string{
 	LBRACKET:   "[",
 	RBRACKET:   "]",
 	COLON:      ":",
+	SEMICOLON:  ";",
 	UNDERSCORE: "_",
 	PIPE:       "|",
 	MATCH:      "match",
 	IF:         "if",
 	WHERE:      "where",
+	VAR:        "var",
+	LET:        "let",
+	CONST:      "const",
 	EQ:         "==",
 	NE:         "!=",
 	LT:         "<",
@@ -96,13 +115,20 @@ var tokenKindStrings = map[TokenKind]string{
 	OR:         "||",
 	NOT:        "!",
 	ASSIGN:     "=",
+	DEFINE:     ":=",
 	PLUS:       "+",
 	MINUS:      "-",
 	STAR:       "*",
 	SLASH:      "/",
-	DOT:        ".",
-	QUESTION:   "?",
-	NEWLINE:    "NEWLINE",
+	DOT:               ".",
+	QUESTION:          "?",
+	QUESTION_QUESTION: "??",
+	QUESTION_DOT:      "?.",
+	FAT_ARROW:         "=>",
+	THIN_ARROW:        "->",
+	ENUM:              "enum",
+	GUARD:             "guard",
+	NEWLINE:           "NEWLINE",
 }
 
 // String returns the string representation of a token kind
@@ -133,5 +159,5 @@ func (t Token) String() string {
 
 // IsKeyword returns true if token is a Dingo keyword
 func (t Token) IsKeyword() bool {
-	return t.Kind == MATCH || t.Kind == IF || t.Kind == WHERE
+	return t.Kind == MATCH || t.Kind == IF || t.Kind == WHERE || t.Kind == ENUM || t.Kind == GUARD
 }

@@ -35,6 +35,11 @@ const (
 	LANGLE   // <
 	RANGLE   // >
 	SEMICOLON // ;
+
+	// Dingo-specific operators
+	QUESTION          // ? (error propagation, ternary)
+	QUESTION_QUESTION // ?? (null coalescing)
+	QUESTION_DOT      // ?. (safe navigation)
 )
 
 var tokenTypeNames = map[TokenType]string{
@@ -58,6 +63,9 @@ var tokenTypeNames = map[TokenType]string{
 	LANGLE:    "LANGLE",
 	RANGLE:    "RANGLE",
 	SEMICOLON: "SEMICOLON",
+	QUESTION:  "QUESTION",
+	QUESTION_QUESTION: "QUESTION_QUESTION",
+	QUESTION_DOT:      "QUESTION_DOT",
 }
 
 // String returns the string representation of the token type

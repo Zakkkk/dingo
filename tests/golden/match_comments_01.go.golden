@@ -1,0 +1,64 @@
+// P0 Bug Fix: Comments in match arms
+// Previously, inline comments after match arms would break parsing
+// because the regex-based processor treated them as separate arms
+package main
+
+import "fmt"
+
+
+type EventTag uint8
+
+const (
+	EventTagClick EventTag = iota
+	EventTagScroll
+	EventTagKeyPress
+)
+
+type Event struct {
+	tag          EventTag
+	click_x      *int
+	click_y      *int
+	keypress_key *string
+	scroll_delta *int
+}
+
+func EventClick(x int, y int) Event {
+	return Event{tag: EventTagClick, click_x: &x, click_y: &y}
+}
+func EventScroll(delta int) Event {
+	return Event{tag: EventTagScroll, scroll_delta: &delta}
+}
+func EventKeyPress(key string) Event {
+	return Event{tag: EventTagKeyPress, keypress_key: &key}
+}
+func (e Event) IsClick() bool {
+	return e.tag == EventTagClick
+}
+func (e Event) IsScroll() bool {
+	return e.tag == EventTagScroll
+}
+func (e Event) IsKeyPress() bool {
+	return e.tag == EventTagKeyPress
+}
+func handleEvent(event Event) string {
+	tmp := event
+	switch tmp.tag {
+	case EventTagClick:
+		x := *tmp.click_x
+		y := *tmp.click_y
+		return fmt.Sprintf("Click at (%d, %d)", x, y) // dingo:M:1
+	case EventTagScroll:
+		delta := *tmp.scroll_delta
+		return fmt.Sprintf("Scroll by %d", delta) // dingo:M:1
+	case EventTagKeyPress:
+		key := *tmp.keypress_key
+		return fmt.Sprintf("Key: %s", key) // dingo:M:1
+	}
+	panic("non-exhaustive match")
+
+}
+func main() {
+	event := Event.Click{x: 10, y: 20}
+	result := handleEvent(event)
+	fmt.Println(result)
+}

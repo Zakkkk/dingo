@@ -334,9 +334,9 @@ func (n *NullCoalesceASTProcessor) parseNullCoalesce(line string) (*ast.NullCoal
 		return nil, fmt.Errorf("null coalesce requires at least 2 operands, got %d", len(operands))
 	}
 	expr := &ast.NullCoalesceExpr{
-		Left:  operands[0],
-		OpPos: token.Pos(positions[0].start),
-		Right: operands[len(operands)-1],
+		LeftStr:  operands[0],
+		OpPos:    token.Pos(positions[0].start),
+		RightStr: operands[len(operands)-1],
 	}
 
 	// Store chain if more than 2 operands
@@ -345,8 +345,8 @@ func (n *NullCoalesceASTProcessor) parseNullCoalesce(line string) (*ast.NullCoal
 		var chain []*ast.NullCoalesceExpr
 		for i := 1; i < len(operands)-1; i++ {
 			chain = append(chain, &ast.NullCoalesceExpr{
-				Left:  operands[i],
-				OpPos: token.Pos(positions[i].start),
+				LeftStr: operands[i],
+				OpPos:   token.Pos(positions[i].start),
 			})
 		}
 		expr.Chain = chain
@@ -496,13 +496,13 @@ func isValidIdent(s string) bool {
 // Uses default-first pattern: x := defaultValue; if condition { x = actualValue }
 func (n *NullCoalesceASTProcessor) generateLetAssignment(expr *ast.NullCoalesceExpr, varName string, indent string, marker string, lineNum int, markerCounter *int) (string, *TransformMetadata) {
 	// Build operand chain
-	operands := []string{expr.Left}
+	operands := []string{expr.LeftStr}
 	if expr.Chain != nil {
 		for _, ch := range expr.Chain {
-			operands = append(operands, ch.Left)
+			operands = append(operands, ch.LeftStr)
 		}
 	}
-	operands = append(operands, expr.Right)
+	operands = append(operands, expr.RightStr)
 
 	// Detect type of first operand
 	leftType := n.typeDetector.DetectType(strings.TrimSpace(operands[0]))
@@ -570,8 +570,8 @@ func (n *NullCoalesceASTProcessor) generateLetAssignment(expr *ast.NullCoalesceE
 // Returns: transformed line and metadata
 func (n *NullCoalesceASTProcessor) generateInlineExpression(expr *ast.NullCoalesceExpr, marker string, lineNum int, originalLine string) (string, *TransformMetadata) {
 	// Operands are already strings in the AST
-	leftOperand := strings.TrimSpace(expr.Left)
-	rightOperand := strings.TrimSpace(expr.Right)
+	leftOperand := strings.TrimSpace(expr.LeftStr)
+	rightOperand := strings.TrimSpace(expr.RightStr)
 
 	// Detect types for both operands
 	leftType := n.typeDetector.DetectType(leftOperand)

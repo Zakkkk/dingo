@@ -48,14 +48,8 @@ const (
 	BlockComment                     // /* comment */
 )
 
-// Expr is a placeholder for expressions (body, guard, scrutinee)
-// In practice, this will hold the raw string until we have full expression parsing
-type Expr interface {
-	exprNode()
-	Pos() token.Pos
-	End() token.Pos
-	String() string
-}
+// Note: Expr interface is now defined in ast.go
+// match.go uses the common Dingo Expr interface
 
 // RawExpr wraps a string expression (interim solution)
 type RawExpr struct {
@@ -64,6 +58,7 @@ type RawExpr struct {
 	Text     string
 }
 
+func (e *RawExpr) Node()             {}
 func (e *RawExpr) exprNode()         {}
 func (e *RawExpr) Pos() token.Pos    { return e.StartPos }
 func (e *RawExpr) End() token.Pos    { return e.EndPos }
@@ -258,6 +253,9 @@ func (p *LiteralPattern) GetBindings() []Binding {
 // Node implements DingoNode marker interface
 func (m *MatchExpr) Node() {}
 
+// exprNode implements Expr interface
+func (m *MatchExpr) exprNode() {}
+
 // Pos returns the position of the match expression
 func (m *MatchExpr) Pos() token.Pos {
 	return m.Match
@@ -269,4 +267,26 @@ func (m *MatchExpr) End() token.Pos {
 		return m.CloseBrace + 1
 	}
 	return m.Match
+}
+
+// String returns string representation for codegen
+func (m *MatchExpr) String() string {
+	var b strings.Builder
+	b.WriteString("match ")
+	b.WriteString(m.Scrutinee.String())
+	b.WriteString(" { ")
+	for i, arm := range m.Arms {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(arm.Pattern.String())
+		if arm.Guard != nil {
+			b.WriteString(" if ")
+			b.WriteString(arm.Guard.String())
+		}
+		b.WriteString(" => ")
+		b.WriteString(arm.Body.String())
+	}
+	b.WriteString(" }")
+	return b.String()
 }

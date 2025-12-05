@@ -243,14 +243,17 @@ func (p *Preprocessor) ProcessWithMetadata() (string, *SourceMap, []TransformMet
 	}
 
 	// Wire ReturnDetector into ErrorPropASTProcessor for accurate return type detection
-	// The processor is at index 5 (last one) in expression processors
+	// Find ErrorPropASTProcessor by type (not by index - indices may change)
 	// ReturnDetector enables error-only vs (value, error) distinction
-	if errorPropProc, ok := config.Expression[5].(*ErrorPropASTProcessor); ok {
-		// Create ReturnDetector with nil analyzer (will use heuristics-based detection)
-		// Type-based analysis requires valid Go source, which we don't have yet
-		// Heuristics cover common stdlib patterns (os.Open, rows.Scan, etc.)
-		returnDetector := NewReturnDetector(nil)
-		errorPropProc.SetReturnDetector(returnDetector)
+	for _, proc := range config.Expression {
+		if errorPropProc, ok := proc.(*ErrorPropASTProcessor); ok {
+			// Create ReturnDetector with nil analyzer (will use heuristics-based detection)
+			// Type-based analysis requires valid Go source, which we don't have yet
+			// Heuristics cover common stdlib patterns (os.Open, rows.Scan, etc.)
+			returnDetector := NewReturnDetector(nil)
+			errorPropProc.SetReturnDetector(returnDetector)
+			break
+		}
 	}
 
 	// Get body processors for lambda injection (expression processors that implement BodyProcessor)

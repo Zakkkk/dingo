@@ -27,6 +27,7 @@ type Server struct {
 	translator    *Translator
 	transpiler    *AutoTranspiler
 	watcher       *FileWatcher
+	docManager    *IncrementalDocumentManager // Incremental parser manager
 	workspacePath string
 	initialized   bool
 
@@ -53,12 +54,16 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	// Initialize translator
 	translator := NewTranslator(mapCache)
 
+	// Initialize incremental document manager
+	docManager := NewIncrementalDocumentManager(cfg.Logger)
+
 	// Create server first (without transpiler)
 	server := &Server{
 		config:     cfg,
 		gopls:      gopls,
 		mapCache:   mapCache,
 		translator: translator,
+		docManager: docManager,
 	}
 
 	// Initialize auto-transpiler with server reference
@@ -244,6 +249,19 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 		dingoPath := params.TextDocument.URI.Filename()
 		s.config.Logger.Infof("[didOpen] Opened .dingo file: %s", dingoPath)
 
+		// Initialize incremental parser for this document
+		if err := s.docManager.OpenDocument(string(params.TextDocument.URI), params.TextDocument.Text); err != nil {
+			s.config.Logger.Warnf("[didOpen] Failed to initialize incremental parser: %v", err)
+		} else {
+			s.config.Logger.Debugf("[didOpen] Incremental parser initialized")
+
+			// Publish initial diagnostics from parser
+			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
+			if len(diagnostics) > 0 {
+				s.publishDingoDiagnostics(params.TextDocument.URI, diagnostics)
+			}
+		}
+
 		// Check if .go file exists, if not auto-transpile
 		goPath := dingoToGoPath(dingoPath)
 		if _, err := os.Stat(goPath); os.IsNotExist(err) {
@@ -290,6 +308,18 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 	// We translate positions during queries instead
 	if isDingoFile(params.TextDocument.URI) {
 		s.config.Logger.Debugf("Changed .dingo file (not forwarding to gopls): %s", params.TextDocument.URI)
+
+		// Update incremental parser
+		if err := s.docManager.UpdateDocument(string(params.TextDocument.URI), params.ContentChanges); err != nil {
+			s.config.Logger.Warnf("[didChange] Incremental parse failed: %v", err)
+		} else {
+			s.config.Logger.Debugf("[didChange] Incremental parse succeeded")
+
+			// Publish updated diagnostics
+			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
+			s.publishDingoDiagnostics(params.TextDocument.URI, diagnostics)
+		}
+
 		return reply(ctx, nil, nil)
 	}
 
@@ -338,6 +368,9 @@ func (s *Server) handleDidClose(ctx context.Context, reply jsonrpc2.Replier, req
 	// CRITICAL FIX D1: When .dingo file closes, close corresponding .go file with gopls
 	if isDingoFile(params.TextDocument.URI) {
 		s.config.Logger.Debugf("Closed .dingo file: %s", params.TextDocument.URI)
+
+		// Close incremental parser for this document
+		s.docManager.CloseDocument(string(params.TextDocument.URI))
 
 		// Close corresponding .go file with gopls
 		if err := s.closeGoFileWithGopls(ctx, params.TextDocument.URI.Filename()); err != nil {

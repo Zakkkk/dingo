@@ -43,13 +43,14 @@ func handleResult(r ResultIntError) string {
 			t.Fatalf("Preprocessing failed: %v", err)
 		}
 
-		// Verify preprocessor generated markers
+		// Verify preprocessor generated switch statement with source map markers
+		// The new AST-based MatchProcessor directly generates switch statements
 		preprocessedStr := string(preprocessed)
-		if !strings.Contains(preprocessedStr, "DINGO_MATCH_START") {
-			t.Errorf("Expected DINGO_MATCH_START marker, got:\n%s", preprocessedStr)
+		if !strings.Contains(preprocessedStr, "switch tmp.tag {") {
+			t.Errorf("Expected switch statement with tmp.tag, got:\n%s", preprocessedStr)
 		}
-		if !strings.Contains(preprocessedStr, "DINGO_PATTERN:") {
-			t.Errorf("Expected DINGO_PATTERN markers, got:\n%s", preprocessedStr)
+		if !strings.Contains(preprocessedStr, "// dingo:M:") {
+			t.Errorf("Expected source map markers (dingo:M:N), got:\n%s", preprocessedStr)
 		}
 
 		// Step 2: Parse preprocessed code

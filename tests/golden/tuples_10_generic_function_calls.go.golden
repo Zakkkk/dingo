@@ -1,0 +1,301 @@
+package main
+
+import "github.com/MadAppGang/dingo/pkg/dgo"
+
+
+type OptionTag uint8
+const (
+	OptionTagSome OptionTag = iota
+	OptionTagNone
+)
+type OptionUser struct {
+	tag  OptionTag
+	some *User
+}
+func OptionUserSome(arg User) OptionUser {
+	return OptionUser{tag: OptionTagSome, some: &arg}
+}
+func OptionUserNone() OptionUser {
+	return OptionUser{tag: OptionTagNone}
+}
+func (o OptionUser) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionUser) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionUser) Unwrap() User {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionUser) UnwrapOr(defaultValue User) User {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionUser) UnwrapOrElse(fn func() User) User {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionUser) Map(fn func(User) interface{}) OptionUser {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(User)
+	return OptionUser{tag: OptionTagSome, some: &result}
+}
+func (o OptionUser) AndThen(fn func(User) OptionUser) OptionUser {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionUser) Filter(predicate func(User) bool) OptionUser {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionUser{tag: OptionTagNone}
+}
+type OptionInt struct {
+	tag  OptionTag
+	some *int
+}
+func OptionIntSome(arg int) OptionInt {
+	return OptionInt{tag: OptionTagSome, some: &arg}
+}
+func OptionIntNone() OptionInt {
+	return OptionInt{tag: OptionTagNone}
+}
+func (o OptionInt) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionInt) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionInt) Unwrap() int {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionInt) UnwrapOr(defaultValue int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionInt) UnwrapOrElse(fn func() int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionInt) Map(fn func(int) interface{}) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(int)
+	return OptionInt{tag: OptionTagSome, some: &result}
+}
+func (o OptionInt) AndThen(fn func(int) OptionInt) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionInt{tag: OptionTagNone}
+}
+type OptionString struct {
+	tag  OptionTag
+	some *string
+}
+func OptionStringSome(arg string) OptionString {
+	return OptionString{tag: OptionTagSome, some: &arg}
+}
+func OptionStringNone() OptionString {
+	return OptionString{tag: OptionTagNone}
+}
+func (o OptionString) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionString) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionString) Unwrap() string {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionString) UnwrapOr(defaultValue string) string {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionString) UnwrapOrElse(fn func() string) string {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionString) Map(fn func(string) interface{}) OptionString {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(string)
+	return OptionString{tag: OptionTagSome, some: &result}
+}
+func (o OptionString) AndThen(fn func(string) OptionString) OptionString {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionString) Filter(predicate func(string) bool) OptionString {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionString{tag: OptionTagNone}
+}
+type OptionBool struct {
+	tag  OptionTag
+	some *bool
+}
+func OptionBoolSome(arg bool) OptionBool {
+	return OptionBool{tag: OptionTagSome, some: &arg}
+}
+func OptionBoolNone() OptionBool {
+	return OptionBool{tag: OptionTagNone}
+}
+func (o OptionBool) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionBool) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionBool) Unwrap() bool {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionBool) UnwrapOr(defaultValue bool) bool {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionBool) UnwrapOrElse(fn func() bool) bool {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionBool) Map(fn func(bool) interface{}) OptionBool {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(bool)
+	return OptionBool{tag: OptionTagSome, some: &result}
+}
+func (o OptionBool) AndThen(fn func(bool) OptionBool) OptionBool {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionBool) Filter(predicate func(bool) bool) OptionBool {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionBool{tag: OptionTagNone}
+}
+type Tuple2_Int_Int struct {
+	_0 int
+	_1 int
+}
+
+// Test: Generic function calls should NOT be treated as tuples
+// Feature: Tuple vs generic function call disambiguation
+// Complexity: intermediate
+
+type User struct {
+	Name string
+	Age  int
+}
+func getUserOptional() OptionUser {
+	return OptionUserNone()
+}
+func getNumber() OptionInt {
+	return OptionIntSome(42)
+}
+func readFile() dgo.Result[string, error] {
+	return Err[string, error]("file not found")
+}
+func makeMap() map[string]int {
+	return make(map[string]int)
+}
+func main() {
+	// None[T]() is a generic function call, NOT an empty tuple
+	maybeUser := OptionUserNone()
+	println("User option:", maybeUser)
+
+	// Some[T](value) is a generic function call with one argument
+	num := OptionIntSome(42)
+	println("Number:", num)
+
+	// Result[T,E](value) is a generic function call
+	result := Err[string, error]("error message")
+	println("Result:", result)
+
+	// make() with type parameters
+	m := make(map[string]int)
+	println("Map:", m)
+
+	// Multiple generic calls in one line
+	opt1 := OptionStringNone()
+	opt2 := OptionBoolSome(true)
+	println("Options:", opt1, opt2)
+
+	// Generic calls in if condition
+	if getUserOptional() == OptionUserNone() {
+		println("No user found")
+	}
+
+	// Actual tuples should still work
+	coords := Tuple2_Int_Int{_0: 10, _1: 20}
+	tmp := coords
+	x, y := tmp._0, tmp._1
+	println("Coords:", x, y)
+
+	// Generic call followed by tuple
+	option := OptionIntSome(100)
+	pair := Tuple2_Int_Int{_0: 200, _1: 300}
+	println("Option and pair:", option, pair)
+}

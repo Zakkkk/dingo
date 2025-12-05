@@ -343,6 +343,11 @@ func (t *Tokenizer) lookupKeyword(ident string) TokenKind {
 		"match": MATCH,
 		"if":    IF,
 		"where": WHERE,
+		"enum":  ENUM,
+		"guard": GUARD,
+		"var":   VAR,
+		"let":   LET,
+		"const": CONST,
 	}
 	if kind, ok := keywords[ident]; ok {
 		return kind
@@ -354,9 +359,13 @@ func (t *Tokenizer) lookupKeyword(ident string) TokenKind {
 func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, error) {
 	peek2 := t.scanner.PeekN(2)
 
-	// Two-character operators
+	// Two-character operators (check Dingo-specific first)
 	twoChar := map[string]TokenKind{
-		"=>": ARROW,
+		":=": DEFINE,            // Go: short variable declaration
+		"??": QUESTION_QUESTION, // Dingo: null coalescing
+		"?.": QUESTION_DOT,      // Dingo: safe navigation
+		"=>": ARROW,             // Dingo/existing: fat arrow (match arms)
+		"->": THIN_ARROW,        // Dingo: Rust-style lambda arrow
 		"==": EQ,
 		"!=": NE,
 		"<=": LE,
@@ -382,6 +391,7 @@ func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, erro
 		'[': LBRACKET,
 		']': RBRACKET,
 		':': COLON,
+		';': SEMICOLON,
 		'_': UNDERSCORE,
 		'|': PIPE,
 		'=': ASSIGN,
@@ -454,4 +464,17 @@ func (t *Tokenizer) Match(kinds ...TokenKind) bool {
 		}
 	}
 	return false
+}
+
+// NextToken returns the next token (for parser interface compatibility)
+func (t *Tokenizer) NextToken() Token {
+	if t.tokens == nil {
+		// Lazily tokenize if not done yet
+		t.Tokenize()
+		t.pos = 0
+	}
+
+	tok := t.Current()
+	t.Advance()
+	return tok
 }

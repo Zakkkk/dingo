@@ -37,7 +37,7 @@ func main() {
 	}
 
 	// Lambda in function call
-	apply := func(f func(int) int, val int) int {
+	apply = func(f func(int) int, val int) int {
 		return f(val)
 	}
 	result5 := apply(func(x int) int { return x + 10 }, 5)

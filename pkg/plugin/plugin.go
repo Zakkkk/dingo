@@ -202,6 +202,26 @@ func (p *Pipeline) GetInjectedTypesAST() *ast.File {
 	return p.injectedTypesAST
 }
 
+// GetRequiredImports collects all required imports from plugins
+// Returns deduplicated list of import paths
+func (p *Pipeline) GetRequiredImports() []string {
+	seen := make(map[string]bool)
+	var imports []string
+
+	for _, plugin := range p.plugins {
+		if ip, ok := plugin.(ImportProvider); ok {
+			for _, imp := range ip.GetRequiredImports() {
+				if !seen[imp] {
+					seen[imp] = true
+					imports = append(imports, imp)
+				}
+			}
+		}
+	}
+
+	return imports
+}
+
 // GetStats returns pipeline stats
 func (p *Pipeline) GetStats() Stats {
 	return Stats{
@@ -306,6 +326,15 @@ type DeclarationProvider interface {
 	Plugin
 	GetPendingDeclarations() []ast.Decl
 	ClearPendingDeclarations()
+}
+
+// ImportProvider plugins can request import injection
+// Plugins implement this to declare imports they need for their transformations
+type ImportProvider interface {
+	Plugin
+	// GetRequiredImports returns import paths needed by this plugin's transformations
+	// e.g., ["github.com/MadAppGang/dingo/pkg/dgo"] for Result/Option types
+	GetRequiredImports() []string
 }
 
 // ReportError reports a compile error to the context
