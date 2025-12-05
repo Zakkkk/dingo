@@ -1,137 +1,16 @@
 package main
 
-import "database/sql"
-
-
-type ResultTag uint8
-const (
-	ResultTagOk ResultTag = iota
-	ResultTagErr
+import (
+	"database/sql"
+	"github.com/MadAppGang/dingo/pkg/dgo"
 )
-type ResultSliceStringServiceError struct {
-	tag ResultTag
-	ok  *[]string
-	err *ServiceError
-}
-func ResultSliceStringServiceErrorOk(arg0 []string) ResultSliceStringServiceError {
-	return ResultSliceStringServiceError{tag: ResultTagOk, ok: &arg0}
-}
-func ResultSliceStringServiceErrorErr(arg0 ServiceError) ResultSliceStringServiceError {
-	return ResultSliceStringServiceError{tag: ResultTagErr, err: &arg0}
-}
-func (r ResultSliceStringServiceError) IsOk() bool {
-	return r.tag == ResultTagOk
-}
-func (r ResultSliceStringServiceError) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r ResultSliceStringServiceError) Unwrap() []string {
-	if r.tag != ResultTagOk {
-		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
-	}
-	return *r.ok
-}
-func (r ResultSliceStringServiceError) UnwrapOr(defaultValue []string) []string {
-	if r.tag == ResultTagOk {
-		return *r.ok
-	}
-	return defaultValue
-}
-func (r ResultSliceStringServiceError) UnwrapErr() ServiceError {
-	if r.tag != ResultTagErr {
-		panic("called UnwrapErr on Ok")
-	}
-	if r.err == nil {
-		panic("Result contains nil Err value")
-	}
-	return *r.err
-}
-func (r ResultSliceStringServiceError) UnwrapOrElse(fn func(ServiceError) []string) []string {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return *r.ok
-	}
-	if r.err != nil {
-		return fn(*r.err)
-	}
-	panic("Result in invalid state")
-}
-func (r ResultSliceStringServiceError) Map(fn func([]string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		u := fn(*r.ok)
-		return struct {
-			tag ResultTag
-			ok  *interface{}
-			err *ServiceError
-		}{tag: ResultTagOk, ok: &u}
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *ServiceError
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultSliceStringServiceError) MapErr(fn func(ServiceError) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *[]string
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err: &f}
-	}
-	return struct {
-		tag ResultTag
-		ok  *[]string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultSliceStringServiceError) Filter(predicate func([]string) bool) ResultSliceStringServiceError {
-	if r.tag == ResultTagOk && predicate(*r.ok) {
-		return r
-	}
-	return r
-}
-func (r ResultSliceStringServiceError) AndThen(fn func([]string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*r.ok)
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *ServiceError
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultSliceStringServiceError) OrElse(fn func(ServiceError) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		return fn(*r.err)
-	}
-	return struct {
-		tag ResultTag
-		ok  *[]string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultSliceStringServiceError) And(other interface{}) interface{} {
-	if r.tag == ResultTagOk {
-		return other
-	}
-	return r
-}
-func (r ResultSliceStringServiceError) Or(other ResultSliceStringServiceError) ResultSliceStringServiceError {
-	if r.tag == ResultTagOk {
-		return r
-	}
-	return other
-}
 
 // Custom error type with function call pattern
 type ServiceError struct {
 	Code    string
 	Message string
 }
+
 func (e ServiceError) Error() string {
 	return e.Code + ": " + e.Message
 }
@@ -142,7 +21,7 @@ func WrapDBError(err error) ServiceError {
 }
 
 // Test WrapFunc(err) pattern
-func FindProducts(db *sql.DB) ResultSliceStringServiceError {
+func FindProducts(db *sql.DB) dgo.Result[[]string, ServiceError] {
 	tmp, err := db.Query("SELECT * FROM products")
 
 	if err != nil {

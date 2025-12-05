@@ -1497,29 +1497,29 @@ func (r *RustMatchProcessor) generateCase(scrutineeVar string, arm patternArm, o
 }
 
 // getTagName converts pattern name to Go tag constant name (CamelCase)
-// Ok → ResultTagOk, Err → ResultTagErr, Some → OptionTagSome, None → OptionTagNone
-// ResultOk → ResultTagOk, OptionSome → OptionTagSome (constructor-style names)
+// Ok → dgo.ResultTagOk, Err → dgo.ResultTagErr, Some → dgo.OptionTagSome, None → dgo.OptionTagNone
+// ResultOk → dgo.ResultTagOk, OptionSome → dgo.OptionTagSome (constructor-style names)
 // Status_Pending → StatusTagPending (for custom enums)
 // Pending → StatusTagPending (if enum Status { Pending, ... } was found in source)
 func (r *RustMatchProcessor) getTagName(pattern string) string {
 	switch pattern {
 	case "Ok":
-		return "ResultTagOk"
+		return "dgo.ResultTagOk"
 	case "Err":
-		return "ResultTagErr"
+		return "dgo.ResultTagErr"
 	case "Some":
-		return "OptionTagSome"
+		return "dgo.OptionTagSome"
 	case "None":
-		return "OptionTagNone"
+		return "dgo.OptionTagNone"
 	// Constructor-style names: ResultOk, ResultErr, OptionSome, OptionNone
 	case "ResultOk":
-		return "ResultTagOk"
+		return "dgo.ResultTagOk"
 	case "ResultErr":
-		return "ResultTagErr"
+		return "dgo.ResultTagErr"
 	case "OptionSome":
-		return "OptionTagSome"
+		return "dgo.OptionTagSome"
 	case "OptionNone":
-		return "OptionTagNone"
+		return "dgo.OptionTagNone"
 	default:
 		// First, check if we found this variant in a pre-scanned enum definition
 		// This handles bare variant names like "Pending" when we know it belongs to "Status"
@@ -1545,14 +1545,14 @@ func (r *RustMatchProcessor) getTagName(pattern string) string {
 func (r *RustMatchProcessor) generateBinding(scrutinee string, pattern string, binding string) string {
 	switch pattern {
 	case "Ok", "ResultOk":
-		// For Result<T,E>, Ok value is stored in ok field (pointer to T)
-		return fmt.Sprintf("%s := *%s.ok", binding, scrutinee)
+		// For Result<T,E>, Ok value is stored in Ok field (pointer to T - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Ok", binding, scrutinee)
 	case "Err", "ResultErr":
-		// For Result<T,E>, Err value is stored in err field (pointer to E)
-		return fmt.Sprintf("%s := *%s.err", binding, scrutinee)
+		// For Result<T,E>, Err value is stored in Err field (pointer to E - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Err", binding, scrutinee)
 	case "Some", "OptionSome":
-		// For Option<T>, Some value is stored in some field (pointer to T)
-		return fmt.Sprintf("%s := *%s.some", binding, scrutinee)
+		// For Option<T>, Some value is stored in Some field (pointer to T - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Some", binding, scrutinee)
 	case "None", "OptionNone":
 		// None has no value to extract
 		return ""
@@ -1614,14 +1614,14 @@ func (r *RustMatchProcessor) generateBinding(scrutinee string, pattern string, b
 func (r *RustMatchProcessor) generateTupleBinding(elemVar string, variant string, binding string) string {
 	switch variant {
 	case "Ok", "ResultOk":
-		// For Result<T,E>, Ok value is stored in ok field (pointer to T)
-		return fmt.Sprintf("%s := *%s.ok", binding, elemVar)
+		// For Result<T,E>, Ok value is stored in Ok field (pointer to T - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Ok", binding, elemVar)
 	case "Err", "ResultErr":
-		// For Result<T,E>, Err value is stored in err field (pointer to E)
-		return fmt.Sprintf("%s := *%s.err", binding, elemVar)
+		// For Result<T,E>, Err value is stored in Err field (pointer to E - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Err", binding, elemVar)
 	case "Some", "OptionSome":
-		// For Option<T>, Some value is stored in some field (pointer to T)
-		return fmt.Sprintf("%s := *%s.some", binding, elemVar)
+		// For Option<T>, Some value is stored in Some field (pointer to T - exported for pattern matching)
+		return fmt.Sprintf("%s := *%s.Some", binding, elemVar)
 	case "None", "OptionNone":
 		// None has no value to extract
 		return ""

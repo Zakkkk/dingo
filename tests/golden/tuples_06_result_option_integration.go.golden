@@ -1,483 +1,8 @@
 package main
 
+import "github.com/MadAppGang/dingo/pkg/dgo"
 
-type ResultTag uint8
-const (
-	ResultTagOk ResultTag = iota
-	ResultTagErr
-)
-type ResultIntString struct {
-	tag ResultTag
-	ok  *int
-	err *string
-}
-func ResultIntStringOk(arg0 int) ResultIntString {
-	return ResultIntString{tag: ResultTagOk, ok: &arg0}
-}
-func ResultIntStringErr(arg0 string) ResultIntString {
-	return ResultIntString{tag: ResultTagErr, err: &arg0}
-}
-func (r ResultIntString) IsOk() bool {
-	return r.tag == ResultTagOk
-}
-func (r ResultIntString) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r ResultIntString) Unwrap() int {
-	if r.tag != ResultTagOk {
-		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
-	}
-	return *r.ok
-}
-func (r ResultIntString) UnwrapOr(defaultValue int) int {
-	if r.tag == ResultTagOk {
-		return *r.ok
-	}
-	return defaultValue
-}
-func (r ResultIntString) UnwrapErr() string {
-	if r.tag != ResultTagErr {
-		panic("called UnwrapErr on Ok")
-	}
-	if r.err == nil {
-		panic("Result contains nil Err value")
-	}
-	return *r.err
-}
-func (r ResultIntString) UnwrapOrElse(fn func(string) int) int {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return *r.ok
-	}
-	if r.err != nil {
-		return fn(*r.err)
-	}
-	panic("Result in invalid state")
-}
-func (r ResultIntString) Map(fn func(int) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		u := fn(*r.ok)
-		return struct {
-			tag ResultTag
-			ok  *interface{}
-			err *string
-		}{tag: ResultTagOk, ok: &u}
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *string
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultIntString) MapErr(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *int
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err: &f}
-	}
-	return struct {
-		tag ResultTag
-		ok  *int
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultIntString) Filter(predicate func(int) bool) ResultIntString {
-	if r.tag == ResultTagOk && predicate(*r.ok) {
-		return r
-	}
-	return r
-}
-func (r ResultIntString) AndThen(fn func(int) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*r.ok)
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *string
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultIntString) OrElse(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		return fn(*r.err)
-	}
-	return struct {
-		tag ResultTag
-		ok  *int
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultIntString) And(other interface{}) interface{} {
-	if r.tag == ResultTagOk {
-		return other
-	}
-	return r
-}
-func (r ResultIntString) Or(other ResultIntString) ResultIntString {
-	if r.tag == ResultTagOk {
-		return r
-	}
-	return other
-}
-type ResultIntError struct {
-	tag ResultTag
-	ok  *int
-	err *error
-}
-func ResultIntErrorOk(arg0 int) ResultIntError {
-	return ResultIntError{tag: ResultTagOk, ok: &arg0}
-}
-func ResultIntErrorErr(arg0 error) ResultIntError {
-	return ResultIntError{tag: ResultTagErr, err: &arg0}
-}
-func (r ResultIntError) IsOk() bool {
-	return r.tag == ResultTagOk
-}
-func (r ResultIntError) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r ResultIntError) Unwrap() int {
-	if r.tag != ResultTagOk {
-		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
-	}
-	return *r.ok
-}
-func (r ResultIntError) UnwrapOr(defaultValue int) int {
-	if r.tag == ResultTagOk {
-		return *r.ok
-	}
-	return defaultValue
-}
-func (r ResultIntError) UnwrapErr() error {
-	if r.tag != ResultTagErr {
-		panic("called UnwrapErr on Ok")
-	}
-	if r.err == nil {
-		panic("Result contains nil Err value")
-	}
-	return *r.err
-}
-func (r ResultIntError) UnwrapOrElse(fn func(error) int) int {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return *r.ok
-	}
-	if r.err != nil {
-		return fn(*r.err)
-	}
-	panic("Result in invalid state")
-}
-func (r ResultIntError) Map(fn func(int) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		u := fn(*r.ok)
-		return struct {
-			tag ResultTag
-			ok  *interface{}
-			err *error
-		}{tag: ResultTagOk, ok: &u}
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *error
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultIntError) MapErr(fn func(error) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *int
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err: &f}
-	}
-	return struct {
-		tag ResultTag
-		ok  *int
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultIntError) Filter(predicate func(int) bool) ResultIntError {
-	if r.tag == ResultTagOk && predicate(*r.ok) {
-		return r
-	}
-	return r
-}
-func (r ResultIntError) AndThen(fn func(int) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*r.ok)
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *error
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultIntError) OrElse(fn func(error) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		return fn(*r.err)
-	}
-	return struct {
-		tag ResultTag
-		ok  *int
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultIntError) And(other interface{}) interface{} {
-	if r.tag == ResultTagOk {
-		return other
-	}
-	return r
-}
-func (r ResultIntError) Or(other ResultIntError) ResultIntError {
-	if r.tag == ResultTagOk {
-		return r
-	}
-	return other
-}
-type ResultStringString struct {
-	tag ResultTag
-	ok  *string
-	err *string
-}
-func ResultStringStringOk(arg0 string) ResultStringString {
-	return ResultStringString{tag: ResultTagOk, ok: &arg0}
-}
-func ResultStringStringErr(arg0 string) ResultStringString {
-	return ResultStringString{tag: ResultTagErr, err: &arg0}
-}
-func (r ResultStringString) IsOk() bool {
-	return r.tag == ResultTagOk
-}
-func (r ResultStringString) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r ResultStringString) Unwrap() string {
-	if r.tag != ResultTagOk {
-		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
-	}
-	return *r.ok
-}
-func (r ResultStringString) UnwrapOr(defaultValue string) string {
-	if r.tag == ResultTagOk {
-		return *r.ok
-	}
-	return defaultValue
-}
-func (r ResultStringString) UnwrapErr() string {
-	if r.tag != ResultTagErr {
-		panic("called UnwrapErr on Ok")
-	}
-	if r.err == nil {
-		panic("Result contains nil Err value")
-	}
-	return *r.err
-}
-func (r ResultStringString) UnwrapOrElse(fn func(string) string) string {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return *r.ok
-	}
-	if r.err != nil {
-		return fn(*r.err)
-	}
-	panic("Result in invalid state")
-}
-func (r ResultStringString) Map(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		u := fn(*r.ok)
-		return struct {
-			tag ResultTag
-			ok  *interface{}
-			err *string
-		}{tag: ResultTagOk, ok: &u}
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *string
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultStringString) MapErr(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *string
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err: &f}
-	}
-	return struct {
-		tag ResultTag
-		ok  *string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultStringString) Filter(predicate func(string) bool) ResultStringString {
-	if r.tag == ResultTagOk && predicate(*r.ok) {
-		return r
-	}
-	return r
-}
-func (r ResultStringString) AndThen(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*r.ok)
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *string
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultStringString) OrElse(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		return fn(*r.err)
-	}
-	return struct {
-		tag ResultTag
-		ok  *string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultStringString) And(other interface{}) interface{} {
-	if r.tag == ResultTagOk {
-		return other
-	}
-	return r
-}
-func (r ResultStringString) Or(other ResultStringString) ResultStringString {
-	if r.tag == ResultTagOk {
-		return r
-	}
-	return other
-}
-type ResultStringError struct {
-	tag ResultTag
-	ok  *string
-	err *error
-}
-func ResultStringErrorOk(arg0 string) ResultStringError {
-	return ResultStringError{tag: ResultTagOk, ok: &arg0}
-}
-func ResultStringErrorErr(arg0 error) ResultStringError {
-	return ResultStringError{tag: ResultTagErr, err: &arg0}
-}
-func (r ResultStringError) IsOk() bool {
-	return r.tag == ResultTagOk
-}
-func (r ResultStringError) IsErr() bool {
-	return r.tag == ResultTagErr
-}
-func (r ResultStringError) Unwrap() string {
-	if r.tag != ResultTagOk {
-		panic("called Unwrap on Err")
-	}
-	if r.ok == nil {
-		panic("Result contains nil Ok value")
-	}
-	return *r.ok
-}
-func (r ResultStringError) UnwrapOr(defaultValue string) string {
-	if r.tag == ResultTagOk {
-		return *r.ok
-	}
-	return defaultValue
-}
-func (r ResultStringError) UnwrapErr() error {
-	if r.tag != ResultTagErr {
-		panic("called UnwrapErr on Ok")
-	}
-	if r.err == nil {
-		panic("Result contains nil Err value")
-	}
-	return *r.err
-}
-func (r ResultStringError) UnwrapOrElse(fn func(error) string) string {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return *r.ok
-	}
-	if r.err != nil {
-		return fn(*r.err)
-	}
-	panic("Result in invalid state")
-}
-func (r ResultStringError) Map(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		u := fn(*r.ok)
-		return struct {
-			tag ResultTag
-			ok  *interface{}
-			err *error
-		}{tag: ResultTagOk, ok: &u}
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *error
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultStringError) MapErr(fn func(error) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		f := fn(*r.err)
-		return struct {
-			tag ResultTag
-			ok  *string
-			err *interface{}
-		}{tag: ResultTagErr, ok: nil, err: &f}
-	}
-	return struct {
-		tag ResultTag
-		ok  *string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultStringError) Filter(predicate func(string) bool) ResultStringError {
-	if r.tag == ResultTagOk && predicate(*r.ok) {
-		return r
-	}
-	return r
-}
-func (r ResultStringError) AndThen(fn func(string) interface{}) interface{} {
-	if r.tag == ResultTagOk && r.ok != nil {
-		return fn(*r.ok)
-	}
-	return struct {
-		tag ResultTag
-		ok  *interface{}
-		err *error
-	}{tag: r.tag, ok: nil, err: r.err}
-}
-func (r ResultStringError) OrElse(fn func(error) interface{}) interface{} {
-	if r.tag == ResultTagErr && r.err != nil {
-		return fn(*r.err)
-	}
-	return struct {
-		tag ResultTag
-		ok  *string
-		err *interface{}
-	}{tag: r.tag, ok: r.ok, err: nil}
-}
-func (r ResultStringError) And(other interface{}) interface{} {
-	if r.tag == ResultTagOk {
-		return other
-	}
-	return r
-}
-func (r ResultStringError) Or(other ResultStringError) ResultStringError {
-	if r.tag == ResultTagOk {
-		return r
-	}
-	return other
-}
+
 type OptionTag uint8
 const (
 	OptionTagSome OptionTag = iota
@@ -540,63 +65,6 @@ func (o OptionString) Filter(predicate func(string) bool) OptionString {
 	}
 	return OptionString{tag: OptionTagNone}
 }
-type OptionInt struct {
-	tag  OptionTag
-	some *int
-}
-func OptionIntSome(arg int) OptionInt {
-	return OptionInt{tag: OptionTagSome, some: &arg}
-}
-func OptionIntNone() OptionInt {
-	return OptionInt{tag: OptionTagNone}
-}
-func (o OptionInt) IsSome() bool {
-	return o.tag == OptionTagSome
-}
-func (o OptionInt) IsNone() bool {
-	return o.tag == OptionTagNone
-}
-func (o OptionInt) Unwrap() int {
-	if o.tag != OptionTagSome {
-		panic("called Unwrap on None")
-	}
-	return *o.some
-}
-func (o OptionInt) UnwrapOr(defaultValue int) int {
-	if o.tag == OptionTagSome {
-		return *o.some
-	}
-	return defaultValue
-}
-func (o OptionInt) UnwrapOrElse(fn func() int) int {
-	if o.tag == OptionTagSome {
-		return *o.some
-	}
-	return fn()
-}
-func (o OptionInt) Map(fn func(int) interface{}) OptionInt {
-	if o.tag == OptionTagNone {
-		return o
-	}
-	mapped := fn(*o.some)
-	result := mapped.(int)
-	return OptionInt{tag: OptionTagSome, some: &result}
-}
-func (o OptionInt) AndThen(fn func(int) OptionInt) OptionInt {
-	if o.tag == OptionTagNone {
-		return o
-	}
-	return fn(*o.some)
-}
-func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
-	if o.tag == OptionTagNone {
-		return o
-	}
-	if predicate(*o.some) {
-		return o
-	}
-	return OptionInt{tag: OptionTagNone}
-}
 type OptionInterface struct {
 	tag  OptionTag
 	some *interface{}
@@ -653,6 +121,63 @@ func (o OptionInterface) Filter(predicate func(interface{}) bool) OptionInterfac
 		return o
 	}
 	return OptionInterface{tag: OptionTagNone}
+}
+type OptionInt struct {
+	tag  OptionTag
+	some *int
+}
+func OptionIntSome(arg int) OptionInt {
+	return OptionInt{tag: OptionTagSome, some: &arg}
+}
+func OptionIntNone() OptionInt {
+	return OptionInt{tag: OptionTagNone}
+}
+func (o OptionInt) IsSome() bool {
+	return o.tag == OptionTagSome
+}
+func (o OptionInt) IsNone() bool {
+	return o.tag == OptionTagNone
+}
+func (o OptionInt) Unwrap() int {
+	if o.tag != OptionTagSome {
+		panic("called Unwrap on None")
+	}
+	return *o.some
+}
+func (o OptionInt) UnwrapOr(defaultValue int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return defaultValue
+}
+func (o OptionInt) UnwrapOrElse(fn func() int) int {
+	if o.tag == OptionTagSome {
+		return *o.some
+	}
+	return fn()
+}
+func (o OptionInt) Map(fn func(int) interface{}) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	mapped := fn(*o.some)
+	result := mapped.(int)
+	return OptionInt{tag: OptionTagSome, some: &result}
+}
+func (o OptionInt) AndThen(fn func(int) OptionInt) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	return fn(*o.some)
+}
+func (o OptionInt) Filter(predicate func(int) bool) OptionInt {
+	if o.tag == OptionTagNone {
+		return o
+	}
+	if predicate(*o.some) {
+		return o
+	}
+	return OptionInt{tag: OptionTagNone}
 }
 type OptionBool struct {
 	tag  OptionTag
@@ -711,7 +236,7 @@ func (o OptionBool) Filter(predicate func(bool) bool) OptionBool {
 	}
 	return OptionBool{tag: OptionTagNone}
 }
-type Tuple2AnyAny struct {
+type Tuple2_Any_Any struct {
 	_0 interface {
 	}
 	_1 interface {
@@ -723,7 +248,7 @@ type Tuple2AnyAny struct {
 // Complexity: intermediate
 
 // Tuple of Options
-func findUser(id int) (OptionString, OptionInt) {
+func findUser(id int) (dgo.Option[string], dgo.Option[int]) {
 	if id > 0 {
 		return OptionStringSome("User"), OptionInterfaceSome(id)
 	}
@@ -731,22 +256,15 @@ func findUser(id int) (OptionString, OptionInt) {
 }
 
 // Tuple of Results
-func getIntResult() ResultIntString {
-	return ResultIntError{tag: ResultTagOk, ok: func() *int {
-		tmp2 := 42
-		return &tmp2
-	}()}
+func getIntResult() dgo.Result[int, string] {
+	return dgo.Ok[int, string](42)
 }
-func getStringResult() ResultStringString {
-	return ResultStringError{
+func getStringResult() dgo.Result[string, string] {
+	return dgo.Ok[string, string]("hello")
+}
 
-	// Tuple with mixed Option types
-	tag: ResultTagOk, ok: func() *string {
-		tmp3 := "hello"
-		return &tmp3
-	}()}
-}
-func getOptions() (OptionInt, OptionString, OptionBool) {
+// Tuple with mixed Option types
+func getOptions() (dgo.Option[int], dgo.Option[string], dgo.Option[bool]) {
 	return OptionIntSome(10), Option_string_None(), OptionBoolSome(true)
 }
 func main() {
@@ -762,7 +280,7 @@ func main() {
 	// Create tuple of Results manually
 	r1 := getIntResult()
 	r2 := getStringResult()
-	results := Tuple2AnyAny{_0: r1, _1: r2}
+	results := Tuple2_Any_Any{_0: r1, _1: r2}
 	tmp1 := results
 	res1, res2 := tmp1._0, tmp1._1
 

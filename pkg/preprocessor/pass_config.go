@@ -17,11 +17,12 @@ type BodyProcessor interface {
 // Compile-time assertions: Verify all expression processors implement BodyProcessor
 // If any processor is missing ProcessBody/Name methods, this will fail at compile time
 var (
+	_ BodyProcessor = (*LineJoinProcessor)(nil)
 	_ BodyProcessor = (*SafeNavASTProcessor)(nil)
 	_ BodyProcessor = (*NullCoalesceASTProcessor)(nil)
 	_ BodyProcessor = (*TernaryProcessor)(nil)
 	_ BodyProcessor = (*ErrorPropASTProcessor)(nil)
-	_ BodyProcessor = (*TypeAnnotASTProcessor)(nil)
+	_ BodyProcessor = (*TypeAnnotProcessor)(nil)
 	_ BodyProcessor = (*FunctionalProcessor)(nil)
 )
 
@@ -54,22 +55,34 @@ type PassConfig struct {
 func NewDefaultPassConfig() *PassConfig {
 	// Pass 1: Structural Transforms (Change code shape)
 	structural := []FeatureProcessor{
-		// 0. Dingo Pre-Parser (let → var/short decl) - MUST be FIRST
+		// 0. Line Join (multi-line method chains) - MUST be ABSOLUTE FIRST
+		//    Transforms: return value\n    .Map(...) → return value.Map(...)
+		//    Required: Go doesn't allow lines starting with .
+		NewLineJoinProcessor(),
+
+		// 1. Dingo Pre-Parser (let → var/short decl)
 		//    Transforms: let x: Type = val → var x: Type = val
 		//    Transforms: let x = val → x := val
 		NewDingoPreParser(),
 
-		// 1. Generic syntax (<> → []) - BEFORE type annotations
+		// 2. Generic syntax (<> → []) - BEFORE type annotations
 		//    Transforms: Result<T,E> → Result[T,E]
 		NewGenericSyntaxProcessor(),
 
-		// 2. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
+		// 3. Guard let (guard let x = expr else { ... }) - AST-based
+		//    Transforms: guard let x = Result() else { return } → if Result.IsErr() { ... }
+		//    MUST run BEFORE pattern matching (both use similar control flow patterns)
+		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
+		NewGuardLetASTProcessor(),
+
+		// 4. Pattern matching (match) - MUST run BEFORE lambdas (both use =>)
 		//    Match arms: Pattern => Expression (structural context)
 		//    Lambdas: params => expression (expression context)
-		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
-		NewRustMatchASTProcessor(),
+		//    MIGRATED TO AST: New MatchProcessor uses tokenizer + parser + generator
+		//    P0 FIXES: Comments in arms, nested patterns Ok(Some(x))
+		NewMatchProcessor(),
 
-		// 3. Enums (enum Name { ... }) - AST-based
+		// 5. Enums (enum Name { ... }) - AST-based
 		//    Transforms: enum Result { Ok, Err } → struct types + constructors
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewEnumASTProcessor(),
@@ -88,9 +101,11 @@ func NewDefaultPassConfig() *PassConfig {
 		//    MIGRATED TO AST: Uses proper AST-based parsing instead of regex
 		NewFunctionalASTProcessor(),
 
-		// 1. Type annotations (: → space) - AST-based
+		// 1. Type annotations (: → space) - Text-based (MUST be text-based to handle invalid Go)
 		//    Transforms: param: Type → param Type
-		NewTypeAnnotASTProcessor(),
+		//    NOTE: Using text-based processor because AST-based requires valid Go,
+		//    but type annotations make code invalid until processed
+		NewTypeAnnotProcessor(),
 
 		// 2. Safe navigation (?.) - AST-based
 		//    Transforms: user?.name → conditional access pattern

@@ -27,6 +27,7 @@ The current preprocessor stage uses regex-based text transformations, which are 
 | `error_prop.go` | Error propagation (`?`) | P1 | High | TODO |
 | `enum.go` | Enum/Sum types | P1 | High | TODO |
 | `rust_match.go` | Pattern matching | P1 | High | TODO |
+| `rust_match_ast.go` | Match expressions | P0 | High | **BROKEN** - Comment handling fails |
 | `lambda.go` | Lambda expressions | P2 | Medium | TODO |
 | `null_coalesce.go` | Null coalescing (`??`) | P2 | Medium | TODO |
 | `safe_nav.go` | Safe navigation (`?.`) | P2 | Medium | TODO |

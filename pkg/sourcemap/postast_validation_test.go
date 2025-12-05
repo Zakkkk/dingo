@@ -2,12 +2,12 @@ package sourcemap
 
 import (
 	"encoding/json"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/generator"
 	"github.com/MadAppGang/dingo/pkg/parser"
 	"github.com/MadAppGang/dingo/pkg/preprocessor"
@@ -449,14 +449,15 @@ func transpileDingoFile(t *testing.T, dingoPath string) (goPath, mapPath string)
 	}
 
 	// Parse with preprocessor
-	p := parser.NewGoParserInstance()
-	parseResult, err := p.ParseFile(dingoPath, dingoSource)
+	fset := token.NewFileSet()
+	p := parser.NewParser(parser.ParseComments)
+	astFile, err := p.ParseFile(fset, dingoPath, dingoSource)
 	if err != nil {
 		t.Fatalf("Failed to parse .dingo file: %v", err)
 	}
 
 	// Generate Go code
-	gen, err := generator.NewWithPlugins(parseResult.FileSet, nil, nil)
+	gen, err := generator.NewWithPlugins(fset, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to create generator: %v", err)
 	}
@@ -465,7 +466,7 @@ func transpileDingoFile(t *testing.T, dingoPath string) (goPath, mapPath string)
 	// Source map generator (GenerateFromFiles) looks for markers in the .go file
 	gen.SetKeepMarkers(true)
 
-	goCode, err := gen.Generate(&dingoast.File{File: parseResult.AST})
+	goCode, err := gen.Generate(astFile)
 	if err != nil {
 		t.Fatalf("Failed to generate Go code: %v", err)
 	}

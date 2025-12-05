@@ -488,10 +488,19 @@ func example(path string) ([]byte, error) {
 	// This should be after: package main, blank line, import "os", blank line
 	// So expansion should start around line 5
 
-	// The metadata-based system generates ONE mapping per transformation
-	// Line 4 has one error propagation → 1 mapping
-	if len(sourceMap.Mappings) != 1 {
-		t.Errorf("expected 1 mapping (metadata-based), got %d", len(sourceMap.Mappings))
+	// The metadata-based system generates mappings for transformations
+	// Line 4 has one error propagation transformation
+	// But we also get identity mappings for untransformed lines
+	// Filter to only error_prop mappings
+	var errorPropMappings []Mapping
+	for _, m := range sourceMap.Mappings {
+		if m.Name == "error_prop" {
+			errorPropMappings = append(errorPropMappings, m)
+		}
+	}
+
+	if len(errorPropMappings) != 1 {
+		t.Errorf("expected 1 error_prop mapping, got %d", len(errorPropMappings))
 		for i, m := range sourceMap.Mappings {
 			t.Logf("Mapping %d: orig=%d gen=%d name=%s", i, m.OriginalLine, m.GeneratedLine, m.Name)
 		}
@@ -499,7 +508,7 @@ func example(path string) ([]byte, error) {
 	}
 
 	// Verify the mapping references the correct original line (line 4 in input)
-	mapping := sourceMap.Mappings[0]
+	mapping := errorPropMappings[0]
 	if mapping.OriginalLine != 4 {
 		t.Errorf("expected original line 4, got %d", mapping.OriginalLine)
 	}

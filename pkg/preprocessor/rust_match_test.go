@@ -27,13 +27,13 @@ func TestRustMatchProcessor_SimpleResult(t *testing.T) {
 		"scrutinee := result",
 		"// DINGO_MATCH_START: result",
 		"switch scrutinee.tag {",
-		"case ResultTagOk:",
+		"case dgo.ResultTagOk:",
 		"// DINGO_PATTERN: Ok(x)",
-		"x := *scrutinee.ok",
+		"x := *scrutinee.Ok",
 		"x * 2",
-		"case ResultTagErr:",
+		"case dgo.ResultTagErr:",
 		"// DINGO_PATTERN: Err(e)",
-		"e := *scrutinee.err",
+		"e := *scrutinee.Err",
 		"// DINGO_MATCH_END",
 	}
 
@@ -71,10 +71,10 @@ func TestRustMatchProcessor_SimpleOption(t *testing.T) {
 		"scrutinee := value",
 		"// DINGO_MATCH_START: value",
 		"switch scrutinee.tag {",
-		"case OptionTagSome:",
+		"case dgo.OptionTagSome:",
 		"// DINGO_PATTERN: Some(v)",
-		"v := *scrutinee.some",
-		"case OptionTagNone:",
+		"v := *scrutinee.Some",
+		"case dgo.OptionTagNone:",
 		"// DINGO_PATTERN: None",
 		"\"default\"",
 		"// DINGO_MATCH_END",
@@ -200,10 +200,10 @@ func TestRustMatchProcessor_MultilineMatch(t *testing.T) {
 	if !strings.Contains(result, "scrutinee := result") {
 		t.Error("Expected match transformation")
 	}
-	if !strings.Contains(result, "case ResultTagOk:") {
+	if !strings.Contains(result, "case dgo.ResultTagOk:") {
 		t.Error("Expected Ok case")
 	}
-	if !strings.Contains(result, "case ResultTagErr:") {
+	if !strings.Contains(result, "case dgo.ResultTagErr:") {
 		t.Error("Expected Err case")
 	}
 }
@@ -314,10 +314,10 @@ func TestRustMatchProcessor_GetTagName(t *testing.T) {
 		pattern string
 		want    string
 	}{
-		{"Ok", "ResultTagOk"},
-		{"Err", "ResultTagErr"},
-		{"Some", "OptionTagSome"},
-		{"None", "OptionTagNone"},
+		{"Ok", "dgo.ResultTagOk"},
+		{"Err", "dgo.ResultTagErr"},
+		{"Some", "dgo.OptionTagSome"},
+		{"None", "dgo.OptionTagNone"},
 		{"Active", "ActiveTag"},
 		{"Pending", "PendingTag"},
 	}
@@ -340,9 +340,9 @@ func TestRustMatchProcessor_GenerateBinding(t *testing.T) {
 		binding string
 		want    string
 	}{
-		{"Ok", "x", "x := *scrutinee.ok"},
-		{"Err", "e", "e := *scrutinee.err"},
-		{"Some", "v", "v := *scrutinee.some"},
+		{"Ok", "x", "x := *scrutinee.Ok"},
+		{"Err", "e", "e := *scrutinee.Err"},
+		{"Some", "v", "v := *scrutinee.Some"},
 		{"Active", "id", "id := *scrutinee.active"},
 	}
 

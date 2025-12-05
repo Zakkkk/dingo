@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/plugin"
-	"github.com/MadAppGang/dingo/pkg/registry"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -53,6 +52,12 @@ type ResultTypePlugin struct {
 	// Track function return types for implicit Result wrapping
 	// Maps FuncDecl/FuncLit to their parsed Result return type info
 	funcResultTypes map[ast.Node]*resultReturnInfo
+
+	// Track if we need the dgo import (for Result/Option types)
+	needsDgoImport bool
+
+	// Track Result[T,E] nodes that need dgo. prefix (AST-based rewriting)
+	resultTypeRewrites map[*ast.IndexListExpr]bool
 }
 
 // resultReturnInfo holds parsed Result<T, E> return type information
@@ -62,18 +67,31 @@ type resultReturnInfo struct {
 	resultTypeName string // The sanitized type name (e.g., "ResultUserDBError")
 }
 
+// dgoImportPath is the import path for the Dingo runtime package
+const dgoImportPath = "github.com/MadAppGang/dingo/pkg/dgo"
+
 // NewResultTypePlugin creates a new Result type plugin
 func NewResultTypePlugin() *ResultTypePlugin {
 	return &ResultTypePlugin{
-		emittedTypes:    make(map[string]bool),
-		pendingDecls:    make([]ast.Decl, 0),
-		funcResultTypes: make(map[ast.Node]*resultReturnInfo),
+		emittedTypes:       make(map[string]bool),
+		pendingDecls:       make([]ast.Decl, 0),
+		funcResultTypes:    make(map[ast.Node]*resultReturnInfo),
+		resultTypeRewrites: make(map[*ast.IndexListExpr]bool),
 	}
 }
 
 // Name returns the plugin name
 func (p *ResultTypePlugin) Name() string {
 	return "result_type"
+}
+
+// GetRequiredImports implements plugin.ImportProvider
+// Returns the dgo import path if Result types were detected
+func (p *ResultTypePlugin) GetRequiredImports() []string {
+	if p.needsDgoImport {
+		return []string{dgoImportPath}
+	}
+	return nil
 }
 
 // SetContext sets the plugin context (ContextAware interface)
@@ -83,7 +101,7 @@ func (p *ResultTypePlugin) SetContext(ctx *plugin.Context) {
 	// Initialize type inference service with go/types integration (Fix A5)
 	if ctx != nil && ctx.FileSet != nil {
 		// Create type inference service
-		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger, registry.NewRegistryWithFileSet("builtin", ctx.FileSet))
+		service, err := NewTypeInferenceService(ctx.FileSet, nil, ctx.Logger)
 		if err != nil {
 			ctx.Logger.Warnf("Failed to create type inference service: %v", err)
 		} else {
@@ -138,30 +156,11 @@ func (p *ResultTypePlugin) stripCommentsNearExpr(expr ast.Expr, stmt ast.Node) {
 		return
 	}
 
-	// Use the file directly without type assertion since Transform already has it
-	// The ctx.CurrentFile should be set by the Pipeline when it's passed
-	file := p.file
-	if file == nil {
-		return
-	}
-
-	stripper := NewCommentStripper(file, p.ctx)
-	stripper.StripCommentsNearExpr(expr, stmt)
+	// Comment stripping removed - handled by go/printer
+	// The go/printer package automatically handles comment positioning
 }
 
-// findParentStmt finds the parent statement node for a given expression
-// by using the shared helper from comment_util.go
-func (p *ResultTypePlugin) findParentStmt(expr ast.Expr) ast.Node {
-	// Validate parent map is available
-	if p.ctx == nil || p.ctx.GetParentMap() == nil {
-		if p.ctx != nil && p.ctx.Logger != nil {
-			p.ctx.Logger.Warnf("Parent map not built - comment stripping may fail. Call BuildParentMap() before Transform phase.")
-		}
-		return nil
-	}
-
-	return FindContainingStatement(p.ctx, expr)
-}
+// findParentStmt is no longer needed - comment stripping handled by go/printer
 
 // wrapReturnForResult checks if a return expression needs implicit wrapping
 // and returns the wrapped expression, or nil if no wrapping needed.
@@ -186,9 +185,7 @@ func (p *ResultTypePlugin) wrapReturnForResult(expr ast.Expr, info *resultReturn
 		return nil
 	}
 
-	// Strip comments near the expression before wrapping
-	// They'll be reattached as trailing comments after all transformations
-	p.stripCommentsNearExpr(expr, stmt)
+	// Comment stripping removed - handled by go/printer
 
 	// Try to determine the type of the expression
 	exprType := p.determineExpressionType(expr)
@@ -577,32 +574,27 @@ func (p *ResultTypePlugin) handleGenericResult(expr *ast.IndexExpr) {
 }
 
 // handleGenericResultList processes Result[T, E] syntax (IndexListExpr for Go 1.18+)
+// Tracks nodes that need dgo. prefix during Transform phase
 func (p *ResultTypePlugin) handleGenericResultList(expr *ast.IndexListExpr) {
-	// With Go 1.18+ generics, we keep Result[T, E] as-is
-	// The preprocessor already adds runtime. prefix (Result[T, E] → dgo.Result[T, E])
-	// No type rewriting needed - the runtime package provides the generic type
-
-	// Check if the base type is "Result" or "dgo.Result"
-	isResult := false
+	// Check if the base type is "Result" (needs dgo. prefix) or already "dgo.Result"
 	if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "Result" {
-		isResult = true
-	}
-	if sel, ok := expr.X.(*ast.SelectorExpr); ok {
-		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Result" {
-			isResult = true
-		}
-	}
-
-	if !isResult {
+		// Track this node for rewriting: Result[T, E] → dgo.Result[T, E]
+		p.resultTypeRewrites[expr] = true
+		p.needsDgoImport = true
+		p.ctx.Logger.Debugf("Discovery: Found Result[T, E], will add dgo. prefix in Transform phase")
 		return
 	}
 
-	// Log but don't rewrite - keep the generic syntax
-	p.ctx.Logger.Debugf("Go 1.18+ generics: Found Result[T, E], keeping as-is (no rewrite)")
+	// Already has dgo. prefix - no rewrite needed
+	if sel, ok := expr.X.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "dgo" && sel.Sel.Name == "Result" {
+			p.needsDgoImport = true
+			p.ctx.Logger.Debugf("Discovery: Found dgo.Result[T, E], no rewrite needed")
+			return
+		}
+	}
 
-	// NOTE: With Go 1.18+ generics, we do NOT:
-	// - Generate type declarations (runtime package provides Result[T, E])
-	// - Rewrite Result[T, E] to ResultTE (keep generic syntax)
+	// Not a Result type, ignore
 }
 
 // handleConstructorCall processes Ok(value) and Err(error) calls during discovery phase
@@ -644,10 +636,7 @@ func (p *ResultTypePlugin) transformOkConstructor(call *ast.CallExpr, resultInfo
 
 	valueArg := call.Args[0]
 
-	// Strip comments near the argument expression before wrapping
-	if stmt := p.findParentStmt(call); stmt != nil {
-		p.stripCommentsNearExpr(valueArg, stmt)
-	}
+	// Comment stripping removed - handled by go/printer
 
 	// Determine type arguments - use resultInfo if available, otherwise infer
 	var okType, errType string
@@ -719,10 +708,7 @@ func (p *ResultTypePlugin) transformErrConstructor(call *ast.CallExpr, resultInf
 
 	errorArg := call.Args[0]
 
-	// Strip comments near the argument expression before wrapping
-	if stmt := p.findParentStmt(call); stmt != nil {
-		p.stripCommentsNearExpr(errorArg, stmt)
-	}
+	// Comment stripping removed - handled by go/printer
 
 	// Determine type arguments - use resultInfo if available, otherwise infer
 	var okType, errType string
@@ -785,10 +771,7 @@ func (p *ResultTypePlugin) transformOkConstructorWithType(call *ast.CallExpr, er
 
 	valueArg := call.Args[0]
 
-	// Strip comments near the argument expression before wrapping
-	if stmt := p.findParentStmt(call); stmt != nil {
-		p.stripCommentsNearExpr(valueArg, stmt)
-	}
+	// Comment stripping removed - handled by go/printer
 
 	// Infer okType from the value argument
 	okType, err := p.inferTypeFromExpr(valueArg)
@@ -845,10 +828,7 @@ func (p *ResultTypePlugin) transformErrConstructorWithType(call *ast.CallExpr, o
 
 	errorArg := call.Args[0]
 
-	// Strip comments near the argument expression before wrapping
-	if stmt := p.findParentStmt(call); stmt != nil {
-		p.stripCommentsNearExpr(errorArg, stmt)
-	}
+	// Comment stripping removed - handled by go/printer
 
 	// Get okType from the explicit type parameter
 	okType := p.getTypeName(okTypeExpr)
@@ -2459,6 +2439,24 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 						NamePos: indexListExpr.Pos(),
 						Name:    replacement,
 					})
+					return true
+				}
+
+				// Check for Result[T, E] that needs dgo. prefix
+				if p.resultTypeRewrites[indexListExpr] {
+					// Rewrite Result[T, E] → dgo.Result[T, E]
+					// Keep the same IndexListExpr structure, just change the X (base) to dgo.Result
+					newExpr := &ast.IndexListExpr{
+						X: &ast.SelectorExpr{
+							X:   ast.NewIdent("dgo"),
+							Sel: ast.NewIdent("Result"),
+						},
+						Lbrack:  indexListExpr.Lbrack,
+						Indices: indexListExpr.Indices,
+						Rbrack:  indexListExpr.Rbrack,
+					}
+					cursor.Replace(newExpr)
+					p.ctx.Logger.Debugf("Transform: Result[T, E] → dgo.Result[T, E]")
 					return true
 				}
 			}
