@@ -82,6 +82,11 @@ func (g *SafeNavCodeGen) Generate() ast.CodeGenResult {
 	// Collect the chain segments (flattening nested SafeNavExpr)
 	chain, baseReceiver := g.collectChain()
 
+	// Validate chain is not empty (defensive programming)
+	if len(chain) == 0 || baseReceiver == "" {
+		return ast.CodeGenResult{}
+	}
+
 	// If we have return context, generate human-like code
 	if g.Context != nil && g.Context.Context == ast.ContextReturn {
 		return g.generateHumanLikeReturn(chain, baseReceiver)
@@ -168,126 +173,108 @@ func (g *SafeNavCodeGen) generateArgsFrom(args []ast.Expr) {
 // Input: return config?.Database?.Host
 // Output:
 //
-//	if config != nil && config.Database != nil {
-//	    return config.Database.Host
-//	}
-//	return nil
+//	tmp := config
+//	if tmp == nil { return nil }
+//	tmp1 := tmp.Database
+//	if tmp1 == nil { return nil }
+//	return tmp1.Host
+//
+// This uses temporaries to avoid duplicate receiver evaluation and method call side effects.
 func (g *SafeNavCodeGen) generateHumanLikeReturn(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Build the nil check condition: config != nil && config.Database != nil
-	var nilChecks string
-	currentPath := baseReceiver
+	// Track Dingo source positions for LSP
+	var dingoStart, dingoEnd int
+	if g.expr != nil {
+		dingoStart = int(g.expr.Pos())
+		dingoEnd = int(g.expr.End())
+	} else {
+		dingoStart = int(g.callExpr.Pos())
+		dingoEnd = int(g.callExpr.End())
+	}
+
+	var output bytes.Buffer
+	outputStart := 0
+
+	// Generate sequential checks with temporaries (same pattern as IIFE)
+	// tmp := config
+	output.WriteString("tmp := ")
+	output.WriteString(baseReceiver)
+	output.WriteString("\n")
+
+	// Generate nil checks for each segment except the last
+	tmpVar := "tmp"
 	for i, seg := range chain[:len(chain)-1] {
-		if i > 0 {
-			nilChecks += " && "
-		}
-		nilChecks += currentPath + " != nil"
-		currentPath += "." + seg.name
+		// if tmp == nil { return nil }
+		output.WriteString("if ")
+		output.WriteString(tmpVar)
+		output.WriteString(" == nil { return nil }\n")
+
+		// tmp1 := tmp.Database (or tmp.GetHost(arg) for methods)
+		nextTmp := fmt.Sprintf("tmp%d", i+1)
+		output.WriteString(nextTmp)
+		output.WriteString(" := ")
+		output.WriteString(tmpVar)
+		output.WriteString(".")
+		output.WriteString(seg.name)
 		if seg.isMethod {
-			currentPath += "("
+			output.WriteString("(")
 			for j, arg := range seg.args {
 				if j > 0 {
-					currentPath += ", "
+					output.WriteString(", ")
 				}
-				currentPath += g.dingoExprToString(arg)
+				output.WriteString(g.dingoExprToString(arg))
 			}
-			currentPath += ")"
+			output.WriteString(")")
 		}
+		output.WriteString("\n")
+		tmpVar = nextTmp
 	}
 
-	// Add final receiver check
-	if len(chain) > 1 {
-		nilChecks += " && " + currentPath + " != nil"
-	} else {
-		nilChecks = baseReceiver + " != nil"
-	}
+	// Final nil check
+	output.WriteString("if ")
+	output.WriteString(tmpVar)
+	output.WriteString(" == nil { return nil }\n")
 
-	// Build the value access path
+	// Final access (last segment)
 	lastSeg := chain[len(chain)-1]
-	valuePath := currentPath + "." + lastSeg.name
+	output.WriteString("return ")
+	output.WriteString(tmpVar)
+	output.WriteString(".")
+	output.WriteString(lastSeg.name)
 	if lastSeg.isMethod {
-		valuePath += "("
+		output.WriteString("(")
 		for j, arg := range lastSeg.args {
 			if j > 0 {
-				valuePath += ", "
+				output.WriteString(", ")
 			}
-			valuePath += g.dingoExprToString(arg)
+			output.WriteString(g.dingoExprToString(arg))
 		}
-		valuePath += ")"
+		output.WriteString(")")
 	}
-
-	// Generate the statement-level code
-	var output bytes.Buffer
-	output.WriteString("if ")
-	output.WriteString(nilChecks)
-	output.WriteString(" {\n\treturn ")
-	output.WriteString(valuePath)
-	output.WriteString("\n}\nreturn nil")
 
 	result := g.Result()
 	result.StatementOutput = output.Bytes()
 
-	// Also generate IIFE for Output field (backward compatibility)
-	g.generateIIFEContent(chain, baseReceiver)
-	result.Output = g.Buf.Bytes()
+	// Add source mapping for LSP integration
+	outputEnd := len(result.StatementOutput)
+	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
+		dingoStart,
+		dingoEnd,
+		outputStart,
+		outputEnd,
+		"safe_nav_return",
+	))
 
 	return result
 }
 
 // generateHumanLikeAssignment generates human-readable code for assignments.
 //
-// Input: x := config?.Database?.Host
-// Output:
-//
-//	var x string
-//	if config != nil && config.Database != nil {
-//	    x = config.Database.Host
-//	}
+// Currently falls back to IIFE until type information is available.
+// TODO: Implement when type information available from GenContext.VarType
 func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Build the nil check condition
-	var nilChecks string
-	currentPath := baseReceiver
-	for i, seg := range chain[:len(chain)-1] {
-		if i > 0 {
-			nilChecks += " && "
-		}
-		nilChecks += currentPath + " != nil"
-		currentPath += "." + seg.name
-		if seg.isMethod {
-			currentPath += "("
-			for j, arg := range seg.args {
-				if j > 0 {
-					currentPath += ", "
-				}
-				currentPath += g.dingoExprToString(arg)
-			}
-			currentPath += ")"
-		}
-	}
-
-	// Add final receiver check
-	if len(chain) > 1 {
-		nilChecks += " && " + currentPath + " != nil"
-	} else {
-		nilChecks = baseReceiver + " != nil"
-	}
-
-	// Build the value access path
-	lastSeg := chain[len(chain)-1]
-	valuePath := currentPath + "." + lastSeg.name
-	if lastSeg.isMethod {
-		valuePath += "("
-		for j, arg := range lastSeg.args {
-			if j > 0 {
-				valuePath += ", "
-			}
-			valuePath += g.dingoExprToString(arg)
-		}
-		valuePath += ")"
-	}
-
-	// Generate the statement-level code
-	// For now, we fall back to IIFE for standalone assignments since we don't have type information
-	// TODO: Add type inference to enable proper human-like output for assignments
+	// Fall back to IIFE for now
+	// Proper implementation would use temporaries like generateHumanLikeReturn,
+	// but requires type information to generate: var x Type
 	return g.generateIIFE(chain, baseReceiver)
 }
 
