@@ -1,93 +1,87 @@
 # Dingo Transpiler Architecture
 
-**Last Updated**: 2025-11-22
-**Current Phase**: Phase 9 Complete - Post-AST Source Maps
+**Last Updated**: 2025-12-06
+**Status**: MIGRATION IN PROGRESS - String manipulation being replaced with proper AST
+
+---
+
+## 🚨 CRITICAL: No String Manipulation 🚨
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  CURRENT pkg/ast/*_codegen.go FILES USE STRING MANIPULATION - WRONG!        ║
+║                                                                              ║
+║  They must be DELETED and replaced with proper AST-based codegens that:     ║
+║  • Use pkg/tokenizer/ for tokenization                                      ║
+║  • Use pkg/parser/ for parsing (5,329 lines of Pratt parser exists!)        ║
+║  • Accept AST nodes as input, NEVER raw bytes                               ║
+║                                                                              ║
+║  📖 FULL PLAN: ai-docs/plans/REMOVE_STRING_MANIPULATION.md                  ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
 ## Overview
 
-Dingo uses a **three-stage transpilation** architecture:
+Dingo WILL use an **AST-based code generation** architecture:
 
-1. **Stage 1: Preprocessor** - Text-based transformations (Dingo syntax → valid Go) with unique markers
-2. **Stage 2: AST Processing** - Structural transformations (Go AST → transformed Go AST)
-3. **Stage 3: Post-AST Source Maps** - Accurate position mapping using FileSet and unique markers
+1. **Tokenizer** - Tokenize source into tokens (pkg/tokenizer/) - ONLY place reading bytes
+2. **Parser** - Parse tokens into AST nodes (pkg/parser/) - Pratt parser, 5,329 lines
+3. **Codegen** - Generate Go from AST nodes (pkg/codegen/) - NEVER reads bytes
+4. **Go Printer** - Output formatted Go code
 
-This approach leverages Go's own parser while enabling Dingo-specific syntax that Go doesn't support, with 100% accurate source maps for full IDE integration.
+**CURRENT STATE**: pkg/ast/*_codegen.go files incorrectly use string manipulation.
+**TARGET STATE**: Proper pipeline using tokenizer → parser → codegen.
 
 ---
 
-## The Three-Stage Pipeline
+## The AST-Based Pipeline
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     .dingo Source File                       │
 │  enum Color { Red, Green, Blue }                            │
-│  func process(x: int) -> Result<int, Error> { ... }        │
+│  func process(x: int) Result<int, error> { ... }            │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│            STAGE 1: PREPROCESSOR (Text-Based)                │
+│            UNIFIED AST PIPELINE (pkg/ast/transform.go)       │
+│                     ast.TransformSource()                    │
 ├─────────────────────────────────────────────────────────────┤
-│  TypeAnnotProcessor:   param: Type  →  param Type           │
-│  ErrorPropProcessor:   x?  →  if err != nil { return ... }  │
-│  EnumProcessor:        enum Name {} → Go structs             │
-│  KeywordProcessor:     Other Dingo keywords                  │
+│  Each transform parses → generates Go → returns mappings:   │
 │                                                              │
-│  NEW: Emits TransformMetadata with unique markers           │
-│       Format: // dingo:X:N  (X=type, N=counter)            │
+│    TransformEnumSource()        enum → Go interface          │
+│    TransformLetSource()         let x = → x :=              │
+│    TransformLambdaSource()      |x| expr → func(x any) any  │
+│    TransformMatchSource()       match → inline type switch   │
+│    TransformErrorPropSource()   expr? → inline error check   │
+│    TransformTernarySource()     a ? b : c → inline if        │
+│    TransformNullCoalesceSource() a ?? b → inline nil check   │
+│    TransformSafeNavSource()     x?.y → inline nil chain      │
+│    TransformTupleSource()       (a, b) → struct literal      │
 ├─────────────────────────────────────────────────────────────┤
-│  Tools: regexp, string manipulation                          │
-│  Output: Valid Go syntax + unique markers                    │
+│  Returns: Go source + []SourceMapping for LSP integration   │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│             Valid Go Code + Markers                          │
-│  type ColorTag uint8                                         │
-│  func process(x int) Result_int_Error { ... }               │
-│  tmp, err := foo() // dingo:E:1                             │
+│              GO PARSER & PRINTER                             │
+├─────────────────────────────────────────────────────────────┤
+│  • go/parser.ParseFile()  →  Validate & build AST           │
+│  • go/printer.Fprint()    →  Output formatted Go code       │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│            STAGE 2: AST PROCESSING                           │
-├─────────────────────────────────────────────────────────────┤
-│  go/parser:        Parse preprocessed Go → AST              │
-│                                                              │
-│  Plugin Pipeline:  3-phase transformation                    │
-│    Phase 1 - Discovery:   Find Ok()/Err() calls            │
-│    Phase 2 - Transform:   Rewrite AST nodes                │
-│    Phase 3 - Inject:      Add type declarations            │
-├─────────────────────────────────────────────────────────────┤
-│  Tools: go/parser, go/ast, astutil, go/printer              │
-│  Output: Transformed AST → go/printer → final .go file      │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│            STAGE 3: POST-AST SOURCE MAPS                     │
-├─────────────────────────────────────────────────────────────┤
-│  PostASTGenerator:                                           │
-│    1. Reads final .go file (after go/printer formatting)   │
-│    2. Uses go/token.FileSet for ground truth positions     │
-│    3. Matches unique markers (// dingo:X:N) in comments    │
-│    4. Maps positions: .dingo line/col → .go line/col       │
-├─────────────────────────────────────────────────────────────┤
-│  Tools: go/token, go/parser (for FileSet)                   │
-│  Output: .sourcemap with 100% accurate positions            │
-└─────────────────────────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│      Final Output: .go file + .sourcemap (perfect LSP)       │
+│                Output: .go file (compiles with go build)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Why This Architecture?
+## Why AST-Based Code Generation?
 
 ### The Problem We're Solving
 
@@ -95,544 +89,488 @@ Dingo needs to support syntax that **isn't valid Go**:
 - `enum Color { Red, Green, Blue }` - enums don't exist in Go
 - `param: Type` - Go uses `param Type` (space, not colon)
 - `x?` - error propagation operator doesn't exist in Go
+- `|x| x + 1` - Rust-style lambdas aren't valid Go
 
-We have two options:
-1. **Write a custom parser** - Complex, error-prone, hard to maintain
-2. **Transform to valid Go first, then use go/parser** - Simple, reliable
+### The Solution: Parse → Generate → Map
 
-We chose option 2.
+Each Dingo feature follows the pattern:
+1. **Parse**: Find and parse feature syntax into AST nodes
+2. **Generate**: Generate equivalent Go code from AST nodes
+3. **Map**: Track source mappings for LSP integration
 
-### Why Not Use participle or Tree-sitter?
+### Advantages Over Old Approaches
 
-**Early planning docs mentioned `participle`** as the parser, but the implementation evolved:
+**Old Regex Preprocessing** (`pkg/preprocessor/` - DELETED):
+- Fragile (edge cases broke easily)
+- Hard to debug (complex patterns)
+- Error-prone (position tracking issues)
 
-**Why we moved away from custom parsers:**
-- Go already has an excellent parser: `go/parser`
-- Writing a custom parser duplicates existing work
-- Maintaining grammar files adds complexity
-- go/parser is battle-tested and always up-to-date
+**Old Token-Level Transform** (`TransformToGo` - REMOVED):
+- No source mapping support
+- Hard to extend with new features
+- Tight coupling between parsing and generation
 
-**What we do instead:**
-- Preprocessors transform Dingo syntax → valid Go (simple regex)
-- Then go/parser handles all the hard parsing work
-- Much simpler, more maintainable
-
-### The "Regex vs AST Parsing" Debate
-
-**Some code reviewers flagged this:**
-> "Enum preprocessor uses regex instead of AST parsing - this is fragile!"
-
-**Why regex is CORRECT for preprocessors:**
-
-1. **Chicken-and-egg problem**: You can't use go/parser on `enum Color {}` because it's not valid Go syntax
-2. **Preprocessors MUST use text manipulation**: That's their job - make invalid Go valid
-3. **Proven pattern**: Other preprocessors work the same way:
-   - TypeAnnotProcessor uses regex for `:` → space
-   - ErrorPropProcessor uses regex for `?` operator
-   - EnumProcessor uses regex for `enum` keyword
-
-**AST parsing happens in Stage 2**, where it belongs:
-- Plugin pipeline uses proper AST traversal (astutil.Apply)
-- Type transformations use go/ast
-- Declaration injection uses go/ast
+**New AST-Based Pipeline** (`pkg/ast/` - CURRENT):
+- **Modular**: Each feature is a separate parser + codegen
+- **Source Maps**: Each transform returns position mappings
+- **Testable**: Parsers and generators can be tested independently
+- **Extensible**: Easy to add new features following the pattern
 
 ---
 
-## Stage 1: Preprocessor Pipeline
-
-### Architecture
-
-```go
-type Preprocessor struct {
-    processors []FeatureProcessor
-}
-
-type FeatureProcessor interface {
-    Process(source []byte, mappings []Mapping) ([]byte, []Mapping, error)
-}
-```
-
-### Current Preprocessors
-
-| Preprocessor | Input | Output | Purpose |
-|--------------|-------|--------|---------|
-| **TypeAnnotProcessor** | `func add(a: int, b: int)` | `func add(a int, b int)` | Convert `:` to space |
-| **ErrorPropProcessor** | `let x = readFile(path)?` | `x, err := readFile(path); if err != nil { return ..., err }` | Expand `?` operator |
-| **EnumProcessor** | `enum Color { Red, Green }` | `type ColorTag uint8; const (...); type Color struct {...}` | Generate tagged unions |
-| **KeywordProcessor** | `let x = 5` | `var x = 5` | Convert Dingo keywords |
-
-### How Preprocessors Work
-
-**Example: EnumProcessor**
-
-Input (Dingo):
-```go
-enum Color {
-    Red,
-    Green,
-    Blue
-}
-```
-
-Transformation steps:
-1. **Find** enum declarations using regex: `enum\s+(\w+)\s*\{([^}]*)\}`
-2. **Parse** variant list by splitting on commas
-3. **Generate** Go code:
-   - Tag type: `type ColorTag uint8`
-   - Constants: `const (ColorTag_Red ColorTag = iota; ...)`
-   - Struct: `type Color struct { tag ColorTag }`
-   - Constructors: `func Color_Red() Color { ... }`
-   - Helper methods: `func (c Color) IsRed() bool { ... }`
-4. **Replace** original enum block with generated code
-
-Output (Valid Go):
-```go
-type ColorTag uint8
-
-const (
-    ColorTag_Red ColorTag = iota
-    ColorTag_Green
-    ColorTag_Blue
-)
-
-type Color struct {
-    tag ColorTag
-}
-
-func Color_Red() Color {
-    return Color{tag: ColorTag_Red}
-}
-
-// ... more constructors and helper methods
-```
-
-### Source Mapping (Post-AST Architecture)
-
-**New Approach (Phase 9)**: Preprocessors emit metadata with unique markers for Post-AST position mapping:
-
-```go
-type TransformMetadata struct {
-    OriginalLine   int    // Line in .dingo file
-    OriginalCol    int    // Column in .dingo file
-    UniqueMarker   string // "// dingo:X:N" for matching in final .go
-    TransformType  string // "error_prop", "type_annot", etc.
-}
-```
-
-**How it works**:
-1. **Stage 1**: Preprocessors emit TransformMetadata with unique markers (e.g., `// dingo:E:1`)
-2. **Stage 2**: AST processing preserves markers as comments
-3. **Stage 3**: PostASTGenerator matches markers in final .go file using go/token.FileSet
-
-**Benefits**:
-- 100% accurate positions (FileSet is ground truth)
-- Zero drift from go/printer reformatting
-- No line offset math or cumulative tracking
-- Full IDE integration support
-
-This allows error messages and LSP features to point to the original `.dingo` file with perfect accuracy.
-
----
-
-## Stage 2: Plugin Pipeline
-
-### Architecture
-
-```go
-type Pipeline struct {
-    plugins []Plugin
-    ctx     *Context
-}
-
-type Plugin interface {
-    Process(file *ast.File) error
-}
-
-// Optional interfaces plugins can implement:
-type ContextAware interface {
-    SetContext(*Context)
-}
-
-type Transformer interface {
-    Transform(node ast.Node) (ast.Node, error)
-}
-
-type DeclarationProvider interface {
-    GetPendingDeclarations() []ast.Decl
-    ClearPendingDeclarations()
-}
-```
-
-### Three-Phase Execution
-
-**Phase 1: Discovery**
-- Each plugin calls `Process(file)` to scan the AST
-- Plugins discover what transformations are needed
-- Example: ResultTypePlugin finds all `Ok()` and `Err()` calls
-
-**Phase 2: Transform**
-- Plugins implementing `Transformer` modify AST nodes
-- Uses `astutil.Apply` for safe tree traversal
-- Example: Replace `Ok(value)` with `Result{tag: ResultTag_Ok, ok_0: &value}`
-
-**Phase 3: Inject**
-- Plugins implementing `DeclarationProvider` add type declarations
-- Example: Add `type Result_int_error struct {...}` to file
-
-### Current Plugins
-
-| Plugin | Purpose | Transforms |
-|--------|---------|------------|
-| **ResultTypePlugin** | Result<T,E> support | `Ok(x)` → struct literal, adds Result type defs |
-
-### Plugin Example: ResultTypePlugin
-
-**Discovery phase:**
-```go
-func (p *ResultTypePlugin) Process(file *ast.File) error {
-    ast.Inspect(file, func(n ast.Node) bool {
-        if call, ok := n.(*ast.CallExpr); ok {
-            if ident, ok := call.Fun.(*ast.Ident); ok {
-                if ident.Name == "Ok" || ident.Name == "Err" {
-                    // Record this call needs transformation
-                    p.recordResultUsage(call)
-                }
-            }
-        }
-        return true
-    })
-    return nil
-}
-```
-
-**Transform phase:**
-```go
-func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
-    return astutil.Apply(node,
-        func(cursor *astutil.Cursor) bool {
-            if call, ok := cursor.Node().(*ast.CallExpr); ok {
-                if ident, ok := call.Fun.(*ast.Ident); ok {
-                    if ident.Name == "Ok" {
-                        replacement := p.transformOkConstructor(call)
-                        cursor.Replace(replacement)
-                    }
-                }
-            }
-            return true
-        },
-        nil,
-    )
-}
-```
-
-**Inject phase:**
-```go
-func (p *ResultTypePlugin) GetPendingDeclarations() []ast.Decl {
-    return []ast.Decl{
-        // type Result_int_error struct { ... }
-        // func (r Result_int_error) IsOk() bool { ... }
-        // etc.
-    }
-}
-```
-
----
-
-## Code Generation
-
-After plugin pipeline completes:
-
-```go
-func (g *Generator) Generate(file *ast.File) ([]byte, error) {
-    // 1. Transform through plugin pipeline
-    transformed, err := g.pipeline.Transform(file)
-    if err != nil {
-        return nil, err
-    }
-
-    // 2. Generate Go code using go/printer
-    var buf bytes.Buffer
-    if err := printer.Fprint(&buf, g.fset, transformed); err != nil {
-        return nil, err
-    }
-
-    // 3. Format with gofmt
-    formatted, err := format.Source(buf.Bytes())
-    if err != nil {
-        return buf.Bytes(), nil // Return unformatted on error
-    }
-
-    return formatted, nil
-}
-```
-
----
-
-## Why This Works
-
-### Separation of Concerns
-
-**Preprocessors handle:**
-- Dingo syntax → valid Go syntax
-- Simple text transformations
-- Syntax that go/parser can't handle
-
-**Plugins handle:**
-- Go AST → transformed Go AST
-- Complex semantic transformations
-- Type inference and code generation
-
-### Leveraging Go's Tooling
-
-We use Go's own tools wherever possible:
-- `go/parser` - battle-tested, always up-to-date
-- `go/ast` - comprehensive AST representation
-- `go/printer` - correct code generation
-- `go/format` - standard formatting
-
-This means:
-- Less code to maintain
-- Fewer bugs
-- Automatic support for new Go features
-
-### Extensibility
-
-**Adding a new Dingo syntax feature:**
-
-1. If it's not valid Go: Add a preprocessor
-   ```go
-   type MyFeatureProcessor struct {}
-   func (p *MyFeatureProcessor) Process(src []byte, ...) ([]byte, ..., error) {
-       // Transform your syntax to valid Go
-   }
-   ```
-
-2. If it transforms valid Go AST: Add a plugin
-   ```go
-   type MyFeaturePlugin struct {}
-   func (p *MyFeaturePlugin) Process(file *ast.File) error {
-       // Discover usage
-   }
-   func (p *MyFeaturePlugin) Transform(node ast.Node) (ast.Node, error) {
-       // Transform AST
-   }
-   ```
-
-3. Register it:
-   ```go
-   // For preprocessors:
-   preprocessor.RegisterProcessor(NewMyFeatureProcessor())
-
-   // For plugins:
-   registry.Register("my-feature", NewMyFeaturePlugin())
-   ```
-
----
-
-## Known Limitations (Phase 2.16)
-
-### Fix A4: Literal Address Issue
-
-**Problem**: Generated code contains `&42`, `&"string"` (invalid Go)
-
-**Example**:
-```go
-// Dingo:
-x := Ok(42)
-
-// Generated (INVALID):
-x := Result{tag: ResultTag_Ok, ok_0: &42}  // Can't take address of literal
-```
-
-**Workaround**: Assign to variable first
-```go
-val := 42
-x := Ok(val)  // Works
-```
-
-**Fix (Phase 3)**: Generate temporary variables
-```go
-tmp := 42
-x := Result{tag: ResultTagOk, ok: &tmp}
-```
-
-### Fix A5: Type Inference Limitations
-
-**Problem**: Falls back to `interface{}` without go/types integration
-
-**Example**:
-```go
-func process() Result<int, error> {
-    return Ok(42)  // Plugin infers types from context
-}
-
-// But this fails:
-x := Ok(42)  // No context - falls back to interface{}
-```
-
-**Fix (Phase 3)**: Integrate go/types for full type inference
-
----
-
-## File Organization
+## Package Structure
 
 ```
 pkg/
-├── preprocessor/
-│   ├── preprocessor.go      # Pipeline coordinator
-│   ├── typeannotation.go    # : → space
-│   ├── errorprop.go          # ? → error handling
-│   ├── enum.go               # enum → structs
-│   ├── keyword.go            # let → var, etc.
-│   └── mapping.go            # Source map utilities
+├── ast/                        # AST CODE GENERATION (NEW - December 2025)
+│   ├── transform.go            # TransformSource() - unified pipeline entry
+│   ├── sourcemap.go            # CodeGenResult, SourceMapping types
+│   ├── helpers.go              # Shared helpers (isIdentChar, skipWhitespace)
+│   │
+│   ├── enum.go                 # Enum AST nodes
+│   ├── enum_parser.go          # Parse enum declarations
+│   ├── enum_codegen.go         # Generate Go interface pattern
+│   │
+│   ├── let_codegen.go          # let x = → x :=
+│   ├── lambda_codegen.go       # |x| expr → func(x any) any { return }
+│   ├── match_codegen.go        # match → inline type switch
+│   ├── error_prop_codegen.go   # expr? → inline error handling
+│   ├── ternary_codegen.go      # a ? b : c → inline if
+│   ├── null_coalesce_codegen.go # a ?? b → inline nil check
+│   ├── safe_nav_codegen.go     # x?.y → inline nil chain
+│   └── tuple_codegen.go        # (a, b) → struct literal
 │
-├── plugin/
-│   ├── plugin.go             # Pipeline & interfaces
-│   ├── context.go            # Shared context
-│   ├── registry.go           # Plugin registration
-│   └── builtin/
-│       └── result_type.go    # Result<T,E> plugin
+├── parser/                     # DINGO PARSER (Pratt-based)
+│   ├── file.go                 # File-level parsing
+│   ├── pratt.go                # Pratt expression parser
+│   ├── stmt.go                 # Statement parsing
+│   └── simple.go               # Simple Dingo parser
 │
-└── generator/
-    └── generator.go          # Code generation orchestration
+├── goparser/                   # GO PARSER WRAPPER
+│   ├── parser/
+│   │   └── parser.go           # ParseFile() - Go AST from Dingo
+│   ├── scanner/
+│   │   └── scanner.go          # Extended scanner for Dingo tokens
+│   └── token/
+│       └── token.go            # Dingo token definitions (?, ??, ?.)
+│
+├── transpiler/                 # CLI ENTRY POINT
+│   ├── transpiler.go           # TranspileFile with config
+│   ├── pure_pipeline.go        # PureASTTranspile - uses ast.TransformSource()
+│   └── ast_pipeline.go         # ASTTranspile - returns metadata
+│
+└── feature/                    # PLUGGABLE FEATURE SYSTEM
+    ├── plugin.go               # Plugin interface
+    ├── engine.go               # Feature engine
+    └── builtin/                # Built-in plugins
+        └── plugins.go          # Plugin implementations
 ```
 
 ---
 
-## Testing Strategy
+## Pluggable Feature System
 
-### Preprocessor Tests
+The pluggable feature system (`pkg/feature/`) allows language features to be:
+- **Enabled/disabled** via `dingo.toml` configuration
+- **Extended** with 3rd-party plugins (future: RPC-based)
+- **Validated** for dependencies and conflicts
 
-- Unit tests for each processor
-- Validate with `go/parser` (generated code must parse)
-- Test edge cases: nested braces, comments, Unicode
+### Plugin Interface
 
-Example:
 ```go
-func TestEnumProcessor(t *testing.T) {
-    input := `enum Color { Red, Green, Blue }`
+// pkg/feature/plugin.go
+type Plugin interface {
+    // Metadata
+    Name() string        // e.g., "enum", "match", "lambdas"
+    Version() string     // e.g., "1.0.0"
+    Type() PluginType    // CharacterLevel or TokenLevel
+    Priority() int       // Lower = runs earlier (10, 20, 30...)
 
-    processor := NewEnumProcessor()
-    output, _, err := processor.Process([]byte(input), nil)
-    require.NoError(t, err)
+    // Dependencies
+    Dependencies() []string  // Must run after these (e.g., match → enum)
+    Conflicts() []string     // Cannot run with these
 
-    // Validate generated Go compiles
-    _, err = parser.ParseFile(token.NewFileSet(), "", output, 0)
-    require.NoError(t, err, "Generated code must be valid Go")
+    // Syntax detection (for disabled feature errors)
+    Detect(src []byte) []SyntaxLocation
+
+    // Transformation
+    Transform(src []byte, ctx *Context) ([]byte, error)
 }
 ```
 
-### Plugin Tests
+### Built-in Plugins
 
-- Unit tests for each plugin
-- AST comparison tests
-- Integration tests with full pipeline
+| Plugin | Priority | Type | Description |
+|--------|----------|------|-------------|
+| `enum` | 10 | Character | `enum Name {...}` → Go interface pattern |
+| `match` | 20 | Character | `match expr {...}` → IIFE type switch |
+| `enum_constructors` | 30 | Character | `Variant()` → `NewVariant()` |
+| `error_prop` | 40 | Character | `expr?` → error handling |
+| `guard_let` | 50 | Character | `guard let x = expr else {...}` |
+| `safe_nav_statements` | 55 | Character | Statement-level `?.` |
+| `safe_nav` | 60 | Character | Expression-level `?.` |
+| `null_coalesce` | 70 | Character | `a ?? b` → nil checks |
+| `lambdas` | 80 | Character | `\|x\| expr` and `x => expr` |
+| `type_annotations` | 100 | Token | `param: Type` → `param Type` |
+| `generics` | 110 | Token | `Result<T,E>` → `Result[T,E]` |
+| `let_binding` | 120 | Token | `let x =` → `x :=` |
 
-### Golden Tests
+### Feature Configuration (dingo.toml)
 
-- End-to-end: `.dingo` → `.go` → compile
-- Both files committed to repo
-- Test realistic examples
+```toml
+[feature_matrix]
+# All features enabled by default
+# Only need to specify features you want to disable
 
----
+# Character-level features
+enum = true             # enum declarations
+match = true            # match expressions
+enum_constructors = true
+error_prop = true       # ? operator
+guard_let = true
+safe_nav_statements = true
+safe_nav = true         # ?. operator (set to false to disable)
+null_coalesce = true    # ?? operator (set to false to disable)
+lambdas = true          # |x| and => syntax
 
-## Performance Characteristics
+# Token-level features
+type_annotations = true # x: Type syntax
+generics = true         # <T> syntax
+let_binding = true      # let keyword
+```
 
-### Preprocessor Stage
+### Disabled Feature Detection
 
-- **Time Complexity**: O(n) where n = source file size
-- **Space Complexity**: O(n) for source + O(m) for mappings
-- **Bottlenecks**: Regex matching, string concatenation
+When a feature is disabled but its syntax is used, the transpiler reports a clear error:
 
-### Plugin Stage
+```
+error: feature 'lambdas' is disabled in configuration
+  --> src/main.dingo:10:5
+   |
+10 |     let add = |x, y| x + y
+   |               ^^^^^^^^^^^^
+   |
+   = help: enable 'lambdas' in dingo.toml [feature_matrix] section
+```
 
-- **Time Complexity**: O(n * p) where n = AST nodes, p = plugins
-- **Space Complexity**: O(n) for AST
-- **Bottlenecks**: Multiple AST traversals (one per plugin)
+### Feature Engine
 
-### Future Optimizations
+The engine (`pkg/feature/engine.go`) orchestrates plugin execution:
 
-- **Preprocessor**: Use `strings.Builder` for concatenation
-- **Plugins**: Combine traversals when possible
-- **Caching**: Source map caching for repeated builds
-
----
-
-## Design Decisions
-
-### Why Not Use a Custom Parser Generator?
-
-**Considered**: participle, Tree-sitter, ANTLR
-
-**Rejected because**:
-- Adds dependency and complexity
-- Requires maintaining grammar files
-- go/parser already exists and works great
-- Preprocessor approach is simpler
-
-### Why Regex in Preprocessors?
-
-**Some reviewers questioned this** - "regex is fragile!"
-
-**But regex is CORRECT because**:
-- Preprocessors transform text that ISN'T valid Go
-- You CAN'T use go/parser on `enum Color {}`
-- Regex is the right tool for text transformation
-- All preprocessors use this pattern (proven approach)
-
-### Why Not Transpile to a Different Target?
-
-**Could we transpile to Rust/C/LLVM instead of Go?**
-
-No - the entire value proposition is **staying in the Go ecosystem**:
-- Use all Go packages
-- Deploy to Go infrastructure
-- Leverage Go's tooling
-- Zero runtime overhead
-
-Transpiling to anything else loses these benefits.
-
----
-
-## Comparison to Other Transpilers
-
-### TypeScript → JavaScript
-
-- Adds types to untyped language
-- Removes type annotations at compile time
-- Dingo does the same: adds features, removes at compile time
-
-### Borgo → Go
-
-- Full Rust-like syntax
-- Written in Rust
-- Monolithic transpiler
-- **Dingo differs**: Go-like syntax, written in Go, modular architecture
-
-### templ → Go
-
-- HTML templates as Go functions
-- gopls proxy for IDE support
-- **Dingo adopts**: Their LSP proxy pattern (future)
-
----
-
-## Future Architecture
-
-### Phase 3: Type Inference
-
-Integrate go/types for better type inference:
 ```go
-import "go/types"
+// Create engine with feature configuration
+engine, err := feature.NewEngine(enabledFeatures)
+if err != nil {
+    // Dependency error (e.g., match enabled but enum disabled)
+    // Conflict error (if any plugins conflict)
+    return err
+}
 
-func (p *ResultTypePlugin) inferType(expr ast.Expr) types.Type {
-    return p.typeInfo.TypeOf(expr)
+// Transform source - runs all enabled plugins in priority order
+src, err = engine.TransformCharacterLevel(src, filename)
+if err != nil {
+    // DisabledFeatureError if disabled syntax detected
+    // TransformError if transformation fails
+    return err
 }
 ```
 
-### Phase 4: Language Server
+### Adding New Features (Future)
 
-gopls proxy using templ's pattern:
+To add a new language feature:
+
+1. **Create plugin** implementing `feature.Plugin` interface
+2. **Register** via `feature.Register(&MyPlugin{})` in init()
+3. **Add detection** logic in `Detect()` method
+4. **Implement transformation** in `Transform()` method
+5. **Add config field** in `FeatureMatrix` struct
+
+For 3rd-party plugins (v1.1+), use RPC-based loading via HashiCorp's go-plugin.
+
+---
+
+## Features Implemented
+
+### Fully Transformed to Go
+
+| Feature | Dingo Syntax | Go Output |
+|---------|--------------|-----------|
+| **Type Annotations** | `func(x: int)` | `func(x int)` |
+| **Let Declarations** | `let x = 42` | `x := 42` |
+| **Generic Types** | `Result<T, E>` | `Result[T, E]` |
+| **Error Propagation** | `let x = expr?` | `tmp, err := expr; if err != nil { return err }; var x = tmp` |
+| **Guard Let** | `guard let x = expr else \|err\| {...}` | `x, err := expr; if err != nil {...}` |
+| **Lambdas (Rust)** | `\|x\| x + 1` | `func(x) { return x + 1 }` |
+| **Lambdas (TS)** | `(x) => x + 1` | `func(x) { return x + 1 }` |
+| **Typed Lambdas** | `\|x: int\| x + 1` | `func(x int) { return x + 1 }` |
+| **Enums** | `enum Status { Active, Inactive }` | Tagged union interface pattern |
+| **Match** | `match expr { Pattern => result }` | IIFE with type switch |
+| **Match Guards** | `Pattern if cond => result` | Nested if-else in case block |
+
+### Partially Implemented (Markers Only)
+
+| Feature | Current State |
+|---------|---------------|
+| **Null Coalescing** `??` | Leaves `/*DINGO_NULL_COAL*/` marker |
+| **Safe Navigation** `?.` | Leaves `/*DINGO_SAFE_NAV*/` marker |
+
+These markers are placeholders for future AST-level expansion.
+
+---
+
+## Transformation Examples
+
+### Error Propagation (`?`)
+
+**Input (Dingo):**
+```go
+func GetUser(id: int) (User, error) {
+    let data = fetchFromDB(id)?
+    let user = parseUser(data)?
+    return user, nil
+}
+```
+
+**Output (Go):**
+```go
+func GetUser(id int) (User, error) {
+    tmp, err := fetchFromDB(id)
+    if err != nil {
+        return User{}, err
+    }
+    var data = tmp
+
+    tmp1, err1 := parseUser(data)
+    if err1 != nil {
+        return User{}, err1
+    }
+    var user = tmp1
+
+    return user, nil
+}
+```
+
+### Match Expression
+
+**Input (Dingo):**
+```go
+func describe(event: Event) string {
+    return match event {
+        UserCreated(id, email) => fmt.Sprintf("User %d: %s", id, email),
+        UserDeleted(id) => fmt.Sprintf("Deleted user %d", id),
+        _ => "Unknown event",
+    }
+}
+```
+
+**Output (Go):**
+```go
+func describe(event Event) string {
+    return func() string {
+        switch __matchVal := (event).(type) {
+        case EventUserCreated:
+            id := __matchVal.id
+            email := __matchVal.email
+            return fmt.Sprintf("User %d: %s", id, email)
+        case EventUserDeleted:
+            id := __matchVal.id
+            return fmt.Sprintf("Deleted user %d", id)
+        default:
+            return "Unknown event"
+        }
+        panic("exhaustive match failed")
+    }()
+}
+```
+
+### Enum Declaration
+
+**Input (Dingo):**
+```go
+enum Status {
+    Active
+    Inactive { reason: string }
+}
+```
+
+**Output (Go):**
+```go
+type Status interface{ isStatus() }
+
+type StatusActive struct{}
+func (StatusActive) isStatus() {}
+func NewStatusActive() Status { return StatusActive{} }
+
+type StatusInactive struct{ reason string }
+func (StatusInactive) isStatus() {}
+func NewStatusInactive(reason string) Status {
+    return StatusInactive{reason: reason}
+}
+```
+
+---
+
+## Entry Points
+
+### For CLI (`dingo build`)
+
+```go
+// pkg/transpiler/pure_pipeline.go
+func PureASTTranspile(source []byte, filename string) ([]byte, error)
+```
+
+Pipeline:
+1. `ast.TransformSource()` → transforms Dingo to Go with source mappings
+2. `go/parser.ParseFile()` → validates output
+3. `go/printer` → formats output
+
+### For Direct Transformation
+
+```go
+// pkg/ast/transform.go
+
+// Transform Dingo source to Go with source mappings
+func TransformSource(src []byte) ([]byte, []SourceMapping, error)
+
+// SourceMapping tracks position mappings for LSP
+type SourceMapping struct {
+    DingoStart, DingoEnd int
+    GoStart, GoEnd       int
+    Kind                 string
+}
+```
+
+### For Go AST Access
+
+```go
+// pkg/goparser/parser/parser.go
+
+// Get Go AST (for LSP/further manipulation)
+func ParseFile(fset *token.FileSet, filename string, src []byte, mode Mode) (*ast.File, error)
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+Located in `pkg/goparser/parser/parser_test.go`:
+
+| Test Suite | Coverage |
+|------------|----------|
+| `TestTransformTypeAnnotations` | Function params, methods, receivers |
+| `TestTransformLetDeclarations` | Simple let, string values, in functions |
+| `TestParseFile` | Full file parsing, package names |
+| `TestGuardLetTransformation` | With/without error binding |
+| `TestLambdaTransformation` | Rust-style, TS-style, block bodies |
+| `TestEnumTransformation` | Simple enums, enums with fields |
+| `TestMatchTransformation` | Default patterns, field extraction |
+| `TestQuestionMarkInStrings` | SQL queries, string literals |
+| `TestWildcardBindings` | `_` binding skip extraction |
+
+### Running Tests
+
+```bash
+# Parser tests
+go test ./pkg/goparser/parser/... -v
+
+# All tests
+go test ./...
+```
+
+### End-to-End Testing
+
+```bash
+# Build and compile example
+go run ./cmd/dingo build examples/01_error_propagation/http_handler.dingo
+go build examples/01_error_propagation/http_handler.go
+```
+
+---
+
+## Key Design Decisions
+
+### Why Character-Level Passes?
+
+Some features (enum, match, lambda) require understanding context that spans multiple tokens or includes syntax Go's scanner sees as invalid.
+
+Character-level passes:
+- Handle `{...}` brace balancing manually
+- Track string literals to avoid false transformations
+- Generate complete replacement code before tokenization
+
+### Why Token-Level for Simple Features?
+
+Type annotations (`param: Type`) and generics (`Result<T,E>`) are simple token-to-token transformations. Using Go's scanner ensures:
+- Correct handling of string literals
+- Proper position tracking
+- No false positives in comments
+
+### Why Not Full Custom Parser?
+
+- Go's parser is battle-tested
+- Grammar maintenance is complex
+- We only need to transform **before** parsing, not replace parsing
+- go/parser handles edge cases we'd have to reimplement
+
+---
+
+## Future Work
+
+### Null Coalescing (`??`)
+
+Currently leaves `/*DINGO_NULL_COAL*/` marker. Full transformation:
+
+```go
+// Input
+let x = getValue() ?? defaultValue
+
+// Output
+var x = func() T {
+    tmp := getValue()
+    if tmp != nil {
+        return tmp
+    }
+    return defaultValue
+}()
+```
+
+### Safe Navigation (`?.`)
+
+Currently leaves `/*DINGO_SAFE_NAV*/` marker. Full transformation:
+
+```go
+// Input
+let name = user?.profile?.name ?? "Anonymous"
+
+// Output
+var name = func() string {
+    if user == nil { return "Anonymous" }
+    if user.profile == nil { return "Anonymous" }
+    return user.profile.name
+}()
+```
+
+### Source Maps
+
+`TokenMapping` is generated but not yet serialized:
+
+```go
+type TokenMapping struct {
+    OriginalLine int
+    OriginalCol  int
+    GeneratedLine int
+    GeneratedCol  int
+}
+```
+
+Future: Generate `.sourcemap` files for LSP integration.
+
+### LSP Integration
+
+Using templ's gopls proxy pattern:
+
 ```go
 type Server struct {
     gopls      *subprocess
@@ -640,32 +578,209 @@ type Server struct {
 }
 
 func (s *Server) Handle(req *protocol.Request) (*protocol.Response, error) {
-    // Translate request positions using source maps
     translated := s.translateRequest(req)
-
-    // Forward to gopls
-    resp, err := s.gopls.Handle(translated)
-
-    // Translate response positions back
-    return s.translateResponse(resp), err
+    resp := s.gopls.Handle(translated)
+    return s.translateResponse(resp)
 }
 ```
 
 ---
 
-## Conclusion
+## Comparison to Previous Architectures
 
-Dingo's two-stage architecture is:
+### Old: Regex-Based Preprocessor (`pkg/preprocessor/`)
 
-✅ **Simple** - Leverages go/parser instead of custom parsing
-✅ **Correct** - Preprocessors use regex because they MUST transform non-Go syntax
-✅ **Maintainable** - Clear separation: preprocessors handle syntax, plugins handle semantics
-✅ **Extensible** - Easy to add new features as preprocessors or plugins
-✅ **Proven** - Similar to TypeScript, Borgo, templ approaches
+```
+❌ Fragile pattern matching
+❌ Position tracking errors accumulate
+❌ Hard to debug complex patterns
+❌ Order-dependent pass system
+❌ No AST awareness
+```
 
-The architecture correctly addresses the core challenge: **How do you add syntax to Go without forking the Go parser?**
+**Status**: DELETED (November 2025)
 
-Answer: Transform to valid Go first, then use go/parser.
+### Old: Token-Based Transform (`TransformToGo()`)
+
+```
+❌ No source mapping support
+❌ Tight coupling between parsing and generation
+❌ Hard to extend with new features
+```
+
+**Status**: REMOVED (December 2025)
+
+### Current: AST-Based Code Generation (`pkg/ast/`)
+
+```
+✅ Each feature is a separate parser + codegen
+✅ Source mappings returned by each transform
+✅ Modular and testable components
+✅ Easy to add new features
+✅ Unified pipeline with transform.go
+✅ Falls through to standard go/parser
+```
+
+**Status**: CURRENT (December 2025)
+
+---
+
+## Semantic Analysis Strategy: gopls Proxy
+
+### The Decision
+
+**Dingo delegates semantic analysis to gopls** instead of building a custom type checker.
+
+This is a deliberate architectural choice based on:
+1. Cost/benefit analysis
+2. Comparison with similar projects (Borgo, templ, TypeScript)
+3. Dingo's goals (syntax sugar, not a new type system)
+
+### Dingo vs Borgo: Why Different Approaches
+
+| Aspect | Borgo | Dingo |
+|--------|-------|-------|
+| **Goal** | New language with Rust-like type system | Syntax sugar for Go |
+| **Type System** | Traits, Hindley-Milner inference | Go's type system unchanged |
+| **After Transform** | Still needs Borgo semantics | Pure Go - gopls works |
+| **Type Checker** | Must build own (50K+ LOC) | Use gopls |
+
+**Borgo** adds concepts Go doesn't have (traits, algebraic types as first-class). gopls can't understand Borgo's types, so Borgo must build its own type checker.
+
+**Dingo** transforms to idiomatic Go. After transformation:
+- `Result<T,E>` becomes `Result[T,E]` (Go generic)
+- `enum Status {...}` becomes interface pattern
+- `x?` becomes `if err != nil { return err }`
+
+gopls can analyze all of this perfectly.
+
+### The Hybrid Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     DINGO ARCHITECTURE                       │
+├─────────────────────────────────────────────────────────────┤
+│  .dingo file                                                │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌──────────────────────────────────────┐                   │
+│  │  Dingo Parser (pkg/goparser/)        │  ← DINGO OWNS     │
+│  │  - Custom tokenizer (?, ??, enum)    │                   │
+│  │  - Pratt expression parser           │                   │
+│  │  - Character-level transformations   │                   │
+│  └──────────────────────────────────────┘                   │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌──────────────────────────────────────┐                   │
+│  │  Dingo-Only Semantic Checks          │  ← DINGO OWNS     │
+│  │  - Pattern exhaustiveness            │    (minimal)      │
+│  │  - Enum variant validation           │                   │
+│  │  - ? operator context check          │                   │
+│  └──────────────────────────────────────┘                   │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌──────────────────────────────────────┐                   │
+│  │  Transform → .go + .sourcemap        │  ← DINGO OWNS     │
+│  └──────────────────────────────────────┘                   │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌──────────────────────────────────────┐                   │
+│  │  gopls (via LSP proxy)               │  ← DELEGATE       │
+│  │  - Full Go type checking             │                   │
+│  │  - Symbol resolution                 │                   │
+│  │  - All IDE features                  │                   │
+│  └──────────────────────────────────────┘                   │
+│      │                                                       │
+│      ▼                                                       │
+│  ┌──────────────────────────────────────┐                   │
+│  │  LSP Proxy (dingo-lsp)               │  ← DINGO OWNS     │
+│  │  - Translate positions via sourcemap │                   │
+│  │  - Translate error messages          │                   │
+│  │  - Merge Dingo-specific diagnostics  │                   │
+│  └──────────────────────────────────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### What Dingo Builds vs Delegates
+
+**Dingo builds** (minimal semantic analysis):
+
+| Check | Why Dingo Must Do It |
+|-------|---------------------|
+| Pattern exhaustiveness | Go switch doesn't enforce this |
+| Enum variant validation | Dingo-specific construct |
+| `?` operator context | Must be in Result-returning function |
+| Error message translation | Make gopls errors Dingo-native |
+
+**Dingo delegates to gopls**:
+
+| Feature | Delegated To |
+|---------|-------------|
+| Type checking | gopls |
+| Symbol resolution | gopls |
+| Import resolution | gopls |
+| Interface satisfaction | gopls |
+| Generic inference | gopls |
+| Autocomplete | gopls |
+| Go-to-definition | gopls |
+| Find references | gopls |
+| Rename refactoring | gopls |
+| Hover information | gopls |
+
+### Cost/Benefit Analysis
+
+| Factor | Build Own Type Checker | Use gopls Proxy |
+|--------|------------------------|-----------------|
+| Engineering effort | 50,000+ LOC, 18-24 months | 5,000-10,000 LOC |
+| Maintenance | 1-2 FTE to track Go evolution | Minimal |
+| Go compatibility | Risk of drift | Automatic |
+| IDE feature parity | Years to match gopls | Immediate |
+| Error messages | Full control | Requires translation layer |
+
+### Similar Projects
+
+**templ** (Go templating) uses the same approach:
+- Transforms `.templ` → `.go` with source maps
+- LSP proxy wraps gopls
+- Users get full IDE features via position translation
+
+Quote from Go Time podcast:
+> "The LSP can piggyback on top of gopls and provide all the features that gopls provides by just remapping the source code locations."
+
+### Summary
+
+Dingo's value is **syntax and ergonomics**, not a new type system. Building a Go type checker would mean reimplementing:
+- `go/types`: 30,000+ LOC
+- gopls analysis: 100,000+ LOC
+
+That's not where Dingo should invest. Focus on:
+1. Excellent Dingo parser ✅ (done)
+2. Accurate source maps 🔄 (in progress)
+3. Smooth gopls proxy 🔄 (in progress)
+4. Minimal Dingo-specific checks 📋 (planned)
+
+---
+
+## References
+
+### External Projects
+
+- **TypeScript** - Transpiler architecture reference
+- **Borgo** (github.com/borgo-lang/borgo) - Rust-like → Go transpiler (built own type checker)
+- **templ** (github.com/a-h/templ) - gopls proxy pattern (Dingo follows this)
+
+### Go Standard Library
+
+- `go/scanner` - Tokenization
+- `go/parser` - Parsing
+- `go/token` - Position tracking
+- `go/ast` - AST manipulation
+- `go/printer` - Code output
+
+### Research
+
+- [Go Time Podcast #291](https://changelog.com/gotime/291) - templ's gopls proxy architecture
+- [Borgo GitHub](https://github.com/borgo-lang/borgo) - Why Borgo needed its own type checker
 
 ---
 

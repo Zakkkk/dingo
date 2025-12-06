@@ -2,10 +2,11 @@
 
 This document provides a comprehensive overview of all planned features for the Dingo language, organized by priority, complexity, and implementation status.
 
-**Last Updated:** 2025-12-05
-**Phase:** Phase 10 - Token-Based Parser Architecture
+**Last Updated:** 2025-12-06
+**Phase:** Phase 10 - Token-Based Parser with Pluggable Features
 **Status Source of Truth:** See CLAUDE.md for current implementation phase
-**Architecture:** New token-based parser (`pkg/goparser/`) - replaces old regex preprocessor
+**Architecture:** Token-based parser (`pkg/goparser/`) + Pluggable Feature System (`pkg/feature/`)
+**Configuration:** Features can be enabled/disabled via `dingo.toml` `[feature_matrix]` section
 **Philosophy:** As a meta-language, Dingo can implement features Go rejected, as long as they transpile cleanly
 
 ---
@@ -37,18 +38,94 @@ This document provides a comprehensive overview of all planned features for the 
 
 ---
 
+## Pluggable Feature System
+
+**All language features are implemented as plugins** that can be enabled/disabled via configuration.
+
+### Configuration (dingo.toml)
+
+```toml
+[feature_matrix]
+# All features enabled by default
+# Only specify features you want to disable:
+
+# Character-level features
+enum = true              # enum declarations
+match = true             # match expressions
+enum_constructors = true # Variant() → NewVariant()
+error_prop = true        # ? operator
+guard_let = true         # guard let expressions
+safe_nav_statements = true
+safe_nav = false         # Disable ?. operator
+null_coalesce = false    # Disable ?? operator
+lambdas = true           # |x| and => syntax
+
+# Token-level features
+type_annotations = true  # x: Type syntax
+generics = true          # <T> syntax
+let_binding = true       # let keyword
+```
+
+### Plugin Priority Order
+
+Features execute in a fixed priority order to ensure correct transformation:
+
+| Priority | Plugin | Type | Depends On |
+|----------|--------|------|------------|
+| 10 | `enum` | Character | - |
+| 20 | `match` | Character | `enum` |
+| 30 | `enum_constructors` | Character | `enum` |
+| 40 | `error_prop` | Character | - |
+| 50 | `guard_let` | Character | `error_prop` |
+| 55 | `safe_nav_statements` | Character | - |
+| 60 | `safe_nav` | Character | - |
+| 70 | `null_coalesce` | Character | `safe_nav` |
+| 80 | `lambdas` | Character | - |
+| 100 | `type_annotations` | Token | - |
+| 110 | `generics` | Token | - |
+| 120 | `let_binding` | Token | - |
+
+### Disabled Feature Errors
+
+When a disabled feature's syntax is used, the transpiler reports:
+
+```
+error: feature 'lambdas' is disabled in configuration
+  --> src/main.dingo:10:5
+   |
+10 |     let add = |x, y| x + y
+   |               ^^^^^^^^^^^^
+   |
+   = help: enable 'lambdas' in dingo.toml [feature_matrix] section
+```
+
+### Future: 3rd-Party Plugins (v1.1+)
+
+The architecture supports 3rd-party plugins via RPC (HashiCorp go-plugin):
+
+```toml
+# Future dingo.toml syntax
+[[plugins]]
+name = "pipe_operator"
+path = "~/.dingo/plugins/dingo-pipe"
+enabled = true
+```
+
+---
+
 ## Feature Matrix
 
 ### Infrastructure & Architecture
 
 | Priority | Feature | Complexity | Timeline | Community Demand | Status | File |
 |----------|---------|------------|----------|------------------|--------|------|
-| **ARCH** | Type Annotations (`param: Type`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
-| **ARCH** | Generic Syntax (`<T>` → `[T]`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
-| **ARCH** | Keywords (`let`, `use`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level pass |
+| **ARCH** | Type Annotations (`param: Type`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
+| **ARCH** | Generic Syntax (`<T>` → `[T]`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
+| **ARCH** | Keywords (`let`, `use`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
 | **ARCH** | Source Maps | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | TokenMapping |
 | **ARCH** | Workspace Builds | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | Multi-package |
 | **ARCH** | Token-Based Parser | 🟠 High | 5-6 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented (Phase 10) | `pkg/goparser/` |
+| **ARCH** | **Pluggable Features** | 🟡 Medium | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | `pkg/feature/` |
 | **ARCH** | File Organization | 🟡 Medium | 4 weeks | ⭐⭐⭐⭐⭐ | ✅ Designed | [file-organization.md](./file-organization.md) |
 
 ### Language Features

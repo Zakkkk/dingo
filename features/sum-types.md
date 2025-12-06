@@ -1,7 +1,8 @@
 # Sum Types (Discriminated Unions)
 
 **Priority:** P0 (Critical - Foundation for type system)
-**Status:** 🔴 Not Started
+**Status:** ✅ Implemented (Phase 10 - Token-Based Parser)
+**Implementation:** `pkg/goparser/parser/parser.go` - `transformEnum()` (generates tagged union interface pattern)
 **Community Demand:** ⭐⭐⭐⭐⭐ (996+ 👍 on Go proposal #19412 - HIGHEST)
 **Inspiration:** Rust, Swift, TypeScript, Kotlin
 
