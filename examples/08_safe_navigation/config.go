@@ -1,5 +1,5 @@
-// Generated Go code from config.dingo
-// Safe navigation becomes explicit nil checks
+// Real-world example: Safely navigating nested configuration
+// Safe navigation (?.) prevents nil pointer panics in deep object access
 package main
 
 import "fmt"
@@ -48,45 +48,40 @@ type OutputConfig struct {
 }
 
 // GetDatabaseHost safely accesses nested database host
+// Without safe nav: if config.Database != nil { return config.Database.Host }
 func GetDatabaseHost(config *ServerConfig) string {
-	var result string
-	if config != nil {
-		if config.Database != nil {
-			result = config.Database.Host
-		}
+	if config != nil && config.Database != nil {
+		return config.Database.Host
 	}
-	if result == "" {
-		return "localhost"
-	}
-	return result
+	return "localhost"
 }
 
 // GetSSLCertPath navigates 3 levels deep safely
 func GetSSLCertPath(config *ServerConfig) string {
-	var result string
-	if config != nil {
-		if config.Database != nil {
-			if config.Database.SSL != nil {
-				result = config.Database.SSL.CertPath
-			}
-		}
+	if config != nil && config.Database != nil && config.Database.SSL != nil {
+		return config.Database.SSL.CertPath
 	}
-	if result == "" {
-		return "/etc/ssl/cert.pem"
-	}
-	return result
+	return "/etc/ssl/cert.pem"
 }
 
 // GetCAPath handles optional *string at the end
 func GetCAPath(config *ServerConfig) string {
-	var path *string
-	if config != nil {
-		if config.Database != nil {
-			if config.Database.SSL != nil {
-				path = config.Database.SSL.CAPath
-			}
+	// Chain ends with *string, need to dereference if present
+	path := func() *string {
+		tmp := config
+		if tmp == nil {
+			return nil
 		}
-	}
+		tmp1 := tmp.Database
+		if tmp1 == nil {
+			return nil
+		}
+		tmp2 := tmp1.SSL
+		if tmp2 == nil {
+			return nil
+		}
+		return tmp2.CAPath
+	}()
 	if path != nil {
 		return *path
 	}
@@ -95,14 +90,21 @@ func GetCAPath(config *ServerConfig) string {
 
 // GetRedisPassword safely accesses deeply nested optional password
 func GetRedisPassword(config *ServerConfig) string {
-	var password *string
-	if config != nil {
-		if config.Cache != nil {
-			if config.Cache.Redis != nil {
-				password = config.Cache.Redis.Password
-			}
+	password := func() *string {
+		tmp := config
+		if tmp == nil {
+			return nil
 		}
-	}
+		tmp1 := tmp.Cache
+		if tmp1 == nil {
+			return nil
+		}
+		tmp2 := tmp1.Redis
+		if tmp2 == nil {
+			return nil
+		}
+		return tmp2.Password
+	}()
 	if password != nil {
 		return *password
 	}
@@ -111,14 +113,21 @@ func GetRedisPassword(config *ServerConfig) string {
 
 // GetLogFile combines safe navigation with null coalescing
 func GetLogFile(config *ServerConfig) string {
-	var file *string
-	if config != nil {
-		if config.Logging != nil {
-			if config.Logging.Output != nil {
-				file = config.Logging.Output.File
-			}
+	file := func() *string {
+		tmp := config
+		if tmp == nil {
+			return nil
 		}
-	}
+		tmp1 := tmp.Logging
+		if tmp1 == nil {
+			return nil
+		}
+		tmp2 := tmp1.Output
+		if tmp2 == nil {
+			return nil
+		}
+		return tmp2.File
+	}()
 	if file != nil {
 		return *file
 	}
@@ -127,25 +136,26 @@ func GetLogFile(config *ServerConfig) string {
 
 // IsSSLEnabled shows safe navigation with method-like checks
 func IsSSLEnabled(config *ServerConfig) bool {
-	var result bool
-	if config != nil {
-		if config.Database != nil {
-			if config.Database.SSL != nil {
-				result = config.Database.SSL.Enabled
-			}
-		}
+	// If any part is nil, returns false (zero value)
+	if config != nil && config.Database != nil && config.Database.SSL != nil {
+		return config.Database.SSL.Enabled
 	}
-	return result
+	return false
 }
 
 // GetReplicaCount safely accesses array length
 func GetReplicaCount(config *ServerConfig) int {
-	var replicas []*DatabaseConfig
-	if config != nil {
-		if config.Database != nil {
-			replicas = config.Database.Replicas
+	replicas := func() []*DatabaseConfig {
+		tmp := config
+		if tmp == nil {
+			return nil
 		}
-	}
+		tmp1 := tmp.Database
+		if tmp1 == nil {
+			return nil
+		}
+		return tmp1.Replicas
+	}()
 	if replicas == nil {
 		return 0
 	}
@@ -180,6 +190,7 @@ func main() {
 	// Minimal configuration
 	minimal := &ServerConfig{
 		Name: "development",
+		// No database, cache, or logging configured
 	}
 
 	// Nil configuration
@@ -193,11 +204,11 @@ func main() {
 	fmt.Printf("Replicas: %d\n", GetReplicaCount(full))
 
 	fmt.Println("\n=== Minimal Config ===")
-	fmt.Printf("DB Host: %s\n", GetDatabaseHost(minimal))
-	fmt.Printf("SSL Cert: %s\n", GetSSLCertPath(minimal))
-	fmt.Printf("SSL Enabled: %v\n", IsSSLEnabled(minimal))
+	fmt.Printf("DB Host: %s\n", GetDatabaseHost(minimal))  // "localhost"
+	fmt.Printf("SSL Cert: %s\n", GetSSLCertPath(minimal))  // default
+	fmt.Printf("SSL Enabled: %v\n", IsSSLEnabled(minimal)) // false
 
 	fmt.Println("\n=== Nil Config ===")
-	fmt.Printf("DB Host: %s\n", GetDatabaseHost(empty))
-	fmt.Printf("SSL Cert: %s\n", GetSSLCertPath(empty))
+	fmt.Printf("DB Host: %s\n", GetDatabaseHost(empty)) // "localhost"
+	fmt.Printf("SSL Cert: %s\n", GetSSLCertPath(empty)) // default
 }

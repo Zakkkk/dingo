@@ -1,5 +1,5 @@
-// Generated Go code from defaults.dingo
-// Null coalescing becomes nil checks with fallback
+// Real-world example: Configuration defaults with null coalescing
+// The ?? operator provides fallback values for nil pointers and zero values
 package main
 
 import (
@@ -21,105 +21,91 @@ type EnvConfig struct {
 	Region      *string
 }
 
-// Option type for demonstration
-type Option[T any] struct {
-	value   T
-	present bool
-}
-
-func (o Option[T]) IsSome() bool { return o.present }
-func (o Option[T]) Unwrap() T    { return o.value }
-
 // GetHost returns configured host or default
 func GetHost(config *AppConfig) string {
-	var result *string
-	if config != nil {
-		result = config.Host
-	}
-	if result != nil {
-		return *result
+	// If config is nil or Host is nil, return default
+	if config != nil && config.Host != nil {
+		return *config.Host
 	}
 	return "localhost"
 }
 
 // GetPort returns configured port or default
 func GetPort(config *AppConfig) int {
-	var result *int
-	if config != nil {
-		result = config.Port
-	}
-	if result != nil {
-		return *result
+	if config != nil && config.Port != nil {
+		return *config.Port
 	}
 	return 8080
 }
 
 // GetTimeout returns timeout with environment override
 func GetTimeout(config *AppConfig) int {
+	// Check environment first, then config, then default
 	envTimeout := os.Getenv("APP_TIMEOUT")
 	if envTimeout != "" {
+		// Parse would go here in real code
 		return 30
 	}
-	var result *int
-	if config != nil {
-		result = config.Timeout
-	}
-	if result != nil {
-		return *result
+	if config != nil && config.Timeout != nil {
+		return *config.Timeout
 	}
 	return 60
 }
 
-// GetLogLevel with chained defaults
+// GetLogLevel with single fallback (chained ?? only works with nilable types)
 func GetLogLevel(config *AppConfig) string {
-	var configLevel *string
-	if config != nil {
-		configLevel = config.LogLevel
+	// Note: os.Getenv returns string (non-nilable), so ?? chain doesn't apply
+	// For env fallback, use explicit check
+	var level string
+	if config != nil && config.LogLevel != nil {
+		level = *config.LogLevel
+	} else {
+		level = ""
 	}
-	if configLevel != nil {
-		return *configLevel
+	if level == "" {
+		level = os.Getenv("LOG_LEVEL")
 	}
-	envLevel := os.Getenv("LOG_LEVEL")
-	if envLevel != "" {
-		return envLevel
+	if level == "" {
+		level = "info"
 	}
-	return "info"
+	return level
 }
 
 // GetDatabaseURL with environment fallback
 func GetDatabaseURL(env *EnvConfig) string {
-	var configURL *string
-	if env != nil {
-		configURL = env.DatabaseURL
+	var url string
+	if env != nil && env.DatabaseURL != nil {
+		url = *env.DatabaseURL
+	} else {
+		url = ""
 	}
-	if configURL != nil {
-		return *configURL
+	if url == "" {
+		url = os.Getenv("DATABASE_URL")
 	}
-	envURL := os.Getenv("DATABASE_URL")
-	if envURL != "" {
-		return envURL
+	if url == "" {
+		url = "postgres://localhost:5432/app"
 	}
-	return "postgres://localhost:5432/app"
+	return url
 }
 
 // GetRegion with multi-level fallback
 func GetRegion(env *EnvConfig) string {
-	var configRegion *string
-	if env != nil {
-		configRegion = env.Region
+	var region string
+	if env != nil && env.Region != nil {
+		region = *env.Region
+	} else {
+		region = ""
 	}
-	if configRegion != nil {
-		return *configRegion
+	if region == "" {
+		region = os.Getenv("AWS_REGION")
 	}
-	awsRegion := os.Getenv("AWS_REGION")
-	if awsRegion != "" {
-		return awsRegion
+	if region == "" {
+		region = os.Getenv("REGION")
 	}
-	region := os.Getenv("REGION")
-	if region != "" {
-		return region
+	if region == "" {
+		region = "us-east-1"
 	}
-	return "us-east-1"
+	return region
 }
 
 // LoadConfig demonstrates building config with defaults
@@ -134,15 +120,18 @@ func LoadConfig(appConfig *AppConfig, envConfig *EnvConfig) map[string]interface
 	}
 }
 
-// GetOptionalSetting example with Option type
-func GetOptionalSetting(setting Option[string]) string {
-	if setting.IsSome() {
-		return setting.Unwrap()
+// Example with pointer type (Option type would require plugin)
+// For Option<T> support, use the option plugin
+func GetOptionalSetting(setting *string) string {
+	// Works with *T via nil check
+	if setting != nil {
+		return *setting
 	}
 	return "default"
 }
 
-// GetAPIEndpoint with chained coalescing
+// Coalescing for multi-source config
+// Note: For chained *T ?? *T ?? string, use explicit checks
 func GetAPIEndpoint(primary *string, secondary *string, tertiary *string) string {
 	if primary != nil {
 		return *primary
@@ -172,6 +161,7 @@ func main() {
 	// Partially configured
 	partialConfig := &AppConfig{
 		Host: &host,
+		// Port, Timeout, LogLevel are nil - will use defaults
 	}
 
 	// No configuration (all defaults)

@@ -8,8 +8,16 @@ import (
 // CodeGenResult contains generated Go code and source mappings.
 // All AST-based code generators return this type to enable LSP integration.
 type CodeGenResult struct {
-	Output   []byte          // Generated Go source code
+	Output   []byte          // Generated Go source code (expression-level)
 	Mappings []SourceMapping // Dingo → Go position mappings
+
+	// Statement-level code generation (for human-like output)
+	// If StatementOutput is non-empty, replace entire statement instead of just expression
+	StatementOutput []byte // Multi-line statement replacement (e.g., if/else blocks)
+
+	// For argument context: code to hoist before the statement
+	HoistedCode []byte // Declarations to insert before statement
+	Replacement []byte // Expression replacement (e.g., variable name)
 }
 
 // SourceMapping tracks the relationship between original Dingo source

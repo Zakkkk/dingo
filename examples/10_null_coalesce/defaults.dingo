@@ -43,19 +43,45 @@ func GetTimeout(config: *AppConfig) int {
 	return config?.Timeout ?? 60
 }
 
-// GetLogLevel with chained defaults
+// GetLogLevel with single fallback (chained ?? only works with nilable types)
 func GetLogLevel(config: *AppConfig) string {
-	return config?.LogLevel ?? os.Getenv("LOG_LEVEL") ?? "info"
+	// Note: os.Getenv returns string (non-nilable), so ?? chain doesn't apply
+	// For env fallback, use explicit check
+	level := config?.LogLevel ?? ""
+	if level == "" {
+		level = os.Getenv("LOG_LEVEL")
+	}
+	if level == "" {
+		level = "info"
+	}
+	return level
 }
 
 // GetDatabaseURL with environment fallback
 func GetDatabaseURL(env: *EnvConfig) string {
-	return env?.DatabaseURL ?? os.Getenv("DATABASE_URL") ?? "postgres://localhost:5432/app"
+	url := env?.DatabaseURL ?? ""
+	if url == "" {
+		url = os.Getenv("DATABASE_URL")
+	}
+	if url == "" {
+		url = "postgres://localhost:5432/app"
+	}
+	return url
 }
 
 // GetRegion with multi-level fallback
 func GetRegion(env: *EnvConfig) string {
-	return env?.Region ?? os.Getenv("AWS_REGION") ?? os.Getenv("REGION") ?? "us-east-1"
+	region := env?.Region ?? ""
+	if region == "" {
+		region = os.Getenv("AWS_REGION")
+	}
+	if region == "" {
+		region = os.Getenv("REGION")
+	}
+	if region == "" {
+		region = "us-east-1"
+	}
+	return region
 }
 
 // LoadConfig demonstrates building config with defaults
@@ -70,18 +96,29 @@ func LoadConfig(appConfig: *AppConfig, envConfig: *EnvConfig) map[string]interfa
 	}
 }
 
-// Example with Option type
-func GetOptionalSetting(setting: Option<string>) string {
-	// Works with Option<T> via IsSome/Unwrap or unwrapping
-	if setting.IsSome() {
-		return setting.Unwrap()
+// Example with pointer type (Option type would require plugin)
+// For Option<T> support, use the option plugin
+func GetOptionalSetting(setting: *string) string {
+	// Works with *T via nil check
+	if setting != nil {
+		return *setting
 	}
 	return "default"
 }
 
-// Chained coalescing for multi-source config
+// Coalescing for multi-source config
+// Note: For chained *T ?? *T ?? string, use explicit checks
 func GetAPIEndpoint(primary: *string, secondary: *string, tertiary: *string) string {
-	return primary ?? secondary ?? tertiary ?? "https://api.default.com"
+	if primary != nil {
+		return *primary
+	}
+	if secondary != nil {
+		return *secondary
+	}
+	if tertiary != nil {
+		return *tertiary
+	}
+	return "https://api.default.com"
 }
 
 func main() {

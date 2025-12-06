@@ -1,0 +1,835 @@
+package ast
+
+import (
+	"fmt"
+
+	"github.com/MadAppGang/dingo/pkg/tokenizer"
+)
+
+// ExprKind represents the type of Dingo expression
+type ExprKind int
+
+const (
+	ExprMatch        ExprKind = iota // match expr { ... }
+	ExprLambdaRust                   // |x| body
+	ExprLambdaTS                     // (x) => body
+	ExprErrorProp                    // expr?
+	ExprNullCoalesce                 // expr ?? default
+	ExprSafeNav                      // expr?.field
+)
+
+// String returns string representation of ExprKind
+func (k ExprKind) String() string {
+	switch k {
+	case ExprMatch:
+		return "match"
+	case ExprLambdaRust:
+		return "lambda(rust)"
+	case ExprLambdaTS:
+		return "lambda(ts)"
+	case ExprErrorProp:
+		return "error_prop"
+	case ExprNullCoalesce:
+		return "null_coalesce"
+	case ExprSafeNav:
+		return "safe_nav"
+	default:
+		return fmt.Sprintf("ExprKind(%d)", k)
+	}
+}
+
+// ExprContext represents the context where an expression appears
+type ExprContext int
+
+const (
+	ContextStatement  ExprContext = iota // standalone statement
+	ContextAssignment                    // result := expr
+	ContextReturn                        // return expr
+	ContextArgument                      // foo(expr)
+)
+
+// String returns string representation of ExprContext
+func (c ExprContext) String() string {
+	switch c {
+	case ContextStatement:
+		return "statement"
+	case ContextAssignment:
+		return "assignment"
+	case ContextReturn:
+		return "return"
+	case ContextArgument:
+		return "argument"
+	default:
+		return fmt.Sprintf("ExprContext(%d)", c)
+	}
+}
+
+// ExprLocation represents the location and context of a Dingo expression
+type ExprLocation struct {
+	Kind    ExprKind
+	Start   int         // byte offset (inclusive)
+	End     int         // byte offset (exclusive)
+	Context ExprContext // context where expression appears
+
+	// Statement-level information for human-like code generation
+	StatementStart int    // containing statement start byte offset
+	StatementEnd   int    // containing statement end byte offset
+	VarName        string // for assignments: the variable name being assigned
+}
+
+// FindDingoExpressions scans source code and returns all match and lambda expression locations
+func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
+	tok := tokenizer.New(src)
+	allTokens, err := tok.Tokenize()
+	if err != nil {
+		return nil, fmt.Errorf("tokenize: %w", err)
+	}
+
+	var locations []ExprLocation
+	tok.Reset()
+
+	for {
+		current := tok.Current()
+		if current.Kind == tokenizer.EOF {
+			break
+		}
+
+		// Skip comments and strings (never look for expressions inside)
+		if current.Kind == tokenizer.COMMENT || current.Kind == tokenizer.STRING || current.Kind == tokenizer.CHAR {
+			tok.Advance()
+			continue
+		}
+
+		// Match expression
+		if current.Kind == tokenizer.MATCH {
+			start := current.BytePos()
+			tok.Advance() // consume 'match'
+
+			// Find the end of match expression
+			end, err := findMatchEnd(tok, start)
+			if err != nil {
+				return nil, err
+			}
+
+			// Detect context
+			context := detectContext(src, start)
+
+			locations = append(locations, ExprLocation{
+				Kind:    ExprMatch,
+				Start:   start,
+				End:     end,
+				Context: context,
+			})
+			continue
+		}
+
+		// Rust-style lambda: |params| body
+		if current.Kind == tokenizer.PIPE {
+			// Peek ahead to distinguish from standalone pipe
+			next := tok.PeekToken()
+			if next.Kind == tokenizer.IDENT || next.Kind == tokenizer.RPAREN || next.Kind == tokenizer.UNDERSCORE {
+				start := current.BytePos()
+				tok.Advance() // consume opening |
+
+				end, err := findLambdaEnd(tok, ExprLambdaRust)
+				if err != nil {
+					return nil, err
+				}
+
+				context := detectContext(src, start)
+
+				locations = append(locations, ExprLocation{
+					Kind:    ExprLambdaRust,
+					Start:   start,
+					End:     end,
+					Context: context,
+				})
+				continue
+			}
+		}
+
+		// TypeScript-style lambda: (params) => body
+		// This is harder to detect - need to look for pattern: ( ... ) =>
+		if current.Kind == tokenizer.LPAREN {
+			// Save position to potentially rewind
+			savedPos := tok.Current()
+			tok.Advance() // consume (
+
+			// Try to find => pattern
+			isLambda := false
+			depth := 1
+			for depth > 0 {
+				t := tok.Current()
+				if t.Kind == tokenizer.EOF {
+					break
+				}
+				if t.Kind == tokenizer.LPAREN {
+					depth++
+				}
+				if t.Kind == tokenizer.RPAREN {
+					depth--
+					if depth == 0 {
+						// Check if next is =>
+						tok.Advance()
+						if tok.Current().Kind == tokenizer.ARROW {
+							isLambda = true
+						}
+						break
+					}
+				}
+				tok.Advance()
+			}
+
+			// Rewind to saved position
+			tok.Reset()
+			for tok.Current().Pos < savedPos.Pos {
+				tok.Advance()
+			}
+
+			if isLambda {
+				start := current.BytePos()
+				tok.Advance() // consume (
+
+				end, err := findLambdaEnd(tok, ExprLambdaTS)
+				if err != nil {
+					return nil, err
+				}
+
+				context := detectContext(src, start)
+
+				locations = append(locations, ExprLocation{
+					Kind:    ExprLambdaTS,
+					Start:   start,
+					End:     end,
+					Context: context,
+				})
+				continue
+			}
+		}
+
+		// Error propagation: expr?
+		// Must distinguish from ?? (null coalesce) and ?. (safe nav)
+		if current.Kind == tokenizer.QUESTION {
+			next := tok.PeekToken()
+			// Only standalone ? (not ?? or ?.)
+			if next.Kind != tokenizer.QUESTION && next.Kind != tokenizer.DOT {
+				// Find current token index in allTokens
+				currentIdx := -1
+				for i, t := range allTokens {
+					if t.Pos == current.Pos {
+						currentIdx = i
+						break
+					}
+				}
+
+				if currentIdx > 0 {
+					// Find operand start by scanning backward
+					operandStart := findOperandStart(allTokens, currentIdx, src)
+
+					locations = append(locations, ExprLocation{
+						Kind:    ExprErrorProp,
+						Start:   operandStart,
+						End:     current.ByteEnd(), // After the ?
+						Context: detectContext(src, operandStart),
+					})
+				}
+			}
+		}
+
+		// Null coalescing: expr ?? default
+		if current.Kind == tokenizer.QUESTION_QUESTION {
+			// Check if this position is already covered by a previous expression
+			// (handles chained ?? like a ?? b ?? c - only detect once)
+			alreadyCovered := false
+			currentPos := current.BytePos()
+			for _, loc := range locations {
+				if loc.Kind == ExprNullCoalesce && currentPos >= loc.Start && currentPos < loc.End {
+					alreadyCovered = true
+					break
+				}
+			}
+			if alreadyCovered {
+				tok.Advance()
+				continue
+			}
+
+			// Find current token index in allTokens
+			currentIdx := -1
+			for i, t := range allTokens {
+				if t.Pos == current.Pos {
+					currentIdx = i
+					break
+				}
+			}
+
+			if currentIdx > 0 {
+				// Find operand start by scanning backward (returns byte pos and token index)
+				operandStart, operandTokenIdx := findOperandStartWithIndex(allTokens, currentIdx, src)
+
+				// Find right side end by scanning forward
+				tok.Advance() // Skip ??
+				rightEnd := findNullCoalesceEnd(tok, allTokens, currentIdx+1)
+
+				// Get full context with statement boundaries using tokens
+				ctxInfo := detectContextFromTokens(allTokens, operandTokenIdx, rightEnd)
+
+				locations = append(locations, ExprLocation{
+					Kind:           ExprNullCoalesce,
+					Start:          operandStart,
+					End:            rightEnd,
+					Context:        ctxInfo.Context,
+					StatementStart: ctxInfo.StatementStart,
+					StatementEnd:   ctxInfo.StatementEnd,
+					VarName:        ctxInfo.VarName,
+				})
+				continue // Already advanced
+			}
+		}
+
+		// Safe navigation: expr?.field
+		if current.Kind == tokenizer.QUESTION_DOT {
+			// Find current token index in allTokens
+			currentIdx := -1
+			for i, t := range allTokens {
+				if t.Pos == current.Pos {
+					currentIdx = i
+					break
+				}
+			}
+
+			if currentIdx > 0 {
+				// Find operand start by scanning backward (returns byte pos and token index)
+				operandStart, operandTokenIdx := findOperandStartWithIndex(allTokens, currentIdx, src)
+
+				// Save position in case we need to rewind
+				savedPos := tok.Current()
+
+				// Find safe nav chain end by scanning forward
+				tok.Advance() // Skip ?.
+				safeNavEnd := findSafeNavEnd(tok, allTokens, currentIdx+1)
+
+				// If safeNavEnd is -1, this ?. is followed by ?? somewhere,
+				// so we should skip this detection and let null coalesce handle it
+				if safeNavEnd != -1 {
+					// Get full context with statement boundaries using tokens
+					ctxInfo := detectContextFromTokens(allTokens, operandTokenIdx, safeNavEnd)
+
+					locations = append(locations, ExprLocation{
+						Kind:           ExprSafeNav,
+						Start:          operandStart,
+						End:            safeNavEnd,
+						Context:        ctxInfo.Context,
+						StatementStart: ctxInfo.StatementStart,
+						StatementEnd:   ctxInfo.StatementEnd,
+						VarName:        ctxInfo.VarName,
+					})
+					continue // Already advanced
+				} else {
+					// Rewind - let the main loop advance normally
+					// so ?? detection can find this expression
+					tok.Reset()
+					for tok.Current().Pos < savedPos.Pos {
+						tok.Advance()
+					}
+				}
+			}
+		}
+
+		tok.Advance()
+	}
+
+	return locations, nil
+}
+
+// findMatchEnd finds the closing brace of a match expression
+// Assumes tok is positioned just after 'match' keyword
+func findMatchEnd(tok *tokenizer.Tokenizer, startPos int) (int, error) {
+	depth := 0
+	foundOpen := false
+
+	for {
+		current := tok.Current()
+		if current.Kind == tokenizer.EOF {
+			return 0, fmt.Errorf("unexpected EOF in match expression starting at byte %d", startPos)
+		}
+
+		switch current.Kind {
+		case tokenizer.LBRACE:
+			foundOpen = true
+			depth++
+		case tokenizer.RBRACE:
+			depth--
+			if depth == 0 && foundOpen {
+				tok.Advance()
+				return current.ByteEnd(), nil // Position after closing brace
+			}
+			if depth < 0 {
+				return 0, fmt.Errorf("unmatched closing brace at byte %d in match expression", current.BytePos())
+			}
+		}
+
+		tok.Advance()
+	}
+}
+
+// findLambdaEnd finds the end of a lambda expression body
+// For Rust style: assumes tok is positioned after opening |
+// For TS style: assumes tok is positioned after opening (
+func findLambdaEnd(tok *tokenizer.Tokenizer, style ExprKind) (int, error) {
+	braceDepth := 0
+	parenDepth := 0
+	bracketDepth := 0
+
+	// Skip parameters first
+	if style == ExprLambdaRust {
+		// Skip to closing pipe
+		for {
+			current := tok.Current()
+			if current.Kind == tokenizer.EOF {
+				return 0, fmt.Errorf("unexpected EOF in lambda params")
+			}
+			if current.Kind == tokenizer.PIPE {
+				tok.Advance()
+				break
+			}
+			tok.Advance()
+		}
+	} else if style == ExprLambdaTS {
+		// Skip to => arrow (already past opening paren)
+		parenDepth = 1
+		for parenDepth > 0 {
+			current := tok.Current()
+			if current.Kind == tokenizer.EOF {
+				return 0, fmt.Errorf("unexpected EOF in lambda params")
+			}
+			if current.Kind == tokenizer.LPAREN {
+				parenDepth++
+			}
+			if current.Kind == tokenizer.RPAREN {
+				parenDepth--
+			}
+			tok.Advance()
+		}
+
+		// Expect =>
+		current := tok.Current()
+		if current.Kind != tokenizer.ARROW {
+			return 0, fmt.Errorf("expected => after lambda params, got %s", current.Kind)
+		}
+		tok.Advance()
+		parenDepth = 0 // Reset for body parsing
+	}
+
+	// Now find end of body
+	// Body can be:
+	// - Block: { ... }
+	// - Expression: stops at comma, semicolon, or unmatched closing delimiter
+	lastPos := 0
+	for {
+		current := tok.Current()
+		lastPos = current.ByteEnd()
+
+		if current.Kind == tokenizer.EOF {
+			return lastPos, nil
+		}
+
+		switch current.Kind {
+		case tokenizer.LBRACE:
+			braceDepth++
+		case tokenizer.RBRACE:
+			braceDepth--
+			if braceDepth < 0 {
+				return current.BytePos(), nil // Unmatched = end of lambda
+			}
+			if braceDepth == 0 {
+				tok.Advance()
+				return current.ByteEnd(), nil // Block lambda complete
+			}
+		case tokenizer.LPAREN:
+			parenDepth++
+		case tokenizer.RPAREN:
+			parenDepth--
+			if parenDepth < 0 {
+				return current.BytePos(), nil // Unmatched paren = end
+			}
+		case tokenizer.LBRACKET:
+			bracketDepth++
+		case tokenizer.RBRACKET:
+			bracketDepth--
+			if bracketDepth < 0 {
+				return current.BytePos(), nil
+			}
+		case tokenizer.COMMA, tokenizer.SEMICOLON:
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return current.BytePos(), nil // End of expression
+			}
+		case tokenizer.NEWLINE:
+			// Newline can end expression-style lambda if not inside delimiters
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				// Peek ahead to see if this is really the end
+				next := tok.PeekToken()
+				if next.Kind == tokenizer.RBRACE || next.Kind == tokenizer.RPAREN ||
+				   next.Kind == tokenizer.COMMA || next.Kind == tokenizer.SEMICOLON {
+					return current.BytePos(), nil
+				}
+			}
+		}
+
+		tok.Advance()
+	}
+}
+
+// detectContext scans backward from expression start to determine context
+func detectContext(src []byte, exprStart int) ExprContext {
+	if exprStart == 0 {
+		return ContextStatement
+	}
+
+	pos := exprStart - 1
+
+	// Skip whitespace backward
+	for pos >= 0 && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\n' || src[pos] == '\r') {
+		pos--
+	}
+
+	if pos < 0 {
+		return ContextStatement
+	}
+
+	// Check for := or =
+	if src[pos] == '=' {
+		if pos > 0 && src[pos-1] == ':' {
+			return ContextAssignment
+		}
+		return ContextAssignment
+	}
+
+	// Check for "return" keyword (look backward up to 6 chars)
+	if pos >= 5 {
+		// Look for 'n' of "return"
+		end := pos + 1
+		start := end - 6
+		if start < 0 {
+			start = 0
+		}
+		word := string(src[start:end])
+		if len(word) >= 6 && word[len(word)-6:] == "return" {
+			// Verify it's actually the keyword (check preceding char)
+			if start == 0 || !isIdentifierChar(src[start-1]) {
+				return ContextReturn
+			}
+		}
+	}
+
+	// Check for opening paren or comma (function argument)
+	if src[pos] == '(' || src[pos] == ',' {
+		return ContextArgument
+	}
+
+	return ContextStatement
+}
+
+// ContextInfo contains full context information for an expression (token-based)
+type ContextInfo struct {
+	Context        ExprContext
+	StatementStart int
+	StatementEnd   int
+	VarName        string
+}
+
+// detectContextFromTokens uses tokens to find context and statement boundaries.
+// This is the proper way to detect context - using tokenizer output, not byte scanning.
+func detectContextFromTokens(tokens []tokenizer.Token, exprTokenIdx int, exprEnd int) ContextInfo {
+	result := ContextInfo{
+		Context:        ContextStatement,
+		StatementStart: 0,
+		StatementEnd:   exprEnd,
+	}
+
+	if exprTokenIdx <= 0 || len(tokens) == 0 {
+		return result
+	}
+
+	// Scan backward to find context and statement start
+	for i := exprTokenIdx - 1; i >= 0; i-- {
+		tok := tokens[i]
+
+		switch tok.Kind {
+		case tokenizer.DEFINE: // :=
+			result.Context = ContextAssignment
+			// Find the variable name (should be the IDENT before :=)
+			if i > 0 && tokens[i-1].Kind == tokenizer.IDENT {
+				result.VarName = tokens[i-1].Lit
+				// Statement starts at the identifier
+				result.StatementStart = tokens[i-1].BytePos()
+			}
+			// Find statement end (scan forward for NEWLINE or SEMICOLON)
+			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			return result
+
+		case tokenizer.ASSIGN: // =
+			result.Context = ContextAssignment
+			// Find the variable name (should be the IDENT before =)
+			if i > 0 && tokens[i-1].Kind == tokenizer.IDENT {
+				result.VarName = tokens[i-1].Lit
+				result.StatementStart = tokens[i-1].BytePos()
+			}
+			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			return result
+
+		case tokenizer.RETURN:
+			result.Context = ContextReturn
+			result.StatementStart = tok.BytePos()
+			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			return result
+
+		case tokenizer.LPAREN, tokenizer.COMMA:
+			result.Context = ContextArgument
+			return result
+
+		case tokenizer.NEWLINE, tokenizer.SEMICOLON, tokenizer.LBRACE:
+			// Hit statement boundary without finding context marker
+			return result
+		}
+	}
+
+	return result
+}
+
+// findStatementEndFromTokens finds the end of a statement by scanning for NEWLINE or SEMICOLON
+func findStatementEndFromTokens(tokens []tokenizer.Token, startIdx int) int {
+	for i := startIdx; i < len(tokens); i++ {
+		switch tokens[i].Kind {
+		case tokenizer.NEWLINE, tokenizer.SEMICOLON:
+			return tokens[i].BytePos()
+		case tokenizer.EOF:
+			if i > 0 {
+				return tokens[i-1].ByteEnd()
+			}
+			return 0
+		}
+	}
+
+	// Return end of last token if no terminator found
+	if len(tokens) > 0 {
+		return tokens[len(tokens)-1].ByteEnd()
+	}
+	return 0
+}
+
+// isIdentifierChar returns true if rune can be part of identifier
+func isIdentifierChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+}
+
+// findOperandStart scans backward from questionIdx to find where the operand expression starts
+// It handles: foo(), x.bar(), arr[i], a.b.c(), x?.y, x?.y?.z, etc.
+func findOperandStart(tokens []tokenizer.Token, questionIdx int, src []byte) int {
+	pos, _ := findOperandStartWithIndex(tokens, questionIdx, src)
+	return pos
+}
+
+// findOperandStartWithIndex scans backward from questionIdx to find where the operand expression starts.
+// Returns both the byte position and the token index of the operand start.
+// It handles: foo(), x.bar(), arr[i], a.b.c(), x?.y, x?.y?.z, etc.
+func findOperandStartWithIndex(tokens []tokenizer.Token, questionIdx int, src []byte) (int, int) {
+	if questionIdx == 0 {
+		return 0, 0
+	}
+
+	// Walk backward, tracking balanced delimiters
+	depth := 0
+	start := questionIdx - 1
+
+	for start >= 0 {
+		tok := tokens[start]
+
+		switch tok.Kind {
+		case tokenizer.RPAREN, tokenizer.RBRACKET:
+			depth++
+		case tokenizer.LPAREN, tokenizer.LBRACKET:
+			depth--
+			if depth < 0 {
+				return tokens[start+1].BytePos(), start + 1
+			}
+		case tokenizer.DOT, tokenizer.QUESTION_DOT:
+			// Part of selector/safe nav chain, continue backward
+		case tokenizer.IDENT:
+			if depth == 0 {
+				// Check if previous token continues the expression
+				if start > 0 {
+					prev := tokens[start-1]
+					if prev.Kind == tokenizer.DOT || prev.Kind == tokenizer.QUESTION_DOT {
+						start--
+						continue
+					}
+				}
+				return tok.BytePos(), start
+			}
+		case tokenizer.ASSIGN, tokenizer.DEFINE, tokenizer.COMMA,
+			tokenizer.SEMICOLON, tokenizer.LBRACE, tokenizer.RETURN:
+			// Statement boundary - operand starts at next token
+			if start+1 < len(tokens) {
+				return tokens[start+1].BytePos(), start + 1
+			}
+			return tok.ByteEnd(), start
+		}
+		start--
+	}
+
+	if len(tokens) > 0 {
+		return tokens[0].BytePos(), 0
+	}
+	return 0, 0
+}
+
+// findNullCoalesceEnd finds the end of the right side of a null coalesce expression
+// Handles: a ?? b, a ?? b ?? c (left associative), a ?? (b + c), etc.
+func findNullCoalesceEnd(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, startIdx int) int {
+	braceDepth := 0
+	parenDepth := 0
+	bracketDepth := 0
+	lastPos := 0
+
+	for {
+		current := tok.Current()
+		if current.Kind == tokenizer.EOF {
+			return lastPos
+		}
+
+		lastPos = current.ByteEnd()
+
+		switch current.Kind {
+		case tokenizer.LBRACE:
+			braceDepth++
+		case tokenizer.RBRACE:
+			braceDepth--
+			if braceDepth < 0 {
+				return current.BytePos() // Unmatched = end of expression
+			}
+		case tokenizer.LPAREN:
+			parenDepth++
+		case tokenizer.RPAREN:
+			parenDepth--
+			if parenDepth < 0 {
+				return current.BytePos() // Unmatched = end of expression
+			}
+		case tokenizer.LBRACKET:
+			bracketDepth++
+		case tokenizer.RBRACKET:
+			bracketDepth--
+			if bracketDepth < 0 {
+				return current.BytePos()
+			}
+		case tokenizer.COMMA, tokenizer.SEMICOLON:
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return current.BytePos() // Statement terminator at depth 0
+			}
+		case tokenizer.QUESTION_QUESTION:
+			// Another ?? - this is a chained coalesce, continue scanning
+			// a ?? b ?? c should be one complete expression
+			// Don't return here - let it continue to find the full chain
+		case tokenizer.NEWLINE:
+			// Newline at depth 0 ends the expression
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return current.BytePos()
+			}
+		case tokenizer.IDENT, tokenizer.STRING, tokenizer.INT, tokenizer.FLOAT:
+			// These are valid right operands - we want to consume them
+			// and then check if the next token continues the expression
+			tok.Advance()
+
+			// Check if next token continues the expression
+			next := tok.Current()
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				// If next is not a selector/call/index/another ??, we're done
+				if next.Kind != tokenizer.DOT && next.Kind != tokenizer.LPAREN &&
+				   next.Kind != tokenizer.LBRACKET && next.Kind != tokenizer.QUESTION_QUESTION {
+					return lastPos
+				}
+			}
+			continue
+		}
+
+		tok.Advance()
+	}
+}
+
+// findSafeNavEnd finds the end of a safe navigation chain
+// Handles: x?.y, x?.y.z, x?.y?.z, x?.foo(), x?.y[0], etc.
+// CRITICAL: If followed by ??, returns -1 to signal that the entire expression
+// should be detected as a null coalesce instead (since ?? has lower precedence)
+func findSafeNavEnd(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, startIdx int) int {
+	braceDepth := 0
+	parenDepth := 0
+	bracketDepth := 0
+	lastPos := 0
+
+	for {
+		current := tok.Current()
+		if current.Kind == tokenizer.EOF {
+			return lastPos
+		}
+
+		lastPos = current.ByteEnd()
+
+		switch current.Kind {
+		case tokenizer.LBRACE:
+			braceDepth++
+		case tokenizer.RBRACE:
+			braceDepth--
+			if braceDepth < 0 {
+				return current.BytePos()
+			}
+		case tokenizer.LPAREN:
+			parenDepth++
+		case tokenizer.RPAREN:
+			parenDepth--
+			if parenDepth < 0 {
+				return current.BytePos()
+			}
+			// If we just closed a call and depth is 0, continue to check for more chaining
+		case tokenizer.LBRACKET:
+			bracketDepth++
+		case tokenizer.RBRACKET:
+			bracketDepth--
+			if bracketDepth < 0 {
+				return current.BytePos()
+			}
+			// If we just closed an index and depth is 0, continue to check for more chaining
+		case tokenizer.DOT, tokenizer.QUESTION_DOT:
+			// Continue - part of the chain
+		case tokenizer.IDENT:
+			// Continue - field name or method name
+		case tokenizer.QUESTION_QUESTION:
+			// If followed by ??, the whole expression is a null coalesce
+			// Return -1 to signal that we should skip this detection
+			// (null coalesce finder will handle the entire expression)
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return -1
+			}
+		case tokenizer.COMMA, tokenizer.SEMICOLON:
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				return current.BytePos()
+			}
+		case tokenizer.NEWLINE:
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				next := tok.PeekToken()
+				// If next token is not a continuation (dot or ?.), end here
+				if next.Kind != tokenizer.DOT && next.Kind != tokenizer.QUESTION_DOT {
+					return current.BytePos()
+				}
+			}
+		default:
+			// Unknown token at depth 0 - likely end of expression
+			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
+				// Check if this is an operator or other construct
+				if current.Kind != tokenizer.DOT && current.Kind != tokenizer.QUESTION_DOT {
+					return current.BytePos()
+				}
+			}
+		}
+
+		tok.Advance()
+	}
+}
