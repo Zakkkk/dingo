@@ -1,5 +1,5 @@
-// Generated Go code from data_pipeline.dingo
-// Lambdas become standard Go anonymous functions
+// Real-world example: Data processing pipeline with lambdas
+// Concise lambda syntax makes functional transformations readable
 package main
 
 import (
@@ -19,17 +19,16 @@ type User struct {
 // ProcessUsers demonstrates a data pipeline with lambdas
 func ProcessUsers(users []User) {
 	// Filter active premium users over 18
-	eligible := Filter(users, func(u User) bool {
-		return u.Active && u.Premium && u.Age >= 18
-	})
+	// TypeScript-style: func(params) { return expr }
+	eligible := Filter(users, func(u) { return u.Active && u.Premium && u.Age >= 18 })
 
 	// Transform to display format
-	names := Map(eligible, func(u User) string {
-		return fmt.Sprintf("%s <%s>", u.Name, u.Email)
-	})
+	// Rust-style: func(params) { return expr }
+	names := Map(eligible, func(u) { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
 
 	// Multi-line lambda for complex logic
-	summary := Reduce(eligible, "", func(acc string, u User) string {
+	// TypeScript-style with block
+	summary := Reduce(eligible, "", func(acc, u) {
 		if acc == "" {
 			return u.Name
 		}
@@ -70,7 +69,7 @@ func Reduce[T, R any](items []T, initial R, reducer func(R, T) R) R {
 	return result
 }
 
-// SortUsers sorts with custom comparator
+// Sorting with custom comparator
 func SortUsers(users []User, compare func(User, User) bool) []User {
 	// Copy to avoid mutating original
 	sorted := make([]User, len(users))
@@ -99,9 +98,7 @@ func main() {
 	ProcessUsers(users)
 
 	// Sort by age (ascending) using lambda
-	byAge := SortUsers(users, func(a, b User) bool {
-		return a.Age < b.Age
-	})
+	byAge := SortUsers(users, func(a, b) { return a.Age < b.Age })
 
 	fmt.Println("\nUsers by age:")
 	for _, u := range byAge {
@@ -109,9 +106,7 @@ func main() {
 	}
 
 	// Sort by name using lambda
-	byName := SortUsers(users, func(a, b User) bool {
-		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-	})
+	byName := SortUsers(users, func(a, b) { return strings.ToLower(a.Name) < strings.ToLower(b.Name) })
 
 	fmt.Println("\nUsers by name:")
 	for _, u := range byName {

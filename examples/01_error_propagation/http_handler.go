@@ -19,41 +19,38 @@ type User struct {
 // With Dingo: 10 lines with clear data flow
 func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 	// Extract and validate user ID from path
-	tmp, err := extractUserID(r)
-
-	if err != nil {
-		return err
-	}
-	var userID = tmp
-
-	// Load user from database
-	tmp1, err1 := loadUserFromDB(userID)
-
-	if err1 != nil {
-		return err1
-	}
-	var user = tmp1
-
-	// Check user permissions
-	tmp2, err2 := checkPermissions(r, user)
-
-	if err2 != nil {
-		return err2
-	}
-	var _ = tmp2
-
-	// Encode response
-	tmp3, err3 := json.Marshal(user)
-
+	tmp3, err3 := extractUserID(r)
 	if err3 != nil {
 		return err3
 	}
-	var response = tmp3
+	userID := tmp3
+
+	// Load user from database
+	tmp2, err2 := loadUserFromDB(userID)
+	if err2 != nil {
+		return err2
+	}
+	user := tmp2
+
+	// Check user permissions
+	tmp1, err1 := checkPermissions(r, user)
+	if err1 != nil {
+		return err1
+	}
+	_ = tmp1
+
+	// Encode response
+	tmp, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+	response := tmp
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(response)
 	return nil
 }
+
 func extractUserID(r *http.Request) (string, error) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -61,6 +58,7 @@ func extractUserID(r *http.Request) (string, error) {
 	}
 	return id, nil
 }
+
 func loadUserFromDB(id string) (*User, error) {
 	// Simulated database lookup
 	if id == "404" {
@@ -68,6 +66,7 @@ func loadUserFromDB(id string) (*User, error) {
 	}
 	return &User{ID: id, Name: "John Doe", Email: "john@example.com"}, nil
 }
+
 func checkPermissions(r *http.Request, user *User) (bool, error) {
 	// Simulated permission check
 	authHeader := r.Header.Get("Authorization")
@@ -76,6 +75,7 @@ func checkPermissions(r *http.Request, user *User) (bool, error) {
 	}
 	return true, nil
 }
+
 func main() {
 	http.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if err := GetUserHandler(w, r); err != nil {
