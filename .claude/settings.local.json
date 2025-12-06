@@ -15,7 +15,18 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(for i in 01 02 03 04 05 06 07 08 09 10)",
-      "Bash(do echo \"=== $i ===\" go run ./cmd/dingo build examples/$i_*/*.dingo)"
+      "Bash(do echo \"=== $i ===\" go run ./cmd/dingo build examples/$i_*/*.dingo)",
+      "Bash(go env:*)",
+      "Bash(wc:*)",
+      "WebFetch(domain:babeljs.io)",
+      "WebFetch(domain:eslint.org)",
+      "WebFetch(domain:pkg.go.dev)",
+      "WebFetch(domain:tree-sitter.github.io)",
+      "WebFetch(domain:docs.microsoft.com)",
+      "Bash(grep:*)",
+      "Bash(git -C /Users/jack/mag/dingo status --short)",
+      "Bash(xargs -I {} sh -c \"echo \"\"=== {} ===\"\" && git show 7332a6d:pkg/parser/{} 2>/dev/null | wc -l\")",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

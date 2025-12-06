@@ -118,13 +118,13 @@ func main() {
 			t.Fatalf("Failed to compile generated Go: %v", err)
 		}
 
-		// Verify enum code was generated
+		// Verify enum code was generated (interface pattern)
 		goCode := mustReadFile(t, goFile)
-		if !strings.Contains(goCode, "StatusTag") {
-			t.Error("Generated code missing StatusTag enum")
+		if !strings.Contains(goCode, "type Status interface") {
+			t.Error("Generated code missing Status interface")
 		}
 		if !strings.Contains(goCode, "StatusPending") {
-			t.Error("Generated code missing StatusPending constructor")
+			t.Error("Generated code missing StatusPending struct")
 		}
 		if !strings.Contains(goCode, "IsActive()") {
 			t.Error("Generated code missing IsActive() method")

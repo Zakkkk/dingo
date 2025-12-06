@@ -1,0 +1,26 @@
+// P0 Bug Fix: Comments in match arms
+// Previously, inline comments after match arms would break parsing
+// because the regex-based processor treated them as separate arms
+package main
+
+import "fmt"
+
+enum Event {
+	Click { x: int, y: int }
+	Scroll { delta: int }
+	KeyPress { key: string }
+}
+
+func handleEvent(event: Event) string {
+	return match event {
+		Click(x, y) => fmt.Sprintf("Click at (%d, %d)", x, y),  // Click events
+		Scroll(delta) => fmt.Sprintf("Scroll by %d", delta),    // Scroll events
+		KeyPress(key) => fmt.Sprintf("Key: %s", key),           // Key events
+	}
+}
+
+func main() {
+	event := Event.Click{x: 10, y: 20}
+	result := handleEvent(event)
+	fmt.Println(result)
+}

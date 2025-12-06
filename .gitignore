@@ -44,6 +44,7 @@ editors/vscode/.vscode-test/
 
 # Source map files (test artifacts)
 *.go.map
+*.go.dmap
 
 # Golden test artifacts
 *.actual
