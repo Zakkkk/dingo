@@ -878,6 +878,171 @@ lambda_style = "kotlin"
 	}
 }
 
+func TestFeatureMatrixToEnabledFeatures(t *testing.T) {
+	// Test with all nil (default enabled)
+	fm := &FeatureMatrix{}
+	enabled := fm.ToEnabledFeatures()
+	if len(enabled) != 0 {
+		t.Errorf("Expected empty map for all nil, got %v", enabled)
+	}
+
+	// Test with some features disabled
+	falseVal := false
+	trueVal := true
+	fm = &FeatureMatrix{
+		Enum:     &trueVal,
+		Match:    &falseVal,
+		Lambdas:  &trueVal,
+		ErrorProp: &falseVal,
+	}
+	enabled = fm.ToEnabledFeatures()
+	if len(enabled) != 4 {
+		t.Errorf("Expected 4 features in map, got %d", len(enabled))
+	}
+	if !enabled["enum"] {
+		t.Error("enum should be enabled")
+	}
+	if enabled["match"] {
+		t.Error("match should be disabled")
+	}
+	if !enabled["lambdas"] {
+		t.Error("lambdas should be enabled")
+	}
+	if enabled["error_prop"] {
+		t.Error("error_prop should be disabled")
+	}
+}
+
+func TestFeatureMatrixIsFeatureEnabled(t *testing.T) {
+	falseVal := false
+	trueVal := true
+
+	tests := []struct {
+		name    string
+		matrix  *FeatureMatrix
+		feature string
+		want    bool
+	}{
+		{
+			name:    "nil field returns true (default enabled)",
+			matrix:  &FeatureMatrix{},
+			feature: "enum",
+			want:    true,
+		},
+		{
+			name:    "explicitly enabled",
+			matrix:  &FeatureMatrix{Enum: &trueVal},
+			feature: "enum",
+			want:    true,
+		},
+		{
+			name:    "explicitly disabled",
+			matrix:  &FeatureMatrix{Enum: &falseVal},
+			feature: "enum",
+			want:    false,
+		},
+		{
+			name:    "match disabled",
+			matrix:  &FeatureMatrix{Match: &falseVal},
+			feature: "match",
+			want:    false,
+		},
+		{
+			name:    "lambdas disabled",
+			matrix:  &FeatureMatrix{Lambdas: &falseVal},
+			feature: "lambdas",
+			want:    false,
+		},
+		{
+			name:    "error_prop disabled",
+			matrix:  &FeatureMatrix{ErrorProp: &falseVal},
+			feature: "error_prop",
+			want:    false,
+		},
+		{
+			name:    "unknown feature returns true",
+			matrix:  &FeatureMatrix{},
+			feature: "unknown_feature",
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.matrix.IsFeatureEnabled(tt.feature)
+			if got != tt.want {
+				t.Errorf("IsFeatureEnabled(%q) = %v, want %v", tt.feature, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadFeatureMatrixConfig(t *testing.T) {
+	// Create temp directory with feature matrix config
+	tmpDir, err := os.MkdirTemp("", "dingo-test-fm-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Write project config with feature matrix
+	projectConfig := `[feature_matrix]
+enum = true
+match = false
+error_prop = true
+lambdas = false
+`
+	configPath := filepath.Join(tmpDir, "dingo.toml")
+	if err := os.WriteFile(configPath, []byte(projectConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Change to temp directory
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Override HOME
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	// Load config
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Check feature matrix
+	if cfg.FeatureMatrix.Enum == nil || !*cfg.FeatureMatrix.Enum {
+		t.Error("Expected enum to be explicitly enabled")
+	}
+	if cfg.FeatureMatrix.Match == nil || *cfg.FeatureMatrix.Match {
+		t.Error("Expected match to be explicitly disabled")
+	}
+	if cfg.FeatureMatrix.ErrorProp == nil || !*cfg.FeatureMatrix.ErrorProp {
+		t.Error("Expected error_prop to be explicitly enabled")
+	}
+	if cfg.FeatureMatrix.Lambdas == nil || *cfg.FeatureMatrix.Lambdas {
+		t.Error("Expected lambdas to be explicitly disabled")
+	}
+
+	// Verify ToEnabledFeatures works
+	enabled := cfg.FeatureMatrix.ToEnabledFeatures()
+	if !enabled["enum"] {
+		t.Error("enum should be enabled in map")
+	}
+	if enabled["match"] {
+		t.Error("match should be disabled in map")
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&

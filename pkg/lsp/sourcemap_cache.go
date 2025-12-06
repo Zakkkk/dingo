@@ -5,16 +5,53 @@ import (
 	"fmt"
 	"os"
 	"sync"
-
-	"github.com/MadAppGang/dingo/pkg/preprocessor"
 )
 
 // MaxSupportedSourceMapVersion is the highest source map version this LSP can handle
 const MaxSupportedSourceMapVersion = 1
 
+// SourceMap represents a simple source map structure
+// This is a minimal implementation for LSP position translation
+type SourceMap struct {
+	Version  int              `json:"version"`
+	Mappings []PositionMapping `json:"mappings"`
+}
+
+// PositionMapping represents a single position mapping
+type PositionMapping struct {
+	DingoLine   int `json:"dingoLine"`
+	DingoColumn int `json:"dingoColumn"`
+	GoLine      int `json:"goLine"`
+	GoColumn    int `json:"goColumn"`
+}
+
+// MapToGenerated maps from Dingo source position to Go generated position
+func (sm *SourceMap) MapToGenerated(dingoLine, dingoCol int) (int, int) {
+	// Find closest mapping for the Dingo position
+	for _, m := range sm.Mappings {
+		if m.DingoLine == dingoLine {
+			return m.GoLine, m.GoColumn
+		}
+	}
+	// No mapping found - return identity mapping
+	return dingoLine, dingoCol
+}
+
+// MapToOriginal maps from Go generated position to Dingo source position
+func (sm *SourceMap) MapToOriginal(goLine, goCol int) (int, int) {
+	// Find closest mapping for the Go position
+	for _, m := range sm.Mappings {
+		if m.GoLine == goLine {
+			return m.DingoLine, m.DingoColumn
+		}
+	}
+	// No mapping found - return identity mapping
+	return goLine, goCol
+}
+
 // SourceMapGetter is an interface for retrieving source maps
 type SourceMapGetter interface {
-	Get(goFilePath string) (*preprocessor.SourceMap, error)
+	Get(goFilePath string) (*SourceMap, error)
 	Invalidate(goFilePath string)
 	InvalidateAll()
 	Size() int
@@ -23,7 +60,7 @@ type SourceMapGetter interface {
 // SourceMapCache provides in-memory caching of source maps with version validation
 type SourceMapCache struct {
 	mu      sync.RWMutex
-	maps    map[string]*preprocessor.SourceMap // mapPath -> SourceMap
+	maps    map[string]*SourceMap // mapPath -> SourceMap
 	logger  Logger
 	maxSize int
 }
@@ -31,14 +68,14 @@ type SourceMapCache struct {
 // NewSourceMapCache creates a new source map cache
 func NewSourceMapCache(logger Logger) (*SourceMapCache, error) {
 	return &SourceMapCache{
-		maps:    make(map[string]*preprocessor.SourceMap),
+		maps:    make(map[string]*SourceMap),
 		logger:  logger,
 		maxSize: 100, // LRU limit (future: implement eviction)
 	}, nil
 }
 
 // Get retrieves a source map from cache or loads it from disk
-func (c *SourceMapCache) Get(goFilePath string) (*preprocessor.SourceMap, error) {
+func (c *SourceMapCache) Get(goFilePath string) (*SourceMap, error) {
 	mapPath := goFilePath + ".map"
 
 	// CRITICAL FIX C5: Safe double-check locking pattern
@@ -88,15 +125,15 @@ func (c *SourceMapCache) Get(goFilePath string) (*preprocessor.SourceMap, error)
 	return sm, nil
 }
 
-func (c *SourceMapCache) parseSourceMap(data []byte) (*preprocessor.SourceMap, error) {
-	var sm preprocessor.SourceMap
+func (c *SourceMapCache) parseSourceMap(data []byte) (*SourceMap, error) {
+	var sm SourceMap
 	if err := json.Unmarshal(data, &sm); err != nil {
 		return nil, fmt.Errorf("JSON parse error: %w", err)
 	}
 	return &sm, nil
 }
 
-func (c *SourceMapCache) validateVersion(sm *preprocessor.SourceMap, mapPath string) error {
+func (c *SourceMapCache) validateVersion(sm *SourceMap, mapPath string) error {
 	// Default to version 1 if not specified (legacy files from Phase 3)
 	if sm.Version == 0 {
 		sm.Version = 1
@@ -137,7 +174,7 @@ func (c *SourceMapCache) InvalidateAll() {
 	defer c.mu.Unlock()
 
 	count := len(c.maps)
-	c.maps = make(map[string]*preprocessor.SourceMap)
+	c.maps = make(map[string]*SourceMap)
 	c.logger.Infof("All source maps invalidated (%d entries cleared)", count)
 }
 

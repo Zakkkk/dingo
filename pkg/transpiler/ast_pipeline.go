@@ -6,8 +6,6 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-
-	"github.com/MadAppGang/dingo/pkg/goparser/parser"
 )
 
 // TranspileResult holds the result of AST-based transpilation
@@ -75,12 +73,6 @@ func ASTTranspile(source []byte, filename string, fset *token.FileSet) (*Transpi
 
 	// Estimate metadata from source
 	result.Metadata.TokenCount = len(source) / 5 // Rough approximation
-
-	// Also parse with Dingo parser to get token count
-	_, _, err = parser.TransformToGo(source)
-	if err == nil {
-		// Successfully transformed, no additional errors
-	}
 
 	return result, nil
 }

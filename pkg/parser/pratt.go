@@ -32,6 +32,10 @@ var operatorPrecedence = map[tokenizer.TokenKind]int{
 	tokenizer.QUESTION_QUESTION: PrecNullCoal,  // a ?? b (null coalescing)
 	tokenizer.QUESTION_DOT:      PrecPostfix,   // x?.field (safe navigation)
 
+	// Standard Go operators
+	tokenizer.DOT:               PrecCall,      // x.y (selector/method call)
+	tokenizer.LPAREN:            PrecCall,      // x() (function call)
+
 	// Standard Go operators (to be added as tokenizer is extended)
 	// These would be added when full Go expression parsing is needed
 	// For now, focusing on Dingo-specific operators per the plan
@@ -83,6 +87,8 @@ func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	p.registerPrefix(tokenizer.INT, p.parseIntegerLiteral)
 	p.registerPrefix(tokenizer.FLOAT, p.parseFloatLiteral)
 	p.registerPrefix(tokenizer.STRING, p.parseStringLiteral)
+	p.registerPrefix(tokenizer.TRUE, p.parseBoolLiteral)
+	p.registerPrefix(tokenizer.FALSE, p.parseBoolLiteral)
 	p.registerPrefix(tokenizer.LPAREN, p.parseGroupedOrLambda)
 	p.registerPrefix(tokenizer.PIPE, p.parseLambda) // Rust-style lambda: |x| expr
 	p.registerPrefix(tokenizer.MATCH, p.parseMatchExpr) // Match expressions
@@ -91,6 +97,10 @@ func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	p.registerInfix(tokenizer.QUESTION, p.parseErrorPropagation)
 	p.registerInfix(tokenizer.QUESTION_QUESTION, p.parseNullCoalescing)
 	p.registerInfix(tokenizer.QUESTION_DOT, p.parseSafeNavigation)
+
+	// Register infix parse functions for standard Go operators
+	p.registerInfix(tokenizer.DOT, p.parseSelectorExpr)
+	p.registerInfix(tokenizer.LPAREN, p.parseCallExpr)
 
 	// Initialize current and peek tokens
 	p.nextToken()
@@ -113,6 +123,29 @@ func (p *PrattParser) registerInfix(tokenType tokenizer.TokenKind, fn infixParse
 func (p *PrattParser) nextToken() {
 	p.curToken = p.peekToken
 	p.peekToken = p.tokenizer.NextToken()
+}
+
+// parserState captures the full state for lookahead/backtracking
+type parserState struct {
+	curToken  tokenizer.Token
+	peekToken tokenizer.Token
+	tokPos    int
+}
+
+// saveState saves the current parser state for backtracking
+func (p *PrattParser) saveState() parserState {
+	return parserState{
+		curToken:  p.curToken,
+		peekToken: p.peekToken,
+		tokPos:    p.tokenizer.SavePos(),
+	}
+}
+
+// restoreState restores a previously saved parser state
+func (p *PrattParser) restoreState(state parserState) {
+	p.curToken = state.curToken
+	p.peekToken = state.peekToken
+	p.tokenizer.RestorePos(state.tokPos)
 }
 
 // curTokenIs checks if current token is of given type
@@ -206,8 +239,28 @@ func (p *PrattParser) parseFloatLiteral() ast.Expr {
 }
 
 func (p *PrattParser) parseStringLiteral() ast.Expr {
-	// TODO: Return proper ast.BasicLit node
-	return nil
+	return &ast.RawExpr{
+		StartPos: p.curToken.Pos,
+		EndPos:   p.curToken.End,
+		Text:     p.curToken.Lit,
+	}
+}
+
+func (p *PrattParser) parseBoolLiteral() ast.Expr {
+	lit := p.curToken.Lit
+	if lit == "" {
+		// Fallback if tokenizer doesn't provide literal text
+		if p.curToken.Kind == tokenizer.TRUE {
+			lit = "true"
+		} else {
+			lit = "false"
+		}
+	}
+	return &ast.RawExpr{
+		StartPos: p.curToken.Pos,
+		EndPos:   p.curToken.End,
+		Text:     lit,
+	}
 }
 
 // parseGroupedOrLambda handles both grouped expressions and TypeScript lambdas
@@ -240,13 +293,11 @@ func (p *PrattParser) parseGroupedExpression() ast.Expr {
 // parseErrorPropagation handles the postfix ? operator (x?)
 func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 	questionPos := p.curToken.Pos
+	p.nextToken() // Consume the ? token
 
-	// The left operand needs to be convertible to go/ast.Expr
-	// For now, we'll store nil and handle this during AST transformation
-	// TODO: Properly convert Dingo AST to go/ast during semantic analysis
 	return &ast.ErrorPropExpr{
 		Question: questionPos,
-		Operand:  nil, // Will be filled during AST transformation
+		Operand:  left, // Capture the operand expression
 		// ResultType and ErrorType will be filled by type checker during semantic analysis
 	}
 }
@@ -262,13 +313,12 @@ func (p *PrattParser) parseNullCoalescing(left ast.Expr) ast.Expr {
 
 	// Right-associative: use same precedence (not precedence + 1)
 	// This makes a ?? b ?? c parse as a ?? (b ?? c)
-	_ = p.ParseExpression(precedence) // Parse right, but not used yet
+	right := p.ParseExpression(precedence)
 
-	// TODO: Convert Dingo AST nodes to go/ast.Expr during transformation
 	return &ast.NullCoalesceExpr{
-		Left:  nil, // Will be filled during AST transformation
+		Left:  left,
 		OpPos: opPos,
-		Right: nil, // Will be filled during AST transformation
+		Right: right,
 	}
 }
 
@@ -282,7 +332,7 @@ func (p *PrattParser) parseSafeNavigation(left ast.Expr) ast.Expr {
 	}
 
 	// Create identifier using Dingo AST
-	_ = &ast.DingoIdent{ // Parse but not used yet
+	sel := &ast.DingoIdent{
 		NamePos: p.curToken.Pos,
 		Name:    p.curToken.Lit,
 	}
@@ -318,21 +368,19 @@ func (p *PrattParser) parseSafeNavigation(left ast.Expr) ast.Expr {
 			return nil
 		}
 
-		// TODO: Convert Dingo AST to go/ast during transformation
 		return &ast.SafeNavCallExpr{
-			X:     nil, // Will be filled during transformation
+			X:     left,
 			OpPos: opPos,
-			Fun:   nil, // Will be filled during transformation
-			Args:  nil, // Will be filled during transformation
+			Fun:   sel,
+			Args:  args,
 		}
 	}
 
 	// Field access: x?.field
-	// TODO: Convert Dingo AST to go/ast during transformation
 	return &ast.SafeNavExpr{
-		X:     nil, // Will be filled during transformation
+		X:     left,
 		OpPos: opPos,
-		Sel:   nil, // Will be filled during transformation
+		Sel:   sel,
 	}
 }
 
@@ -361,4 +409,103 @@ func (p *PrattParser) peekError(t tokenizer.TokenKind) {
 // Errors returns all parse errors encountered
 func (p *PrattParser) Errors() []ParseError {
 	return p.errors
+}
+
+// parseSelectorExpr handles the infix DOT operator (x.field or pkg.Func)
+// For qualified identifiers like fmt.Sprintf, this builds the full expression
+func (p *PrattParser) parseSelectorExpr(left ast.Expr) ast.Expr {
+	// Current token is DOT (not used in RawExpr approach)
+	_ = p.curToken.Pos
+
+	// Expect identifier after DOT
+	if !p.expectPeek(tokenizer.IDENT) {
+		p.addError("expected identifier after '.'")
+		return nil
+	}
+
+	// Get the selector identifier
+	selName := p.curToken.Lit
+	selEnd := p.curToken.End
+
+	// Build the full selector expression as RawExpr
+	// We need to reconstruct the full text: left.selector
+	leftText := ""
+	if ident, ok := left.(*ast.DingoIdent); ok {
+		leftText = ident.Name
+	} else if raw, ok := left.(*ast.RawExpr); ok {
+		leftText = raw.Text
+	} else {
+		// Fallback: use left's String() method
+		leftText = left.String()
+	}
+
+	fullText := leftText + "." + selName
+
+	return &ast.RawExpr{
+		StartPos: left.Pos(),
+		EndPos:   selEnd,
+		Text:     fullText,
+	}
+}
+
+// parseCallExpr handles the infix LPAREN operator (function calls)
+// This allows parsing expressions like fmt.Sprintf("hello %s", name)
+func (p *PrattParser) parseCallExpr(left ast.Expr) ast.Expr {
+	// Current token is LPAREN (not used in RawExpr approach)
+	_ = p.curToken.Pos
+
+	// Parse arguments
+	args := []string{}
+	if !p.peekTokenIs(tokenizer.RPAREN) {
+		// Parse first argument
+		p.nextToken()
+		arg := p.ParseExpression(PrecLowest)
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+
+		// Parse remaining arguments
+		for p.peekTokenIs(tokenizer.COMMA) {
+			p.nextToken() // consume comma
+			p.nextToken() // move to next argument
+			arg := p.ParseExpression(PrecLowest)
+			if arg != nil {
+				args = append(args, arg.String())
+			}
+		}
+	}
+
+	// Expect closing paren
+	if !p.expectPeek(tokenizer.RPAREN) {
+		return nil
+	}
+	rparenPos := p.curToken.End
+
+	// Build the full call expression as RawExpr
+	funcText := left.String()
+	argsText := ""
+	for i, arg := range args {
+		if i > 0 {
+			argsText += ", "
+		}
+		argsText += arg
+	}
+
+	fullText := funcText + "(" + argsText + ")"
+
+	return &ast.RawExpr{
+		StartPos: left.Pos(),
+		EndPos:   rparenPos,
+		Text:     fullText,
+	}
+}
+
+// addError is a helper to add errors with current token position
+func (p *PrattParser) addError(msg string) {
+	p.errors = append(p.errors, ParseError{
+		Pos:     p.curToken.Pos,
+		Line:    p.curToken.Line,
+		Column:  p.curToken.Column,
+		Message: msg,
+	})
 }

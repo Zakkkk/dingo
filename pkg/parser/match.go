@@ -159,6 +159,11 @@ func (p *PrattParser) parseMatchArm() *ast.MatchArm {
 		arm.Arrow = p.curToken.Pos
 	}
 
+	// Skip any newlines between arrow and body
+	for p.peekTokenIs(tokenizer.NEWLINE) {
+		p.nextToken()
+	}
+
 	// Move to body
 	p.nextToken()
 

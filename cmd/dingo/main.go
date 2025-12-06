@@ -2,9 +2,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,13 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
-	"github.com/MadAppGang/dingo/pkg/generator"
-	"github.com/MadAppGang/dingo/pkg/parser"
-	"github.com/MadAppGang/dingo/pkg/plugin"
-	"github.com/MadAppGang/dingo/pkg/plugin/builtin"
-	"github.com/MadAppGang/dingo/pkg/preprocessor"
-	"github.com/MadAppGang/dingo/pkg/sourcemap"
-	"github.com/MadAppGang/dingo/pkg/typeloader"
+	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
 )
 
@@ -68,11 +60,9 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 
 func buildCmd() *cobra.Command {
 	var (
-		output               string
-		outdir               string
-		watch                bool
-		multiValueReturnMode string
-		transpileMode        string
+		output string
+		outdir string
+		watch  bool
 	)
 
 	cmd := &cobra.Command{
@@ -83,40 +73,26 @@ func buildCmd() *cobra.Command {
 The transpiler:
 1. Parses Dingo source code into AST
 2. Transforms Dingo-specific features to Go equivalents
-3. Generates idiomatic Go code with source maps
-
-When using --outdir (or configured in dingo.toml), all .go files are automatically
-copied to create a complete, buildable output directory.
+3. Generates idiomatic Go code
 
 Examples:
   dingo build hello.dingo              # Generates hello.go in same directory
   dingo build -o output.go main.dingo  # Custom output file
-  dingo build --outdir build/ ./...    # Output all to build/ (mirrors structure)
-  dingo build -O build/ ./...          # Short form
-
-Config file (dingo.toml):
-  [build]
-  outdir = "build/"                    # Sets default output directory`,
+  dingo build ./...                    # Build all .dingo files in workspace`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBuild(args, output, outdir, watch, multiValueReturnMode, transpileMode)
+			return runBuild(args, output, outdir, watch)
 		},
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (single file only)")
 	cmd.Flags().StringVarP(&outdir, "outdir", "O", "", "Output directory (mirrors source structure)")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for file changes and rebuild")
-	cmd.Flags().StringVar(&multiValueReturnMode, "multi-value-return", "full",
-		"Multi-value return propagation mode: 'full' (default, supports (A,B,error)) or 'single' (restricts to (T,error))")
-	cmd.Flags().StringVar(&transpileMode, "mode", "",
-		"Transpilation mode: 'legacy' (preprocessor-based), 'ast' (new AST parser), 'hybrid' (AST with fallback). Defaults to config or 'legacy'")
 
 	return cmd
 }
 
 func runCmd() *cobra.Command {
-	var multiValueReturnMode string
-
 	cmd := &cobra.Command{
 		Use:   "run [file.dingo] [-- args...]",
 		Short: "Compile and run a Dingo program",
@@ -132,8 +108,7 @@ to your program after -- (double dash).
 Examples:
   dingo run hello.dingo
   dingo run main.dingo -- arg1 arg2 arg3
-  dingo run server.dingo -- --port 8080
-  dingo run --multi-value-return=single file.dingo`,
+  dingo run server.dingo -- --port 8080`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputFile := args[0]
@@ -144,12 +119,9 @@ Examples:
 				programArgs = args[1:]
 			}
 
-			return runDingoFile(inputFile, programArgs, multiValueReturnMode)
+			return runDingoFile(inputFile, programArgs)
 		},
 	}
-
-	cmd.Flags().StringVar(&multiValueReturnMode, "multi-value-return", "full",
-		"Multi-value return propagation mode: 'full' (default, supports (A,B,error)) or 'single' (restricts to (T,error))")
 
 	return cmd
 }
@@ -164,40 +136,18 @@ func versionCmd() *cobra.Command {
 	}
 }
 
-func runBuild(files []string, output, outdir string, watch bool, _ string, modeFlag string) error {
+func runBuild(files []string, output, outdir string, watch bool) error {
 	// Validate mutually exclusive flags
 	if output != "" && outdir != "" {
 		return fmt.Errorf("--output and --outdir are mutually exclusive")
 	}
 
-	// Load main Dingo configuration (C1: Config Integration)
-	//
-	// Priority order:
-	// 1. dingo.toml in current directory
-	// 2. ~/.dingo/config.toml
-	// 3. Built-in defaults
+	// Load config (for future use)
 	cfg, err := config.Load(nil)
 	if err != nil {
-		// Non-fatal: fall back to defaults and warn
 		cfg = config.DefaultConfig()
-		fmt.Fprintf(os.Stderr, "Warning: config load failed, using defaults: %v\n", err)
 	}
-
-	// CLI flag overrides config for outdir
-	effectiveOutdir := outdir
-	if effectiveOutdir == "" && cfg.Build.OutDir != "" {
-		effectiveOutdir = cfg.Build.OutDir
-	}
-
-	// CLI flag overrides config for transpile mode
-	// Priority: CLI flag > config > default ("legacy")
-	effectiveMode := cfg.Build.TranspileMode
-	if modeFlag != "" {
-		effectiveMode = modeFlag
-	}
-	if effectiveMode == "" {
-		effectiveMode = "legacy" // Default to legacy if not configured
-	}
+	_ = cfg // Reserved for future config options
 
 	// Expand workspace patterns (./..., ./pkg/...) to actual files
 	expandedFiles, err := expandWorkspacePatterns(files)
@@ -214,42 +164,25 @@ func runBuild(files []string, output, outdir string, watch bool, _ string, modeF
 	// Print build start
 	buildUI.PrintBuildStart(len(expandedFiles))
 
-	// TODO: Output resolver is incomplete - disabled for now
-	// For now, output files are written alongside source files (.go)
-	// When re-implementing, restore the OutputResolver type and logic
-	if effectiveOutdir != "" {
-		return fmt.Errorf("--outdir flag is not currently supported (OutputResolver incomplete)")
+	// Output directory not yet supported
+	if outdir != "" {
+		return fmt.Errorf("--outdir flag is not currently supported")
 	}
-	_ = effectiveOutdir // Suppress unused warning (already checked above)
-
-	// Create BuildCache for this build invocation
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get working directory: %w", err)
-	}
-	buildCache := typeloader.NewBuildCache(typeloader.LoaderConfig{
-		WorkingDir: cwd,
-		FailFast:   true,
-	})
-	defer buildCache.Clear()
 
 	// Build each file
 	success := true
 	var lastError error
 	transpiled := 0
-	_ = transpiled // Will be used in summary (currently disabled)
 
 	for _, file := range expandedFiles {
 		var outputPath string
 
-		// TODO: OutputResolver code disabled (incomplete implementation)
-		// if resolver != nil { ... }
 		if output != "" {
 			// Using single output file mode
 			outputPath = output
 		}
 
-		if err := buildFile(file, outputPath, buildUI, cfg, buildCache, effectiveMode); err != nil {
+		if err := buildFile(file, outputPath, buildUI); err != nil {
 			success = false
 			lastError = err
 			buildUI.PrintError(err.Error())
@@ -258,14 +191,9 @@ func runBuild(files []string, output, outdir string, watch bool, _ string, modeF
 		transpiled++
 	}
 
-	// TODO: Auto-copy pure .go files disabled (OutputResolver incomplete)
-	_ = transpiled // Suppress unused (would be used in summary)
-
 	// Print summary
 	if success {
-		summary := ""
-		// TODO: resolver != nil check disabled (OutputResolver incomplete)
-		// summary = fmt.Sprintf("Transpiled: %d, Copied: %d, Skipped (up-to-date): %d", transpiled, copied, skipped)
+		summary := fmt.Sprintf("Transpiled: %d files", transpiled)
 		buildUI.PrintSummary(true, summary)
 		if watch {
 			fmt.Println()
@@ -279,12 +207,7 @@ func runBuild(files []string, output, outdir string, watch bool, _ string, modeF
 	return nil
 }
 
-func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput, cfg *config.Config, buildCache *typeloader.BuildCache, mode string) error {
-	// TODO(phase-7): Integrate mode switching when AST pipeline is complete
-	// For now, mode parameter is accepted but legacy pipeline is always used
-	// Future: Check mode and dispatch to appropriate pipeline (legacy/ast/hybrid)
-	_ = mode // Suppress unused warning until mode switching is implemented
-
+func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 	if outputPath == "" {
 		// Default: replace .dingo with .go
 		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
@@ -298,192 +221,58 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput, cfg *confi
 	buildUI.PrintFileStart(inputPath, outputPath)
 
 	// Step 1: Read source
+	readStart := time.Now()
 	src, err := os.ReadFile(inputPath)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Step 2: Preprocess (with dynamic type loading via BuildCache)
-	prepStart := time.Now()
-	var goSource string
-	var metadata []preprocessor.TransformMetadata // Phase 3: Collect metadata for PostASTGenerator
-	var prepDuration time.Duration
+	buildUI.PrintStep(ui.Step{
+		Name:     "Read",
+		Status:   ui.StepSuccess,
+		Duration: time.Since(readStart),
+	})
 
-	// Use NewWithTypeLoading if BuildCache is available, otherwise fall back to legacy behavior
-	if buildCache != nil {
-		// Note: WorkingDir is handled internally by typeloader using current directory
-		prep, err := preprocessor.NewWithTypeLoading(src, cfg, buildCache)
-		if err != nil {
-			buildUI.PrintStep(ui.Step{
-				Name:     "Preprocess",
-				Status:   ui.StepError,
-				Duration: time.Since(prepStart),
-			})
-			return fmt.Errorf("type loading failed: %w", err)
-		}
-
-		var legacyMap *preprocessor.SourceMap
-		goSource, legacyMap, metadata, err = prep.ProcessWithMetadata()
-		_ = legacyMap // Discard legacy map - Phase 3 uses PostASTGenerator
-		prepDuration = time.Since(prepStart)
-		if err != nil {
-			buildUI.PrintStep(ui.Step{
-				Name:     "Preprocess",
-				Status:   ui.StepError,
-				Duration: prepDuration,
-			})
-			return fmt.Errorf("preprocessing error: %w", err)
-		}
-	} else {
-		// Fall back to legacy behavior (for backwards compatibility)
-		// For single-file builds, create a simple cache for just this file
-		pkgDir := filepath.Dir(inputPath)
-		cache := preprocessor.NewFunctionExclusionCache(pkgDir)
-		err = cache.ScanPackage([]string{inputPath}) // Only scan the file being built
-		if err != nil {
-			// Fall back to no cache if scanning fails (e.g., syntax errors in .dingo file)
-			prep := preprocessor.NewWithMainConfig(src, cfg)
-			var legacyMap *preprocessor.SourceMap
-			goSource, legacyMap, metadata, err = prep.ProcessWithMetadata()
-			_ = legacyMap // Discard legacy map - Phase 3 uses PostASTGenerator
-			prepDuration = time.Since(prepStart)
-			if err != nil {
-				buildUI.PrintStep(ui.Step{
-					Name:     "Preprocess",
-					Status:   ui.StepError,
-					Duration: prepDuration,
-				})
-				return fmt.Errorf("preprocessing error: %w", err)
-			}
-		} else {
-			// Cache scan successful, use preprocessor with unqualified import inference
-			prep := preprocessor.NewWithCache(src, cache)
-			var legacyMap *preprocessor.SourceMap
-			goSource, legacyMap, metadata, err = prep.ProcessWithMetadata()
-			_ = legacyMap // Discard legacy map - Phase 3 uses PostASTGenerator
-			prepDuration = time.Since(prepStart)
-			if err != nil {
-				buildUI.PrintStep(ui.Step{
-					Name:     "Preprocess",
-					Status:   ui.StepError,
-					Duration: prepDuration,
-				})
-				return fmt.Errorf("preprocessing error: %w", err)
-			}
-		}
+	// Step 2: Transpile using pure AST pipeline
+	transpileStart := time.Now()
+	goSource, err := transpiler.PureASTTranspile(src, inputPath)
+	if err != nil {
+		buildUI.PrintStep(ui.Step{
+			Name:     "Transpile",
+			Status:   ui.StepError,
+			Duration: time.Since(transpileStart),
+		})
+		return fmt.Errorf("transpilation error: %w", err)
 	}
 
 	buildUI.PrintStep(ui.Step{
-		Name:     "Preprocess",
+		Name:     "Transpile",
 		Status:   ui.StepSuccess,
-		Duration: prepDuration,
+		Duration: time.Since(transpileStart),
 	})
 
-	// Step 3: Parse preprocessed Go
-	parseStart := time.Now()
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments | parser.SkipPreprocess)
-	parseDuration := time.Since(parseStart)
-
-	if err != nil {
-		buildUI.PrintStep(ui.Step{
-			Name:     "Parse",
-			Status:   ui.StepError,
-			Duration: parseDuration,
-		})
-		return fmt.Errorf("parse error: %w", err)
-	}
-
-	buildUI.PrintStep(ui.Step{
-		Name:     "Parse",
-		Status:   ui.StepSuccess,
-		Duration: parseDuration,
-	})
-
-	// DEBUG: Check if markers are in AST
-	// Step 2: Setup plugins
-	registry, err := builtin.NewDefaultRegistry()
-	if err != nil {
-		buildUI.PrintStep(ui.Step{
-			Name:   "Setup",
-			Status: ui.StepError,
-		})
-		return fmt.Errorf("failed to setup plugins: %w", err)
-	}
-
-	// Step 3: Generate with plugins
-	genStart := time.Now()
-	logger := plugin.NewNoOpLogger() // Silent logger for CLI
-	gen, err := generator.NewWithPlugins(fset, registry, logger)
-	if err != nil {
-		buildUI.PrintStep(ui.Step{
-			Name:     "Generate",
-			Status:   ui.StepError,
-			Duration: time.Since(genStart),
-		})
-		return fmt.Errorf("failed to create generator: %w", err)
-	}
-
-	outputCode, err := gen.Generate(file)
-	genDuration := time.Since(genStart)
-
-	if err != nil {
-		buildUI.PrintStep(ui.Step{
-			Name:     "Generate",
-			Status:   ui.StepError,
-			Duration: genDuration,
-		})
-		return fmt.Errorf("generation error: %w", err)
-	}
-
-	buildUI.PrintStep(ui.Step{
-		Name:     "Generate",
-		Status:   ui.StepSuccess,
-		Duration: genDuration,
-	})
-
-	// Step 4: Write .go file
+	// Step 3: Write .go file
 	writeStart := time.Now()
-	if err := os.WriteFile(outputPath, outputCode, 0o644); err != nil {
-		writeDuration := time.Since(writeStart)
+	if err := os.WriteFile(outputPath, goSource, 0o644); err != nil {
 		buildUI.PrintStep(ui.Step{
 			Name:     "Write",
 			Status:   ui.StepError,
-			Duration: writeDuration,
+			Duration: time.Since(writeStart),
 		})
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
-	// Phase 3: Generate source map AFTER go/printer using PostASTGenerator
-	// CRITICAL: Parse the WRITTEN .go file to get accurate FileSet positions
-	// (The in-memory version may have different line numbers after go/printer formatting)
-	sourceMapPath := outputPath + ".map"
-	sourceMap, err := sourcemap.GenerateFromFiles(inputPath, outputPath, metadata)
-	if err != nil {
-		// Non-fatal: just log warning
-		buildUI.PrintInfo(fmt.Sprintf("Warning: source map generation failed: %v", err))
-	} else {
-		// Write source map
-		sourceMapJSON, _ := json.MarshalIndent(sourceMap, "", "  ")
-		if err := os.WriteFile(sourceMapPath, sourceMapJSON, 0o644); err != nil {
-			// Non-fatal: just log warning
-			buildUI.PrintInfo(fmt.Sprintf("Warning: failed to write source map: %v", err))
-		}
-	}
-
-	writeDuration := time.Since(writeStart)
-
 	buildUI.PrintStep(ui.Step{
 		Name:     "Write",
 		Status:   ui.StepSuccess,
-		Duration: writeDuration,
-		Message:  fmt.Sprintf("%d bytes written", len(outputCode)),
+		Duration: time.Since(writeStart),
+		Message:  fmt.Sprintf("%d bytes written", len(goSource)),
 	})
 
 	return nil
 }
 
-func runDingoFile(inputPath string, programArgs []string, _ string) error {
+func runDingoFile(inputPath string, programArgs []string) error {
 	// Create beautiful output
 	buildUI := ui.NewBuildOutput()
 
@@ -502,13 +291,6 @@ func runDingoFile(inputPath string, programArgs []string, _ string) error {
 	// Step 1: Build (transpile)
 	buildStart := time.Now()
 
-	// Load main Dingo configuration (C1: Config Integration)
-	cfg, err := config.Load(nil)
-	if err != nil {
-		// Non-fatal: fall back to defaults
-		cfg = config.DefaultConfig()
-	}
-
 	// Read source
 	src, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -516,52 +298,10 @@ func runDingoFile(inputPath string, programArgs []string, _ string) error {
 		return err
 	}
 
-	// Preprocess (with main config + package context for unqualified imports)
-	var goSource string
-	pkgDir := filepath.Dir(inputPath)
-	pkgCtx, err := preprocessor.NewPackageContext(pkgDir, preprocessor.DefaultBuildOptions())
+	// Transpile using pure AST pipeline
+	goCode, err := transpiler.PureASTTranspile(src, inputPath)
 	if err != nil {
-		// Fall back to no cache if package context fails
-		prep := preprocessor.NewWithMainConfig(src, cfg)
-		goSource, _, err = prep.Process()
-		if err != nil {
-			buildUI.PrintError(fmt.Sprintf("Preprocessing error: %v", err))
-			return err
-		}
-	} else {
-		prep := preprocessor.NewWithCache(src, pkgCtx.GetCache())
-		goSource, _, err = prep.Process()
-		if err != nil {
-			buildUI.PrintError(fmt.Sprintf("Preprocessing error: %v", err))
-			return err
-		}
-	}
-
-	// Parse
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, inputPath, []byte(goSource), parser.ParseComments | parser.SkipPreprocess)
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Parse error: %v", err))
-		return err
-	}
-
-	// Generate with plugins
-	registry, err := builtin.NewDefaultRegistry()
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Failed to setup plugins: %v", err))
-		return err
-	}
-
-	logger := plugin.NewNoOpLogger()
-	gen, err := generator.NewWithPlugins(fset, registry, logger)
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Failed to create generator: %v", err))
-		return err
-	}
-
-	goCode, err := gen.Generate(file)
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Generation error: %v", err))
+		buildUI.PrintError(fmt.Sprintf("Transpilation error: %v", err))
 		return err
 	}
 

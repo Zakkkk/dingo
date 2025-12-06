@@ -69,27 +69,6 @@ func ParseFile(fset *gotoken.FileSet, filename string, src []byte, mode Mode) (*
 	return dingoFile.File, nil
 }
 
-// TokenMapping tracks the relationship between Dingo and Go source positions
-type TokenMapping struct {
-	DingoStart, DingoEnd int    // Position in original Dingo source
-	GoStart, GoEnd       int    // Position in transformed Go source
-	Kind                 string // Type of transformation
-}
-
-// TransformToGo transforms Dingo source to valid Go source.
-//
-// DEPRECATED: Use pkg/ast.TransformSource() instead.
-// This function is kept for backward compatibility but is no longer
-// the primary transformation path. The new transpiler uses:
-//
-//	dingoast.TransformSource(src) → transformed Go source
-//
-// See pkg/transpiler/pure_pipeline.go for the new pipeline.
-func TransformToGo(src []byte) ([]byte, []TokenMapping, error) {
-	// This function is deprecated - use pkg/ast.TransformSource() instead
-	return src, nil, nil
-}
-
 // ParseExpr parses a Dingo expression and returns a Go AST expression.
 func ParseExpr(src string) (ast.Expr, error) {
 	// Use standard Go parser for now

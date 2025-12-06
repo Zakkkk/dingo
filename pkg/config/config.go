@@ -88,11 +88,97 @@ type BuildConfig struct {
 
 // Config represents the complete Dingo project configuration
 type Config struct {
-	Features  FeatureConfig   `toml:"features"`
-	Match     MatchConfig     `toml:"match"`
-	SourceMap SourceMapConfig `toml:"sourcemaps"`
-	Debug     DebugConfig     `toml:"debug"`
-	Build     BuildConfig     `toml:"build"`
+	Features      FeatureConfig   `toml:"features"`
+	FeatureMatrix FeatureMatrix   `toml:"feature_matrix"`
+	Match         MatchConfig     `toml:"match"`
+	SourceMap     SourceMapConfig `toml:"sourcemaps"`
+	Debug         DebugConfig     `toml:"debug"`
+	Build         BuildConfig     `toml:"build"`
+}
+
+// FeatureMatrix controls which language features are enabled/disabled.
+// All features are enabled by default. Setting a feature to false disables it.
+// When a disabled feature's syntax is used, the transpiler will report an error.
+type FeatureMatrix struct {
+	// Character-level features (transform raw source)
+	Enum             *bool `toml:"enum"`              // enum declarations
+	Match            *bool `toml:"match"`             // match expressions
+	EnumConstructors *bool `toml:"enum_constructors"` // Variant() -> NewVariant()
+	ErrorProp        *bool `toml:"error_prop"`        // ? operator for error propagation
+	GuardLet         *bool `toml:"guard_let"`         // guard let expressions
+	SafeNavStatements *bool `toml:"safe_nav_statements"` // ?. in statements
+	SafeNav          *bool `toml:"safe_nav"`          // ?. operator
+	NullCoalesce     *bool `toml:"null_coalesce"`     // ?? operator
+	Lambdas          *bool `toml:"lambdas"`           // |x| expr and x => expr
+
+	// Token-level features (transform after tokenization)
+	TypeAnnotations *bool `toml:"type_annotations"` // x: Type syntax
+	Generics        *bool `toml:"generics"`         // <T> syntax
+	LetBinding      *bool `toml:"let_binding"`      // let x = expr
+}
+
+// ToEnabledFeatures converts the FeatureMatrix to a map[string]bool
+// for use with the feature engine. Features not explicitly set are enabled by default.
+func (fm *FeatureMatrix) ToEnabledFeatures() map[string]bool {
+	result := make(map[string]bool)
+
+	// Helper to add feature if explicitly set
+	addIfSet := func(name string, val *bool) {
+		if val != nil {
+			result[name] = *val
+		}
+	}
+
+	// Character-level features
+	addIfSet("enum", fm.Enum)
+	addIfSet("match", fm.Match)
+	addIfSet("enum_constructors", fm.EnumConstructors)
+	addIfSet("error_prop", fm.ErrorProp)
+	addIfSet("guard_let", fm.GuardLet)
+	addIfSet("safe_nav_statements", fm.SafeNavStatements)
+	addIfSet("safe_nav", fm.SafeNav)
+	addIfSet("null_coalesce", fm.NullCoalesce)
+	addIfSet("lambdas", fm.Lambdas)
+
+	// Token-level features
+	addIfSet("type_annotations", fm.TypeAnnotations)
+	addIfSet("generics", fm.Generics)
+	addIfSet("let_binding", fm.LetBinding)
+
+	return result
+}
+
+// IsFeatureEnabled checks if a specific feature is enabled.
+// Returns true if not explicitly disabled (features enabled by default).
+func (fm *FeatureMatrix) IsFeatureEnabled(name string) bool {
+	switch name {
+	case "enum":
+		return fm.Enum == nil || *fm.Enum
+	case "match":
+		return fm.Match == nil || *fm.Match
+	case "enum_constructors":
+		return fm.EnumConstructors == nil || *fm.EnumConstructors
+	case "error_prop":
+		return fm.ErrorProp == nil || *fm.ErrorProp
+	case "guard_let":
+		return fm.GuardLet == nil || *fm.GuardLet
+	case "safe_nav_statements":
+		return fm.SafeNavStatements == nil || *fm.SafeNavStatements
+	case "safe_nav":
+		return fm.SafeNav == nil || *fm.SafeNav
+	case "null_coalesce":
+		return fm.NullCoalesce == nil || *fm.NullCoalesce
+	case "lambdas":
+		return fm.Lambdas == nil || *fm.Lambdas
+	case "type_annotations":
+		return fm.TypeAnnotations == nil || *fm.TypeAnnotations
+	case "generics":
+		return fm.Generics == nil || *fm.Generics
+	case "let_binding":
+		return fm.LetBinding == nil || *fm.LetBinding
+	default:
+		return true // Unknown features enabled by default
+	}
 }
 
 // ResultTypeConfig controls Result<T, E> type behavior

@@ -42,11 +42,15 @@ func TestASTTranspileBasic(t *testing.T) {
 		{
 			name:        "Dingo type annotation",
 			source:      "package main\n\nfunc test(x: int) int {\n\treturn x\n}\n\nfunc main() {}",
-			expectError: true, // Currently fails - AST parser doesn't handle type annotations yet
+			expectError: false, // Type annotations are now transformed by the pipeline
 			checkOutput: func(t *testing.T, result *TranspileResult) {
-				// TODO: Once AST parser handles type annotations, update this test
-				// Type annotation should be transformed
-				t.Skip("AST parser doesn't yet handle Dingo type annotations")
+				if result == nil {
+					t.Fatal("expected result, got nil")
+				}
+				// Type annotation (x: int) should be transformed to Go syntax (x int)
+				if !strings.Contains(string(result.GoCode), "x int") {
+					t.Errorf("expected type annotation to be transformed, got: %s", result.GoCode)
+				}
 			},
 		},
 	}

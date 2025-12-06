@@ -1,0 +1,273 @@
+package codegen
+
+import (
+	"go/ast"
+	"strings"
+	"testing"
+
+	dingoast "github.com/MadAppGang/dingo/pkg/ast"
+)
+
+func TestErrorPropGenerator_Simple(t *testing.T) {
+	// Test simple function call: readFile(path)?
+	callExpr := &ast.CallExpr{
+		Fun: &ast.Ident{Name: "readFile"},
+		Args: []ast.Expr{
+			&ast.Ident{Name: "path"},
+		},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+	want := `tmp, err := readFile(path)
+if err != nil {
+	return nil, err
+}
+tmp`
+
+	if got != want {
+		t.Errorf("Generated code mismatch:\nGot:\n%s\n\nWant:\n%s", got, want)
+	}
+}
+
+func TestErrorPropGenerator_Chained(t *testing.T) {
+	// Test chained call: foo().bar()?
+	callExpr := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun: &ast.Ident{Name: "foo"},
+			},
+			Sel: &ast.Ident{Name: "bar"},
+		},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	// Should generate error propagation for the chained call
+	if !strings.Contains(got, "tmp, err := foo().bar()") {
+		t.Errorf("Expected chained call in generated code, got:\n%s", got)
+	}
+	if !strings.Contains(got, "if err != nil") {
+		t.Errorf("Expected error check in generated code, got:\n%s", got)
+	}
+	if !strings.Contains(got, "return nil, err") {
+		t.Errorf("Expected error return in generated code, got:\n%s", got)
+	}
+}
+
+func TestErrorPropGenerator_NestedCall(t *testing.T) {
+	// Test nested call: process(getData())?
+	innerCall := &ast.CallExpr{
+		Fun: &ast.Ident{Name: "getData"},
+	}
+	outerCall := &ast.CallExpr{
+		Fun:  &ast.Ident{Name: "process"},
+		Args: []ast.Expr{innerCall},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: outerCall,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	// Should generate error propagation for the nested call
+	if !strings.Contains(got, "tmp, err := process(getData())") {
+		t.Errorf("Expected nested call in generated code, got:\n%s", got)
+	}
+	if !strings.Contains(got, "if err != nil") {
+		t.Errorf("Expected error check in generated code, got:\n%s", got)
+	}
+}
+
+func TestErrorPropGenerator_MultipleInSequence(t *testing.T) {
+	// Test multiple ? operators in sequence (each should get unique variables)
+	// First: expr1?
+	expr1 := &dingoast.ErrorPropExpr{
+		Operand: &ast.CallExpr{
+			Fun: &ast.Ident{Name: "first"},
+		},
+	}
+	gen1 := NewErrorPropGenerator(expr1)
+	result1 := gen1.Generate()
+	code1 := string(result1.Output)
+
+	// Second: expr2? (using same generator to advance counter)
+	expr2 := &dingoast.ErrorPropExpr{
+		Operand: &ast.CallExpr{
+			Fun: &ast.Ident{Name: "second"},
+		},
+	}
+	gen2 := NewErrorPropGenerator(expr2)
+	result2 := gen2.Generate()
+	code2 := string(result2.Output)
+
+	// First should use tmp, err
+	if !strings.Contains(code1, "tmp, err := first()") {
+		t.Errorf("First expression should use 'tmp, err', got:\n%s", code1)
+	}
+
+	// Second should also use tmp, err (separate generator, separate counter)
+	if !strings.Contains(code2, "tmp, err := second()") {
+		t.Errorf("Second expression should use 'tmp, err' (separate generator), got:\n%s", code2)
+	}
+}
+
+func TestErrorPropGenerator_VariableNaming(t *testing.T) {
+	// Test that variable naming follows convention: tmp, tmp1, tmp2, etc.
+	gen := NewBaseGenerator()
+
+	// First variable should be "tmp"
+	var1 := gen.TempVar("tmp")
+	if var1 != "tmp" {
+		t.Errorf("First TempVar should be 'tmp', got %q", var1)
+	}
+
+	// Second variable should be "tmp1"
+	var2 := gen.TempVar("tmp")
+	if var2 != "tmp1" {
+		t.Errorf("Second TempVar should be 'tmp1', got %q", var2)
+	}
+
+	// Third variable should be "tmp2"
+	var3 := gen.TempVar("tmp")
+	if var3 != "tmp2" {
+		t.Errorf("Third TempVar should be 'tmp2', got %q", var3)
+	}
+
+	// Different base should still follow pattern
+	err1 := gen.TempVar("err")
+	if err1 != "err3" {
+		t.Errorf("Fourth TempVar with base 'err' should be 'err3', got %q", err1)
+	}
+}
+
+func TestErrorPropGenerator_SelectorExpr(t *testing.T) {
+	// Test selector expression: obj.method()?
+	callExpr := &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   &ast.Ident{Name: "obj"},
+			Sel: &ast.Ident{Name: "method"},
+		},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	if !strings.Contains(got, "tmp, err := obj.method()") {
+		t.Errorf("Expected selector expression in generated code, got:\n%s", got)
+	}
+}
+
+func TestErrorPropGenerator_WithArgs(t *testing.T) {
+	// Test function call with arguments: readFile(path, mode)?
+	callExpr := &ast.CallExpr{
+		Fun: &ast.Ident{Name: "readFile"},
+		Args: []ast.Expr{
+			&ast.Ident{Name: "path"},
+			&ast.Ident{Name: "mode"},
+		},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	if !strings.Contains(got, "tmp, err := readFile(path, mode)") {
+		t.Errorf("Expected function call with arguments in generated code, got:\n%s", got)
+	}
+}
+
+func TestErrorPropGenerator_ReturnPattern(t *testing.T) {
+	// Verify the return pattern uses nil as placeholder
+	callExpr := &ast.CallExpr{
+		Fun: &ast.Ident{Name: "test"},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	// Should use nil as placeholder (type inference comes later)
+	if !strings.Contains(got, "return nil, err") {
+		t.Errorf("Expected 'return nil, err' pattern, got:\n%s", got)
+	}
+}
+
+func TestErrorPropGenerator_CodeStructure(t *testing.T) {
+	// Verify the complete structure of generated code
+	callExpr := &ast.CallExpr{
+		Fun: &ast.Ident{Name: "getData"},
+	}
+
+	epExpr := &dingoast.ErrorPropExpr{
+		Operand: callExpr,
+	}
+
+	gen := NewErrorPropGenerator(epExpr)
+	result := gen.Generate()
+
+	got := string(result.Output)
+	lines := strings.Split(got, "\n")
+
+	// Should have 5 lines:
+	// 1. tmp, err := getData()
+	// 2. if err != nil {
+	// 3. 	return nil, err
+	// 4. }
+	// 5. tmp
+	if len(lines) != 5 {
+		t.Errorf("Expected 5 lines, got %d:\n%s", len(lines), got)
+	}
+
+	// Verify each line
+	expectedLines := []string{
+		"tmp, err := getData()",
+		"if err != nil {",
+		"\treturn nil, err",
+		"}",
+		"tmp",
+	}
+
+	for i, want := range expectedLines {
+		if i >= len(lines) {
+			t.Errorf("Missing line %d, expected %q", i+1, want)
+			continue
+		}
+		if lines[i] != want {
+			t.Errorf("Line %d mismatch:\nGot:  %q\nWant: %q", i+1, lines[i], want)
+		}
+	}
+}

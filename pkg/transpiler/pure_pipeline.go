@@ -39,24 +39,38 @@ func PureASTTranspile(source []byte, filename string) ([]byte, error) {
 // PureASTTranspileWithOptions transpiles with optional type inference.
 // Set inferTypes to false to disable type inference (faster but uses interface{}).
 func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool) ([]byte, error) {
-	// Step 1: Transform Dingo syntax to Go using AST-based transformations
-	transformedSource, mappings, err := dingoast.TransformSource(source)
+	// Step 1: Transform Dingo syntax to Go using token-based transformations
+	transformedSource, tokenMappings, err := dingoast.TransformSource(source)
 	if err != nil {
 		return nil, fmt.Errorf("transform error: %w", err)
 	}
 
-	// TODO: Store mappings for LSP integration
-	// For now, we just track that they exist
-	_ = mappings
+	// Step 2: Transform statement-level error propagation (MUST run before expression transforms)
+	transformedSource, stmtMappings, err := transformErrorPropStatements(transformedSource)
+	if err != nil {
+		return nil, fmt.Errorf("statement transform error: %w", err)
+	}
 
-	// Step 2: Parse the transformed Go source with standard go/parser
+	// Step 3: Transform match/lambda expressions using AST-based codegen
+	transformedSource, astMappings, err := transformASTExpressions(transformedSource)
+	if err != nil {
+		return nil, fmt.Errorf("AST transform error: %w", err)
+	}
+
+	// TODO: Store mappings for LSP integration
+	// Combine token mappings, statement mappings, and AST mappings
+	_ = tokenMappings
+	_ = stmtMappings
+	_ = astMappings
+
+	// Step 3: Parse the transformed Go source with standard go/parser
 	fset := token.NewFileSet()
 	goFile, err := goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
-	// Step 3: Run type inference to replace interface{} with actual types
+	// Step 4: Run type inference to replace interface{} with actual types
 	if inferTypes {
 		_, err = typechecker.RewriteSource(fset, goFile)
 		if err != nil {

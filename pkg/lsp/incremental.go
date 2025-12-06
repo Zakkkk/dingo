@@ -7,7 +7,7 @@ import (
 
 	"go.lsp.dev/protocol"
 
-	"github.com/MadAppGang/dingo/pkg/parser"
+	"github.com/MadAppGang/dingo/pkg/goparser/parser"
 )
 
 // IncrementalDocumentManager manages incremental parsing state for open documents

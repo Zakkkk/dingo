@@ -1,0 +1,282 @@
+package codegen
+
+import (
+	"fmt"
+	"go/token"
+
+	"github.com/MadAppGang/dingo/pkg/ast"
+)
+
+// MatchCodeGen generates Go code for match expressions.
+// Transforms Dingo match expressions to Go switch statements with type assertions.
+//
+// Example transformation:
+//   Dingo: match result { Ok(value) => value, Err(e) => 0 }
+//   Go:    func() int { switch __v := result.(type) { case Ok: value := __v.Value; return value; case Err: e := __v.Value; return 0 } }()
+//
+// Pattern types supported:
+//   - ConstructorPattern: Ok(x), Err(e), Some(v), None
+//   - VariablePattern: x (matches anything, binds to variable)
+//   - WildcardPattern: _ (matches anything, no binding)
+//   - LiteralPattern: 1, "hello", true (matches specific value)
+//   - TuplePattern: (a, b) (matches tuple, binds elements)
+type MatchCodeGen struct {
+	*BaseGenerator
+	Match *ast.MatchExpr
+}
+
+// Constructor is in expr.go to avoid import cycles
+
+// Generate generates Go code for the match expression.
+// Returns CodeGenResult with generated code and source mappings.
+func (g *MatchCodeGen) Generate() ast.CodeGenResult {
+	if g.Match == nil {
+		return ast.CodeGenResult{}
+	}
+
+	// If match is used as expression, wrap in IIFE
+	if g.Match.IsExpr {
+		g.generateMatchIIFE()
+	} else {
+		g.generateMatchSwitch()
+	}
+
+	return g.Result()
+}
+
+// generateMatchIIFE generates IIFE wrapper for match expressions.
+// Example: func() TYPE { switch ... }()
+func (g *MatchCodeGen) generateMatchIIFE() {
+	startPos := g.Match.Pos()
+
+	// Track mapping for opening func()
+	g.MB.Add(startPos, token.Pos(g.Buf.Len()))
+	g.Write("func() ")
+
+	// TODO: Infer return type from arms
+	// For now, use interface{} as placeholder
+	g.Write("interface{} ")
+
+	g.WriteByte('{')
+	g.generateMatchSwitch()
+	g.Write("}()")
+
+	// Track mapping for closing
+	g.MB.Add(g.Match.End(), token.Pos(g.Buf.Len()))
+}
+
+// generateMatchSwitch generates switch statement for match expression.
+// Example: switch __v := scrutinee.(type) { case Pattern: ... }
+func (g *MatchCodeGen) generateMatchSwitch() {
+	// Generate scrutinee
+	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+	scrutineeCode := string(scrutineeResult.Code)
+
+	// Track mapping for scrutinee
+	g.MB.Add(g.Match.Scrutinee.Pos(), token.Pos(g.Buf.Len()))
+
+	// Check if we need type assertion (for constructor patterns)
+	needsTypeSwitch := g.hasConstructorPatterns()
+
+	if needsTypeSwitch {
+		// Generate type switch: switch __v := scrutinee.(type)
+		tempVar := g.TempVar("v")
+		g.Write("switch ")
+		g.Write(tempVar)
+		g.Write(" := ")
+		g.Write(scrutineeCode)
+		g.Write(".(type) {")
+	} else {
+		// Generate value switch: switch scrutinee {
+		g.Write("switch ")
+		g.Write(scrutineeCode)
+		g.Write(" {")
+	}
+
+	// Generate cases for each arm
+	for _, arm := range g.Match.Arms {
+		g.generateMatchArm(arm, needsTypeSwitch)
+	}
+
+	g.WriteByte('}')
+}
+
+// hasConstructorPatterns checks if any arm has constructor patterns.
+// This determines whether we need a type switch or value switch.
+func (g *MatchCodeGen) hasConstructorPatterns() bool {
+	for _, arm := range g.Match.Arms {
+		if _, ok := arm.Pattern.(*ast.ConstructorPattern); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// generateMatchArm generates a case clause for a match arm.
+// Handles pattern matching, guards, and body generation.
+func (g *MatchCodeGen) generateMatchArm(arm *ast.MatchArm, typeSwitch bool) {
+	// Track mapping for pattern
+	g.MB.Add(arm.PatternPos, token.Pos(g.Buf.Len()))
+
+	// Generate case clause based on pattern type
+	switch pattern := arm.Pattern.(type) {
+	case *ast.ConstructorPattern:
+		g.generateConstructorCase(pattern, arm, typeSwitch)
+	case *ast.LiteralPattern:
+		g.generateLiteralCase(pattern, arm)
+	case *ast.WildcardPattern:
+		g.generateWildcardCase(arm)
+	case *ast.VariablePattern:
+		g.generateVariableCase(pattern, arm)
+	case *ast.TuplePattern:
+		g.generateTupleCase(pattern, arm)
+	default:
+		// Unknown pattern type - generate default case
+		g.Write("default:")
+		g.generateArmBody(arm, nil)
+	}
+}
+
+// generateConstructorCase generates case for constructor patterns (Ok(x), Err(e), Some(v), None).
+func (g *MatchCodeGen) generateConstructorCase(pattern *ast.ConstructorPattern, arm *ast.MatchArm, typeSwitch bool) {
+	g.Write("case ")
+	g.Write(pattern.Name)
+	g.Write(":")
+
+	// Extract bindings from constructor parameters
+	var bindings []Binding
+	for i, param := range pattern.Params {
+		bindings = append(bindings, g.extractBindings(param, i)...)
+	}
+
+	g.generateArmBody(arm, bindings)
+}
+
+// Binding represents a variable binding extracted from a pattern.
+type Binding struct {
+	Name      string
+	FieldPath string // e.g., "Value", "First", "Second"
+}
+
+// extractBindings recursively extracts variable bindings from patterns.
+func (g *MatchCodeGen) extractBindings(pattern ast.Pattern, index int) []Binding {
+	switch p := pattern.(type) {
+	case *ast.VariablePattern:
+		// Single variable binding: x
+		// For constructor params, bind to .Value field
+		return []Binding{{
+			Name:      p.Name,
+			FieldPath: "Value",
+		}}
+	case *ast.TuplePattern:
+		// Tuple pattern: (a, b)
+		var bindings []Binding
+		for i, elem := range p.Elements {
+			elemBindings := g.extractBindings(elem, i)
+			for j := range elemBindings {
+				// Adjust field path for tuple element
+				elemBindings[j].FieldPath = fmt.Sprintf("Field%d", i)
+			}
+			bindings = append(bindings, elemBindings...)
+		}
+		return bindings
+	case *ast.ConstructorPattern:
+		// Nested constructor: Ok(Some(x))
+		var bindings []Binding
+		for i, param := range p.Params {
+			bindings = append(bindings, g.extractBindings(param, i)...)
+		}
+		return bindings
+	default:
+		// Wildcard or literal - no bindings
+		return nil
+	}
+}
+
+// generateLiteralCase generates case for literal patterns (1, "hello", true).
+func (g *MatchCodeGen) generateLiteralCase(pattern *ast.LiteralPattern, arm *ast.MatchArm) {
+	g.Write("case ")
+	g.Write(pattern.Value)
+	g.Write(":")
+	g.generateArmBody(arm, nil)
+}
+
+// generateWildcardCase generates default case for wildcard pattern (_).
+func (g *MatchCodeGen) generateWildcardCase(arm *ast.MatchArm) {
+	g.Write("default:")
+	g.generateArmBody(arm, nil)
+}
+
+// generateVariableCase generates default case with binding for variable pattern (x).
+func (g *MatchCodeGen) generateVariableCase(pattern *ast.VariablePattern, arm *ast.MatchArm) {
+	g.Write("default:")
+
+	// Bind variable to scrutinee value
+	bindings := []Binding{{
+		Name:      pattern.Name,
+		FieldPath: "", // Bind to scrutinee itself
+	}}
+	g.generateArmBody(arm, bindings)
+}
+
+// generateTupleCase generates case for tuple patterns ((a, b)).
+func (g *MatchCodeGen) generateTupleCase(pattern *ast.TuplePattern, arm *ast.MatchArm) {
+	// Tuple patterns need special handling - not implemented yet
+	// For now, generate default case
+	g.Write("default:")
+	g.generateArmBody(arm, nil)
+}
+
+// generateArmBody generates the body of a match arm.
+// Handles variable bindings, guards, and body expression.
+func (g *MatchCodeGen) generateArmBody(arm *ast.MatchArm, bindings []Binding) {
+	// Generate variable bindings
+	for _, binding := range bindings {
+		g.Write(binding.Name)
+		g.Write(" := ")
+
+		// If binding has a field path, use type assertion variable
+		if binding.FieldPath != "" {
+			// Get the most recent temp var (from type switch)
+			// For now, use hardcoded __v (TODO: track properly)
+			tempVar := "v" // Should be the same as TempVar("v") from generateMatchSwitch
+			g.Write(tempVar)
+			g.WriteByte('.')
+			g.Write(binding.FieldPath)
+		} else {
+			// Bind to scrutinee itself (for variable patterns in default case)
+			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+			g.Buf.Write(scrutineeResult.Code)
+		}
+
+		g.WriteByte(';')
+	}
+
+	// Generate guard check if present
+	if arm.Guard != nil {
+		g.Write("if ")
+		guardResult := GenerateExpr(arm.Guard)
+		g.MB.Add(arm.GuardPos, token.Pos(g.Buf.Len()))
+		g.Buf.Write(guardResult.Code)
+		g.Write(" {")
+	}
+
+	// Generate body
+	g.MB.Add(arm.Body.Pos(), token.Pos(g.Buf.Len()))
+
+	// If match is expression, use return statement
+	if g.Match.IsExpr {
+		g.Write("return ")
+	}
+
+	bodyResult := GenerateExpr(arm.Body)
+	g.Buf.Write(bodyResult.Code)
+
+	// Close guard if present
+	if arm.Guard != nil {
+		g.WriteByte('}')
+	}
+
+	// Track mapping for arm end
+	g.MB.Add(arm.Body.End(), token.Pos(g.Buf.Len()))
+}

@@ -9,9 +9,10 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/generator"
-	"github.com/MadAppGang/dingo/pkg/parser"
+	"github.com/MadAppGang/dingo/pkg/goparser/parser"
 	"github.com/MadAppGang/dingo/pkg/plugin"
-	"github.com/MadAppGang/dingo/pkg/preprocessor"
+	// Preprocessor removed - using AST-based approach now
+	// "github.com/MadAppGang/dingo/pkg/preprocessor"
 )
 
 // simpleLogger implements plugin.Logger
@@ -50,33 +51,12 @@ func runRegenerate(args []string) error {
 		}
 	}
 
-	// Create cache for unqualified import inference
-	pkgDir := filepath.Dir(dingoFile)
-	cache := preprocessor.NewFunctionExclusionCache(pkgDir)
-	err = cache.ScanPackage([]string{dingoFile})
+	// TODO: Preprocessor removed - AST-based approach now
+	// For now, parse directly without preprocessing
+	// In future, parser will handle Dingo syntax natively
 
-	// Create preprocessor
-	var preprocessorInst *preprocessor.Preprocessor
-	if err != nil {
-		// Cache scan failed, fall back to no cache
-		if cfg != nil {
-			preprocessorInst = preprocessor.NewWithMainConfig(dingoSrc, cfg)
-		} else {
-			preprocessorInst = preprocessor.New(dingoSrc)
-		}
-	} else {
-		// Cache scan successful, use it for unqualified imports
-		preprocessorInst = preprocessor.NewWithCache(dingoSrc, cache)
-	}
-
-	// Preprocess
-	preprocessed, _, err := preprocessorInst.Process()
-	if err != nil {
-		return fmt.Errorf("preprocessing failed: %w", err)
-	}
-
-	// Parse
-	file, err := parser.ParseFile(fset, dingoFile, []byte(preprocessed), parser.ParseComments)
+	// Parse Dingo source directly
+	file, err := parser.ParseFile(fset, dingoFile, dingoSrc, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("parse failed: %w", err)
 	}

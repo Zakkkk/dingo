@@ -7,8 +7,6 @@ import (
 
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
-
-	"github.com/MadAppGang/dingo/pkg/preprocessor"
 )
 
 // Direction specifies translation direction
@@ -22,8 +20,6 @@ const (
 // Translator handles bidirectional position translation using source maps
 type Translator struct {
 	cache SourceMapGetter
-	// Keep preprocessor import for SourceMap type
-	_ *preprocessor.SourceMap
 }
 
 // NewTranslator creates a new position translator

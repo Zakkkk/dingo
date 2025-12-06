@@ -74,6 +74,39 @@ const (
 	ENUM  // enum (sum types)
 	GUARD // guard (pattern matching guards)
 
+	// Go keywords (needed for full parsing)
+	PACKAGE   // package
+	IMPORT    // import
+	FUNC      // func
+	RETURN    // return
+	TYPE      // type
+	STRUCT    // struct
+	INTERFACE // interface
+	MAP       // map
+	CHAN      // chan
+	FOR       // for
+	RANGE     // range
+	SWITCH    // switch
+	CASE      // case
+	DEFAULT   // default
+	SELECT    // select
+	BREAK     // break
+	CONTINUE  // continue
+	GOTO      // goto
+	FALLTHROUGH // fallthrough
+	DEFER     // defer
+	GO        // go
+	ELSE      // else
+	NIL       // nil
+	TRUE      // true
+	FALSE     // false
+	IOTA      // iota
+
+	// Additional operators
+	AMPERSAND // &
+	ELLIPSIS  // ...
+	CHAN_ARROW // <-
+
 	// Boundaries (help with expression extraction)
 	NEWLINE // explicit newline tracking for position accuracy
 )
@@ -128,6 +161,35 @@ var tokenKindStrings = map[TokenKind]string{
 	THIN_ARROW:        "->",
 	ENUM:              "enum",
 	GUARD:             "guard",
+	PACKAGE:           "package",
+	IMPORT:            "import",
+	FUNC:              "func",
+	RETURN:            "return",
+	TYPE:              "type",
+	STRUCT:            "struct",
+	INTERFACE:         "interface",
+	MAP:               "map",
+	CHAN:              "chan",
+	FOR:               "for",
+	RANGE:             "range",
+	SWITCH:            "switch",
+	CASE:              "case",
+	DEFAULT:           "default",
+	SELECT:            "select",
+	BREAK:             "break",
+	CONTINUE:          "continue",
+	GOTO:              "goto",
+	FALLTHROUGH:       "fallthrough",
+	DEFER:             "defer",
+	GO:                "go",
+	ELSE:              "else",
+	NIL:               "nil",
+	TRUE:              "true",
+	FALSE:             "false",
+	IOTA:              "iota",
+	AMPERSAND:         "&",
+	ELLIPSIS:          "...",
+	CHAN_ARROW:        "<-",
 	NEWLINE:           "NEWLINE",
 }
 
@@ -160,4 +222,16 @@ func (t Token) String() string {
 // IsKeyword returns true if token is a Dingo keyword
 func (t Token) IsKeyword() bool {
 	return t.Kind == MATCH || t.Kind == IF || t.Kind == WHERE || t.Kind == ENUM || t.Kind == GUARD
+}
+
+// BytePos returns the 0-based byte offset for this token's start position
+// Use this when slicing source bytes: src[token.BytePos():token.ByteEnd()]
+func (t Token) BytePos() int {
+	return int(t.Pos) - 1 // Convert 1-based token.Pos to 0-based byte offset
+}
+
+// ByteEnd returns the 0-based byte offset for this token's end position (exclusive)
+// Use this when slicing source bytes: src[token.BytePos():token.ByteEnd()]
+func (t Token) ByteEnd() int {
+	return int(t.End) - 1 // Convert 1-based token.Pos to 0-based byte offset
 }

@@ -340,14 +340,42 @@ func (t *Tokenizer) scanIdentifier(startPos token.Pos, line, col int) (Token, er
 // lookupKeyword returns keyword kind or IDENT
 func (t *Tokenizer) lookupKeyword(ident string) TokenKind {
 	keywords := map[string]TokenKind{
+		// Dingo keywords
 		"match": MATCH,
-		"if":    IF,
 		"where": WHERE,
 		"enum":  ENUM,
 		"guard": GUARD,
-		"var":   VAR,
 		"let":   LET,
-		"const": CONST,
+		// Go keywords
+		"if":          IF,
+		"var":         VAR,
+		"const":       CONST,
+		"package":     PACKAGE,
+		"import":      IMPORT,
+		"func":        FUNC,
+		"return":      RETURN,
+		"type":        TYPE,
+		"struct":      STRUCT,
+		"interface":   INTERFACE,
+		"map":         MAP,
+		"chan":        CHAN,
+		"for":         FOR,
+		"range":       RANGE,
+		"switch":      SWITCH,
+		"case":        CASE,
+		"default":     DEFAULT,
+		"select":      SELECT,
+		"break":       BREAK,
+		"continue":    CONTINUE,
+		"goto":        GOTO,
+		"fallthrough": FALLTHROUGH,
+		"defer":       DEFER,
+		"go":          GO,
+		"else":        ELSE,
+		"nil":         NIL,
+		"true":        TRUE,
+		"false":       FALSE,
+		"iota":        IOTA,
 	}
 	if kind, ok := keywords[ident]; ok {
 		return kind
@@ -359,6 +387,13 @@ func (t *Tokenizer) lookupKeyword(ident string) TokenKind {
 func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, error) {
 	peek2 := t.scanner.PeekN(2)
 
+	// Check for three-character operators first
+	peek3 := t.scanner.PeekN(3)
+	if peek3 == "..." {
+		t.scanner.SkipBytes(3)
+		return Token{Kind: ELLIPSIS, Pos: startPos, End: t.scanner.Pos(), Lit: "...", Line: line, Column: col}, nil
+	}
+
 	// Two-character operators (check Dingo-specific first)
 	twoChar := map[string]TokenKind{
 		":=": DEFINE,            // Go: short variable declaration
@@ -366,6 +401,7 @@ func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, erro
 		"?.": QUESTION_DOT,      // Dingo: safe navigation
 		"=>": ARROW,             // Dingo/existing: fat arrow (match arms)
 		"->": THIN_ARROW,        // Dingo: Rust-style lambda arrow
+		"<-": CHAN_ARROW,        // Go: channel receive/send
 		"==": EQ,
 		"!=": NE,
 		"<=": LE,
@@ -404,6 +440,7 @@ func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, erro
 		'/': SLASH,
 		'.': DOT,
 		'?': QUESTION,
+		'&': AMPERSAND,
 	}
 
 	if kind, ok := oneChar[r]; ok {
@@ -418,6 +455,16 @@ func (t *Tokenizer) scanOperator(startPos token.Pos, line, col int) (Token, erro
 // Reset resets token position for re-parsing
 func (t *Tokenizer) Reset() {
 	t.pos = 0
+}
+
+// SavePos returns the current position for later restoration
+func (t *Tokenizer) SavePos() int {
+	return t.pos
+}
+
+// RestorePos restores a previously saved position
+func (t *Tokenizer) RestorePos(pos int) {
+	t.pos = pos
 }
 
 // Current returns current token

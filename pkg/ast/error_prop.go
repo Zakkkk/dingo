@@ -2,7 +2,6 @@ package ast
 
 import (
 	"fmt"
-	"go/ast"
 	"go/token"
 	"go/types"
 )
@@ -25,7 +24,7 @@ import (
 //   - The ? operator extracts T and propagates E/error upward
 type ErrorPropExpr struct {
 	Question token.Pos // Position of the ? token
-	Operand  ast.Expr  // Expression before ? (must return Result or (T, error))
+	Operand  Expr      // Expression before ? (must return Result or (T, error))
 
 	// Type information (filled by type checker during semantic analysis)
 	ResultType types.Type // The success type T (what we extract from Result<T,E>)

@@ -41,9 +41,8 @@ func (p *PrattParser) isTypeScriptLambda() bool {
 		return false
 	}
 
-	// Save state for backtracking
-	savedCur := p.curToken
-	savedPeek := p.peekToken
+	// Save full parser state including tokenizer position for backtracking
+	savedState := p.saveState()
 
 	// Advance past LPAREN
 	p.nextToken()
@@ -84,9 +83,8 @@ func (p *PrattParser) isTypeScriptLambda() bool {
 		}
 	}
 
-	// Restore state
-	p.curToken = savedCur
-	p.peekToken = savedPeek
+	// Restore full parser state
+	p.restoreState(savedState)
 
 	return isLambda
 }
@@ -95,11 +93,17 @@ func (p *PrattParser) isTypeScriptLambda() bool {
 func (p *PrattParser) parseRustLambda() ast.Expr {
 	lambdaPos := p.curToken.Pos
 
-	// Consume opening |
-	if !p.expectPeek(tokenizer.PIPE) {
+	// We should already be at the opening |
+	if !p.curTokenIs(tokenizer.PIPE) {
+		p.errors = append(p.errors, ParseError{
+			Pos:     p.curToken.Pos,
+			Line:    p.curToken.Line,
+			Column:  p.curToken.Column,
+			Message: "expected '|' to start lambda",
+		})
 		return nil
 	}
-	p.nextToken() // move past first PIPE
+	p.nextToken() // move past opening |
 
 	// Parse parameters
 	params := p.parseLambdaParams(tokenizer.PIPE)
