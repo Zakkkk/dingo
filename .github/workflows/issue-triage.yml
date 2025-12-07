@@ -3,6 +3,12 @@ name: Issue Triage
 on:
   issues:
     types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to triage'
+        required: true
+        type: number
 
 permissions:
   issues: write
@@ -32,18 +38,37 @@ jobs:
           app_id: ${{ secrets.DINGO_BOT_APP_ID }}
           private_key: ${{ secrets.DINGO_BOT_PRIVATE_KEY }}
 
-      - name: Write issue to file
+      - name: Get issue details
+        id: issue
+        env:
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           mkdir -p .triage
-          cat > .triage/issue.md << 'ISSUE_EOF'
-          # Issue #${{ github.event.issue.number }}
+          # Support both automatic trigger and manual dispatch
+          if [ -n "${{ github.event.issue.number }}" ]; then
+            ISSUE_NUM="${{ github.event.issue.number }}"
+          else
+            ISSUE_NUM="${{ inputs.issue_number }}"
+          fi
+          echo "number=$ISSUE_NUM" >> $GITHUB_OUTPUT
 
-          **Title:** ${{ github.event.issue.title }}
+          # Fetch issue details
+          gh api repos/${{ github.repository }}/issues/$ISSUE_NUM > .triage/issue_data.json
+          echo "title=$(jq -r '.title' .triage/issue_data.json)" >> $GITHUB_OUTPUT
+          echo "author=$(jq -r '.user.login' .triage/issue_data.json)" >> $GITHUB_OUTPUT
 
-          **Author:** @${{ github.event.issue.user.login }}
+      - name: Write issue to file
+        run: |
+          BODY=$(jq -r '.body // "No description provided"' .triage/issue_data.json)
+          cat > .triage/issue.md << ISSUE_EOF
+          # Issue #${{ steps.issue.outputs.number }}
+
+          **Title:** ${{ steps.issue.outputs.title }}
+
+          **Author:** @${{ steps.issue.outputs.author }}
 
           **Body:**
-          ${{ github.event.issue.body }}
+          $BODY
           ISSUE_EOF
 
       - name: Triage issue with Claude Code
@@ -94,7 +119,7 @@ jobs:
           for label in "${LABEL_ARRAY[@]}"; do
             # Only add if label exists
             if gh label list | grep -q "^$label"; then
-              gh issue edit ${{ github.event.issue.number }} --add-label "$label" || true
+              gh issue edit ${{ steps.issue.outputs.number }} --add-label "$label" || true
             fi
           done
 
@@ -103,7 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
-          gh issue edit ${{ github.event.issue.number }} --add-assignee jackrudenko || true
+          gh issue edit ${{ steps.issue.outputs.number }} --add-assignee jackrudenko || true
 
       - name: Post response comment
         if: steps.triage.outputs.response != ''
@@ -117,7 +142,7 @@ jobs:
           echo "---" >> .triage/comment.md
           echo '<sub>🤖 Auto-triaged by <a href="https://github.com/anthropics/claude-code">Claude Code</a> (Opus 4.5)</sub>' >> .triage/comment.md
 
-          gh issue comment ${{ github.event.issue.number }} --body-file .triage/comment.md
+          gh issue comment ${{ steps.issue.outputs.number }} --body-file .triage/comment.md
 
       - name: Convert to discussion (if needed)
         if: steps.triage.outputs.convert_discussion == 'true'
@@ -125,7 +150,7 @@ jobs:
           GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           echo "Note: Issue marked for discussion conversion."
-          gh issue edit ${{ github.event.issue.number }} --add-label "discussion" || true
+          gh issue edit ${{ steps.issue.outputs.number }} --add-label "discussion" || true
 
       - name: Cleanup
         if: always()
