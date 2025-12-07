@@ -37,12 +37,14 @@ type MatchCodeGen struct {
 }
 
 // SharedTempVar generates unique temp var names using shared counter if available.
-// Counter starts at len(locations) and decrements, so first expression in file gets no suffix.
+// Uses incrementing counter to ensure positive numbers in variable names.
 // Falls back to local counter if no shared counter is provided.
 func (g *MatchCodeGen) SharedTempVar(base string) string {
 	if g.Context != nil && g.Context.TempCounter != nil {
-		*g.Context.TempCounter--
+		// Increment counter to get unique name
+		// First call gets no suffix, subsequent calls get 1, 2, 3, ...
 		counter := *g.Context.TempCounter
+		*g.Context.TempCounter++
 		if counter == 0 {
 			return base
 		}
@@ -168,10 +170,10 @@ func (g *MatchCodeGen) generateMatchSwitch() {
 		g.Write(" {\n")
 	}
 
-	// Generate cases for each arm
-	for _, arm := range g.Match.Arms {
-		g.generateMatchArm(arm, needsTypeSwitch)
-	}
+	// Group arms by pattern type to avoid duplicate case clauses
+	// This handles guarded patterns correctly: multiple patterns for the same
+	// constructor are combined into a single case with if/else chain
+	g.generateGroupedCases(needsTypeSwitch)
 
 	g.WriteByte('}')
 
@@ -184,6 +186,299 @@ func (g *MatchCodeGen) generateMatchSwitch() {
 	}
 
 	// NO PANIC for statement matches: silent fall-through per user requirement
+}
+
+// armGroup represents a group of arms that share the same case clause
+type armGroup struct {
+	typeName string        // The Go type name for constructor patterns
+	arms     []*ast.MatchArm
+	isDefault bool         // true for wildcard/variable patterns (default case)
+}
+
+// generateGroupedCases groups arms by pattern type and generates cases.
+// This is critical for handling guarded patterns:
+// - Multiple arms for the same constructor become if/else chain in one case
+// - Avoids duplicate case clauses which are illegal in Go
+func (g *MatchCodeGen) generateGroupedCases(typeSwitch bool) {
+	// Group arms by their case key (type name for constructors, "default" for wildcards)
+	groups := make(map[string]*armGroup)
+	var order []string // Preserve order
+
+	for _, arm := range g.Match.Arms {
+		key := g.getPatternCaseKey(arm.Pattern)
+
+		if _, exists := groups[key]; !exists {
+			groups[key] = &armGroup{
+				typeName:  key,
+				isDefault: key == "default",
+			}
+			order = append(order, key)
+		}
+		groups[key].arms = append(groups[key].arms, arm)
+	}
+
+	// Generate case for each group
+	for _, key := range order {
+		group := groups[key]
+		g.generateGroupedCase(group, typeSwitch)
+	}
+}
+
+// getPatternCaseKey returns the case key for a pattern.
+// Constructor patterns return their full type name.
+// Wildcard and variable patterns return "default".
+func (g *MatchCodeGen) getPatternCaseKey(pattern ast.Pattern) string {
+	switch p := pattern.(type) {
+	case *ast.ConstructorPattern:
+		return g.constructorToTypeName(p.Name)
+	case *ast.LiteralPattern:
+		return "literal:" + p.Value
+	case *ast.WildcardPattern, *ast.VariablePattern:
+		return "default"
+	default:
+		return "default"
+	}
+}
+
+// generateGroupedCase generates a single case clause for a group of arms.
+// If the group has multiple arms, generates if/else chain for guards.
+func (g *MatchCodeGen) generateGroupedCase(group *armGroup, typeSwitch bool) {
+	if len(group.arms) == 0 {
+		return
+	}
+
+	firstArm := group.arms[0]
+	patternStart := int(firstArm.PatternPos)
+	patternEnd := int(firstArm.Pattern.End())
+
+	// Generate case clause header
+	if group.isDefault {
+		defaultCase := "default:\n"
+		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
+		g.Write(defaultCase)
+	} else if _, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
+		// Literal pattern
+		lit := firstArm.Pattern.(*ast.LiteralPattern)
+		caseClause := "case " + lit.Value + ":\n"
+		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
+		g.Write(caseClause)
+	} else {
+		// Constructor pattern
+		caseClause := "case " + group.typeName + ":\n"
+		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
+		g.Write(caseClause)
+	}
+
+	// Extract bindings from first arm (all arms in group have same pattern structure)
+	var bindings []Binding
+	if cp, ok := firstArm.Pattern.(*ast.ConstructorPattern); ok {
+		numParams := len(cp.Params)
+		isTupleVariant := g.isTupleVariant(group.typeName)
+		for i, param := range cp.Params {
+			bindings = append(bindings, g.extractBindings(param, i, numParams, isTupleVariant)...)
+		}
+	} else if vp, ok := firstArm.Pattern.(*ast.VariablePattern); ok {
+		bindings = []Binding{{Name: vp.Name, FieldPath: ""}}
+	}
+
+	// Generate bindings once (they're the same for all arms in this group)
+	for _, binding := range bindings {
+		bindingCode := binding.Name + " := "
+		if binding.FieldPath != "" {
+			tempVar := g.scrutineeTempVar
+			if tempVar == "" {
+				tempVar = "v"
+			}
+			bindingCode += tempVar + "." + binding.FieldPath
+		} else {
+			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+			bindingCode += string(scrutineeResult.Output)
+		}
+		bindingCode += "\n"
+		g.Write(bindingCode)
+	}
+
+	// Generate if/else chain for multiple arms (guards)
+	g.generateArmsChain(group.arms)
+}
+
+// generateArmsChain generates an if/else chain for a group of arms.
+// This handles multiple patterns for the same constructor with guards.
+func (g *MatchCodeGen) generateArmsChain(arms []*ast.MatchArm) {
+	for i, arm := range arms {
+		bodyStart := int(arm.Body.Pos())
+		bodyEnd := int(arm.Body.End())
+
+		hasGuard := arm.Guard != nil
+		isFirst := i == 0
+		isLast := i == len(arms)-1
+
+		if hasGuard {
+			guardResult := GenerateExpr(arm.Guard)
+			guardStart := int(arm.GuardPos)
+			guardEnd := int(arm.Guard.End())
+
+			if isFirst {
+				guardCode := "if " + string(guardResult.Output) + " {\n"
+				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
+				g.Write(guardCode)
+			} else {
+				guardCode := "} else if " + string(guardResult.Output) + " {\n"
+				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
+				g.Write(guardCode)
+			}
+		} else {
+			// Unguarded arm
+			if !isFirst {
+				// This is the else fallback after guarded arms
+				g.Write("} else {\n")
+			}
+			// If first and unguarded, no wrapper needed (direct code in case)
+		}
+
+		// Generate body
+		bodyResult := GenerateExpr(arm.Body)
+		if g.Match.IsExpr {
+			bodyCode := "return " + string(bodyResult.Output) + "\n"
+			g.MB.Add(bodyStart, bodyEnd, len(bodyCode), "match")
+			g.Write(bodyCode)
+		} else {
+			g.MB.Add(bodyStart, bodyEnd, len(bodyResult.Output), "match")
+			g.Buf.Write(bodyResult.Output)
+			g.WriteByte('\n')
+		}
+
+		// Close if/else if last arm has guard or previous arms had guards
+		if isLast && (hasGuard || i > 0 && arms[0].Guard != nil) {
+			g.Write("}\n")
+		}
+	}
+}
+
+// generateGroupedCasesWithAssignment is like generateGroupedCases but for assignment context.
+func (g *MatchCodeGen) generateGroupedCasesWithAssignment(varName string, typeSwitch bool) {
+	// Group arms by their case key
+	groups := make(map[string]*armGroup)
+	var order []string
+
+	for _, arm := range g.Match.Arms {
+		key := g.getPatternCaseKey(arm.Pattern)
+		if _, exists := groups[key]; !exists {
+			groups[key] = &armGroup{
+				typeName:  key,
+				isDefault: key == "default",
+			}
+			order = append(order, key)
+		}
+		groups[key].arms = append(groups[key].arms, arm)
+	}
+
+	for _, key := range order {
+		group := groups[key]
+		g.generateGroupedCaseWithAssignment(group, varName, typeSwitch)
+	}
+}
+
+// generateGroupedCaseWithAssignment generates a single case clause with assignment for a group.
+func (g *MatchCodeGen) generateGroupedCaseWithAssignment(group *armGroup, varName string, typeSwitch bool) {
+	if len(group.arms) == 0 {
+		return
+	}
+
+	firstArm := group.arms[0]
+	patternStart := int(firstArm.PatternPos)
+	patternEnd := int(firstArm.Pattern.End())
+
+	// Generate case clause header
+	if group.isDefault {
+		defaultCase := "default:\n"
+		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
+		g.Write(defaultCase)
+	} else if _, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
+		lit := firstArm.Pattern.(*ast.LiteralPattern)
+		caseClause := "case " + lit.Value + ":\n"
+		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
+		g.Write(caseClause)
+	} else {
+		caseClause := "case " + group.typeName + ":\n"
+		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
+		g.Write(caseClause)
+	}
+
+	// Extract bindings from first arm
+	var bindings []Binding
+	if cp, ok := firstArm.Pattern.(*ast.ConstructorPattern); ok {
+		numParams := len(cp.Params)
+		isTupleVariant := g.isTupleVariant(group.typeName)
+		for i, param := range cp.Params {
+			bindings = append(bindings, g.extractBindings(param, i, numParams, isTupleVariant)...)
+		}
+	} else if vp, ok := firstArm.Pattern.(*ast.VariablePattern); ok {
+		bindings = []Binding{{Name: vp.Name, FieldPath: ""}}
+	}
+
+	// Generate bindings once
+	for _, binding := range bindings {
+		bindingCode := binding.Name + " := "
+		if binding.FieldPath != "" {
+			tempVar := g.scrutineeTempVar
+			if tempVar == "" {
+				tempVar = "v"
+			}
+			bindingCode += tempVar + "." + binding.FieldPath
+		} else {
+			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+			bindingCode += string(scrutineeResult.Output)
+		}
+		bindingCode += "\n"
+		g.Write(bindingCode)
+	}
+
+	// Generate if/else chain for multiple arms (guards) with assignment
+	g.generateArmsChainWithAssignment(group.arms, varName)
+}
+
+// generateArmsChainWithAssignment generates an if/else chain with assignments.
+func (g *MatchCodeGen) generateArmsChainWithAssignment(arms []*ast.MatchArm, varName string) {
+	for i, arm := range arms {
+		bodyStart := int(arm.Body.Pos())
+		bodyEnd := int(arm.Body.End())
+
+		hasGuard := arm.Guard != nil
+		isFirst := i == 0
+		isLast := i == len(arms)-1
+
+		if hasGuard {
+			guardResult := GenerateExpr(arm.Guard)
+			guardStart := int(arm.GuardPos)
+			guardEnd := int(arm.Guard.End())
+
+			if isFirst {
+				guardCode := "if " + string(guardResult.Output) + " {\n"
+				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
+				g.Write(guardCode)
+			} else {
+				guardCode := "} else if " + string(guardResult.Output) + " {\n"
+				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
+				g.Write(guardCode)
+			}
+		} else {
+			if !isFirst {
+				g.Write("} else {\n")
+			}
+		}
+
+		// Generate assignment
+		bodyResult := GenerateExpr(arm.Body)
+		assignCode := fmt.Sprintf("\t%s = %s\n", varName, string(bodyResult.Output))
+		g.MB.Add(bodyStart, bodyEnd, len(assignCode), "match")
+		g.Write(assignCode)
+
+		// Close if/else chain
+		if isLast && (hasGuard || i > 0 && arms[0].Guard != nil) {
+			g.Write("}\n")
+		}
+	}
 }
 
 // hasConstructorPatterns checks if any arm has constructor patterns.
@@ -212,8 +507,13 @@ func (g *MatchCodeGen) hasBindings() bool {
 func (g *MatchCodeGen) patternHasBindings(pattern ast.Pattern) bool {
 	switch p := pattern.(type) {
 	case *ast.ConstructorPattern:
-		// Constructor with parameters has bindings
-		return len(p.Params) > 0
+		// Constructor has bindings if any parameter has bindings
+		for _, param := range p.Params {
+			if g.patternHasBindings(param) {
+				return true
+			}
+		}
+		return false
 	case *ast.VariablePattern:
 		// Variable pattern is a binding
 		return true
@@ -644,10 +944,9 @@ func (g *MatchCodeGen) generateMatchSwitchWithAssignment(varName string) {
 		g.Write(" {\n")
 	}
 
-	// Generate cases for each arm with assignments
-	for _, arm := range g.Match.Arms {
-		g.generateMatchArmWithAssignment(arm, varName, needsTypeSwitch)
-	}
+	// Group arms by pattern type to avoid duplicate case clauses
+	// This handles guarded patterns correctly
+	g.generateGroupedCasesWithAssignment(varName, needsTypeSwitch)
 
 	// NO DEFAULT PANIC:
 	// - Expression matches: verified exhaustive by checkExhaustiveness()

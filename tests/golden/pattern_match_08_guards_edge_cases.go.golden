@@ -4,228 +4,219 @@ package main
 // Feature: Edge cases for pattern guard behavior
 // Complexity: advanced
 
-// dingo:n:0
-type ValueTag uint8
-
-const (
-	ValueTagSmall ValueTag = iota
-	ValueTagMedium
-	ValueTagLarge
-)
-
-type Value struct {
-	tag    ValueTag
-	large  *int
-	medium *int
-	small  *int
+type Value interface {
+	isValue()
+	IsSmall() bool
+	IsMedium() bool
+	IsLarge() bool
 }
 
-func ValueSmall(arg0 int) Value {
-	return Value{tag: ValueTagSmall, small: &arg0}
-}
-func ValueMedium(arg0 int) Value {
-	return Value{tag: ValueTagMedium, medium: &arg0}
-}
-func ValueLarge(arg0 int) Value {
-	return Value{tag: ValueTagLarge, large: &arg0}
-}
-func (e Value) IsSmall() bool {
-	return e.tag == ValueTagSmall
-}
-func (e Value) IsMedium() bool {
-	return e.tag == ValueTagMedium
-}
-func (e Value) IsLarge() bool {
-	return e.tag == ValueTagLarge
-}
+type ValueSmall struct{ Value int }
+
+func (ValueSmall) isValue()         {}
+func NewValueSmall(value int) Value { return ValueSmall{Value: value} }
+
+type ValueMedium struct{ Value int }
+
+func (ValueMedium) isValue()         {}
+func NewValueMedium(value int) Value { return ValueMedium{Value: value} }
+
+type ValueLarge struct{ Value int }
+
+func (ValueLarge) isValue()         {}
+func NewValueLarge(value int) Value { return ValueLarge{Value: value} }
+
+func IsValueSmall(v Value) bool    { _, ok := v.(ValueSmall); return ok }
+func IsValueMedium(v Value) bool   { _, ok := v.(ValueMedium); return ok }
+func IsValueLarge(v Value) bool    { _, ok := v.(ValueLarge); return ok }
+func (ValueSmall) IsSmall() bool   { return true }
+func (ValueSmall) IsMedium() bool  { return false }
+func (ValueSmall) IsLarge() bool   { return false }
+func (ValueMedium) IsSmall() bool  { return false }
+func (ValueMedium) IsMedium() bool { return true }
+func (ValueMedium) IsLarge() bool  { return false }
+func (ValueLarge) IsSmall() bool   { return false }
+func (ValueLarge) IsMedium() bool  { return false }
+func (ValueLarge) IsLarge() bool   { return true }
 
 // All patterns have guards (requires fallback wildcard)
 func classify(val Value) string {
-	var result string
-	// DINGO_MATCH_START: val
-	scrutinee := val
-	switch scrutinee.tag {
-	case ValueTagSmall:
-		x := *scrutinee.small
-		// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x > 10
-		if x > 10 {
-			result = "actually medium"
+	return func() string {
+		switch v := val.(type) {
+		case Value_Small:
+			x := v.x
+			if x > 10 {
+				return "actually medium"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			x := v.x
+			if x > 100 {
+				return "actually large"
+			}
+			panic("match guard failed without fallback")
+		case Value_Large:
+			x := v.x
+			if x > 1000 {
+				return "actually huge"
+			}
+			panic("match guard failed without fallback")
+		default:
+			return "normal range"
 		}
-	case ValueTagMedium:
-		x := *scrutinee.medium
-		// DINGO_PATTERN: ValueMedium(x) | DINGO_GUARD: x > 100
-		if x > 100 {
-			result = "actually large"
-		}
-	case ValueTagLarge:
-		x := *scrutinee.large
-		// DINGO_PATTERN: ValueLarge(x) | DINGO_GUARD: x > 1000
-		if x > 1000 {
-			result = "actually huge"
-		}
-	default:
-		// DINGO_PATTERN: _
-		result = "normal range"
-	}
-	return result
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Wildcard pattern with guard
 func filterPositive(val Value) string {
-	var result2 string
-	// DINGO_MATCH_START: val
-	scrutinee2 := val
-	switch scrutinee2.tag {
-	case ValueTagSmall:
-		x := *scrutinee2.small
-		// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x > 0
-		if x > 0 {
-			result2 = "positive small"
+	return func() string {
+		switch v := val.(type) {
+		case Value_Small:
+			x := v.x
+			if x > 0 {
+				return "positive small"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			x := v.x
+			if x > 0 {
+				return "positive medium"
+			}
+			panic("match guard failed without fallback")
+		case Value_Large:
+			x := v.x
+			if x > 0 {
+				return "positive large"
+			}
+			panic("match guard failed without fallback")
+		default:
+			if true {
+				return "non-positive or zero"
+			}
+			panic("match guard failed without fallback")
 		}
-	case ValueTagMedium:
-		x := *scrutinee2.medium
-		// DINGO_PATTERN: ValueMedium(x) | DINGO_GUARD: x > 0
-		if x > 0 {
-			result2 = "positive medium"
-		}
-	case ValueTagLarge:
-		x := *scrutinee2.large
-		// DINGO_PATTERN: ValueLarge(x) | DINGO_GUARD: x > 0
-		if x > 0 {
-			result2 = "positive large"
-		}
-	default:
-		// DINGO_PATTERN: _
-		result2 = "non-positive or zero"
-	}
-	return result2
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Many guarded arms (performance test)
 func granularClassify(val Value) string {
-	var result3 string
-	// DINGO_MATCH_START: val
-	scrutinee3 := val
-	switch scrutinee3.tag {
-	case ValueTagSmall:
-		x := *scrutinee3.small
-		// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x == 1
-		if x == 1 {
-			result3 = "one"
-			// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x == 2
-		} else if x == 2 {
-			result3 = "two"
-			// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x == 3
-		} else if x == 3 {
-			result3 = "three"
-			// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x == 4
-		} else if x == 4 {
-			result3 = "four"
-			// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x == 5
-		} else if x == 5 {
-			result3 = "five"
-			// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: x > 5 && x < 10
-		} else if x > 5 && x < 10 {
-			result3 = "five to ten"
-			// DINGO_PATTERN: ValueSmall(_)
-		} else {
-			result3 = "small other"
+	return func() string {
+		switch v := val.(type) {
+		case Value_Small:
+			x := v.x
+			if x == 1 {
+				return "one"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			x := v.x
+			if x == 2 {
+				return "two"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			x := v.x
+			if x == 3 {
+				return "three"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			x := v.x
+			if x == 4 {
+				return "four"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			x := v.x
+			if x == 5 {
+				return "five"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			x := v.x
+			if x > 5 && x < 10 {
+				return "five to ten"
+			}
+			panic("match guard failed without fallback")
+		case Value_Small:
+			return "small other"
+		case Value_Medium:
+			x := v.x
+			if x < 50 {
+				return "lower medium"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			x := v.x
+			if x >= 50 && x < 100 {
+				return "mid medium"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			return "upper medium"
+		case Value_Large:
+			return "large"
 		}
-	case ValueTagMedium:
-		x := *scrutinee3.medium
-		// DINGO_PATTERN: ValueMedium(x) | DINGO_GUARD: x < 50
-		if x < 50 {
-			result3 = "lower medium"
-			// DINGO_PATTERN: ValueMedium(x) | DINGO_GUARD: x >= 50 && x < 100
-		} else if x >= 50 && x < 100 {
-			result3 = "mid medium"
-			// DINGO_PATTERN: ValueMedium(_)
-		} else {
-			result3 = "upper medium"
-		}
-	case ValueTagLarge:
-		// DINGO_PATTERN: ValueLarge(_)
-		result3 = "large"
-	}
-	return result3
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Guard with constant condition (optimization test)
 func alwaysMatch(val Value) string {
-	var result4 string
-	// DINGO_MATCH_START: val
-	scrutinee4 := val
-	switch scrutinee4.tag {
-	case ValueTagSmall:
-		// DINGO_PATTERN: ValueSmall(_) | DINGO_GUARD: true
-		if true {
-			result4 = "small"
+	return func() string {
+		switch v := val.(type) {
+		case Value_Small:
+			if true {
+				return "small"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			if 1 > 0 {
+				return "medium"
+			}
+			panic("match guard failed without fallback")
+		case Value_Large:
+			return "large"
 		}
-	case ValueTagMedium:
-		// DINGO_PATTERN: ValueMedium(_) | DINGO_GUARD: 1 > 0
-		if 1 > 0 {
-			result4 = "medium"
-		}
-	case ValueTagLarge:
-		// DINGO_PATTERN: ValueLarge(_)
-		result4 = "large"
-	}
-	return result4
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Guard with side effects (not recommended but valid)
 func countMatches(val Value) string {
 	var count int = 0
-	var result5 string
-	// DINGO_MATCH_START: val
-	scrutinee5 := val
-	switch scrutinee5.tag {
-	case ValueTagSmall:
-		x := *scrutinee5.small
-		// DINGO_PATTERN: ValueSmall(x) | DINGO_GUARD: increment(&count) && x > 0
-		if increment(&count) && x > 0 {
-			result5 = "small positive"
+	return func() string {
+		switch v := val.(type) {
+		case Value_Small:
+			x := v.x
+			if increment(&count) && x > 0 {
+				return "small positive"
+			}
+			panic("match guard failed without fallback")
+		case Value_Medium:
+			x := v.x
+			if increment(&count) && x > 0 {
+				return "medium positive"
+			}
+			panic("match guard failed without fallback")
+		case Value_Large:
+			x := v.x
+			if increment(&count) && x > 0 {
+				return "large positive"
+			}
+			panic("match guard failed without fallback")
+		default:
+			return "other"
 		}
-	case ValueTagMedium:
-		x := *scrutinee5.medium
-		// DINGO_PATTERN: ValueMedium(x) | DINGO_GUARD: increment(&count) && x > 0
-		if increment(&count) && x > 0 {
-			result5 = "medium positive"
-		}
-	case ValueTagLarge:
-		x := *scrutinee5.large
-		// DINGO_PATTERN: ValueLarge(x) | DINGO_GUARD: increment(&count) && x > 0
-		if increment(&count) && x > 0 {
-			result5 = "large positive"
-		}
-	default:
-		// DINGO_PATTERN: _
-		result5 = "other"
-	}
-	return result5
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
+
 func increment(p *int) bool {
 	*p++
 	return true
 }
+
 func main() {
-	println(classify(ValueSmall(15)))
-	println(filterPositive(ValueMedium(-5)))
-	println(granularClassify(ValueSmall(3)))
-	println(alwaysMatch(ValueMedium(42)))
+	println(classify(Value_Small(15)))
+	println(filterPositive(Value_Medium(-5)))
+	println(granularClassify(Value_Small(3)))
+	println(alwaysMatch(Value_Medium(42)))
 }

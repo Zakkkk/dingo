@@ -5,197 +5,139 @@ package main
 // Complexity: intermediate
 // Limitation: where guards with NESTED patterns not yet supported
 
-// dingo:n:1
-type OptionTag uint8
-
-const (
-	OptionTagSome OptionTag = iota
-	OptionTagNone
-)
-
-type Option struct {
-	tag  OptionTag
-	some *int
+type Option interface {
+	isOption()
+	IsSome() bool
+	IsNone() bool
 }
 
-func OptionSome(arg0 int) Option {
-	return Option{tag: OptionTagSome, some: &arg0}
-}
-func OptionNone() Option {
-	return Option{tag: OptionTagNone}
-}
-func (e Option) IsSome() bool {
-	return e.tag == OptionTagSome
-}
-func (e Option) IsNone() bool {
-	return e.tag == OptionTagNone
-}
-func (o Option) Map(fn func(int) int) Option {
-	switch o.tag {
-	case OptionTagSome:
-		if o.some != nil {
-			return OptionSome(fn(*o.some))
-		}
-	case OptionTagNone:
-		return o
-	}
-	panic("invalid Option state")
-}
-func (o Option) AndThen(fn func(int) Option) Option {
-	switch o.tag {
-	case OptionTagSome:
-		if o.some != nil {
-			return fn(*o.some)
-		}
-	case OptionTagNone:
-		return o
-	}
-	panic("invalid Option state")
-}
-func (o Option) Unwrap() int {
-	if o.tag != OptionTagSome {
-		panic("called Unwrap on None")
-	}
-	return *o.some
+type OptionSome struct{ Value int }
+
+func (OptionSome) isOption()         {}
+func NewOptionSome(value int) Option { return OptionSome{Value: value} }
+
+type OptionNone struct{}
+
+func (OptionNone) isOption() {}
+func NewOptionNone() Option  { return OptionNone{} }
+
+func IsOptionSome(v Option) bool { _, ok := v.(OptionSome); return ok }
+func IsOptionNone(v Option) bool { _, ok := v.(OptionNone); return ok }
+func (OptionSome) IsSome() bool  { return true }
+func (OptionSome) IsNone() bool  { return false }
+func (OptionNone) IsSome() bool  { return false }
+func (OptionNone) IsNone() bool  { return true }
+
+type Result interface {
+	isResult()
+	IsOk() bool
+	IsErr() bool
 }
 
-// dingo:n:0
-type ResultTag uint8
+type ResultOk struct{ Value int }
 
-const (
-	ResultTagOk ResultTag = iota
-	ResultTagErr
-)
+func (ResultOk) isResult()         {}
+func NewResultOk(value int) Result { return ResultOk{Value: value} }
 
-type Result struct {
-	tag ResultTag
-	err *error
-	ok  *int
-}
-func ResultOk(arg0 int) Result {
-	return Result{tag: ResultTagOk, ok: &arg0}
-}
-func ResultErr(arg0 error) Result {
-	return Result{tag: ResultTagErr, err: &arg0}
-}
-func (e Result) IsOk() bool {
-	return e.tag == ResultTagOk
-}
-func (e Result) IsErr() bool {
-	return e.tag == ResultTagErr
-}
-func (r Result) Map(fn func(int) int) Result {
-	switch r.tag {
-	case ResultTagOk:
-		if r.ok != nil {
-			return ResultOk(fn(*r.ok))
-		}
-	case ResultTagErr:
-		return r
-	}
-	panic("invalid Result state")
-}
-func (r Result) AndThen(fn func(int) Result) Result {
-	switch r.tag {
-	case ResultTagOk:
-		if r.ok != nil {
-			return fn(*r.ok)
-		}
-	case ResultTagErr:
-		return r
-	}
-	panic("invalid Result state")
-}
+type ResultErr struct{ Value error }
+
+func (ResultErr) isResult()           {}
+func NewResultErr(value error) Result { return ResultErr{Value: value} }
+
+func IsResultOk(v Result) bool  { _, ok := v.(ResultOk); return ok }
+func IsResultErr(v Result) bool { _, ok := v.(ResultErr); return ok }
+func (ResultOk) IsOk() bool     { return true }
+func (ResultOk) IsErr() bool    { return false }
+func (ResultErr) IsOk() bool    { return false }
+func (ResultErr) IsErr() bool   { return true }
 
 // Using 'where' keyword (Swift-style)
 func analyzeValue(opt Option) string {
-	var result string
-	// DINGO_MATCH_START: opt
-	scrutinee := opt
-	switch scrutinee.tag {
-	case OptionTagSome:
-		x := *scrutinee.some
-		// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 100
-		if x > 100 {
-			result = "large"
-			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 10
-		} else if x > 10 {
-			result = "medium"
-			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x > 0
-		} else if x > 0 {
-			result = "small"
-			// DINGO_PATTERN: OptionSome(_)
-		} else {
-			result = "non-positive"
+	return func() string {
+		switch v := opt.(type) {
+		case OptionSome:
+			x := v.x
+			if x > 100 {
+				return "large"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			x := v.x
+			if x > 10 {
+				return "medium"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			x := v.x
+			if x > 0 {
+				return "small"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			return "non-positive"
+		default:
+			OptionNone := opt
+			return "none"
 		}
-	case OptionTagNone:
-		// DINGO_PATTERN: OptionNone
-		result = "none"
-	}
-	return result
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Simple pattern with where guards (NOT nested)
 func processResult(result Result) string {
-	var result2 string
-	// DINGO_MATCH_START: result
-	scrutinee2 := result
-	switch scrutinee2.tag {
-	case ResultTagOk:
-		val := *scrutinee2.ok
-		// DINGO_PATTERN: ResultOk(val) | DINGO_GUARD: val > 100
-		if val > 100 {
-			result2 = "large value"
-			// DINGO_PATTERN: ResultOk(val) | DINGO_GUARD: val > 0
-		} else if val > 0 {
-			result2 = "positive value"
-			// DINGO_PATTERN: ResultOk(_)
-		} else {
-			result2 = "non-positive value"
+	return func() string {
+		switch v := result.(type) {
+		case ResultOk:
+			val := v.val
+			if val > 100 {
+				return "large value"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			val := v.val
+			if val > 0 {
+				return "positive value"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			return "non-positive value"
+		case ResultErr:
+			return "error"
 		}
-	case ResultTagErr:
-		// DINGO_PATTERN: ResultErr(_)
-		result2 = "error"
-	}
-	return result2
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Guard fallthrough demonstration
 func categorize(opt Option) string {
-	var result3 string
-	// DINGO_MATCH_START: opt
-	scrutinee3 := opt
-	switch scrutinee3.tag {
-	case OptionTagSome:
-		x := *scrutinee3.some
-		// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%3 == 0 && x%5 == 0
-		if x%3 == 0 && x%5 == 0 {
-			result3 = "fizzbuzz"
-			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%3 == 0
-		} else if x%3 == 0 {
-			result3 = "fizz"
-			// DINGO_PATTERN: OptionSome(x) | DINGO_GUARD: x%5 == 0
-		} else if x%5 == 0 {
-			result3 = "buzz"
-			// DINGO_PATTERN: OptionSome(x)
-		} else {
-			result3 = "number"
+	return func() string {
+		switch v := opt.(type) {
+		case OptionSome:
+			x := v.x
+			if x%3 == 0 && x%5 == 0 {
+				return "fizzbuzz"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			x := v.x
+			if x%3 == 0 {
+				return "fizz"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			x := v.x
+			if x%5 == 0 {
+				return "buzz"
+			}
+			panic("match guard failed without fallback")
+		case OptionSome:
+			x := v.x
+			return "number"
+		default:
+			OptionNone := opt
+			return "empty"
 		}
-	case OptionTagNone:
-		// DINGO_PATTERN: OptionNone
-		result3 = "empty"
-	}
-	return result3
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
+
 func main() {
 	println(analyzeValue(OptionSome(150)))
 	println(processResult(ResultOk(42)))

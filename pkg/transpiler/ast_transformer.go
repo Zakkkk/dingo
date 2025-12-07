@@ -55,9 +55,8 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 	result := src
 
 	// Shared counter for unique temp var names across all expressions
-	// Since we process in reverse order (end→start), start counter high and decrement
-	// so that the first expression in the file gets the lowest number
-	tempCounter := len(locations)
+	// Counter starts at 0 and increments, so first temp var has no suffix
+	tempCounter := 0
 
 	// Transform each expression from end to beginning
 	for _, loc := range locations {

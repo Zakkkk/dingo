@@ -71,11 +71,11 @@ func FilterUserEvents(events: []Event) []Event {
 
 func main() {
 	events := []Event{
-		EventUserCreated(1, "alice@example.com"),
-		EventOrderPlaced("ORD-001", 1500.00, 1),
-		EventPaymentReceived("ORD-001", 1500.00),
-		EventOrderShipped("ORD-001", "TRK-12345"),
-		EventPaymentFailed("ORD-002", "insufficient funds"),
+		Event.UserCreated(1, "alice@example.com"),
+		Event.OrderPlaced("ORD-001", 1500.00, 1),
+		Event.PaymentReceived("ORD-001", 1500.00),
+		Event.OrderShipped("ORD-001", "TRK-12345"),
+		Event.PaymentFailed("ORD-002", "insufficient funds"),
 	}
 
 	fmt.Println("=== Processing Events ===")

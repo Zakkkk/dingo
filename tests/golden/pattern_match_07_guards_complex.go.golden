@@ -6,154 +6,158 @@ import "strings"
 // Feature: Guards with complex boolean logic, field access, and method calls
 // Complexity: advanced
 
-// dingo:n:1
-type RequestTag uint8
-
-const (
-	RequestTagGet RequestTag = iota
-	RequestTagPost
-	RequestTagDelete
-)
-
-type Request struct {
-	tag    RequestTag
-	delete *string
-	get    *string
-	post   *string
-	post1  *string
+type Request interface {
+	isRequest()
+	IsGet() bool
+	IsPost() bool
+	IsDelete() bool
 }
 
-func RequestGet(arg0 string) Request {
-	return Request{tag: RequestTagGet, get: &arg0}
-}
-func RequestPost(arg0 string, arg1 string) Request {
-	return Request{tag: RequestTagPost, post: &arg0, post1: &arg1}
-}
-func RequestDelete(arg0 string) Request {
-	return Request{tag: RequestTagDelete, delete: &arg0}
-}
-func (e Request) IsGet() bool {
-	return e.tag == RequestTagGet
-}
-func (e Request) IsPost() bool {
-	return e.tag == RequestTagPost
-}
-func (e Request) IsDelete() bool {
-	return e.tag == RequestTagDelete
+type RequestGet struct{ Value string }
+
+func (RequestGet) isRequest()            {}
+func NewRequestGet(value string) Request { return RequestGet{Value: value} }
+
+type RequestPost struct {
+	Value0 string
+	Value1 string
 }
 
-// dingo:n:0
-type StatusTag uint8
+func (RequestPost) isRequest() {}
+func NewRequestPost(value0 string, value1 string) Request {
+	return RequestPost{Value0: value0, Value1: value1}
+}
 
-const (
-	StatusTagActive StatusTag = iota
-	StatusTagPaused
-	StatusTagStopped
-)
+type RequestDelete struct{ Value string }
 
-type Status struct {
-	tag    StatusTag
-	active *int
-	paused *int
+func (RequestDelete) isRequest()            {}
+func NewRequestDelete(value string) Request { return RequestDelete{Value: value} }
+
+func IsRequestGet(v Request) bool    { _, ok := v.(RequestGet); return ok }
+func IsRequestPost(v Request) bool   { _, ok := v.(RequestPost); return ok }
+func IsRequestDelete(v Request) bool { _, ok := v.(RequestDelete); return ok }
+func (RequestGet) IsGet() bool       { return true }
+func (RequestGet) IsPost() bool      { return false }
+func (RequestGet) IsDelete() bool    { return false }
+func (RequestPost) IsGet() bool      { return false }
+func (RequestPost) IsPost() bool     { return true }
+func (RequestPost) IsDelete() bool   { return false }
+func (RequestDelete) IsGet() bool    { return false }
+func (RequestDelete) IsPost() bool   { return false }
+func (RequestDelete) IsDelete() bool { return true }
+
+type Status interface {
+	isStatus()
+	IsActive() bool
+	IsPaused() bool
+	IsStopped() bool
 }
-func StatusActive(arg0 int) Status {
-	return Status{tag: StatusTagActive, active: &arg0}
-}
-func StatusPaused(arg0 int) Status {
-	return Status{tag: StatusTagPaused, paused: &arg0}
-}
-func StatusStopped() Status {
-	return Status{tag: StatusTagStopped}
-}
-func (e Status) IsActive() bool {
-	return e.tag == StatusTagActive
-}
-func (e Status) IsPaused() bool {
-	return e.tag == StatusTagPaused
-}
-func (e Status) IsStopped() bool {
-	return e.tag == StatusTagStopped
-}
+
+type StatusActive struct{ Value int }
+
+func (StatusActive) isStatus()         {}
+func NewStatusActive(value int) Status { return StatusActive{Value: value} }
+
+type StatusPaused struct{ Value int }
+
+func (StatusPaused) isStatus()         {}
+func NewStatusPaused(value int) Status { return StatusPaused{Value: value} }
+
+type StatusStopped struct{}
+
+func (StatusStopped) isStatus() {}
+func NewStatusStopped() Status  { return StatusStopped{} }
+
+func IsStatusActive(v Status) bool    { _, ok := v.(StatusActive); return ok }
+func IsStatusPaused(v Status) bool    { _, ok := v.(StatusPaused); return ok }
+func IsStatusStopped(v Status) bool   { _, ok := v.(StatusStopped); return ok }
+func (StatusActive) IsActive() bool   { return true }
+func (StatusActive) IsPaused() bool   { return false }
+func (StatusActive) IsStopped() bool  { return false }
+func (StatusPaused) IsActive() bool   { return false }
+func (StatusPaused) IsPaused() bool   { return true }
+func (StatusPaused) IsStopped() bool  { return false }
+func (StatusStopped) IsActive() bool  { return false }
+func (StatusStopped) IsPaused() bool  { return false }
+func (StatusStopped) IsStopped() bool { return true }
 
 // Mixed if/where keywords in same match
 func routeRequest(req Request) string {
-	var result string
-	// DINGO_MATCH_START: req
-	scrutinee := req
-	switch scrutinee.tag {
-	case RequestTagGet:
-		path := *scrutinee.get
-		// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: strings.HasPrefix(path, "/api/")
-		if strings.HasPrefix(path, "/api/") {
-			result = "API endpoint"
-			// DINGO_PATTERN: RequestGet(path) | DINGO_GUARD: len(path) > 0
-		} else if len(path) > 0 {
-			result = "static resource"
+	return func() string {
+		switch v := req.(type) {
+		case Request_Get:
+			path := v.path
+			if strings.HasPrefix(path, "/api/") {
+				return "API endpoint"
+			}
+			panic("match guard failed without fallback")
+		case Request_Get:
+			path := v.path
+			if len(path) > 0 {
+				return "static resource"
+			}
+			panic("match guard failed without fallback")
+		case Request_Post:
+			path := v.path
+			body := v.body
+			if len(body) > 100 && strings.Contains(path, "upload") {
+				return "large upload"
+			}
+			panic("match guard failed without fallback")
+		case Request_Post:
+			body := v.body
+			if len(body) > 0 {
+				return "post request"
+			}
+			panic("match guard failed without fallback")
+		case Request_Delete:
+			path := v.path
+			if isProtected(path) {
+				return "forbidden"
+			}
+			panic("match guard failed without fallback")
+		case Request_Delete:
+			return "delete request"
+		default:
+			return "unknown"
 		}
-	case RequestTagPost:
-		path := *scrutinee.post
-		body := *scrutinee.post1
-		// DINGO_PATTERN: RequestPost(path, body) | DINGO_GUARD: len(body) > 100 && strings.Contains(path, "upload")
-		if len(body) > 100 && strings.Contains(path, "upload") {
-			result = "large upload"
-			// DINGO_PATTERN: RequestPost(_, body) | DINGO_GUARD: len(body) > 0
-		} else if len(body) > 0 {
-			result = "post request"
-		}
-	case RequestTagDelete:
-		path := *scrutinee.delete
-		// DINGO_PATTERN: RequestDelete(path) | DINGO_GUARD: isProtected(path)
-		if isProtected(path) {
-			result = "forbidden"
-			// DINGO_PATTERN: RequestDelete(_)
-		} else {
-			result = "delete request"
-		}
-	default:
-		// DINGO_PATTERN: _
-		result = "unknown"
-	}
-	return result
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // Guards with logical operators
 func classifyStatus(status Status) string {
-	var result2 string
-	// DINGO_MATCH_START: status
-	scrutinee2 := status
-	switch scrutinee2.tag {
-	case StatusTagActive:
-		count := *scrutinee2.active
-		// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count > 1000 || count < 0
-		if count > 1000 || count < 0 {
-			result2 = "unusual"
-			// DINGO_PATTERN: StatusActive(count) | DINGO_GUARD: count >= 100 && count <= 1000
-		} else if count >= 100 && count <= 1000 {
-			result2 = "normal"
-			// DINGO_PATTERN: StatusActive(_)
-		} else {
-			result2 = "low activity"
+	return func() string {
+		switch v := status.(type) {
+		case Status_Active:
+			count := v.count
+			if count > 1000 || count < 0 {
+				return "unusual"
+			}
+			panic("match guard failed without fallback")
+		case Status_Active:
+			count := v.count
+			if count >= 100 && count <= 1000 {
+				return "normal"
+			}
+			panic("match guard failed without fallback")
+		case Status_Active:
+			return "low activity"
+		case Status_Paused:
+			duration := v.duration
+			if duration > 3600 {
+				return "long pause"
+			}
+			panic("match guard failed without fallback")
+		case Status_Paused:
+			if true {
+				return "short pause"
+			}
+			panic("match guard failed without fallback")
+		default:
+			Status_Stopped := status
+			return "stopped"
 		}
-	case StatusTagPaused:
-		duration := *scrutinee2.paused
-		// DINGO_PATTERN: StatusPaused(duration) | DINGO_GUARD: duration > 3600
-		if duration > 3600 {
-			result2 = "long pause"
-			// DINGO_PATTERN: StatusPaused(_) | DINGO_GUARD: true
-		} else if true {
-			result2 = "short pause"
-		}
-	case StatusTagStopped:
-		// DINGO_PATTERN: StatusStopped
-		result2 = "stopped"
-	}
-	return result2
-	panic("unreachable: match is exhaustive")
-	// DINGO_MATCH_END
-
+	}()
 }
 
 // TODO: Type switch support coming in future PR
@@ -161,18 +165,19 @@ func classifyStatus(status Status) string {
 // 	return match val.(type) {
 // 		int if val.(int) > 0 => "positive integer",
 // 		int where val.(int) < 0 => "negative integer",
-// 		func(int __TYPE_INFERENCE_NEEDED) { return "zero" },
+// 		int => "zero",
 // 		string if len(val.(string)) > 0 => "non-empty string",
-// 		func(string __TYPE_INFERENCE_NEEDED) { return "empty string" },
-// 		func(_ __TYPE_INFERENCE_NEEDED) { return "other type" },
+// 		string => "empty string",
+// 		_ => "other type",
 // 	}
 // }
 
 func isProtected(path string) bool {
 	return strings.HasPrefix(path, "/admin/")
 }
+
 func main() {
-	println(routeRequest(RequestGet("/api/users")))
-	println(classifyStatus(StatusActive(500)))
+	println(routeRequest(Request_Get("/api/users")))
+	println(classifyStatus(Status_Active(500)))
 	// println(processValue(42)) // TODO: Enable when type switch support added
 }

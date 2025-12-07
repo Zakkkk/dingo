@@ -4,55 +4,59 @@ package main
 // Feature: Pattern matching with match expression
 // Complexity: basic
 
-
-type StatusTag uint8
-
-const (
-	StatusTagPending StatusTag = iota
-	StatusTagActive
-	StatusTagComplete
-)
-
-type Status struct {
-	tag StatusTag
+type Status interface {
+	isStatus()
+	IsPending() bool
+	IsActive() bool
+	IsComplete() bool
 }
 
-func StatusPending() Status {
-	return Status{tag: StatusTagPending}
-}
-func StatusActive() Status {
-	return Status{tag: StatusTagActive}
-}
-func StatusComplete() Status {
-	return Status{tag: StatusTagComplete}
-}
-func (e Status) IsPending() bool {
-	return e.tag == StatusTagPending
-}
-func (e Status) IsActive() bool {
-	return e.tag == StatusTagActive
-}
-func (e Status) IsComplete() bool {
-	return e.tag == StatusTagComplete
-}
+type StatusPending struct{}
+
+func (StatusPending) isStatus() {}
+func NewStatusPending() Status  { return StatusPending{} }
+
+type StatusActive struct{}
+
+func (StatusActive) isStatus() {}
+func NewStatusActive() Status  { return StatusActive{} }
+
+type StatusComplete struct{}
+
+func (StatusComplete) isStatus() {}
+func NewStatusComplete() Status  { return StatusComplete{} }
+
+func IsStatusPending(v Status) bool     { _, ok := v.(StatusPending); return ok }
+func IsStatusActive(v Status) bool      { _, ok := v.(StatusActive); return ok }
+func IsStatusComplete(v Status) bool    { _, ok := v.(StatusComplete); return ok }
+func (StatusPending) IsPending() bool   { return true }
+func (StatusPending) IsActive() bool    { return false }
+func (StatusPending) IsComplete() bool  { return false }
+func (StatusActive) IsPending() bool    { return false }
+func (StatusActive) IsActive() bool     { return true }
+func (StatusActive) IsComplete() bool   { return false }
+func (StatusComplete) IsPending() bool  { return false }
+func (StatusComplete) IsActive() bool   { return false }
+func (StatusComplete) IsComplete() bool { return true }
+
 func getStatusMessage(s Status) string {
-	tmp := s
-	switch tmp.tag {
-	default:
-		StatusPending := tmp
-		return "Waiting to start" // dingo:M:1
-	default:
-		StatusActive := tmp
-		return "Currently running" // dingo:M:1
-	default:
-		StatusComplete := tmp
-		return "Finished" // dingo:M:1
-	}
-	panic("non-exhaustive match")
-
+	return func() string {
+		switch s {
+		default:
+			Status_Pending := s
+			return "Waiting to start"
+		default:
+			Status_Active := s
+			return "Currently running"
+		default:
+			Status_Complete := s
+			return "Finished"
+		}
+	}()
 }
+
 func main() {
-	status := StatusActive()
+	status := Status_Active()
 	msg := getStatusMessage(status)
 	println(msg)
 }

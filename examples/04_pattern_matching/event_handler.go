@@ -7,15 +7,7 @@ import (
 )
 
 // Event sum type - all possible events in the system
-type Event interface {
-	isEvent()
-	IsUserCreated() bool
-	IsUserDeleted() bool
-	IsOrderPlaced() bool
-	IsOrderShipped() bool
-	IsPaymentReceived() bool
-	IsPaymentFailed() bool
-}
+type Event interface{ isEvent() }
 
 type EventUserCreated struct {
 	userID int
@@ -73,122 +65,76 @@ func NewEventPaymentFailed(orderID string, reason string) Event {
 	return EventPaymentFailed{orderID: orderID, reason: reason}
 }
 
-func IsEventUserCreated(v Event) bool                { _, ok := v.(EventUserCreated); return ok }
-func IsEventUserDeleted(v Event) bool                { _, ok := v.(EventUserDeleted); return ok }
-func IsEventOrderPlaced(v Event) bool                { _, ok := v.(EventOrderPlaced); return ok }
-func IsEventOrderShipped(v Event) bool               { _, ok := v.(EventOrderShipped); return ok }
-func IsEventPaymentReceived(v Event) bool            { _, ok := v.(EventPaymentReceived); return ok }
-func IsEventPaymentFailed(v Event) bool              { _, ok := v.(EventPaymentFailed); return ok }
-func (EventUserCreated) IsUserCreated() bool         { return true }
-func (EventUserCreated) IsUserDeleted() bool         { return false }
-func (EventUserCreated) IsOrderPlaced() bool         { return false }
-func (EventUserCreated) IsOrderShipped() bool        { return false }
-func (EventUserCreated) IsPaymentReceived() bool     { return false }
-func (EventUserCreated) IsPaymentFailed() bool       { return false }
-func (EventUserDeleted) IsUserCreated() bool         { return false }
-func (EventUserDeleted) IsUserDeleted() bool         { return true }
-func (EventUserDeleted) IsOrderPlaced() bool         { return false }
-func (EventUserDeleted) IsOrderShipped() bool        { return false }
-func (EventUserDeleted) IsPaymentReceived() bool     { return false }
-func (EventUserDeleted) IsPaymentFailed() bool       { return false }
-func (EventOrderPlaced) IsUserCreated() bool         { return false }
-func (EventOrderPlaced) IsUserDeleted() bool         { return false }
-func (EventOrderPlaced) IsOrderPlaced() bool         { return true }
-func (EventOrderPlaced) IsOrderShipped() bool        { return false }
-func (EventOrderPlaced) IsPaymentReceived() bool     { return false }
-func (EventOrderPlaced) IsPaymentFailed() bool       { return false }
-func (EventOrderShipped) IsUserCreated() bool        { return false }
-func (EventOrderShipped) IsUserDeleted() bool        { return false }
-func (EventOrderShipped) IsOrderPlaced() bool        { return false }
-func (EventOrderShipped) IsOrderShipped() bool       { return true }
-func (EventOrderShipped) IsPaymentReceived() bool    { return false }
-func (EventOrderShipped) IsPaymentFailed() bool      { return false }
-func (EventPaymentReceived) IsUserCreated() bool     { return false }
-func (EventPaymentReceived) IsUserDeleted() bool     { return false }
-func (EventPaymentReceived) IsOrderPlaced() bool     { return false }
-func (EventPaymentReceived) IsOrderShipped() bool    { return false }
-func (EventPaymentReceived) IsPaymentReceived() bool { return true }
-func (EventPaymentReceived) IsPaymentFailed() bool   { return false }
-func (EventPaymentFailed) IsUserCreated() bool       { return false }
-func (EventPaymentFailed) IsUserDeleted() bool       { return false }
-func (EventPaymentFailed) IsOrderPlaced() bool       { return false }
-func (EventPaymentFailed) IsOrderShipped() bool      { return false }
-func (EventPaymentFailed) IsPaymentReceived() bool   { return false }
-func (EventPaymentFailed) IsPaymentFailed() bool     { return true }
-
 // ProcessEvent handles all event types with exhaustive matching
 // The compiler ensures every Event variant is handled
 func ProcessEvent(event Event) string {
-	return func() string {
-		switch v := event.(type) {
-		case UserCreated:
-			userID := v.Value
-			email := v.Value
-			return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID)
-		case UserDeleted:
-			userID := v.Value
-			return fmt.Sprintf("User #%d data archived", userID)
-		case OrderPlaced:
-			orderID := v.Value
-			amount := v.Value
-			userID := v.Value
-			if amount > 1000 {
-				return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount)
-			}
-		case OrderPlaced:
-			orderID := v.Value
-			amount := v.Value
-			userID := v.Value
+	val3 := event
+	switch v4 := val3.(type) {
+	case EventUserCreated:
+		userID := v4.userID
+		email := v4.email
+		return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID)
+	case EventUserDeleted:
+		userID := v4.userID
+		return fmt.Sprintf("User #%d data archived", userID)
+	case EventOrderPlaced:
+		orderID := v4.orderID
+		amount := v4.amount
+		userID := v4.userID
+		if amount > 1000 {
+			return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount)
+		} else {
 			return fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID)
-		case OrderShipped:
-			orderID := v.Value
-			trackingNumber := v.Value
-			return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber)
-		case PaymentReceived:
-			orderID := v.Value
-			amount := v.Value
-			return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID)
-		case PaymentFailed:
-			orderID := v.Value
-			reason := v.Value
-			return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason)
 		}
-	}()
+	case EventOrderShipped:
+		orderID := v4.orderID
+		trackingNumber := v4.trackingNumber
+		return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber)
+	case EventPaymentReceived:
+		orderID := v4.orderID
+		amount := v4.amount
+		return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID)
+	case EventPaymentFailed:
+		orderID := v4.orderID
+		reason := v4.reason
+		return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason)
+	}
+	panic("unreachable: exhaustive match")
 }
 
 // GetEventPriority uses guards for complex conditions
 func GetEventPriority(event Event) int {
-	return func() int {
-		switch v := event.(type) {
-		case PaymentFailed:
-			return 1
-		case OrderPlaced:
-			amount := v.Value
-			if amount > 500 {
-				return 2
-			}
-		case UserCreated:
-			return 3
-		default:
-			return 4
+	val1 := event
+	switch v2 := val1.(type) {
+	case EventPaymentFailed:
+		return 1
+	case EventOrderPlaced:
+		amount := v2.amount
+		if amount > 500 {
+			return 2
 		}
-	}()
+	case EventUserCreated:
+		return 3
+	default:
+		return 4
+	}
+	panic("unreachable: exhaustive match")
 }
 
 // FilterUserEvents extracts only user-related events
 func FilterUserEvents(events []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
-		isUserEvent := func() bool {
-			switch v := event.(type) {
-			case UserCreated:
-				return true
-			case UserDeleted:
-				return true
-			default:
-				return false
-			}
-		}()
+		var isUserEvent bool
+		val := event
+		switch val.(type) {
+		case EventUserCreated:
+			isUserEvent = true
+		case EventUserDeleted:
+			isUserEvent = true
+		default:
+			isUserEvent = false
+		}
 		if isUserEvent {
 			userEvents = append(userEvents, event)
 		}
@@ -198,11 +144,11 @@ func FilterUserEvents(events []Event) []Event {
 
 func main() {
 	events := []Event{
-		EventUserCreated(1, "alice@example.com"),
-		EventOrderPlaced("ORD-001", 1500.00, 1),
-		EventPaymentReceived("ORD-001", 1500.00),
-		EventOrderShipped("ORD-001", "TRK-12345"),
-		EventPaymentFailed("ORD-002", "insufficient funds"),
+		NewEventUserCreated(1, "alice@example.com"),
+		NewEventOrderPlaced("ORD-001", 1500.00, 1),
+		NewEventPaymentReceived("ORD-001", 1500.00),
+		NewEventOrderShipped("ORD-001", "TRK-12345"),
+		NewEventPaymentFailed("ORD-002", "insufficient funds"),
 	}
 
 	fmt.Println("=== Processing Events ===")

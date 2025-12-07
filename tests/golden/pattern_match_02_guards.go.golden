@@ -4,58 +4,61 @@ package main
 // Feature: Match with conditional guards
 // Complexity: intermediate
 
-
-type ValueTag uint8
-
-const (
-	ValueTagInt ValueTag = iota
-	ValueTagString
-)
-
-type Value struct {
-	tag    ValueTag
-	int    *int
-	string *string
+type Value interface {
+	isValue()
+	IsInt() bool
+	IsString() bool
 }
 
-func ValueInt(arg0 int) Value {
-	return Value{tag: ValueTagInt, int: &arg0}
-}
-func ValueString(arg0 string) Value {
-	return Value{tag: ValueTagString, string: &arg0}
-}
-func (e Value) IsInt() bool {
-	return e.tag == ValueTagInt
-}
-func (e Value) IsString() bool {
-	return e.tag == ValueTagString
-}
+type ValueInt struct{ Value int }
+
+func (ValueInt) isValue()         {}
+func NewValueInt(value int) Value { return ValueInt{Value: value} }
+
+type ValueString struct{ Value string }
+
+func (ValueString) isValue()            {}
+func NewValueString(value string) Value { return ValueString{Value: value} }
+
+func IsValueInt(v Value) bool      { _, ok := v.(ValueInt); return ok }
+func IsValueString(v Value) bool   { _, ok := v.(ValueString); return ok }
+func (ValueInt) IsInt() bool       { return true }
+func (ValueInt) IsString() bool    { return false }
+func (ValueString) IsInt() bool    { return false }
+func (ValueString) IsString() bool { return true }
+
 func describe(v Value) string {
-	tmp := v
-	switch tmp.tag {
-	case ValueTagInt:
-		n := *tmp.value_int_n
-		if n > 0 {
-			return "Positive number" // dingo:M:1
-		} else if n < 0 {
-			return "Negative number" // dingo:M:1
-		} else {
-			return "Zero" // dingo:M:1
+	return func() string {
+		switch v := v.(type) {
+		case Value_Int:
+			n := v.n
+			if n > 0 {
+				return "Positive number"
+			}
+			panic("match guard failed without fallback")
+		case Value_Int:
+			n := v.n
+			if n < 0 {
+				return "Negative number"
+			}
+			panic("match guard failed without fallback")
+		case Value_Int:
+			return "Zero"
+		case Value_String:
+			s := v.s
+			if len(s) > 5 {
+				return "Long string"
+			}
+			panic("match guard failed without fallback")
+		case Value_String:
+			return "Short string"
 		}
-	case ValueTagString:
-		s := *tmp.value_string_s
-		if len(s) > 5 {
-			return "Long string" // dingo:M:1
-		} else {
-			return "Short string" // dingo:M:1
-		}
-	}
-	panic("non-exhaustive match")
-
+	}()
 }
+
 func main() {
-	val1 := ValueInt(42)
-	val2 := ValueString("hello world")
+	val1 := Value_Int(42)
+	val2 := Value_String("hello world")
 
 	println(describe(val1))
 	println(describe(val2))

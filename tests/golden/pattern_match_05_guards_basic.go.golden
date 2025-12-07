@@ -4,116 +4,100 @@ package main
 // Feature: Pattern matching with runtime guard conditions
 // Complexity: basic
 
-
-type ResultTag uint8
-
-const (
-	ResultTagOk ResultTag = iota
-	ResultTagErr
-)
-
-type Result struct {
-	tag ResultTag
-	err *error
-	ok  *int
+type Result interface {
+	isResult()
+	IsOk() bool
+	IsErr() bool
 }
 
-func ResultOk(arg0 int) Result {
-	return Result{tag: ResultTagOk, ok: &arg0}
-}
-func ResultErr(arg0 error) Result {
-	return Result{tag: ResultTagErr, err: &arg0}
-}
-func (e Result) IsOk() bool {
-	return e.tag == ResultTagOk
-}
-func (e Result) IsErr() bool {
-	return e.tag == ResultTagErr
-}
-func (r Result) Map(fn func(int) int) Result {
-	switch r.tag {
-	case ResultTagOk:
-		if r.ok != nil {
-			return ResultOk(fn(*r.ok))
-		}
-	case ResultTagErr:
-		return r
-	}
-	panic("invalid Result state")
-}
-func (r Result) AndThen(fn func(int) Result) Result {
-	switch r.tag {
-	case ResultTagOk:
-		if r.ok != nil {
-			return fn(*r.ok)
-		}
-	case ResultTagErr:
-		return r
-	}
-	panic("invalid Result state")
-}
+type ResultOk struct{ Value int }
+
+func (ResultOk) isResult()         {}
+func NewResultOk(value int) Result { return ResultOk{Value: value} }
+
+type ResultErr struct{ Value error }
+
+func (ResultErr) isResult()           {}
+func NewResultErr(value error) Result { return ResultErr{Value: value} }
+
+func IsResultOk(v Result) bool  { _, ok := v.(ResultOk); return ok }
+func IsResultErr(v Result) bool { _, ok := v.(ResultErr); return ok }
+func (ResultOk) IsOk() bool     { return true }
+func (ResultOk) IsErr() bool    { return false }
+func (ResultErr) IsOk() bool    { return false }
+func (ResultErr) IsErr() bool   { return true }
 
 // Simple guard on Result type
 func classifyNumber(result Result) string {
-	tmp := result
-	switch tmp.tag {
-	case ResultTagResultOk:
-		x := *tmp.resultok_x
-		if x > 0 {
-			return "positive" // dingo:M:1
-		} else if x < 0 {
-			return "negative" // dingo:M:1
-		} else {
-			return "zero" // dingo:M:1
+	return func() string {
+		switch v := result.(type) {
+		case ResultOk:
+			x := v.x
+			if x > 0 {
+				return "positive"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			x := v.x
+			if x < 0 {
+				return "negative"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			return "zero"
+		case ResultErr:
+			e := v.e
+			return "error"
 		}
-	case ResultTagResultErr:
-		e := *tmp.resulterr_e
-		return "error" // dingo:M:1
-	}
-	panic("non-exhaustive match")
-
+	}()
 }
 
 // Guard with multiple conditions
 func validateAge(result Result) string {
-	tmp := result
-	switch tmp.tag {
-	case ResultTagResultOk:
-		age := *tmp.resultok_age
-		if age >= 18 && age < 65 {
-			return "adult" // dingo:M:1
-		} else if age >= 65 {
-			return "senior" // dingo:M:1
-		} else {
-			return "minor" // dingo:M:1
+	return func() string {
+		switch v := result.(type) {
+		case ResultOk:
+			age := v.age
+			if age >= 18 && age < 65 {
+				return "adult"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			age := v.age
+			if age >= 65 {
+				return "senior"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			return "minor"
+		case ResultErr:
+			return "invalid"
 		}
-	case ResultTagResultErr:
-		return "invalid" // dingo:M:1
-	}
-	panic("non-exhaustive match")
-
+	}()
 }
 
 // Guard with function call
 func checkLength(result Result) string {
-	tmp := result
-	switch tmp.tag {
-	case ResultTagResultOk:
-		n := *tmp.resultok_n
-		if isEven(n) {
-			return "even" // dingo:M:1
-		} else {
-			return "odd" // dingo:M:1
+	return func() string {
+		switch v := result.(type) {
+		case ResultOk:
+			n := v.n
+			if isEven(n) {
+				return "even"
+			}
+			panic("match guard failed without fallback")
+		case ResultOk:
+			return "odd"
+		case ResultErr:
+			return "error"
 		}
-	case ResultTagResultErr:
-		return "error" // dingo:M:1
-	}
-	panic("non-exhaustive match")
-
+	}()
 }
+
 func isEven(n int) bool {
 	return n%2 == 0
 }
+
 func main() {
 	println(classifyNumber(ResultOk(42)))
 	println(validateAge(ResultOk(25)))
