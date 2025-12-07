@@ -9,8 +9,17 @@ type StmtKind int
 
 const (
 	StmtErrorPropAssign StmtKind = iota // x := foo()?
-	StmtErrorPropLet                     // let x = foo()?
-	StmtErrorPropReturn                  // return foo()?
+	StmtErrorPropLet                    // let x = foo()?
+	StmtErrorPropReturn                 // return foo()?
+)
+
+// ErrorPropKind represents the type of error transformation
+type ErrorPropKind int
+
+const (
+	ErrorPropBasic   ErrorPropKind = iota // expr?
+	ErrorPropContext                      // expr ? "message"
+	ErrorPropLambda                       // expr ? |err| transform OR expr ? (err) => transform
 )
 
 // StmtLocation represents a Dingo statement that needs transformation
@@ -21,6 +30,13 @@ type StmtLocation struct {
 	VarName   string // Target variable name (for assign/let)
 	ExprStart int    // Start of expression (before ?)
 	ExprEnd   int    // End of expression (after ?)
+
+	// Advanced error propagation
+	ErrorKind       ErrorPropKind // Type of error transformation
+	ErrorContext    string        // Context message (for ErrorPropContext)
+	LambdaParam     string        // Lambda parameter name (for ErrorPropLambda)
+	LambdaBodyStart int           // Start byte position of lambda body
+	LambdaBodyEnd   int           // End byte position of lambda body
 }
 
 // FindErrorPropStatements finds statements containing error propagation
@@ -44,7 +60,7 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 		if t.Kind == tokenizer.IDENT || t.Kind == tokenizer.UNDERSCORE {
 			// Check for "ident :=" or "_ :=" pattern
 			if i+1 < len(tokens) && tokens[i+1].Kind == tokenizer.DEFINE {
-				loc := scanForQuestionMark(tokens, i, src)
+				loc := scanForQuestionMark(tokens, i)
 				if loc != nil {
 					loc.Kind = StmtErrorPropAssign
 					loc.VarName = t.Lit
@@ -58,7 +74,7 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 			if i+2 < len(tokens) &&
 				tokens[i+1].Kind == tokenizer.IDENT &&
 				tokens[i+2].Kind == tokenizer.ASSIGN {
-				loc := scanForQuestionMark(tokens, i, src)
+				loc := scanForQuestionMark(tokens, i)
 				if loc != nil {
 					loc.Kind = StmtErrorPropLet
 					loc.VarName = tokens[i+1].Lit
@@ -68,7 +84,7 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 				}
 			}
 		} else if t.Kind == tokenizer.RETURN {
-			loc := scanForQuestionMark(tokens, i, src)
+			loc := scanForQuestionMark(tokens, i)
 			if loc != nil {
 				loc.Kind = StmtErrorPropReturn
 				locations = append(locations, *loc)
@@ -82,7 +98,8 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 }
 
 // scanForQuestionMark scans forward from startIdx looking for a statement ending with ?
-func scanForQuestionMark(tokens []tokenizer.Token, startIdx int, src []byte) *StmtLocation {
+// Also detects advanced patterns: ? "message", ? |err| expr, ? (err) => expr, ? err => expr
+func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 	depth := 0
 	stmtStart := tokens[startIdx].BytePos()
 
@@ -98,20 +115,85 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int, src []byte) *St
 			// Check it's standalone ? (not ?? or ?.)
 			if i+1 < len(tokens) {
 				next := tokens[i+1]
-				if next.Kind == tokenizer.QUESTION || next.Kind == tokenizer.DOT {
-					continue // It's ?? or ?.
+				if next.Kind == tokenizer.QUESTION {
+					continue // It's ??
+				}
+				if next.Kind == tokenizer.DOT {
+					continue // It's ?.
 				}
 			}
 			if depth == 0 {
-				// Found statement with ? at end
-				// Find expression start (after := or = or return)
+				// Found ? at statement level - check for advanced patterns
 				exprStart := findExprStart(tokens, startIdx, i)
-				return &StmtLocation{
+				loc := &StmtLocation{
 					Start:     stmtStart,
-					End:       t.ByteEnd(),
 					ExprStart: exprStart,
-					ExprEnd:   t.ByteEnd(),
+					ExprEnd:   t.ByteEnd(), // End of expression (excluding ? and transform)
+					ErrorKind: ErrorPropBasic,
 				}
+
+				// Look at what follows the ?
+				if i+1 < len(tokens) {
+					next := tokens[i+1]
+
+					// Pattern: ? "message" (string context)
+					if next.Kind == tokenizer.STRING {
+						loc.ErrorKind = ErrorPropContext
+						// Strip quotes from string literal
+						msg := next.Lit
+						if len(msg) >= 2 {
+							if (msg[0] == '"' && msg[len(msg)-1] == '"') ||
+								(msg[0] == '`' && msg[len(msg)-1] == '`') {
+								msg = msg[1 : len(msg)-1]
+							}
+						}
+						loc.ErrorContext = msg
+						loc.End = next.ByteEnd()
+						return loc
+					}
+
+					// Pattern: ? |param| body (Rust-style lambda)
+					if next.Kind == tokenizer.PIPE {
+						if parsed := parseRustLambdaTransform(tokens, i+1); parsed != nil {
+							loc.ErrorKind = ErrorPropLambda
+							loc.LambdaParam = parsed.param
+							loc.LambdaBodyStart = parsed.bodyStart
+							loc.LambdaBodyEnd = parsed.bodyEnd
+							loc.End = parsed.bodyEnd
+							return loc
+						}
+					}
+
+					// Pattern: ? (param) => body (TypeScript-style with parens)
+					if next.Kind == tokenizer.LPAREN {
+						if parsed := parseTSLambdaTransform(tokens, i+1); parsed != nil {
+							loc.ErrorKind = ErrorPropLambda
+							loc.LambdaParam = parsed.param
+							loc.LambdaBodyStart = parsed.bodyStart
+							loc.LambdaBodyEnd = parsed.bodyEnd
+							loc.End = parsed.bodyEnd
+							return loc
+						}
+					}
+
+					// Pattern: ? param => body (TypeScript-style single param, no parens)
+					if next.Kind == tokenizer.IDENT {
+						if i+2 < len(tokens) && tokens[i+2].Kind == tokenizer.ARROW {
+							if parsed := parseTSSingleParamLambdaTransform(tokens, i+1); parsed != nil {
+								loc.ErrorKind = ErrorPropLambda
+								loc.LambdaParam = parsed.param
+								loc.LambdaBodyStart = parsed.bodyStart
+								loc.LambdaBodyEnd = parsed.bodyEnd
+								loc.End = parsed.bodyEnd
+								return loc
+							}
+						}
+					}
+				}
+
+				// Basic ? (no transform)
+				loc.End = t.ByteEnd()
+				return loc
 			}
 		case tokenizer.SEMICOLON, tokenizer.NEWLINE:
 			// End of statement without finding ?
@@ -121,6 +203,168 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int, src []byte) *St
 		}
 	}
 	return nil
+}
+
+// lambdaParsed holds the result of parsing a lambda transform
+type lambdaParsed struct {
+	param     string
+	bodyStart int // Start byte position of lambda body
+	bodyEnd   int // End byte position of lambda body (from last token's ByteEnd)
+}
+
+// parseRustLambdaTransform parses: |param| body
+// startIdx points to the first PIPE token
+func parseRustLambdaTransform(tokens []tokenizer.Token, startIdx int) *lambdaParsed {
+	if startIdx >= len(tokens) || tokens[startIdx].Kind != tokenizer.PIPE {
+		return nil
+	}
+
+	// Expect: PIPE IDENT PIPE
+	if startIdx+2 >= len(tokens) {
+		return nil
+	}
+	if tokens[startIdx+1].Kind != tokenizer.IDENT {
+		return nil
+	}
+	if tokens[startIdx+2].Kind != tokenizer.PIPE {
+		return nil
+	}
+
+	param := tokens[startIdx+1].Lit
+	bodyStartIdx := startIdx + 3 // After closing |
+
+	// Parse body until end of statement
+	return parseLambdaBody(tokens, bodyStartIdx, param)
+}
+
+// parseTSLambdaTransform parses: (param) => body
+// startIdx points to LPAREN
+func parseTSLambdaTransform(tokens []tokenizer.Token, startIdx int) *lambdaParsed {
+	if startIdx >= len(tokens) || tokens[startIdx].Kind != tokenizer.LPAREN {
+		return nil
+	}
+
+	// Expect: LPAREN IDENT RPAREN ARROW
+	if startIdx+3 >= len(tokens) {
+		return nil
+	}
+	if tokens[startIdx+1].Kind != tokenizer.IDENT {
+		return nil
+	}
+	if tokens[startIdx+2].Kind != tokenizer.RPAREN {
+		return nil
+	}
+	if tokens[startIdx+3].Kind != tokenizer.ARROW {
+		return nil
+	}
+
+	param := tokens[startIdx+1].Lit
+	bodyStartIdx := startIdx + 4 // After =>
+
+	return parseLambdaBody(tokens, bodyStartIdx, param)
+}
+
+// parseTSSingleParamLambdaTransform parses: param => body
+// startIdx points to IDENT
+func parseTSSingleParamLambdaTransform(tokens []tokenizer.Token, startIdx int) *lambdaParsed {
+	if startIdx >= len(tokens) || tokens[startIdx].Kind != tokenizer.IDENT {
+		return nil
+	}
+
+	// Expect: IDENT ARROW
+	if startIdx+1 >= len(tokens) || tokens[startIdx+1].Kind != tokenizer.ARROW {
+		return nil
+	}
+
+	param := tokens[startIdx].Lit
+	bodyStartIdx := startIdx + 2 // After =>
+
+	return parseLambdaBody(tokens, bodyStartIdx, param)
+}
+
+// parseLambdaBody parses the lambda body expression until end of statement
+// Returns token positions only - NO string extraction or manipulation
+func parseLambdaBody(tokens []tokenizer.Token, bodyStartIdx int, param string) *lambdaParsed {
+	if bodyStartIdx >= len(tokens) {
+		return nil
+	}
+
+	depth := 0
+	lastContentIdx := bodyStartIdx // Track last non-whitespace token
+
+	for i := bodyStartIdx; i < len(tokens); i++ {
+		t := tokens[i]
+
+		switch t.Kind {
+		case tokenizer.LPAREN, tokenizer.LBRACKET, tokenizer.LBRACE:
+			depth++
+			lastContentIdx = i
+		case tokenizer.RPAREN:
+			if depth == 0 {
+				// End of expression - return positions from last content token
+				if lastContentIdx < bodyStartIdx {
+					return nil
+				}
+				return &lambdaParsed{
+					param:     param,
+					bodyStart: tokens[bodyStartIdx].BytePos(),
+					bodyEnd:   tokens[lastContentIdx].ByteEnd(),
+				}
+			}
+			depth--
+			lastContentIdx = i
+		case tokenizer.RBRACKET, tokenizer.RBRACE:
+			if depth == 0 {
+				if lastContentIdx < bodyStartIdx {
+					return nil
+				}
+				return &lambdaParsed{
+					param:     param,
+					bodyStart: tokens[bodyStartIdx].BytePos(),
+					bodyEnd:   tokens[lastContentIdx].ByteEnd(),
+				}
+			}
+			depth--
+			lastContentIdx = i
+		case tokenizer.SEMICOLON:
+			if depth == 0 {
+				if lastContentIdx < bodyStartIdx {
+					return nil
+				}
+				return &lambdaParsed{
+					param:     param,
+					bodyStart: tokens[bodyStartIdx].BytePos(),
+					bodyEnd:   tokens[lastContentIdx].ByteEnd(),
+				}
+			}
+		case tokenizer.NEWLINE:
+			// Newline at depth 0 ALWAYS ends the expression in Dingo
+			// Lambda bodies are single-expression, not multi-line
+			if depth == 0 {
+				if lastContentIdx < bodyStartIdx {
+					return nil
+				}
+				return &lambdaParsed{
+					param:     param,
+					bodyStart: tokens[bodyStartIdx].BytePos(),
+					bodyEnd:   tokens[lastContentIdx].ByteEnd(),
+				}
+			}
+		default:
+			// Track last content token (not newline/semicolon/whitespace)
+			lastContentIdx = i
+		}
+	}
+
+	// Reached end of tokens
+	if lastContentIdx < bodyStartIdx {
+		return nil
+	}
+	return &lambdaParsed{
+		param:     param,
+		bodyStart: tokens[bodyStartIdx].BytePos(),
+		bodyEnd:   tokens[lastContentIdx].ByteEnd(),
+	}
 }
 
 // findExprStart finds where the expression starts (after := or = or return)

@@ -28,6 +28,12 @@ import (
 //
 // Returns error immediately on any parse failure with byte offset information.
 func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
+	return transformASTExpressionsWithRegistry(src, nil)
+}
+
+// transformASTExpressionsWithRegistry is like transformASTExpressions but accepts
+// an enum registry for match expression pattern name resolution.
+func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string) ([]byte, []ast.SourceMapping, error) {
 	// Find all Dingo expressions
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
@@ -96,27 +102,46 @@ func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
 				loc.Context == ast.ContextArgument
 		}
 
-		// Generate Go code with context for null coalesce/safe nav (human-like output)
+		// Generate Go code with context for null coalesce/safe nav/match (human-like output)
 		var genResult ast.CodeGenResult
-		if (loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav) &&
-			(loc.Context == ast.ContextReturn || loc.Context == ast.ContextAssignment) {
+		if (loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav || loc.Kind == ast.ExprMatch) &&
+			(loc.Context == ast.ContextReturn || loc.Context == ast.ContextAssignment || loc.Context == ast.ContextArgument) {
 			// Create context for human-like code generation
 			ctx := &codegen.GenContext{
 				Context:        loc.Context,
 				VarName:        loc.VarName,
 				StatementStart: loc.StatementStart,
 				StatementEnd:   loc.StatementEnd,
+				EnumRegistry:   enumRegistry, // Pass enum registry for match pattern resolution
 			}
 
-			// For assignments, try to infer the type using go/types
-			if loc.Context == ast.ContextAssignment && loc.Kind == ast.ExprSafeNav {
-				varType := inferSafeNavType(result, exprSrc)
-				ctx.VarType = varType
+			// For assignments and arguments, try to infer the type
+			if loc.Context == ast.ContextAssignment || loc.Context == ast.ContextArgument {
+				switch loc.Kind {
+				case ast.ExprSafeNav:
+					// Infer type using go/types
+					varType := inferSafeNavType(result, exprSrc)
+					ctx.VarType = varType
+				case ast.ExprMatch:
+					// Infer type from match arm bodies
+					if matchExpr, ok := expr.(*ast.MatchExpr); ok {
+						varType := typechecker.InferMatchResultType(matchExpr, result)
+						ctx.VarType = varType
+					}
+				}
 			}
 
 			genResult = codegen.GenerateExprWithContext(expr, ctx)
 		} else {
-			genResult = codegen.GenerateExpr(expr)
+			// For non-context generation, still pass registry for match expressions
+			if loc.Kind == ast.ExprMatch && len(enumRegistry) > 0 {
+				ctx := &codegen.GenContext{
+					EnumRegistry: enumRegistry,
+				}
+				genResult = codegen.GenerateExprWithContext(expr, ctx)
+			} else {
+				genResult = codegen.GenerateExpr(expr)
+			}
 		}
 
 		if len(genResult.Output) == 0 && len(genResult.StatementOutput) == 0 {
@@ -126,7 +151,43 @@ func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
 		// Determine what to replace and what to use as replacement
 		var replaceStart, replaceEnd int
 		var replacement []byte
-		if len(genResult.StatementOutput) > 0 && loc.StatementStart > 0 {
+
+		// Handle HoistedCode for argument context (variable declaration before statement)
+		if len(genResult.HoistedCode) > 0 && loc.StatementEnd > loc.StatementStart {
+			// Insert hoisted code before the statement
+			// Then replace the expression with the temp variable name
+			replaceStart = loc.Start
+			replaceEnd = loc.End
+
+			// Build replacement: hoisted code at statement start, temp var at expression location
+			hoistedInsertPos := loc.StatementStart
+
+			// Insert hoisted code before the statement
+			newResult := make([]byte, 0, len(result)+len(genResult.HoistedCode)+len(genResult.Output))
+			newResult = append(newResult, result[:hoistedInsertPos]...)
+			newResult = append(newResult, genResult.HoistedCode...)
+			newResult = append(newResult, []byte("\n")...)
+
+			// Replace expression with temp variable
+			newResult = append(newResult, result[hoistedInsertPos:loc.Start]...)
+			newResult = append(newResult, genResult.Output...)
+			newResult = append(newResult, result[loc.End:]...)
+			result = newResult
+
+			// Adjust mapping positions
+			for _, m := range genResult.Mappings {
+				mappings = append(mappings, ast.SourceMapping{
+					DingoStart: loc.Start + m.DingoStart,
+					DingoEnd:   loc.Start + m.DingoEnd,
+					GoStart:    hoistedInsertPos + m.GoStart,
+					GoEnd:      hoistedInsertPos + m.GoEnd,
+					Kind:       m.Kind,
+				})
+			}
+			continue
+		}
+
+		if len(genResult.StatementOutput) > 0 && loc.StatementEnd > loc.StatementStart {
 			// Statement-level replacement (human-like output)
 			replaceStart = loc.StatementStart
 			replaceEnd = loc.StatementEnd
@@ -197,15 +258,21 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 		// Infer return types from enclosing function
 		returnTypes := codegen.InferReturnTypes(result, loc.Start)
 
+		// Extract lambda body if present (using token positions from finder)
+		var lambdaBody []byte
+		if loc.ErrorKind == ast.ErrorPropLambda && loc.LambdaBodyEnd > loc.LambdaBodyStart {
+			lambdaBody = src[loc.LambdaBodyStart:loc.LambdaBodyEnd]
+		}
+
 		// Generate statement-level code
 		var generated []byte
 		switch loc.Kind {
 		case ast.StmtErrorPropAssign, ast.StmtErrorPropLet:
 			// x := foo()? or let x = foo()?
-			generated = generateErrorPropStatement(exprBytes, loc.VarName, returnTypes, &counter)
+			generated = generateErrorPropStatementAdvanced(exprBytes, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
 		case ast.StmtErrorPropReturn:
 			// return foo()?
-			generated = generateErrorPropReturn(exprBytes, returnTypes, &counter)
+			generated = generateErrorPropReturnAdvanced(exprBytes, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
 		}
 
 		// Replace in result
@@ -221,18 +288,18 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 	return result, mappings, nil
 }
 
-// generateErrorPropStatement generates code for statement-level error propagation.
+// generateErrorPropStatementAdvanced generates code for statement-level error propagation
+// with support for all three error kinds: basic, context, and lambda.
 //
-// Input:  expr = "readFile(path)", varName = "data", returnTypes = ["0", "\"\""], counter = 1
-// Output:
-//   tmp, err := readFile(path)
-//   if err != nil {
-//       return 0, "", err
-//   }
-//   data := tmp
+// Basic (ErrorPropBasic):
+//   tmp, err := expr; if err != nil { return ..., err }; data := tmp
 //
-// counter is decremented after use (processing end-to-beginning, so counter starts high)
-func generateErrorPropStatement(expr []byte, varName string, returnTypes []string, counter *int) []byte {
+// Context (ErrorPropContext):
+//   tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; data := tmp
+//
+// Lambda (ErrorPropLambda):
+//   tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; data := tmp
+func generateErrorPropStatementAdvanced(expr []byte, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names
@@ -254,7 +321,7 @@ func generateErrorPropStatement(expr []byte, varName string, returnTypes []strin
 	buf.Write(expr)
 	buf.WriteByte('\n')
 
-	// if err != nil { return ..., err }
+	// if err != nil { return ..., ERROR_VALUE }
 	buf.WriteString("if ")
 	buf.WriteString(errVar)
 	buf.WriteString(" != nil {\n\treturn ")
@@ -267,7 +334,26 @@ func generateErrorPropStatement(expr []byte, varName string, returnTypes []strin
 	if len(returnTypes) > 0 {
 		buf.WriteString(", ")
 	}
-	buf.WriteString(errVar)
+
+	// Generate the error value based on kind
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", err)
+		buf.WriteString(`fmt.Errorf("`)
+		buf.WriteString(errorContext)
+		buf.WriteString(`: %w", `)
+		buf.WriteString(errVar)
+		buf.WriteString(")")
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with error var in body, emit directly (no IIFE)
+		// e.g., |err| NewAppError(403, "msg", err) with err2 → NewAppError(403, "msg", err2)
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, errVar)
+		buf.Write(substituted)
+	default:
+		// Basic: just return err
+		buf.WriteString(errVar)
+	}
+
 	buf.WriteString("\n}\n")
 
 	// varName := tmpVar (or varName = tmpVar for underscore)
@@ -378,18 +464,54 @@ func removeNullCoalesce(src []byte) []byte {
 	return result
 }
 
-// generateErrorPropReturn generates code for return statement error propagation.
+// substituteIdentifier replaces occurrences of oldIdent with newIdent in src
+// using token-aware replacement (only replaces IDENT tokens, not substrings).
+// e.g., substituteIdentifier("NewAppError(403, err)", "err", "err2")
 //
-// Input:  expr = "readFile(path)", returnTypes = ["0", "\"\""], counter = 1
-// Output:
-//   tmp, err := readFile(path)
-//   if err != nil {
-//       return 0, "", err
-//   }
-//   return tmp
+//	→ "NewAppError(403, err2)" (not "NewApperr2or(403, err2)")
+func substituteIdentifier(src []byte, oldIdent, newIdent string) []byte {
+	tok := tokenizer.New(src)
+	tokens, err := tok.Tokenize()
+	if err != nil {
+		// Fallback: return original if tokenization fails
+		return src
+	}
+
+	// Build result by copying source with replacements
+	result := make([]byte, 0, len(src)+len(newIdent)*2)
+	lastCopied := 0
+
+	for _, t := range tokens {
+		if t.Kind == tokenizer.IDENT && t.Lit == oldIdent {
+			// Copy everything up to this token
+			result = append(result, src[lastCopied:t.BytePos()]...)
+			// Write new identifier
+			result = append(result, newIdent...)
+			// Skip past old identifier
+			lastCopied = t.ByteEnd()
+		}
+	}
+
+	// Copy remaining bytes
+	if lastCopied < len(src) {
+		result = append(result, src[lastCopied:]...)
+	}
+
+	return result
+}
+
+// generateErrorPropReturnAdvanced generates code for return statement error propagation
+// with support for all three error kinds: basic, context, and lambda.
 //
-// counter is decremented after use (processing end-to-beginning, so counter starts high)
-func generateErrorPropReturn(expr []byte, returnTypes []string, counter *int) []byte {
+// Basic (ErrorPropBasic):
+//   tmp, err := expr; if err != nil { return ..., err }; return tmp
+//
+// Context (ErrorPropContext):
+//   tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; return tmp
+//
+// Lambda (ErrorPropLambda):
+//   tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; return tmp
+func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names
@@ -411,7 +533,7 @@ func generateErrorPropReturn(expr []byte, returnTypes []string, counter *int) []
 	buf.Write(expr)
 	buf.WriteByte('\n')
 
-	// if err != nil { return ..., err }
+	// if err != nil { return ..., ERROR_VALUE }
 	buf.WriteString("if ")
 	buf.WriteString(errVar)
 	buf.WriteString(" != nil {\n\treturn ")
@@ -424,7 +546,26 @@ func generateErrorPropReturn(expr []byte, returnTypes []string, counter *int) []
 	if len(returnTypes) > 0 {
 		buf.WriteString(", ")
 	}
-	buf.WriteString(errVar)
+
+	// Generate the error value based on kind
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", err)
+		buf.WriteString(`fmt.Errorf("`)
+		buf.WriteString(errorContext)
+		buf.WriteString(`: %w", `)
+		buf.WriteString(errVar)
+		buf.WriteString(")")
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with error var in body, emit directly (no IIFE)
+		// e.g., |err| NewAppError(403, "msg", err) with err2 → NewAppError(403, "msg", err2)
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, errVar)
+		buf.Write(substituted)
+	default:
+		// Basic: just return err
+		buf.WriteString(errVar)
+	}
+
 	buf.WriteString("\n}\n")
 
 	// return tmpVar
