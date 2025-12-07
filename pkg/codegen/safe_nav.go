@@ -269,13 +269,97 @@ func (g *SafeNavCodeGen) generateHumanLikeReturn(chain []chainSegment, baseRecei
 
 // generateHumanLikeAssignment generates human-readable code for assignments.
 //
-// Currently falls back to IIFE until type information is available.
-// TODO: Implement when type information available from GenContext.VarType
+// With VarType available (from type inference), generates:
+//
+//	var path *string
+//	if config != nil && config.Database != nil {
+//	    path = config.Database.Host
+//	}
+//
+// Without VarType, falls back to IIFE.
 func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Fall back to IIFE for now
-	// Proper implementation would use temporaries like generateHumanLikeReturn,
-	// but requires type information to generate: var x Type
-	return g.generateIIFE(chain, baseReceiver)
+	// If no type info, fall back to IIFE
+	if g.Context == nil || g.Context.VarType == "" {
+		return g.generateIIFE(chain, baseReceiver)
+	}
+
+	// Track Dingo source positions for LSP
+	var dingoStart, dingoEnd int
+	if g.expr != nil {
+		dingoStart = int(g.expr.Pos())
+		dingoEnd = int(g.expr.End())
+	} else {
+		dingoStart = int(g.callExpr.Pos())
+		dingoEnd = int(g.callExpr.End())
+	}
+
+	var output bytes.Buffer
+	outputStart := 0
+
+	// var path *string
+	output.WriteString("var ")
+	output.WriteString(g.Context.VarName)
+	output.WriteString(" ")
+	output.WriteString(g.Context.VarType)
+	output.WriteString("\n")
+
+	// Build condition: config != nil && config.Database != nil
+	output.WriteString("if ")
+
+	// Check base receiver
+	output.WriteString(baseReceiver)
+	output.WriteString(" != nil")
+
+	// Check each intermediate segment
+	currentPath := baseReceiver
+	for _, seg := range chain[:len(chain)-1] {
+		currentPath = currentPath + "." + seg.name
+		if seg.isMethod {
+			// Skip method calls in condition - can't safely check method return for nil
+			// in condition without calling it twice
+			continue
+		}
+		output.WriteString(" && ")
+		output.WriteString(currentPath)
+		output.WriteString(" != nil")
+	}
+
+	output.WriteString(" {\n\t")
+
+	// Assignment: path = config.Database.Host
+	output.WriteString(g.Context.VarName)
+	output.WriteString(" = ")
+	output.WriteString(baseReceiver)
+	for _, seg := range chain {
+		output.WriteString(".")
+		output.WriteString(seg.name)
+		if seg.isMethod {
+			output.WriteString("(")
+			for j, arg := range seg.args {
+				if j > 0 {
+					output.WriteString(", ")
+				}
+				output.WriteString(g.dingoExprToString(arg))
+			}
+			output.WriteString(")")
+		}
+	}
+	output.WriteString("\n}")
+
+	result := g.Result()
+	result.StatementOutput = output.Bytes()
+
+	// Add source mapping
+	outputEnd := len(result.StatementOutput)
+	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
+		dingoStart,
+		dingoEnd,
+		outputStart,
+		outputEnd,
+		"safe_nav_assign",
+	))
+
+	return result
 }
 
 // generateIIFE generates an IIFE for contexts where statement-level replacement isn't possible.

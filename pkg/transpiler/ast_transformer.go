@@ -9,6 +9,8 @@ import (
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/codegen"
 	"github.com/MadAppGang/dingo/pkg/parser"
+	"github.com/MadAppGang/dingo/pkg/tokenizer"
+	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
 // transformASTExpressions finds and transforms all Dingo expressions (match, lambda)
@@ -105,6 +107,13 @@ func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
 				StatementStart: loc.StatementStart,
 				StatementEnd:   loc.StatementEnd,
 			}
+
+			// For assignments, try to infer the type using go/types
+			if loc.Context == ast.ContextAssignment && loc.Kind == ast.ExprSafeNav {
+				varType := inferSafeNavType(result, exprSrc)
+				ctx.VarType = varType
+			}
+
 			genResult = codegen.GenerateExprWithContext(expr, ctx)
 		} else {
 			genResult = codegen.GenerateExpr(expr)
@@ -269,6 +278,102 @@ func generateErrorPropStatement(expr []byte, varName string, returnTypes []strin
 	buf.WriteString(tmpVar)
 
 	return buf.Bytes()
+}
+
+// inferSafeNavType attempts to infer the type of a safe navigation expression.
+// It converts the ?. chain to regular . access and type-checks against the source context.
+//
+// Example:
+//
+//	exprSrc: "config?.Database?.Host"
+//	Returns: "*string" (from go/types analysis)
+//
+// Returns empty string if type cannot be inferred.
+func inferSafeNavType(fullSource []byte, exprSrc []byte) string {
+	// Convert safe-nav chain to regular Go expression
+	// config?.Database?.Host → config.Database.Host
+	chainExpr := typechecker.ChainToExprString(string(exprSrc))
+	if chainExpr == "" {
+		return ""
+	}
+
+	// Convert entire source to valid Go by replacing ?. with .
+	// This makes the source parseable by go/parser
+	goSource := bytes.ReplaceAll(fullSource, []byte("?."), []byte("."))
+
+	// Replace ?? expressions: "a ?? b" → "a" (we only need the left side for type inference)
+	// This regex-like replacement handles the common patterns
+	goSource = removeNullCoalesce(goSource)
+
+	// Type check the converted source
+	sc := typechecker.NewSourceChecker()
+	if err := sc.ParseAndCheck("probe.go", goSource); err != nil {
+		return ""
+	}
+
+	return sc.GetExprType(chainExpr)
+}
+
+// removeNullCoalesce removes ?? operators and their right operands for type inference.
+// Uses the Dingo tokenizer to properly find ?? tokens.
+// "a ?? b" → "a" (we only need the left side for type checking)
+func removeNullCoalesce(src []byte) []byte {
+	// Use Dingo tokenizer to find ?? tokens
+	tok := tokenizer.New(src)
+	tokens, err := tok.Tokenize()
+	if err != nil {
+		// If tokenization fails, return source unchanged
+		return src
+	}
+
+	// Collect positions of ?? operators and their right operands
+	type removal struct {
+		start int // Position of ??
+		end   int // Position after right operand
+	}
+	var removals []removal
+
+	for i, t := range tokens {
+		if t.Kind == tokenizer.QUESTION_QUESTION {
+			start := t.BytePos()
+			// Find end: newline, semicolon, or closing delimiter
+			endOffset := t.ByteEnd() + 1 // Start after ??
+			for j := i + 1; j < len(tokens); j++ {
+				nextTok := tokens[j]
+				if nextTok.Kind == tokenizer.NEWLINE ||
+					nextTok.Kind == tokenizer.SEMICOLON ||
+					nextTok.Kind == tokenizer.EOF {
+					endOffset = nextTok.BytePos()
+					break
+				}
+				// For closing delimiters, stop before them
+				if nextTok.Kind == tokenizer.RPAREN ||
+					nextTok.Kind == tokenizer.RBRACE ||
+					nextTok.Kind == tokenizer.RBRACKET {
+					endOffset = nextTok.BytePos()
+					break
+				}
+				// Keep advancing past the token
+				endOffset = nextTok.ByteEnd() + 1
+			}
+			removals = append(removals, removal{start: start, end: endOffset})
+		}
+	}
+
+	// Remove in reverse order to preserve offsets
+	result := src
+	for i := len(removals) - 1; i >= 0; i-- {
+		r := removals[i]
+		if r.end > len(result) {
+			r.end = len(result)
+		}
+		newResult := make([]byte, 0, len(result)-(r.end-r.start))
+		newResult = append(newResult, result[:r.start]...)
+		newResult = append(newResult, result[r.end:]...)
+		result = newResult
+	}
+
+	return result
 }
 
 // generateErrorPropReturn generates code for return statement error propagation.

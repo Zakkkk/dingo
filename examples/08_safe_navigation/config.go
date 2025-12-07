@@ -67,21 +67,10 @@ func GetSSLCertPath(config *ServerConfig) string {
 // GetCAPath handles optional *string at the end
 func GetCAPath(config *ServerConfig) string {
 	// Chain ends with *string, need to dereference if present
-	path := func() *string {
-		tmp := config
-		if tmp == nil {
-			return nil
-		}
-		tmp1 := tmp.Database
-		if tmp1 == nil {
-			return nil
-		}
-		tmp2 := tmp1.SSL
-		if tmp2 == nil {
-			return nil
-		}
-		return tmp2.CAPath
-	}()
+	var path *string
+	if config != nil && config.Database != nil && config.Database.SSL != nil {
+		path = config.Database.SSL.CAPath
+	}
 	if path != nil {
 		return *path
 	}
@@ -90,21 +79,10 @@ func GetCAPath(config *ServerConfig) string {
 
 // GetRedisPassword safely accesses deeply nested optional password
 func GetRedisPassword(config *ServerConfig) string {
-	password := func() *string {
-		tmp := config
-		if tmp == nil {
-			return nil
-		}
-		tmp1 := tmp.Cache
-		if tmp1 == nil {
-			return nil
-		}
-		tmp2 := tmp1.Redis
-		if tmp2 == nil {
-			return nil
-		}
-		return tmp2.Password
-	}()
+	var password *string
+	if config != nil && config.Cache != nil && config.Cache.Redis != nil {
+		password = config.Cache.Redis.Password
+	}
 	if password != nil {
 		return *password
 	}
@@ -113,21 +91,10 @@ func GetRedisPassword(config *ServerConfig) string {
 
 // GetLogFile combines safe navigation with null coalescing
 func GetLogFile(config *ServerConfig) string {
-	file := func() *string {
-		tmp := config
-		if tmp == nil {
-			return nil
-		}
-		tmp1 := tmp.Logging
-		if tmp1 == nil {
-			return nil
-		}
-		tmp2 := tmp1.Output
-		if tmp2 == nil {
-			return nil
-		}
-		return tmp2.File
-	}()
+	var file *string
+	if config != nil && config.Logging != nil && config.Logging.Output != nil {
+		file = config.Logging.Output.File
+	}
 	if file != nil {
 		return *file
 	}
@@ -145,17 +112,10 @@ func IsSSLEnabled(config *ServerConfig) bool {
 
 // GetReplicaCount safely accesses array length
 func GetReplicaCount(config *ServerConfig) int {
-	replicas := func() []*DatabaseConfig {
-		tmp := config
-		if tmp == nil {
-			return nil
-		}
-		tmp1 := tmp.Database
-		if tmp1 == nil {
-			return nil
-		}
-		return tmp1.Replicas
-	}()
+	var replicas []*DatabaseConfig
+	if config != nil && config.Database != nil {
+		replicas = config.Database.Replicas
+	}
 	if replicas == nil {
 		return 0
 	}

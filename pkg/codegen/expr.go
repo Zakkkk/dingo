@@ -8,6 +8,7 @@ import (
 type GenContext struct {
 	Context        ast.ExprContext // Statement context (return, assignment, argument)
 	VarName        string          // For assignments: variable name being assigned
+	VarType        string          // For assignments: inferred type (e.g., "*string")
 	StatementStart int             // Byte offset of containing statement start
 	StatementEnd   int             // Byte offset of containing statement end
 }
