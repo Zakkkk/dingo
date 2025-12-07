@@ -1,12 +1,35 @@
 // Real-world example: HTTP handler that loads and validates user data
-// This demonstrates how ? operator reduces error handling boilerplate
+// This demonstrates all error propagation patterns in Dingo:
+//   1. Basic:   expr?              - propagate error as-is
+//   2. Context: expr ? "message"   - wrap with fmt.Errorf
+//   3. Lambda:  expr ? |e| f(e)    - custom transform (Rust style)
+//   4. Lambda:  expr ? e => f(e)   - custom transform (TypeScript style)
 package main
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 )
+
+// Custom error type for application-level errors
+type AppError struct {
+	Code    int
+	Message string
+	Cause   error
+}
+
+func (e: AppError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("[%d] %s: %v", e.Code, e.Message, e.Cause)
+	}
+	return fmt.Sprintf("[%d] %s", e.Code, e.Message)
+}
+
+func NewAppError(code: int, msg: string, cause: error) error {
+	return AppError{Code: code, Message: msg, Cause: cause}
+}
 
 type User struct {
 	ID    string
@@ -15,24 +38,52 @@ type User struct {
 }
 
 // GetUserHandler handles GET /users/{id} requests
-// Without Dingo: 25+ lines with if err != nil checks
-// With Dingo: 10 lines with clear data flow
+// Demonstrates all error propagation patterns
 func GetUserHandler(w: http.ResponseWriter, r: *http.Request) error {
-	// Extract and validate user ID from path
+	// Pattern 1: Basic ? - propagate error as-is
+	// Use when the error is already descriptive enough
 	let userID = extractUserID(r)?
 
-	// Load user from database
-	let user = loadUserFromDB(userID)?
+	// Pattern 2: String context ? "message" - add context with fmt.Errorf
+	// Use for simple context wrapping without custom error types
+	let user = loadUserFromDB(userID) ? "database lookup failed"
 
-	// Check user permissions
-	let _ = checkPermissions(r, user)?
+	// Pattern 3: Rust-style lambda ? |err| transform(err)
+	// Use for custom error types or complex transformations
+	let _ = checkPermissions(r, user) ? |err| NewAppError(403, "permission denied", err)
 
-	// Encode response
-	let response = json.Marshal(user)?
+	// Pattern 4: TypeScript-style lambda ? (e) => transform(e)
+	// Same as Pattern 3, just different syntax preference
+	let response = json.Marshal(user) ? (e) => NewAppError(500, "serialization error", e)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(response)
 	return nil
+}
+
+// AdvancedHandler demonstrates more complex error handling scenarios
+func AdvancedHandler(userID: string, orderID: string) (Order, error) {
+	// Pattern 1: Basic - error is already descriptive
+	let user = getUser(userID)?
+
+	// Pattern 2: String context - simple message wrapping
+	let order = getOrder(orderID) ? "failed to fetch order"
+
+	// Pattern 3: Rust lambda with captured variables
+	let validated = validateOrder(order, user) ? |e| fmt.Errorf("validation failed for user %s: %w", userID, e)
+
+	// Pattern 4: TypeScript lambda (single param, no parens)
+	let processed = processOrder(validated) ? err => fmt.Errorf("processing error: %w", err)
+
+	return processed, nil
+}
+
+// Helper types and functions
+
+type Order struct {
+	ID     string
+	UserID string
+	Amount float64
 }
 
 func extractUserID(r: *http.Request) (string, error) {
@@ -44,7 +95,6 @@ func extractUserID(r: *http.Request) (string, error) {
 }
 
 func loadUserFromDB(id: string) (*User, error) {
-	// Simulated database lookup
 	if id == "404" {
 		return nil, errors.New("user not found")
 	}
@@ -52,17 +102,38 @@ func loadUserFromDB(id: string) (*User, error) {
 }
 
 func checkPermissions(r: *http.Request, user: *User) (bool, error) {
-	// Simulated permission check
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return false, errors.New("unauthorized: missing auth header")
+		return false, errors.New("missing auth header")
 	}
 	return true, nil
+}
+
+func getUser(id: string) (User, error) {
+	return User{ID: id, Name: "Test User"}, nil
+}
+
+func getOrder(id: string) (Order, error) {
+	return Order{ID: id, Amount: 99.99}, nil
+}
+
+func validateOrder(order: Order, user: User) (Order, error) {
+	order.UserID = user.ID
+	return order, nil
+}
+
+func processOrder(order: Order) (Order, error) {
+	return order, nil
 }
 
 func main() {
 	http.HandleFunc("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if err := GetUserHandler(w, r); err != nil {
+			// Handle AppError specially for proper status codes
+			if appErr, ok := err.(AppError); ok {
+				http.Error(w, appErr.Error(), appErr.Code)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
