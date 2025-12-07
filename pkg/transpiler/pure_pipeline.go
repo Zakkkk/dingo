@@ -104,12 +104,31 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 			// for Result/Option wrapping (checks error variable names, function calls)
 		}
 
-		// Step 4.1: Lambda type inference from call context
-		// This MUST run before general type rewriting to ensure lambda types
-		// are available for the rest of type inference
+		// Step 4.1: Multi-pass lambda type inference from call context
+		// We run multiple passes because lambda inference may resolve types
+		// that enable further inference in subsequent passes.
+		// Example: Filter(users, |u| ...) → eligible has type []User
+		//          Map(eligible, |u| ...) → now we can infer u is User
+		// Without multi-pass, Map's arg type would be "invalid type" because
+		// eligible's type depends on Filter's lambda being correctly typed first.
 		if checker != nil {
-			lambdaInferrer := typechecker.NewLambdaTypeInferrer(fset, goFile, checker.Info())
-			lambdaInferrer.Infer()
+			const maxPasses = 5 // Prevent infinite loops
+			for pass := 0; pass < maxPasses; pass++ {
+				lambdaInferrer := typechecker.NewLambdaTypeInferrer(fset, goFile, checker.Info())
+				changed := lambdaInferrer.Infer()
+				if !changed {
+					break // No more changes, stop iterating
+				}
+
+				// Re-type-check with updated AST to get fresh type info
+				// This is necessary because after updating lambda types,
+				// variables that previously had "invalid type" may now have
+				// correct types.
+				checker, err = typechecker.New(fset, goFile, pkgName)
+				if err != nil {
+					break // Type checker failed, stop
+				}
+			}
 		}
 
 		// Step 4.2: General type inference (IIFE return types, etc.)

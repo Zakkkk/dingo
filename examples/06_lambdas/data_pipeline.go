@@ -24,11 +24,11 @@ func ProcessUsers(users []User) {
 
 	// Transform to display format
 	// Rust-style: |params| expr
-	names := Map(eligible, func(u any) any { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
+	names := Map(eligible, func(u User,) any { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
 
 	// Multi-line lambda for complex logic
 	// TypeScript-style with block
-	summary := Reduce(eligible, "", func(acc string, u any) string {
+	summary := Reduce(eligible, "", func(acc string, u User,) string {
 		if acc == "" {
 			return u.Name
 		}
