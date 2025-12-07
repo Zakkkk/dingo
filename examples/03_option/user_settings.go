@@ -25,19 +25,19 @@ type User struct {
 //
 // Alternative approaches for Option<T>:
 //
-//	opt.MustOk()         - Go style, panics if None (recommended)
-//	opt.Unwrap()         - Rust style alias for MustOk() (deprecated)
-//	opt.UnwrapOr(default) - Returns default if None
-//	opt.UnwrapOrElse(fn) - Computes default lazily via fn() if None
+//	opt.MustSome()       - Go style, panics if None (recommended)
+//	opt.Unwrap()         - Rust style alias for MustSome() (deprecated)
+//	opt.SomeOr(default)  - Returns default if None
+//	opt.SomeOrElse(fn)   - Computes default lazily via fn() if None
 func GetTheme(user User) string {
-	return user.Settings.Theme.UnwrapOr("system")
+	return user.Settings.Theme.SomeOr("system")
 }
 
 // GetFontSize applies validation and returns CSS value
 func GetFontSize(user User) string {
 	// Check if font size is set and apply validation
 	if user.Settings.FontSize.IsSome() {
-		size := user.Settings.FontSize.MustOk()
+		size := user.Settings.FontSize.MustSome()
 		if size < 10 {
 			return "10px"
 		}
@@ -53,7 +53,7 @@ func GetFontSize(user User) string {
 func ShouldSendNotification(user User, notificationType string) bool {
 	// Check if email notifications are enabled
 	if user.Settings.NotifyEmail.IsSome() {
-		return user.Settings.NotifyEmail.MustOk()
+		return user.Settings.NotifyEmail.MustSome()
 	}
 	// Default behavior based on notification type
 	return notificationType == "critical"
@@ -62,11 +62,11 @@ func ShouldSendNotification(user User, notificationType string) bool {
 // FindUserByLanguage returns first user with matching language preference
 func FindUserByLanguage(users []User, lang string) dgo.Option[User] {
 	for _, user := range users {
-		if user.Settings.Language.IsSome() && user.Settings.Language.MustOk() == lang {
-			return dgo.Some[User](Some[User](user))
+		if user.Settings.Language.IsSome() && user.Settings.Language.MustSome() == lang {
+			return dgo.Some(user)
 		}
 	}
-	return dgo.Some[User](None[User]())
+	return dgo.None[User]()
 }
 
 func main() {
@@ -75,9 +75,9 @@ func main() {
 		ID:   1,
 		Name: "Alice",
 		Settings: UserSettings{
-			Theme:    Some("dark"),
-			FontSize: Some(18),
-			Language: None[string](), // Not set - will use system language
+			Theme:    dgo.Some("dark"),
+			FontSize: dgo.Some(18),
+			Language: dgo.None[string](), // Not set - will use system language
 		},
 	}
 
@@ -87,9 +87,9 @@ func main() {
 		Name: "Bob",
 		Settings: UserSettings{
 			// All settings use defaults
-			Theme:    None[string](),
-			FontSize: None[int](),
-			Language: Some("es"),
+			Theme:    dgo.None[string](),
+			FontSize: dgo.None[int](),
+			Language: dgo.Some("es"),
 		},
 	}
 
@@ -100,6 +100,6 @@ func main() {
 
 	users := []User{alice, bob}
 	if spanish := FindUserByLanguage(users, "es"); spanish.IsSome() {
-		fmt.Printf("Spanish user: %s\n", spanish.MustOk().Name) // "Bob"
+		fmt.Printf("Spanish user: %s\n", spanish.MustSome().Name) // "Bob"
 	}
 }

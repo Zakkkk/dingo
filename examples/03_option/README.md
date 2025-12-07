@@ -28,7 +28,7 @@ type UserSettings struct {
 }
 
 // Safe: compiler ensures you handle None case
-theme := user.Settings.Theme.UnwrapOr("system")
+theme := user.Settings.Theme.SomeOr("system")
 ```
 
 ## Comparison
@@ -38,14 +38,17 @@ theme := user.Settings.Theme.UnwrapOr("system")
 | Nil panic risk | High | Zero |
 | Zero vs absent | Ambiguous | Clear |
 | Method chaining | None | Map, AndThen, etc. |
-| Default handling | Manual | UnwrapOr |
+| Default handling | Manual | SomeOr |
 
 ## Key Points
 
 ### Option Methods
 - `IsSome()` / `IsNone()` - Check presence
-- `Unwrap()` - Get value (panics if None)
-- `UnwrapOr(default)` - Get value or default
+- `MustSome()` - Get value (panics if None) [Go style]
+- `SomeOr(default)` - Get value or default [Go style]
+- `SomeOrElse(fn)` - Get value or compute default [Go style]
+- `Unwrap()` - Alias for MustSome() [deprecated]
+- `UnwrapOr()` - Alias for SomeOr() [deprecated]
 - `Map(fn)` - Transform if present
 - `AndThen(fn)` - Chain Option-returning functions
 
@@ -66,11 +69,11 @@ None[T]()       // Absent value (type parameter required)
 - Error returns (use Result instead)
 - Simple boolean "exists" checks
 
-## Pattern: UnwrapOr for Defaults
+## Pattern: SomeOr for Defaults
 Most common usage - provide a fallback:
 ```dingo
-theme := settings.Theme.UnwrapOr("system")
-fontSize := settings.FontSize.UnwrapOr(16)
+theme := settings.Theme.SomeOr("system")
+fontSize := settings.FontSize.SomeOr(16)
 ```
 
 ## Pattern: Map for Transformation
@@ -78,7 +81,7 @@ Transform the value only if present:
 ```dingo
 cssSize := settings.FontSize
     .Map(func(size: int) string { return fmt.Sprintf("%dpx", size) })
-    .UnwrapOr("16px")
+    .SomeOr("16px")
 ```
 
 ## Generated Code

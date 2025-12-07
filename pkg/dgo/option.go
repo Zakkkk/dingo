@@ -48,34 +48,48 @@ func (o Option[T]) IsNone() bool {
 }
 
 // Unwrap returns the contained value, panics if None
-// Deprecated: Use MustOk() for Go-style naming
+// Deprecated: Use MustSome() for Go-style naming
 func (o Option[T]) Unwrap() T {
-	return o.MustOk()
+	return o.MustSome()
 }
 
-// MustOk returns the contained value, panics if None
+// MustSome returns the contained value, panics if None
 // This follows Go's Must* convention for functions that panic on error
-func (o Option[T]) MustOk() T {
+func (o Option[T]) MustSome() T {
 	if o.Tag == OptionTagNone {
-		panic("called MustOk on a None value")
+		panic("called MustSome on a None value")
 	}
 	return *o.Some
 }
 
-// UnwrapOr returns the contained value or the provided default
-func (o Option[T]) UnwrapOr(defaultValue T) T {
+// SomeOr returns the contained value or the provided default
+// This follows Go's variant-based naming: "some or default"
+func (o Option[T]) SomeOr(defaultValue T) T {
 	if o.Tag == OptionTagSome && o.Some != nil {
 		return *o.Some
 	}
 	return defaultValue
 }
 
-// UnwrapOrElse returns the contained value or computes it from the function
-func (o Option[T]) UnwrapOrElse(fn func() T) T {
+// UnwrapOr returns the contained value or the provided default
+// Deprecated: Use SomeOr() for Go-style naming
+func (o Option[T]) UnwrapOr(defaultValue T) T {
+	return o.SomeOr(defaultValue)
+}
+
+// SomeOrElse returns the contained value or computes it from the function
+// This follows Go's variant-based naming: "some or else compute"
+func (o Option[T]) SomeOrElse(fn func() T) T {
 	if o.Tag == OptionTagSome && o.Some != nil {
 		return *o.Some
 	}
 	return fn()
+}
+
+// UnwrapOrElse returns the contained value or computes it from the function
+// Deprecated: Use SomeOrElse() for Go-style naming
+func (o Option[T]) UnwrapOrElse(fn func() T) T {
+	return o.SomeOrElse(fn)
 }
 
 // Map transforms the contained value using the provided function

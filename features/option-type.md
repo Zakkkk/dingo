@@ -252,6 +252,57 @@ val user = obj as? User
 
 ---
 
+## Method Naming Design
+
+### Cross-Language Analysis
+
+| Language | Get Value (panic) | Get or Default | Get or Compute |
+|----------|-------------------|----------------|----------------|
+| **Rust** | `unwrap()` | `unwrap_or(d)` | `unwrap_or_else(f)` |
+| **Swift** | `!` operator | `??` operator | - |
+| **Kotlin** | `!!` operator | `?:` elvis | - |
+| **TypeScript** | - | `??` operator | - |
+
+### Go Idioms
+
+Go's `Must*` pattern in stdlib:
+```go
+template.Must(t, err)     // wraps (T, error) → T, panics on error
+regexp.MustCompile(pat)   // wraps Compile, panics on error
+```
+
+Pattern: **Must{Operation}** for functions that panic.
+
+### Dingo Naming Decision
+
+We chose **variant-based naming** that references the actual type states:
+
+| Method | Description | Style | Rationale |
+|--------|-------------|-------|-----------|
+| **MustSome()** | Returns value, panics if None | Go | Matches variant name, Go's Must* convention |
+| **SomeOr(default)** | Returns value or default | Go | Reads naturally: "some or default" |
+| **SomeOrElse(fn)** | Computes value if None | Go | Consistent with SomeOr |
+| Unwrap() | Alias for MustSome() | Rust | Deprecated, for Rust users |
+| UnwrapOr() | Alias for SomeOr() | Rust | Deprecated, for Rust users |
+| UnwrapOrElse() | Alias for SomeOrElse() | Rust | Deprecated, for Rust users |
+
+### Why Not UnwrapOr?
+
+1. **"Unwrap" is Rust terminology** - not idiomatic Go
+2. **Doesn't reference type semantics** - Option has Some/None, not "wrap"
+3. **SomeOr reads naturally** - `user.SomeOr(defaultUser)` = "some or default"
+
+### Parallel with Result
+
+| Option[T] | Result[T, E] | Description |
+|-----------|--------------|-------------|
+| MustSome() | MustOk() | Panic if empty/error |
+| - | MustErr() | Panic if success |
+| SomeOr(d) | OkOr(d) | Default if empty/error |
+| SomeOrElse(f) | OkOrElse(f) | Compute if empty/error |
+
+---
+
 ## Implementation Details
 
 ### Type System
@@ -270,14 +321,19 @@ impl Option<T> {
     // Check if None
     func isNone() -> bool
 
-    // Unwrap value (panic if None)
-    func unwrap() -> T
+    // Get value (panic if None) - Go style
+    func mustSome() -> T
 
-    // Unwrap or return default
-    func unwrapOr(default: T) -> T
+    // Get value or return default - Go style
+    func someOr(default: T) -> T
 
-    // Unwrap or compute default
-    func unwrapOrElse(f: fn() -> T) -> T
+    // Get value or compute default - Go style
+    func someOrElse(f: fn() -> T) -> T
+
+    // Deprecated Rust-style aliases
+    func unwrap() -> T           // Use mustSome()
+    func unwrapOr(default: T) -> T    // Use someOr()
+    func unwrapOrElse(f: fn() -> T) -> T  // Use someOrElse()
 
     // Map the Some value
     func map<U>(f: fn(T) -> U) -> Option<U>

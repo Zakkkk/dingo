@@ -248,6 +248,58 @@ fn process_user(id: &str) -> Result<User, Error> {
 
 ---
 
+## Method Naming Design
+
+### Cross-Language Analysis
+
+| Language | Get Value (panic) | Get or Default | Get or Compute |
+|----------|-------------------|----------------|----------------|
+| **Rust** | `unwrap()` | `unwrap_or(d)` | `unwrap_or_else(f)` |
+| **Swift** | `!` operator | `??` operator | - |
+| **Kotlin** | `!!` operator | `?:` elvis | - |
+| **TypeScript** | - | `??` operator | - |
+
+### Go Idioms
+
+Go's `Must*` pattern in stdlib:
+```go
+template.Must(t, err)     // wraps (T, error) → T, panics on error
+regexp.MustCompile(pat)   // wraps Compile, panics on error
+```
+
+Pattern: **Must{Operation}** for functions that panic.
+
+### Dingo Naming Decision
+
+We chose **variant-based naming** that references the actual type states:
+
+| Method | Description | Style | Rationale |
+|--------|-------------|-------|-----------|
+| **MustOk()** | Returns value, panics if Err | Go | Matches variant name, Go's Must* convention |
+| **MustErr()** | Returns error, panics if Ok | Go | Matches variant name, Go's Must* convention |
+| **OkOr(default)** | Returns value or default | Go | Reads naturally: "ok or default" |
+| **OkOrElse(fn)** | Computes value if Err | Go | Consistent with OkOr |
+| Unwrap() | Alias for MustOk() | Rust | Deprecated, for Rust users |
+| UnwrapOr() | Alias for OkOr() | Rust | Deprecated, for Rust users |
+| UnwrapOrElse() | Alias for OkOrElse() | Rust | Deprecated, for Rust users |
+
+### Why Not UnwrapOr?
+
+1. **"Unwrap" is Rust terminology** - not idiomatic Go
+2. **Doesn't reference type semantics** - Result has Ok/Err, not "wrap"
+3. **OkOr reads naturally** - `result.OkOr(defaultValue)` = "ok or default"
+
+### Parallel with Option
+
+| Result[T, E] | Option[T] | Description |
+|--------------|-----------|-------------|
+| MustOk() | MustSome() | Panic if error/empty |
+| MustErr() | - | Panic if success (Result only) |
+| OkOr(d) | SomeOr(d) | Default if error/empty |
+| OkOrElse(f) | SomeOrElse(f) | Compute if error/empty |
+
+---
+
 ## Implementation Details
 
 ### Type System Integration

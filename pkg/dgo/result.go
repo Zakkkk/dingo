@@ -64,12 +64,19 @@ func (r Result[T, E]) MustOk() T {
 	return *r.Ok
 }
 
-// UnwrapOr returns the Ok value or the provided default
-func (r Result[T, E]) UnwrapOr(defaultValue T) T {
+// OkOr returns the Ok value or the provided default
+// This follows Go's variant-based naming: "ok or default"
+func (r Result[T, E]) OkOr(defaultValue T) T {
 	if r.Tag == ResultTagOk && r.Ok != nil {
 		return *r.Ok
 	}
 	return defaultValue
+}
+
+// UnwrapOr returns the Ok value or the provided default
+// Deprecated: Use OkOr() for Go-style naming
+func (r Result[T, E]) UnwrapOr(defaultValue T) T {
+	return r.OkOr(defaultValue)
 }
 
 // UnwrapErr returns the Err value, panics if Result is Ok
@@ -87,12 +94,19 @@ func (r Result[T, E]) MustErr() E {
 	return *r.Err
 }
 
-// UnwrapOrElse returns the Ok value or computes it from the error
-func (r Result[T, E]) UnwrapOrElse(fn func(E) T) T {
+// OkOrElse returns the Ok value or computes it from the error
+// This follows Go's variant-based naming: "ok or else compute"
+func (r Result[T, E]) OkOrElse(fn func(E) T) T {
 	if r.Tag == ResultTagOk && r.Ok != nil {
 		return *r.Ok
 	}
 	return fn(*r.Err)
+}
+
+// UnwrapOrElse returns the Ok value or computes it from the error
+// Deprecated: Use OkOrElse() for Go-style naming
+func (r Result[T, E]) UnwrapOrElse(fn func(E) T) T {
+	return r.OkOrElse(fn)
 }
 
 // Map transforms the Ok value using the provided function
@@ -169,16 +183,18 @@ func (r Result[T, E]) ExpectErr(msg string) E {
 	return *r.Err
 }
 
-// OkOr returns the Ok value as an Option
-func (r Result[T, E]) OkOr() *T {
+// OkPtr returns the Ok value as a pointer (nil if Err)
+// Useful for optional-style access without panic
+func (r Result[T, E]) OkPtr() *T {
 	if r.Tag == ResultTagOk {
 		return r.Ok
 	}
 	return nil
 }
 
-// ErrOr returns the Err value as an Option
-func (r Result[T, E]) ErrOr() *E {
+// ErrPtr returns the Err value as a pointer (nil if Ok)
+// Useful for optional-style access without panic
+func (r Result[T, E]) ErrPtr() *E {
 	if r.Tag == ResultTagErr {
 		return r.Err
 	}
