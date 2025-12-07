@@ -5,6 +5,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"github.com/MadAppGang/dingo/pkg/dgo"
 )
 
 type User struct {
@@ -24,40 +25,40 @@ func (e DBError) Error() string {
 
 // FindUserByID returns a Result that explicitly models success or failure
 // Caller must handle both cases - no silent nil pointer bugs
-func FindUserByID(db *sql.DB, id int) Result[User, DBError] {
+func FindUserByID(db *sql.DB, id int) dgo.Result[User, DBError] {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
 	var user User
 	err := row.Scan(&user.ID, &user.Name, &user.Email)
 	if err == sql.ErrNoRows {
-		return DBError{Code: "NOT_FOUND", Message: "user not found"}
+		return dgo.Err[User, DBError](DBError{Code: "NOT_FOUND", Message: "user not found"})
 	}
 	if err != nil {
-		return DBError{Code: "SCAN_ERROR", Message: err.Error()}
+		return dgo.Err[User, DBError](DBError{Code: "SCAN_ERROR", Message: err.Error()})
 	}
 
-	return user
+	return dgo.Ok[User, DBError](user)
 }
 
 // TransferFunds shows Result chaining - each step must succeed
-func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) Result[bool, DBError] {
+func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) dgo.Result[bool, DBError] {
 	// Find source user - check for errors
 	fromResult := FindUserByID(db, fromID)
 	if fromResult.IsErr() {
-		return fromResult.UnwrapErr() // Implicit wrapping → ResultBoolDBErrorErr(...)
+		return dgo.Err[bool, DBError](fromResult.UnwrapErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
 	}
 
 	// Find destination user
 	toResult := FindUserByID(db, toID)
 	if toResult.IsErr() {
-		return toResult.UnwrapErr()
+		return dgo.Err[bool, DBError](toResult.UnwrapErr())
 	}
 
 	// In real code: begin transaction, update balances, commit
 	fmt.Printf("Transferring $%.2f from %s to %s\n",
 		amount, fromResult.Unwrap().Name, toResult.Unwrap().Name)
 
-	return true
+	return dgo.Ok[bool, DBError](true)
 }
 
 func main() {

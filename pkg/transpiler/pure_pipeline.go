@@ -70,16 +70,33 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
+	// Step 3.5: Inject dgo import if Result/Option types are detected
+	InjectDgoImport(fset, goFile)
+
 	// Step 4: Run type inference to replace interface{} with actual types
+	var checker *typechecker.Checker
 	if inferTypes {
 		_, err = typechecker.RewriteSource(fset, goFile)
 		if err != nil {
 			// Type inference failed - continue without it
 			// This is acceptable since interface{} is valid Go
 		}
+
+		// Create type checker for Result/Option wrapper analysis
+		// Extract actual package name from AST instead of hardcoded "main"
+		pkgName := goFile.Name.Name
+		checker, err = typechecker.New(fset, goFile, pkgName)
+		if err != nil {
+			// Type checker unavailable - will fall back to AST-based heuristics
+			// for Result/Option wrapping (checks error variable names, function calls)
+		}
 	}
 
-	// Step 4: Print Go AST to source
+	// Step 4.5: Wrap Result/Option return statements with dgo constructors
+	wrapper := NewResultWrapperTransformer(fset, goFile, checker)
+	wrapper.Transform()
+
+	// Step 5: Print Go AST to source
 	var buf bytes.Buffer
 	cfg := printer.Config{
 		Mode:     printer.UseSpaces | printer.TabIndent,

@@ -19,32 +19,32 @@ type User struct {
 // With Dingo: 10 lines with clear data flow
 func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 	// Extract and validate user ID from path
-	tmp3, err3 := extractUserID(r)
-	if err3 != nil {
-		return err3
-	}
-	userID := tmp3
-
-	// Load user from database
-	tmp2, err2 := loadUserFromDB(userID)
-	if err2 != nil {
-		return err2
-	}
-	user := tmp2
-
-	// Check user permissions
-	tmp1, err1 := checkPermissions(r, user)
-	if err1 != nil {
-		return err1
-	}
-	_ = tmp1
-
-	// Encode response
-	tmp, err := json.Marshal(user)
+	tmp, err := extractUserID(r)
 	if err != nil {
 		return err
 	}
-	response := tmp
+	userID := tmp
+
+	// Load user from database
+	tmp1, err1 := loadUserFromDB(userID)
+	if err1 != nil {
+		return err1
+	}
+	user := tmp1
+
+	// Check user permissions
+	tmp2, err2 := checkPermissions(r, user)
+	if err2 != nil {
+		return err2
+	}
+	_ = tmp2
+
+	// Encode response
+	tmp3, err3 := json.Marshal(user)
+	if err3 != nil {
+		return err3
+	}
+	response := tmp3
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(response)

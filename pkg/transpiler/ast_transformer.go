@@ -186,7 +186,9 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 
 	result := src
 	var mappings []ast.SourceMapping
-	counter := 1 // Counter for unique variable names
+	// Start counter at len(locations) and decrement, so first statement in source
+	// gets tmp/err, second gets tmp1/err1, etc. (we process end-to-beginning)
+	counter := len(locations)
 
 	for _, loc := range locations {
 		// Extract the expression between operator and ?
@@ -229,7 +231,7 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 //   }
 //   data := tmp
 //
-// counter is incremented after use (tmp, err for first; tmp1, err1 for second; etc.)
+// counter is decremented after use (processing end-to-beginning, so counter starts high)
 func generateErrorPropStatement(expr []byte, varName string, returnTypes []string, counter *int) []byte {
 	var buf bytes.Buffer
 
@@ -242,7 +244,7 @@ func generateErrorPropStatement(expr []byte, varName string, returnTypes []strin
 		tmpVar = fmt.Sprintf("tmp%d", *counter-1)
 		errVar = fmt.Sprintf("err%d", *counter-1)
 	}
-	*counter++
+	*counter--
 
 	// tmp, err := expr
 	buf.WriteString(tmpVar)
@@ -386,7 +388,7 @@ func removeNullCoalesce(src []byte) []byte {
 //   }
 //   return tmp
 //
-// counter is incremented after use (tmp, err for first; tmp1, err1 for second; etc.)
+// counter is decremented after use (processing end-to-beginning, so counter starts high)
 func generateErrorPropReturn(expr []byte, returnTypes []string, counter *int) []byte {
 	var buf bytes.Buffer
 
@@ -399,7 +401,7 @@ func generateErrorPropReturn(expr []byte, returnTypes []string, counter *int) []
 		tmpVar = fmt.Sprintf("tmp%d", *counter-1)
 		errVar = fmt.Sprintf("err%d", *counter-1)
 	}
-	*counter++
+	*counter--
 
 	// tmp, err := expr
 	buf.WriteString(tmpVar)
