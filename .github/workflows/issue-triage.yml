@@ -25,6 +25,13 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code@latest
 
+      - name: Generate Dingo Reviewer token
+        id: dingo-bot
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.DINGO_BOT_APP_ID }}
+          private_key: ${{ secrets.DINGO_BOT_PRIVATE_KEY }}
+
       - name: Write issue to file
         run: |
           mkdir -p .triage
@@ -80,6 +87,8 @@ jobs:
 
       - name: Add labels
         if: steps.triage.outputs.labels != ''
+        env:
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           IFS=',' read -ra LABEL_ARRAY <<< "${{ steps.triage.outputs.labels }}"
           for label in "${LABEL_ARRAY[@]}"; do
@@ -88,20 +97,18 @@ jobs:
               gh issue edit ${{ github.event.issue.number }} --add-label "$label" || true
             fi
           done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assign to Jack
         if: steps.triage.outputs.assign_jack == 'true'
+        env:
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           gh issue edit ${{ github.event.issue.number }} --add-assignee jackrudenko || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Post response comment
         if: steps.triage.outputs.response != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
           RESPONSE_TEXT: ${{ steps.triage.outputs.response }}
         run: |
           # Write response to file to avoid shell escaping issues
@@ -114,11 +121,11 @@ jobs:
 
       - name: Convert to discussion (if needed)
         if: steps.triage.outputs.convert_discussion == 'true'
+        env:
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           echo "Note: Issue marked for discussion conversion."
           gh issue edit ${{ github.event.issue.number }} --add-label "discussion" || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cleanup
         if: always()
