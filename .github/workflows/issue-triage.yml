@@ -100,16 +100,17 @@ jobs:
 
       - name: Post response comment
         if: steps.triage.outputs.response != ''
-        run: |
-          # Add bot signature
-          COMMENT="${{ steps.triage.outputs.response }}
-
-          ---
-          <sub>🤖 Auto-triaged by [Claude Code](https://github.com/anthropics/claude-code) (Opus 4.5)</sub>"
-
-          gh issue comment ${{ github.event.issue.number }} --body "$COMMENT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESPONSE_TEXT: ${{ steps.triage.outputs.response }}
+        run: |
+          # Write response to file to avoid shell escaping issues
+          echo "$RESPONSE_TEXT" > .triage/comment.md
+          echo "" >> .triage/comment.md
+          echo "---" >> .triage/comment.md
+          echo '<sub>🤖 Auto-triaged by <a href="https://github.com/anthropics/claude-code">Claude Code</a> (Opus 4.5)</sub>' >> .triage/comment.md
+
+          gh issue comment ${{ github.event.issue.number }} --body-file .triage/comment.md
 
       - name: Convert to discussion (if needed)
         if: steps.triage.outputs.convert_discussion == 'true'
