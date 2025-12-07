@@ -1,0 +1,124 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Write issue to file
+        run: |
+          mkdir -p .triage
+          cat > .triage/issue.md << 'ISSUE_EOF'
+          # Issue #${{ github.event.issue.number }}
+
+          **Title:** ${{ github.event.issue.title }}
+
+          **Author:** @${{ github.event.issue.user.login }}
+
+          **Body:**
+          ${{ github.event.issue.body }}
+          ISSUE_EOF
+
+      - name: Triage issue with Claude Code
+        id: triage
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Run Claude Code in print mode with Opus 4.5
+          # --model opus = Claude Opus 4.5 (latest)
+          # -p = print mode (non-interactive, for CI)
+          # --dangerously-skip-permissions = skip permission prompts in CI
+          claude --model opus -p --dangerously-skip-permissions \
+            --system-prompt "$(cat .github/prompts/issue-triage-system.md)" \
+            "Triage the GitHub issue in .triage/issue.md. Read it, explore the codebase for context, then write your triage result to .triage/result.json"
+
+          echo "Claude Code completed"
+
+          # Read the result file
+          if [ -f .triage/result.json ]; then
+            CLEAN_JSON=$(cat .triage/result.json)
+          else
+            echo "Error: result.json not created"
+            exit 1
+          fi
+
+          # Extract fields
+          echo "category=$(echo "$CLEAN_JSON" | jq -r '.category // "question"')" >> $GITHUB_OUTPUT
+          echo "labels=$(echo "$CLEAN_JSON" | jq -r '.labels | join(",")')" >> $GITHUB_OUTPUT
+          echo "priority=$(echo "$CLEAN_JSON" | jq -r '.priority // empty')" >> $GITHUB_OUTPUT
+          echo "assign_jack=$(echo "$CLEAN_JSON" | jq -r '.assign_to_jack // false')" >> $GITHUB_OUTPUT
+          echo "convert_discussion=$(echo "$CLEAN_JSON" | jq -r '.convert_to_discussion // false')" >> $GITHUB_OUTPUT
+
+          RESPONSE_TEXT=$(echo "$CLEAN_JSON" | jq -r '.response // empty')
+          echo "response<<EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE_TEXT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Show related files for debugging
+          echo "Related files:"
+          echo "$CLEAN_JSON" | jq -r '.related_files[]?' || true
+
+      - name: Add labels
+        if: steps.triage.outputs.labels != ''
+        run: |
+          IFS=',' read -ra LABEL_ARRAY <<< "${{ steps.triage.outputs.labels }}"
+          for label in "${LABEL_ARRAY[@]}"; do
+            # Only add if label exists
+            if gh label list | grep -q "^$label"; then
+              gh issue edit ${{ github.event.issue.number }} --add-label "$label" || true
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assign to Jack
+        if: steps.triage.outputs.assign_jack == 'true'
+        run: |
+          gh issue edit ${{ github.event.issue.number }} --add-assignee jackrudenko || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post response comment
+        if: steps.triage.outputs.response != ''
+        run: |
+          # Add bot signature
+          COMMENT="${{ steps.triage.outputs.response }}
+
+          ---
+          <sub>🤖 Auto-triaged by [Claude Code](https://github.com/anthropics/claude-code) (Opus 4.5)</sub>"
+
+          gh issue comment ${{ github.event.issue.number }} --body "$COMMENT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Convert to discussion (if needed)
+        if: steps.triage.outputs.convert_discussion == 'true'
+        run: |
+          echo "Note: Issue marked for discussion conversion."
+          gh issue edit ${{ github.event.issue.number }} --add-label "discussion" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup
+        if: always()
+        run: rm -rf .triage
