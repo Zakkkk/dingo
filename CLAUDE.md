@@ -214,9 +214,9 @@ All language features are implemented as plugins with **priority ordering**:
 | `enum_constructors` | 30 | ✅ | `Variant()` → `NewVariant()` |
 | `error_prop` | 40 | ✅ | `expr?` → error handling |
 | `guard_let` | 50 | ✅ | `guard let x = expr else {...}` |
-| `safe_nav_statements` | 55 | ⚠️ | Statement-level `?.` |
-| `safe_nav` | 60 | ⚠️ | Expression `?.` (marker) |
-| `null_coalesce` | 70 | ⚠️ | `??` (marker) |
+| `safe_nav_statements` | 55 | ✅ | Statement-level `?.` |
+| `safe_nav` | 60 | ✅ | Expression `?.` (with type inference) |
+| `null_coalesce` | 70 | ✅ | `??` operator |
 | `lambdas` | 80 | ✅ | `\|x\|` and `=>` syntax |
 | `type_annotations` | 100 | ✅ | `param: Type` → `param Type` |
 | `generics` | 110 | ✅ | `<T>` → `[T]` |
@@ -1047,8 +1047,8 @@ All features are now implemented as plugins via `pkg/feature/`:
 | error_prop | 40 | Character | ✅ Complete |
 | guard_let | 50 | Character | ✅ Complete |
 | safe_nav_statements | 55 | Character | ✅ Complete |
-| safe_nav | 60 | Character | ⚠️ Partial |
-| null_coalesce | 70 | Character | ⚠️ Partial |
+| safe_nav | 60 | Character | ✅ Complete |
+| null_coalesce | 70 | Character | ✅ Complete |
 | lambdas | 80 | Character | ✅ Complete |
 | type_annotations | 100 | Token | ✅ Complete |
 | generics | 110 | Token | ✅ Complete |
@@ -1066,10 +1066,9 @@ All features are now implemented as plugins via `pkg/feature/`:
 - Examples compile: `examples/01_error_propagation/`, `examples/04_pattern_matching/`
 
 🎯 **Next**:
-1. Complete null coalescing (`??`) transformation
-2. Complete safe navigation (`?.`) transformation
-3. Source map generation from TokenMapping
-4. LSP integration
+1. Source map generation from TokenMapping
+2. LSP integration
+3. Additional type inference for null coalescing assignments
 
 ## Architecture Decisions (Resolved)
 
@@ -1224,16 +1223,17 @@ Dingo's value proposition is **syntax and ergonomics**, not a new type system. B
 
 ---
 
-**Last Updated**: 2025-12-06 (Pluggable Feature System Complete)
+**Last Updated**: 2025-12-07 (Type Inference for Safe Navigation)
 **Recent Changes**:
+- 2025-12-07: Added `pkg/typechecker/` for go/types integration - infers expression types
+- 2025-12-07: Safe navigation now generates human-like code with type inference
+- 2025-12-07: All 12 features marked ✅ Complete (safe_nav, null_coalesce updated)
 - 2025-12-06: Pluggable feature system complete (`pkg/feature/`) - 12 built-in plugins
 - 2025-12-06: FeatureMatrix config integration - enable/disable features via `dingo.toml`
 - 2025-12-05: Added "Dingo vs Borgo" architectural comparison and gopls strategy
 - 2025-12-05: New token-based parser (pkg/goparser/) replacing regex preprocessor
-- 2025-12-05: P0-P3 pattern matching fixes (guards, return types, wildcards)
-- 2025-11-20: Phase 9 Complete - Ternary Operator
-**Latest Session**: 20251206 (Pluggable Feature System)
-**Previous Session**: 20251205 (Architecture Vision)
+**Latest Session**: 20251207 (Type Inference)
+**Previous Session**: 20251206 (Pluggable Feature System)
 
 ### Additional Project Information
 
