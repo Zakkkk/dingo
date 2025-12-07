@@ -43,9 +43,9 @@ func (l *LambdaExpr) Node() {}
 
 // ToGo converts LambdaExpr to Go function literal
 // Outputs:
-//   - x => x * 2 → func(x __TYPE_INFERENCE_NEEDED) { return x * 2 }
+//   - x => x * 2 → func(x any) { return x * 2 }
 //   - (x: int) => x * 2 → func(x int) { return x * 2 }
-//   - |x, y| x + y → func(x __TYPE_INFERENCE_NEEDED, y __TYPE_INFERENCE_NEEDED) { return x + y }
+//   - |x, y| x + y → func(x any, y any) { return x + y }
 //   - |x: int| -> int { ... } → func(x int) int { ... }
 func (l *LambdaExpr) ToGo() string {
 	var result strings.Builder
@@ -63,8 +63,8 @@ func (l *LambdaExpr) ToGo() string {
 			result.WriteString(" ")
 			result.WriteString(param.Type)
 		} else {
-			// Add marker for type inference
-			result.WriteString(" __TYPE_INFERENCE_NEEDED")
+			// Add placeholder for type inference - will be replaced by typechecker
+			result.WriteString(" any")
 		}
 	}
 

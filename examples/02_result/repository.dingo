@@ -24,7 +24,7 @@ func (e DBError) Error() string {
 
 // FindUserByID returns a Result that explicitly models success or failure
 // Caller must handle both cases - no silent nil pointer bugs
-func FindUserByID(db: *sql.DB, id: int) Result<User, DBError> {
+func FindUserByID(db *sql.DB, id int) Result<User, DBError> {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
 	var user User
@@ -40,7 +40,7 @@ func FindUserByID(db: *sql.DB, id: int) Result<User, DBError> {
 }
 
 // TransferFunds shows Result chaining - each step must succeed
-func TransferFunds(db: *sql.DB, fromID: int, toID: int, amount: float64) Result<bool, DBError> {
+func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) Result<bool, DBError> {
 	// Find source user - check for errors
 	let fromResult = FindUserByID(db, fromID)
 	if fromResult.IsErr() {

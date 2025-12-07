@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "sum_types_02_struct_variant.dingo",
-  "go_file": "sum_types_02_struct_variant.go",
+  "dingo_file": "/Users/jack/mag/dingo/tests/golden/sum_types_02_struct_variant.dingo",
+  "go_file": "/Users/jack/mag/dingo/tests/golden/sum_types_02_struct_variant.go",
   "mappings": [
     {
       "generated_line": 1,

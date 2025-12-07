@@ -311,6 +311,98 @@ func TestParseMatchBody_Block(t *testing.T) {
 	}
 }
 
+// TestPascalCaseValidation verifies that pattern names must be PascalCase without underscores
+func TestPascalCaseValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid PascalCase pattern",
+			input:       "match x { ShapePoint(a, b) => a }",
+			expectError: false,
+		},
+		{
+			name:        "invalid underscore pattern",
+			input:       "match x { Shape_Point(a, b) => a }",
+			expectError: true,
+			errorMsg:    "use 'ShapePoint' instead of 'Shape_Point'",
+		},
+		{
+			name:        "valid nullary constructor",
+			input:       "match x { None => 0 }",
+			expectError: false,
+		},
+		{
+			name:        "invalid underscore nullary",
+			input:       "match x { Status_Pending => 0 }",
+			expectError: true,
+			errorMsg:    "use 'StatusPending' instead of 'Status_Pending'",
+		},
+		{
+			name:        "valid struct pattern",
+			input:       "match x { ColorRGB{r, g, b} => r }",
+			expectError: false,
+		},
+		{
+			name:        "invalid underscore struct pattern",
+			input:       "match x { Color_RGB{r, g, b} => r }",
+			expectError: true,
+			errorMsg:    "use 'ColorRGB' instead of 'Color_RGB'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok := tokenizer.New([]byte(tt.input))
+			_, err := tok.Tokenize()
+			if err != nil {
+				t.Fatalf("tokenization failed: %v", err)
+			}
+			tok.Reset()
+
+			parser := NewPrattParser(tok)
+			parser.ParseExpression(PrecLowest)
+
+			errors := parser.Errors()
+			hasError := len(errors) > 0
+
+			if hasError != tt.expectError {
+				t.Errorf("Expected error: %v, got error: %v (errors: %+v)", tt.expectError, hasError, errors)
+				return
+			}
+
+			if tt.expectError && len(errors) > 0 {
+				found := false
+				for _, err := range errors {
+					if containsSubstring(err.Message, tt.errorMsg) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected error message to contain '%s', got errors: %+v", tt.errorMsg, errors)
+				}
+			}
+		})
+	}
+}
+
+// Helper to check if a string contains a substring
+func containsSubstring(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // Helper to create a simple token for testing
 func makeToken(kind tokenizer.TokenKind, lit string) tokenizer.Token {
 	return tokenizer.Token{

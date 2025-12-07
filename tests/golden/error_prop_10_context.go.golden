@@ -1,0 +1,49 @@
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+// Test: Error propagation with string context
+// Feature: error-propagation
+// Complexity: basic
+
+// This test demonstrates the ? "message" syntax for adding
+// contextual information when propagating errors.
+
+func loadConfig(path string) (string, error) {
+	tmp, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to read config: %w", err)
+	}
+	data := tmp
+	return string(data), nil
+}
+
+func processOrder(orderID string) (Order, error) {
+	tmp, err := fetchOrder(orderID)
+	if err != nil {
+		return Order{}, fmt.Errorf("order fetch failed: %w", err)
+	}
+	order := tmp
+
+	tmp1, err1 := validateOrder(order)
+	if err1 != nil {
+		return Order{}, fmt.Errorf("validation failed: %w", err1)
+	}
+	validated := tmp1
+	return validated, nil
+}
+
+type Order struct {
+	ID string
+}
+
+func fetchOrder(id string) (Order, error) {
+	return Order{ID: id}, nil
+}
+
+func validateOrder(o Order) (Order, error) {
+	return o, nil
+}

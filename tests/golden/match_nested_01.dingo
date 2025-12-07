@@ -7,7 +7,7 @@ import "fmt"
 // WrappedValue demonstrates nested Result and Option types
 type WrappedValue = Result[Option[int], error]
 
-func unwrapValue(wrapped: WrappedValue) int {
+func unwrapValue(wrapped WrappedValue) int {
 	return match wrapped {
 		Ok(Some(value)) => value,              // Nested: Ok containing Some
 		Ok(None) => 0,                         // Ok containing None
@@ -15,7 +15,7 @@ func unwrapValue(wrapped: WrappedValue) int {
 	}
 }
 
-func processNested(wrapped: WrappedValue) string {
+func processNested(wrapped WrappedValue) string {
 	return match wrapped {
 		Ok(Some(x)) if x > 100 => fmt.Sprintf("High value: %d", x),
 		Ok(Some(x)) => fmt.Sprintf("Value: %d", x),

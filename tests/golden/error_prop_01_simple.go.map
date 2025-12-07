@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "tests/golden/error_prop_01_simple.dingo",
-  "go_file": "tests/golden/error_prop_01_simple.go",
+  "dingo_file": "/Users/jack/mag/dingo/tests/golden/error_prop_01_simple.dingo",
+  "go_file": "/Users/jack/mag/dingo/tests/golden/error_prop_01_simple.go",
   "mappings": [
     {
       "generated_line": 1,
@@ -47,6 +47,15 @@
       "processor_input_line": 0,
       "length": 51,
       "name": "identity"
+    },
+    {
+      "generated_line": 8,
+      "generated_column": 2,
+      "original_line": 6,
+      "original_column": 34,
+      "processor_input_line": 0,
+      "length": 1,
+      "name": "error_prop"
     },
     {
       "generated_line": 9,
@@ -101,6 +110,15 @@
       "processor_input_line": 0,
       "length": 13,
       "name": "identity"
+    },
+    {
+      "generated_line": 17,
+      "generated_column": 2,
+      "original_line": 12,
+      "original_column": 33,
+      "processor_input_line": 0,
+      "length": 1,
+      "name": "error_prop"
     },
     {
       "generated_line": 23,

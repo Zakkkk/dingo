@@ -28,8 +28,9 @@ import (
 // 1. Transform Dingo syntax to Go using AST-based codegens (pkg/ast/transform.go)
 // 2. Parse transformed Go with standard go/parser
 // 3. Run go/types to infer types (optional)
-// 4. Rewrite interface{} placeholders with actual types
-// 5. Print Go AST to source
+// 4. Lambda type inference from call context
+// 5. Rewrite interface{} placeholders with actual types
+// 6. Print Go AST to source
 //
 // Source mappings are tracked during transformation for LSP integration.
 func PureASTTranspile(source []byte, filename string) ([]byte, error) {
@@ -39,6 +40,10 @@ func PureASTTranspile(source []byte, filename string) ([]byte, error) {
 // PureASTTranspileWithOptions transpiles with optional type inference.
 // Set inferTypes to false to disable type inference (faster but uses interface{}).
 func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool) ([]byte, error) {
+	// Extract enum registry from ORIGINAL source (before transformation)
+	// This is used by match expressions to prefix variant names correctly
+	enumRegistry := dingoast.ExtractEnumRegistry(source)
+
 	// Step 1: Transform Dingo syntax to Go using token-based transformations
 	transformedSource, tokenMappings, err := dingoast.TransformSource(source)
 	if err != nil {
@@ -51,16 +56,24 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("statement transform error: %w", err)
 	}
 
+	// Step 2.5: Transform guard let statements (MUST run after error propagation, before expressions)
+	transformedSource, guardLetMappings, err := transformGuardLetStatements(transformedSource)
+	if err != nil {
+		return nil, fmt.Errorf("guard let transform error: %w", err)
+	}
+
 	// Step 3: Transform match/lambda expressions using AST-based codegen
-	transformedSource, astMappings, err := transformASTExpressions(transformedSource)
+	// Pass enum registry so match expressions can prefix variant names correctly
+	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("AST transform error: %w", err)
 	}
 
 	// TODO: Store mappings for LSP integration
-	// Combine token mappings, statement mappings, and AST mappings
+	// Combine token mappings, statement mappings, guard let mappings, and AST mappings
 	_ = tokenMappings
 	_ = stmtMappings
+	_ = guardLetMappings
 	_ = astMappings
 
 	// Step 3: Parse the transformed Go source with standard go/parser
@@ -70,25 +83,40 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("parse error: %w", err)
 	}
 
-	// Step 3.5: Inject dgo import if Result/Option types are detected
+	// Step 3.5: None inference - rewrite bare None/None() to None[T]()
+	// This must run BEFORE QualifyDingoTypes so we can access the original type names
+	noneTransformer := NewNoneInferenceTransformer(fset, goFile)
+	if err := noneTransformer.Transform(); err != nil {
+		return nil, fmt.Errorf("none inference: %w", err)
+	}
+
+	// Step 3.6: Inject dgo import if Result/Option types are detected
 	InjectDgoImport(fset, goFile)
 
 	// Step 4: Run type inference to replace interface{} with actual types
 	var checker *typechecker.Checker
 	if inferTypes {
-		_, err = typechecker.RewriteSource(fset, goFile)
-		if err != nil {
-			// Type inference failed - continue without it
-			// This is acceptable since interface{} is valid Go
-		}
-
-		// Create type checker for Result/Option wrapper analysis
 		// Extract actual package name from AST instead of hardcoded "main"
 		pkgName := goFile.Name.Name
 		checker, err = typechecker.New(fset, goFile, pkgName)
 		if err != nil {
 			// Type checker unavailable - will fall back to AST-based heuristics
 			// for Result/Option wrapping (checks error variable names, function calls)
+		}
+
+		// Step 4.1: Lambda type inference from call context
+		// This MUST run before general type rewriting to ensure lambda types
+		// are available for the rest of type inference
+		if checker != nil {
+			lambdaInferrer := typechecker.NewLambdaTypeInferrer(fset, goFile, checker.Info())
+			lambdaInferrer.Infer()
+		}
+
+		// Step 4.2: General type inference (IIFE return types, etc.)
+		_, err = typechecker.RewriteSource(fset, goFile)
+		if err != nil {
+			// Type inference failed - continue without it
+			// This is acceptable since interface{} is valid Go
 		}
 	}
 

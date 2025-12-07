@@ -9,15 +9,41 @@ import (
 
 // ErrorPropGenerator generates Go code for error propagation expressions (expr?).
 //
-// Transforms:
-//   let data = readFile(path)?
+// Basic Transforms:
+//
+//	let data = readFile(path)?
 //
 // Into:
-//   tmp, err := readFile(path)
-//   if err != nil {
-//       return zeroVal1, zeroVal2, ..., err
-//   }
-//   data := tmp
+//
+//	tmp, err := readFile(path)
+//	if err != nil {
+//	    return zeroVal1, zeroVal2, ..., err
+//	}
+//	data := tmp
+//
+// Context Transform (? "message"):
+//
+//	let order = fetchOrder(id) ? "fetch failed"
+//
+// Into:
+//
+//	tmp, err := fetchOrder(id)
+//	if err != nil {
+//	    return zeroVal1, zeroVal2, ..., fmt.Errorf("fetch failed: %w", err)
+//	}
+//	order := tmp
+//
+// Lambda Transform (? |err| transform):
+//
+//	let user = loadUser(id) ? |err| wrap("user", err)
+//
+// Into:
+//
+//	tmp, err := loadUser(id)
+//	if err != nil {
+//	    return zeroVal1, zeroVal2, ..., func(err error) error { return wrap("user", err) }(err)
+//	}
+//	user := tmp
 //
 // Variable naming convention:
 //   - First: tmp, err
@@ -28,6 +54,7 @@ type ErrorPropGenerator struct {
 	Expr        *ast.ErrorPropExpr
 	ReturnTypes []string // Zero values for non-error return types
 	Counter     int      // For generating unique variable names
+	NeedsFmt    bool     // Set to true if fmt.Errorf is generated (caller should add import)
 }
 
 // NewErrorPropGenerator creates a new error propagation code generator.
@@ -43,18 +70,42 @@ func NewErrorPropGenerator(expr *ast.ErrorPropExpr, returnTypes []string) *Error
 // Generate produces Go code for error propagation.
 //
 // Pattern:
-//   1. Generate unique temp variable names
-//   2. Call operand and capture result + error
-//   3. Check error and return with zero values if non-nil
-//   4. Return temp variable for success case
+//  1. Generate unique temp variable names
+//  2. Call operand and capture result + error
+//  3. Check error and return with zero values if non-nil
+//  4. Return temp variable for success case
 //
-// Example:
-//   Input:  readFile(path)?
-//   Output: tmp, err := readFile(path)
-//           if err != nil {
-//               return 0, "", err  // zero values based on return types
-//           }
-//           tmp
+// Handles three cases:
+//   - Basic: `expr?` → return err
+//   - Context: `expr ? "message"` → return fmt.Errorf("message: %w", err)
+//   - Transform: `expr ? |e| f(e)` → return func(e ...) ... { return f(e) }(err)
+//
+// Example (basic):
+//
+//	Input:  readFile(path)?
+//	Output: tmp, err := readFile(path)
+//	        if err != nil {
+//	            return 0, "", err
+//	        }
+//	        tmp
+//
+// Example (context):
+//
+//	Input:  fetchOrder(id) ? "fetch failed"
+//	Output: tmp, err := fetchOrder(id)
+//	        if err != nil {
+//	            return nil, fmt.Errorf("fetch failed: %w", err)
+//	        }
+//	        tmp
+//
+// Example (transform):
+//
+//	Input:  loadUser(id) ? |err| wrap("user", err)
+//	Output: tmp, err := loadUser(id)
+//	        if err != nil {
+//	            return nil, func(err error) error { return wrap("user", err) }(err)
+//	        }
+//	        tmp
 func (g *ErrorPropGenerator) Generate() ast.CodeGenResult {
 	// Convert Dingo operand AST to Go source code
 	operandSrc := g.dingoExprToString(g.Expr.Operand)
@@ -75,7 +126,7 @@ func (g *ErrorPropGenerator) Generate() ast.CodeGenResult {
 	// Generate the error propagation pattern:
 	//   tmp, err := operand
 	//   if err != nil {
-	//       return zeroVal1, zeroVal2, ..., err
+	//       return zeroVal1, zeroVal2, ..., <error-expression>
 	//   }
 	//   tmp
 
@@ -92,7 +143,7 @@ func (g *ErrorPropGenerator) Generate() ast.CodeGenResult {
 	g.Write(errVar)
 	g.Write(" != nil {\n")
 
-	// Line 3: return zeroVal1, zeroVal2, ..., err
+	// Line 3: return zeroVal1, zeroVal2, ..., <error-expression>
 	g.Write("\treturn ")
 	for i, zeroVal := range g.ReturnTypes {
 		if i > 0 {
@@ -103,7 +154,9 @@ func (g *ErrorPropGenerator) Generate() ast.CodeGenResult {
 	if len(g.ReturnTypes) > 0 {
 		g.Write(", ")
 	}
-	g.Write(errVar)
+
+	// Generate error value based on transformation type
+	g.generateErrorValue(errVar)
 	g.WriteByte('\n')
 
 	// Line 4: }
@@ -113,6 +166,36 @@ func (g *ErrorPropGenerator) Generate() ast.CodeGenResult {
 	g.Write(tmpVar)
 
 	return g.Result()
+}
+
+// generateErrorValue generates the error expression based on transformation type.
+//
+// Three cases:
+//   - Basic: just use the error variable
+//   - Context: fmt.Errorf("message: %w", err)
+//   - Transform: lambda.ToGo()(err)
+func (g *ErrorPropGenerator) generateErrorValue(errVar string) {
+	if g.Expr.ErrorContext != nil {
+		// String context: fmt.Errorf("message: %w", err)
+		g.NeedsFmt = true
+		g.Write("fmt.Errorf(\"")
+		// Escape any quotes in the message
+		escapedMsg := strings.ReplaceAll(g.Expr.ErrorContext.Message, "\"", "\\\"")
+		g.Write(escapedMsg)
+		g.Write(": %w\", ")
+		g.Write(errVar)
+		g.Write(")")
+	} else if g.Expr.ErrorTransform != nil {
+		// Lambda transform: func(...) ... { return ... }(err)
+		// Use the lambda's ToGo() method which generates a proper Go function literal
+		g.Write(g.Expr.ErrorTransform.ToGo())
+		g.Write("(")
+		g.Write(errVar)
+		g.Write(")")
+	} else {
+		// Basic: just return err
+		g.Write(errVar)
+	}
 }
 
 // dingoExprToString converts a Dingo ast.Expr to Go source code string.

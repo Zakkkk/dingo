@@ -1,0 +1,88 @@
+package main
+
+import "fmt"
+
+// Test: Error propagation with all transformation types
+// Feature: error-propagation
+// Complexity: advanced
+
+// This test demonstrates mixing basic ?, string context, and lambda transforms
+// in a single function to show all error propagation patterns together.
+
+func processUserRequest(userID int, requestData []byte) (Response, error) {
+	// Basic error propagation (no context)
+	tmp, err := getUser(userID)
+	if err != nil {
+		return Response{}, err
+	}
+	user := tmp
+
+	// String context wrapping
+	tmp1, err1 := getPermissions(user.ID)
+	if err1 != nil {
+		return Response{}, fmt.Errorf("failed to load permissions: %w", err1)
+	}
+	permissions := tmp1
+
+	// Rust-style lambda transform
+	tmp2, err2 := validateRequest(requestData)
+	if err2 != nil {
+		return Response{}, func(err __TYPE_INFERENCE_NEEDED) { return fmt.Errorf("validation error for user %d: %w", userID, err) }(err2)
+	}
+	validated := tmp2
+
+	// TypeScript-style lambda with parens
+	tmp3, err3 := executeRequest(validated, permissions)
+	if err3 != nil {
+		return Response{}, func(e __TYPE_INFERENCE_NEEDED) { return fmt.Errorf("execution failed: %w", e) }(err3)
+	}
+	result := tmp3
+
+	// TypeScript-style lambda without parens
+	tmp4, err4 := enrichResult(result)
+	if err4 != nil {
+		return Response{}, func(err __TYPE_INFERENCE_NEEDED) { return fmt.Errorf("enrichment error: %w", err) }(err4)
+	}
+	enriched := tmp4
+
+	return enriched, nil
+}
+
+type User struct {
+	ID   int
+	Name string
+}
+
+type Permissions struct {
+	CanRead  bool
+	CanWrite bool
+}
+
+type Request struct {
+	Data []byte
+}
+
+type Response struct {
+	Status  int
+	Message string
+}
+
+func getUser(id int) (User, error) {
+	return User{ID: id, Name: "Test"}, nil
+}
+
+func getPermissions(userID int) (Permissions, error) {
+	return Permissions{CanRead: true, CanWrite: false}, nil
+}
+
+func validateRequest(data []byte) (Request, error) {
+	return Request{Data: data}, nil
+}
+
+func executeRequest(req Request, perms Permissions) (Response, error) {
+	return Response{Status: 200, Message: "OK"}, nil
+}
+
+func enrichResult(resp Response) (Response, error) {
+	return resp, nil
+}

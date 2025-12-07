@@ -11,7 +11,7 @@ enum Event {
 	KeyPress { key: string }
 }
 
-func handleEvent(event: Event) string {
+func handleEvent(event Event) string {
 	return match event {
 		Click(x, y) => fmt.Sprintf("Click at (%d, %d)", x, y),  // Click events
 		Scroll(delta) => fmt.Sprintf("Scroll by %d", delta),    // Scroll events

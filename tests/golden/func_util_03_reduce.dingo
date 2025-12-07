@@ -4,7 +4,7 @@ package main
 // Feature: Functional reduce/fold utility
 // Complexity: intermediate
 
-func reduce(arr: []int, initial: int, f: func(int, int) int) int {
+func reduce(arr []int, initial int, f func(int, int) int) int {
 	let result = initial
 	for _, v := range arr {
 		result = f(result, v)

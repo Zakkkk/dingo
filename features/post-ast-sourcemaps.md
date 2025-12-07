@@ -50,9 +50,9 @@ Dingo's current source map generation creates mappings during text-based preproc
 ┌─────────────────────────────────────┐
 │ Stage 1: Preprocessor (Text-based) │
 │ • ErrorPropProcessor                │  x? → if err != nil...
-│ • TypeAnnotProcessor                │  param: Type → param Type
 │ • EnumProcessor                     │  enum → structs
 │ → CREATES SOURCE MAPS HERE ← 🔴 PROBLEM
+│ (Note: TypeAnnotProcessor removed 2025-12-08)
 └─────────────────────────────────────┘
     ↓ (Valid Go syntax)
 ┌─────────────────────────────────────┐
@@ -135,9 +135,9 @@ Dingo's current source map generation creates mappings during text-based preproc
 ┌─────────────────────────────────────┐
 │ Stage 1: Preprocessor (Text-based) │
 │ • ErrorPropProcessor                │  x? → if err != nil...
-│ • TypeAnnotProcessor                │  param: Type → param Type
 │ • EnumProcessor                     │  enum → structs
 │ → EMITS METADATA (NOT FINAL MAPS) ←
+│ (Note: TypeAnnotProcessor removed 2025-12-08)
 └─────────────────────────────────────┘
     ↓ (Valid Go + Transformation Metadata)
 ┌─────────────────────────────────────┐

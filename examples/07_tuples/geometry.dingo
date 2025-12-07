@@ -15,7 +15,7 @@ type BoundingBox = (Point2D, Point2D)
 
 // ParseCoordinates returns multiple related values
 // Without tuples, you'd need a struct or multiple returns
-func ParseCoordinates(input: string) ((float64, float64), error) {
+func ParseCoordinates(input string) ((float64, float64), error) {
 	var x, y float64
 	_, err := fmt.Sscanf(input, "(%f,%f)", &x, &y)
 	if err != nil {
@@ -25,7 +25,7 @@ func ParseCoordinates(input: string) ((float64, float64), error) {
 }
 
 // Distance calculates distance between two points
-func Distance(p1: Point2D, p2: Point2D) float64 {
+func Distance(p1 Point2D, p2 Point2D) float64 {
 	// Tuple destructuring
 	let (x1, y1) = p1
 	let (x2, y2) = p2
@@ -36,14 +36,14 @@ func Distance(p1: Point2D, p2: Point2D) float64 {
 }
 
 // Midpoint returns the point between two points
-func Midpoint(p1: Point2D, p2: Point2D) Point2D {
+func Midpoint(p1 Point2D, p2 Point2D) Point2D {
 	let (x1, y1) = p1
 	let (x2, y2) = p2
 	return ((x1 + x2) / 2, (y1 + y2) / 2)
 }
 
 // CalculateBoundingBox finds the bounding box for a set of points
-func CalculateBoundingBox(points: []Point2D) BoundingBox {
+func CalculateBoundingBox(points []Point2D) BoundingBox {
 	if len(points) == 0 {
 		return ((0.0, 0.0), (0.0, 0.0))
 	}
@@ -71,7 +71,7 @@ func CalculateBoundingBox(points: []Point2D) BoundingBox {
 }
 
 // TransformPoints applies a transformation to all points
-func TransformPoints(points: []Point2D, transform: func(Point2D) Point2D) []Point2D {
+func TransformPoints(points []Point2D, transform func(Point2D) Point2D) []Point2D {
 	result := make([]Point2D, len(points))
 	for i, p := range points {
 		result[i] = transform(p)

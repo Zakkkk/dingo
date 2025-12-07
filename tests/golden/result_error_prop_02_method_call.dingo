@@ -18,7 +18,7 @@ func (ServiceError) NewDBError(err: error) ServiceError {
 }
 
 // Test Type.Method(err) pattern
-func FindUsers(db: *sql.DB) Result<[]string, ServiceError> {
+func FindUsers(db *sql.DB) Result<[]string, ServiceError> {
 	let rows = db.Query("SELECT * FROM users")? ServiceError.NewDBError(err)
 	defer rows.Close()
 	return ResultSliceStringServiceErrorOk([]string{"user1", "user2"})

@@ -4,6 +4,10 @@ All notable changes to the Dingo compiler will be documented in this file.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Removed `type_annotations` feature (`param: Type` syntax). Use Go-native `param Type` syntax instead.
+
 ### 🏗️ P0 AST Migration - LetDecl (2025-11-27)
 
 **Type**: Architecture Improvement

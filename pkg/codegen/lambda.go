@@ -7,16 +7,16 @@ import (
 // LambdaCodeGen generates Go function literals from Dingo lambda expressions.
 //
 // Transforms:
-//   - Rust-style: |x| x + 1 → func(x TYPE) TYPE { return x + 1 }
-//   - TypeScript-style: (x) => x + 1 → func(x TYPE) TYPE { return x + 1 }
-//   - Block lambda: |x| { ... } → func(x TYPE) TYPE { ... }
+//   - Rust-style: |x| x + 1 → func(x any) any { return x + 1 }
+//   - TypeScript-style: (x) => x + 1 → func(x any) any { return x + 1 }
+//   - Block lambda: |x| { ... } → func(x any) any { ... }
 //
 // Handles:
 //   - Type annotations on parameters
 //   - Return type annotations
 //   - Expression bodies (wrap in { return ... })
 //   - Block bodies (pass through)
-//   - Type inference markers (__TYPE_INFERENCE_NEEDED)
+//   - Type inference placeholders (any - replaced in type inference pass)
 type LambdaCodeGen struct {
 	*BaseGenerator
 	expr *ast.LambdaExpr
@@ -51,10 +51,17 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 	// )
 	g.WriteByte(')')
 
-	// Return type (if specified)
+	// Return type
+	// - If explicitly specified: use it
+	// - If expression body (not block): needs return type, use "any" as placeholder
+	// - If block body: may or may not return, user is responsible
 	if g.expr.ReturnType != "" {
 		g.WriteByte(' ')
 		g.Write(g.expr.ReturnType)
+	} else if !g.expr.IsBlock {
+		// Expression lambdas always return - use "any" as placeholder
+		// The LambdaTypeInferrer will refine this if the lambda is used in a typed context
+		g.Write(" any")
 	}
 
 	// Body
@@ -80,7 +87,7 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 //
 // For each parameter:
 //   - If type is specified: param Type
-//   - If no type: param __TYPE_INFERENCE_NEEDED
+//   - If no type: param any (placeholder for type inference)
 //
 // Multiple parameters are comma-separated.
 func (g *LambdaCodeGen) generateParams() {
@@ -97,8 +104,9 @@ func (g *LambdaCodeGen) generateParams() {
 		if param.Type != "" {
 			g.Write(param.Type)
 		} else {
-			// Type inference marker
-			g.Write("__TYPE_INFERENCE_NEEDED")
+			// Type inference placeholder (valid Go 1.18+ syntax)
+			// Will be replaced by actual type in type inference pass
+			g.Write("any")
 		}
 	}
 }

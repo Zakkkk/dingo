@@ -18,6 +18,16 @@ type CodeGenResult struct {
 	// For argument context: code to hoist before the statement
 	HoistedCode []byte // Declarations to insert before statement
 	Replacement []byte // Expression replacement (e.g., variable name)
+
+	// Error indicates code generation failed
+	Error *CodeGenError // Compile-time error (halts transpilation)
+}
+
+// CodeGenError represents a compile-time error during code generation.
+type CodeGenError struct {
+	Position int    // Byte offset in Dingo source
+	Message  string // Error message
+	Hint     string // Suggestion for fixing the error
 }
 
 // SourceMapping tracks the relationship between original Dingo source

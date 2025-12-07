@@ -49,17 +49,17 @@ type OutputConfig struct {
 
 // GetDatabaseHost safely accesses nested database host
 // Without safe nav: if config.Database != nil { return config.Database.Host }
-func GetDatabaseHost(config: *ServerConfig) string {
+func GetDatabaseHost(config *ServerConfig) string {
 	return config?.Database?.Host ?? "localhost"
 }
 
 // GetSSLCertPath navigates 3 levels deep safely
-func GetSSLCertPath(config: *ServerConfig) string {
+func GetSSLCertPath(config *ServerConfig) string {
 	return config?.Database?.SSL?.CertPath ?? "/etc/ssl/cert.pem"
 }
 
 // GetCAPath handles optional *string at the end
-func GetCAPath(config: *ServerConfig) string {
+func GetCAPath(config *ServerConfig) string {
 	// Chain ends with *string, need to dereference if present
 	path := config?.Database?.SSL?.CAPath
 	if path != nil {
@@ -69,7 +69,7 @@ func GetCAPath(config: *ServerConfig) string {
 }
 
 // GetRedisPassword safely accesses deeply nested optional password
-func GetRedisPassword(config: *ServerConfig) string {
+func GetRedisPassword(config *ServerConfig) string {
 	password := config?.Cache?.Redis?.Password
 	if password != nil {
 		return *password
@@ -78,7 +78,7 @@ func GetRedisPassword(config: *ServerConfig) string {
 }
 
 // GetLogFile combines safe navigation with null coalescing
-func GetLogFile(config: *ServerConfig) string {
+func GetLogFile(config *ServerConfig) string {
 	file := config?.Logging?.Output?.File
 	if file != nil {
 		return *file
@@ -87,13 +87,13 @@ func GetLogFile(config: *ServerConfig) string {
 }
 
 // IsSSLEnabled shows safe navigation with method-like checks
-func IsSSLEnabled(config: *ServerConfig) bool {
+func IsSSLEnabled(config *ServerConfig) bool {
 	// If any part is nil, returns false (zero value)
 	return config?.Database?.SSL?.Enabled ?? false
 }
 
 // GetReplicaCount safely accesses array length
-func GetReplicaCount(config: *ServerConfig) int {
+func GetReplicaCount(config *ServerConfig) int {
 	replicas := config?.Database?.Replicas
 	if replicas == nil {
 		return 0

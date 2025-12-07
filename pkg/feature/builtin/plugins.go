@@ -8,6 +8,7 @@ package builtin
 import (
 	"regexp"
 
+	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/feature"
 )
 
@@ -65,7 +66,6 @@ var (
 	patternNullCoalesce   = regexp.MustCompile(`\?\?`)
 	patternLambdaRust     = regexp.MustCompile(`\|[^|]*\|\s*[^{]`)
 	patternLambdaTS       = regexp.MustCompile(`\([^)]*\)\s*=>`)
-	patternTypeAnnotation = regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*[a-zA-Z_\*\[\]]`)
 	patternGenerics       = regexp.MustCompile(`[A-Z][a-zA-Z0-9_]*<[A-Z]`)
 	patternLet            = regexp.MustCompile(`(?m)^\s*let\s+[a-zA-Z_]`)
 )
@@ -108,10 +108,15 @@ func (p *EnumPlugin) Detect(src []byte) []feature.SyntaxLocation {
 	return detectPattern(src, patternEnum)
 }
 func (p *EnumPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
-	if Transforms.Enum == nil {
-		return src, nil
+	// Call the AST-based enum transformer directly
+	transformedSrc, enumRegistry := dingoast.TransformEnumSource(src)
+
+	// Store enum registry in context for enum_constructors plugin
+	if ctx != nil && ctx.Registry != nil && enumRegistry != nil {
+		ctx.Registry.Set("enum_registry", enumRegistry)
 	}
-	return Transforms.Enum(src), nil
+
+	return transformedSrc, nil
 }
 
 // --- Match Plugin ---
@@ -150,10 +155,23 @@ func (p *EnumConstructorsPlugin) Detect(src []byte) []feature.SyntaxLocation {
 	return nil
 }
 func (p *EnumConstructorsPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
-	if Transforms.EnumConstructors == nil {
+	// Get enum registry from context (populated by EnumPlugin)
+	var enumRegistry map[string]string
+	if ctx != nil && ctx.Registry != nil {
+		if regVal, ok := ctx.Registry.Get("enum_registry"); ok {
+			if reg, ok := regVal.(map[string]string); ok {
+				enumRegistry = reg
+			}
+		}
+	}
+
+	// If no registry, nothing to transform
+	if len(enumRegistry) == 0 {
 		return src, nil
 	}
-	return Transforms.EnumConstructors(src), nil
+
+	// Call the AST-based enum constructor transformer
+	return dingoast.TransformEnumConstructors(src, enumRegistry), nil
 }
 
 // --- Error Propagation Plugin ---
@@ -281,23 +299,6 @@ func (p *LambdasPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, err
 }
 
 // --- Token-Level Plugins ---
-
-// TypeAnnotationsPlugin transforms `: Type` to ` Type` in param lists
-type TypeAnnotationsPlugin struct{}
-
-func (p *TypeAnnotationsPlugin) Name() string               { return "type_annotations" }
-func (p *TypeAnnotationsPlugin) Version() string            { return "1.0.0" }
-func (p *TypeAnnotationsPlugin) Type() feature.PluginType   { return feature.TokenLevel }
-func (p *TypeAnnotationsPlugin) Priority() int              { return 100 }
-func (p *TypeAnnotationsPlugin) Dependencies() []string     { return nil }
-func (p *TypeAnnotationsPlugin) Conflicts() []string        { return nil }
-func (p *TypeAnnotationsPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternTypeAnnotation)
-}
-func (p *TypeAnnotationsPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
-	// Transforms handled by AST pipeline (pkg/ast.TransformSource)
-	return src, nil
-}
 
 // GenericsPlugin transforms `<T>` to `[T]`
 type GenericsPlugin struct{}

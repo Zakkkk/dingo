@@ -22,18 +22,18 @@ type EnvConfig struct {
 }
 
 // GetHost returns configured host or default
-func GetHost(config: *AppConfig) string {
+func GetHost(config *AppConfig) string {
 	// If config is nil or Host is nil, return default
 	return config?.Host ?? "localhost"
 }
 
 // GetPort returns configured port or default
-func GetPort(config: *AppConfig) int {
+func GetPort(config *AppConfig) int {
 	return config?.Port ?? 8080
 }
 
 // GetTimeout returns timeout with environment override
-func GetTimeout(config: *AppConfig) int {
+func GetTimeout(config *AppConfig) int {
 	// Check environment first, then config, then default
 	envTimeout := os.Getenv("APP_TIMEOUT")
 	if envTimeout != "" {
@@ -44,7 +44,7 @@ func GetTimeout(config: *AppConfig) int {
 }
 
 // GetLogLevel with single fallback (chained ?? only works with nilable types)
-func GetLogLevel(config: *AppConfig) string {
+func GetLogLevel(config *AppConfig) string {
 	// Note: os.Getenv returns string (non-nilable), so ?? chain doesn't apply
 	// For env fallback, use explicit check
 	level := config?.LogLevel ?? ""
@@ -58,7 +58,7 @@ func GetLogLevel(config: *AppConfig) string {
 }
 
 // GetDatabaseURL with environment fallback
-func GetDatabaseURL(env: *EnvConfig) string {
+func GetDatabaseURL(env *EnvConfig) string {
 	url := env?.DatabaseURL ?? ""
 	if url == "" {
 		url = os.Getenv("DATABASE_URL")
@@ -70,7 +70,7 @@ func GetDatabaseURL(env: *EnvConfig) string {
 }
 
 // GetRegion with multi-level fallback
-func GetRegion(env: *EnvConfig) string {
+func GetRegion(env *EnvConfig) string {
 	region := env?.Region ?? ""
 	if region == "" {
 		region = os.Getenv("AWS_REGION")
@@ -85,7 +85,7 @@ func GetRegion(env: *EnvConfig) string {
 }
 
 // LoadConfig demonstrates building config with defaults
-func LoadConfig(appConfig: *AppConfig, envConfig: *EnvConfig) map[string]interface{} {
+func LoadConfig(appConfig *AppConfig, envConfig *EnvConfig) map[string]interface{} {
 	return map[string]interface{}{
 		"host":        GetHost(appConfig),
 		"port":        GetPort(appConfig),
@@ -98,7 +98,7 @@ func LoadConfig(appConfig: *AppConfig, envConfig: *EnvConfig) map[string]interfa
 
 // Example with pointer type (Option type would require plugin)
 // For Option<T> support, use the option plugin
-func GetOptionalSetting(setting: *string) string {
+func GetOptionalSetting(setting *string) string {
 	// Works with *T via nil check
 	if setting != nil {
 		return *setting
@@ -108,7 +108,7 @@ func GetOptionalSetting(setting: *string) string {
 
 // Coalescing for multi-source config
 // Note: For chained *T ?? *T ?? string, use explicit checks
-func GetAPIEndpoint(primary: *string, secondary: *string, tertiary: *string) string {
+func GetAPIEndpoint(primary *string, secondary *string, tertiary *string) string {
 	if primary != nil {
 		return *primary
 	}

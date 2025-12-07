@@ -8,7 +8,7 @@ type Config struct {
 	Port int
 }
 
-func pipeline(path: string) (*Config, error) {
+func pipeline(path string) (*Config, error) {
 	let data = ReadFile(path)? "failed to read config"
 	var cfg Config
 	let err = Unmarshal(data, &cfg)? "failed to parse config"

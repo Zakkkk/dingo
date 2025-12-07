@@ -226,6 +226,17 @@ func (p *PrattParser) parsePattern() ast.Pattern {
 
 		// Check for known constructors without params
 		if isNullaryConstructor(ident.Lit) {
+			// Validate PascalCase naming (no underscores)
+			if err := validatePascalCasePattern(ident.Lit); err != nil {
+				p.errors = append(p.errors, ParseError{
+					Pos:     ident.Pos,
+					Line:    ident.Line,
+					Column:  ident.Column,
+					Message: err.Error(),
+				})
+				// Continue parsing but mark as error
+			}
+
 			return &ast.ConstructorPattern{
 				NamePos: ident.Pos,
 				Name:    ident.Lit,
@@ -256,6 +267,17 @@ func (p *PrattParser) parsePattern() ast.Pattern {
 // parseConstructorPattern parses Ok(x), Err(e), Some(v), etc.
 // Also handles nested: Ok(Some(x))
 func (p *PrattParser) parseConstructorPattern(nameTok tokenizer.Token) ast.Pattern {
+	// Validate PascalCase naming (no underscores)
+	if err := validatePascalCasePattern(nameTok.Lit); err != nil {
+		p.errors = append(p.errors, ParseError{
+			Pos:     nameTok.Pos,
+			Line:    nameTok.Line,
+			Column:  nameTok.Column,
+			Message: err.Error(),
+		})
+		// Continue parsing but mark as error
+	}
+
 	// Expect and consume '('
 	if !p.expectPeek(tokenizer.LPAREN) {
 		return nil
@@ -311,8 +333,19 @@ func (p *PrattParser) parseConstructorPattern(nameTok tokenizer.Token) ast.Patte
 	}
 }
 
-// parseStructPattern parses struct-like patterns: Color_RGB{r, g, b}
+// parseStructPattern parses struct-like patterns: ColorRGB{r, g, b}
 func (p *PrattParser) parseStructPattern(nameTok tokenizer.Token) ast.Pattern {
+	// Validate PascalCase naming (no underscores)
+	if err := validatePascalCasePattern(nameTok.Lit); err != nil {
+		p.errors = append(p.errors, ParseError{
+			Pos:     nameTok.Pos,
+			Line:    nameTok.Line,
+			Column:  nameTok.Column,
+			Message: err.Error(),
+		})
+		// Continue parsing but mark as error
+	}
+
 	// Expect and consume '{'
 	if !p.expectPeek(tokenizer.LBRACE) {
 		return nil
@@ -522,10 +555,18 @@ func (p *PrattParser) parseBlockBody() (ast.Expr, bool) {
 // Helper functions
 
 func isNullaryConstructor(name string) bool {
-	// Check for None or qualified variants like Option_None
-	return name == "None" ||
-	       name == "Option_None" ||
-	       name == "Result_None"
+	// Heuristic: Capitalized identifiers are constructors (Go naming convention)
+	// - Lowercase: variable binding (e.g., x, value, err)
+	// - Uppercase: constructor/variant (e.g., None, Pending, Active)
+	// - Underscore: wildcard (handled separately)
+
+	if len(name) == 0 {
+		return false
+	}
+
+	// Check if first character is uppercase (A-Z)
+	firstChar := name[0]
+	return firstChar >= 'A' && firstChar <= 'Z'
 }
 
 func literalKindFromToken(kind tokenizer.TokenKind) ast.LiteralKind {
@@ -539,4 +580,63 @@ func literalKindFromToken(kind tokenizer.TokenKind) ast.LiteralKind {
 	default:
 		return ast.IntLiteral
 	}
+}
+
+// validatePascalCasePattern checks if a pattern name follows PascalCase convention
+// Rejects patterns with underscores (e.g., Shape_Point) and provides helpful error
+func validatePascalCasePattern(name string) error {
+	// Check for underscores - deprecated syntax
+	if containsUnderscore(name) {
+		// Suggest PascalCase alternative
+		suggested := toPascalCase(name)
+		return fmt.Errorf("deprecated: pattern names must be PascalCase without underscores (use '%s' instead of '%s')", suggested, name)
+	}
+
+	// Pattern names should start with uppercase (constructor/variant)
+	if len(name) > 0 {
+		firstChar := rune(name[0])
+		if firstChar < 'A' || firstChar > 'Z' {
+			return fmt.Errorf("pattern names must be PascalCase (start with uppercase letter)")
+		}
+	}
+
+	return nil
+}
+
+// containsUnderscore checks if a string contains underscore characters
+func containsUnderscore(s string) bool {
+	for _, ch := range s {
+		if ch == '_' {
+			return true
+		}
+	}
+	return false
+}
+
+// toPascalCase converts snake_case to PascalCase for error messages
+// Example: Shape_Point -> ShapePoint
+func toPascalCase(s string) string {
+	if !containsUnderscore(s) {
+		return s
+	}
+
+	var result []rune
+	capitalizeNext := true
+
+	for _, ch := range s {
+		if ch == '_' {
+			capitalizeNext = true
+			continue
+		}
+
+		if capitalizeNext && ch >= 'a' && ch <= 'z' {
+			result = append(result, ch-'a'+'A')
+			capitalizeNext = false
+		} else {
+			result = append(result, ch)
+			capitalizeNext = false
+		}
+	}
+
+	return string(result)
 }

@@ -7,7 +7,7 @@ enum Result {
 	Err(error),
 }
 
-func divide(a: float64, b: float64) Result {
+func divide(a float64, b float64) Result {
 	if b == 0.0 {
 		return ResultErr(errors.New("division by zero"))
 	}

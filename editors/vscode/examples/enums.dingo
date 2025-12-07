@@ -19,7 +19,7 @@ enum Message {
 }
 
 // Pattern matching on enums
-func processMessage(msg: Message) {
+func processMessage(msg Message) {
     match msg {
         Quit => {
             println("Quitting...")

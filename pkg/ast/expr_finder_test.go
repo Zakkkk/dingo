@@ -444,6 +444,9 @@ func TestContextDetection_WithWhitespace(t *testing.T) {
 }
 
 func TestContextDetection_ReturnWithNewline(t *testing.T) {
+	// Note: return followed by newline is a complete statement in Go (automatic semicolon insertion)
+	// So `return\nmatch x {...}` is TWO statements, not `return match x {...}`
+	// This means the match is NOT in return context - it's a standalone statement
 	src := []byte(`
 	return
 		match x {
@@ -461,8 +464,9 @@ func TestContextDetection_ReturnWithNewline(t *testing.T) {
 		t.Fatalf("expected 1 expression, got %d", len(locs))
 	}
 
-	if locs[0].Context != ContextReturn {
-		t.Errorf("expected ContextReturn with newline, got %v", locs[0].Context)
+	// Due to Go's automatic semicolon insertion, the match is a statement, not return context
+	if locs[0].Context != ContextStatement {
+		t.Errorf("expected ContextStatement (due to newline after return), got %v", locs[0].Context)
 	}
 }
 

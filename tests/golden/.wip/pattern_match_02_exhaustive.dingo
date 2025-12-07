@@ -4,7 +4,7 @@ import "fmt"
 
 // Example 1: Non-exhaustive Result match (missing Err case)
 // This should produce a compile error
-func handleResultNonExhaustive(result: Result<int, string>) -> int {
+func handleResultNonExhaustive(result Result<int, string>) -> int {
 	match result {
 		Ok(x) => x * 2
 		// ERROR: non-exhaustive match, missing cases: Err
@@ -12,7 +12,7 @@ func handleResultNonExhaustive(result: Result<int, string>) -> int {
 }
 
 // Example 2: Exhaustive Result match with wildcard
-func handleResultExhaustive(result: Result<int, string>) -> int {
+func handleResultExhaustive(result Result<int, string>) -> int {
 	match result {
 		Ok(x) => x * 2,
 		_ => 0
@@ -21,7 +21,7 @@ func handleResultExhaustive(result: Result<int, string>) -> int {
 
 // Example 3: Non-exhaustive Option match (missing None case)
 // This should produce a compile error
-func handleOptionNonExhaustive(opt: Option<int>) -> int {
+func handleOptionNonExhaustive(opt Option<int>) -> int {
 	match opt {
 		Some(x) => x
 		// ERROR: non-exhaustive match, missing cases: None
@@ -29,7 +29,7 @@ func handleOptionNonExhaustive(opt: Option<int>) -> int {
 }
 
 // Example 4: Exhaustive Option match with all cases
-func handleOptionExhaustive(opt: Option<int>) -> int {
+func handleOptionExhaustive(opt Option<int>) -> int {
 	match opt {
 		Some(x) => x,
 		None => 0
@@ -37,7 +37,7 @@ func handleOptionExhaustive(opt: Option<int>) -> int {
 }
 
 // Example 5: Wildcard covers all remaining cases
-func handleWithWildcard(result: Result<User, Error>) -> string {
+func handleWithWildcard(result Result<User, Error>) -> string {
 	match result {
 		Ok(user) => user.name,
 		_ => "Unknown"
@@ -45,7 +45,7 @@ func handleWithWildcard(result: Result<User, Error>) -> string {
 }
 
 // Example 6: Demonstrating proper error message format
-func demonstrateErrorMessage(result: Result<int, string>) {
+func demonstrateErrorMessage(result Result<int, string>) {
 	// This will produce:
 	// error: non-exhaustive match, missing cases: Err
 	//   --> pattern_match_02_exhaustive.dingo:XX:YY

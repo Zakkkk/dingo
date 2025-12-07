@@ -20,9 +20,8 @@ type TokenMapping struct {
 //
 // This is a minimal transformer that:
 // 1. Converts ? to markers (?, ??, ?. → comments for now)
-// 2. Handles type annotations (param: Type → param Type)
-// 3. Handles generic syntax (Result<T,E> → Result[T,E])
-// 4. Handles let declarations (let x = → x :=)
+// 2. Handles generic syntax (Result<T,E> → Result[T,E])
+// 3. Handles let declarations (let x = → x :=)
 //
 // More complex transformations (enum, match, lambda) are handled by pkg/parser/
 // and pkg/codegen/ in the full AST pipeline.
@@ -62,31 +61,11 @@ func TransformToGo(src []byte) ([]byte, []TokenMapping, error) {
 	lastCopied := 0 // Last byte position we've copied from src
 
 	// State tracking
-	parenDepth := 0
-	inParamList := false
 	genericDepth := 0 // Track depth of generic type brackets
 
 	for i := 0; i < len(tokens)-1; i++ { // -1 because last is EOF
 		t := tokens[i]
 		offset := file.Offset(t.pos) // Convert Pos to byte offset
-
-		// Track parentheses for parameter context
-		if t.tok == gotoken.LPAREN {
-			// Check if previous token suggests parameter list
-			if i > 0 {
-				prev := tokens[i-1]
-				if prev.tok == gotoken.IDENT || prev.tok == gotoken.RBRACK || prev.tok == gotoken.FUNC {
-					inParamList = true
-				}
-			}
-			parenDepth++
-		}
-		if t.tok == gotoken.RPAREN {
-			parenDepth--
-			if parenDepth == 0 {
-				inParamList = false
-			}
-		}
 
 		// Handle generic type syntax: Result<T, E> -> Result[T, E]
 		// Replace '<' with '[' when after an identifier (type name)
@@ -163,27 +142,6 @@ func TransformToGo(src []byte) ([]byte, []TokenMapping, error) {
 				Kind:       "generic_close",
 			})
 			continue
-		}
-
-		// Handle type annotations: param: Type -> param Type
-		// Replace ':' with ' ' when in parameter list after identifier
-		if t.tok == gotoken.COLON && inParamList {
-			if i > 0 && tokens[i-1].tok == gotoken.IDENT {
-				// Copy everything up to the colon
-				result = append(result, src[lastCopied:offset]...)
-				// Replace colon with space
-				result = append(result, ' ')
-				lastCopied = offset + 1 // Skip the colon
-
-				mappings = append(mappings, TokenMapping{
-					DingoStart: offset,
-					DingoEnd:   offset + 1,
-					GoStart:    len(result) - 1,
-					GoEnd:      len(result),
-					Kind:       "type_annotation",
-				})
-				continue
-			}
 		}
 
 		// Handle 'let' keyword

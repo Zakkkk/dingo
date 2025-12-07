@@ -258,7 +258,7 @@ func TestLetCodeGen_TypeAnnotationWithoutColon(t *testing.T) {
 
 	result := gen.Generate()
 
-	expected := "var xint = 42" // Should append type directly (ToGo removes colon if present)
+	expected := "var x int = 42" // Should handle formatting correctly
 	got := string(result.Output)
 	if got != expected {
 		t.Errorf("Generate() output mismatch:\ngot:  %q\nwant: %q", got, expected)

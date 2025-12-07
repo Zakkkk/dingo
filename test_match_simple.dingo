@@ -1,0 +1,17 @@
+package main
+
+import "fmt"
+
+enum Status {
+    Pending
+    Active
+}
+
+func main() {
+    s := Pending()
+    x := match s {
+        Pending => "waiting"
+        Active => "running"
+    }
+    fmt.Println(x)
+}

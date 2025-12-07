@@ -4,7 +4,7 @@ package main
 // Feature: Functional filter utility
 // Complexity: basic
 
-func filter(arr: []int, predicate: func(int) bool) []int {
+func filter(arr []int, predicate func(int) bool) []int {
 	let result = []int{}
 	for _, v := range arr {
 		if predicate(v) {

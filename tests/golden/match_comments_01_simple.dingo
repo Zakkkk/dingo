@@ -4,7 +4,7 @@ package main
 
 import "fmt"
 
-func processResult(result: Result[int, error]) int {
+func processResult(result Result[int, error]) int {
 	return match result {
 		Ok(value) => value,        // Success case
 		Err(e) => 0,               // Error case - return zero

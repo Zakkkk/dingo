@@ -78,11 +78,11 @@ func (g *MatchGenerator) Generate(match *dingoast.MatchExpr) (string, []Mapping)
 	b.WriteString(scrutineeExpr)
 	b.WriteString("\n")
 
-	// Generate: switch tempVar.tag {
+	// Generate: switch v := tempVar.(type) {
 	b.WriteString(g.indent())
-	b.WriteString("switch ")
+	b.WriteString("switch v := ")
 	b.WriteString(tempVar)
-	b.WriteString(".tag {\n")
+	b.WriteString(".(type) {\n")
 
 	g.indentLevel++
 
@@ -246,17 +246,18 @@ func (g *MatchGenerator) generateMultiArmCase(arms []*dingoast.MatchArm, scrutin
 	}
 
 	// Generate case header
-	tagName := g.constructorToTag(p.Name)
+	typeName := g.constructorToType(p.Name)
 	b.WriteString(g.indent())
 	b.WriteString("case ")
-	b.WriteString(tagName)
+	b.WriteString(typeName)
 	b.WriteString(":\n")
 
 	g.indentLevel++
 
 	// Extract bindings (same for all arms since pattern is the same)
+	// Use "v" from type switch instead of scrutineeVar
 	if len(p.Params) > 0 {
-		bindingsCode := g.generateBindings(p, scrutineeVar, 0)
+		bindingsCode := g.generateBindings(p, "v", 0)
 		b.WriteString(bindingsCode)
 	}
 
@@ -379,20 +380,21 @@ func (g *MatchGenerator) generateConstructorCase(p *dingoast.ConstructorPattern,
 	var b strings.Builder
 	var mappings []Mapping
 
-	// Determine tag name from constructor
-	tagName := g.constructorToTag(p.Name)
+	// Determine type name from constructor
+	typeName := g.constructorToType(p.Name)
 
-	// case TagName:
+	// case TypeName:
 	b.WriteString(g.indent())
 	b.WriteString("case ")
-	b.WriteString(tagName)
+	b.WriteString(typeName)
 	b.WriteString(":\n")
 
 	g.indentLevel++
 
 	// Extract bindings from nested patterns
+	// Use "v" from type switch instead of scrutineeVar
 	if len(p.Params) > 0 {
-		bindingsCode := g.generateBindings(p, scrutineeVar, 0)
+		bindingsCode := g.generateBindings(p, "v", 0)
 		b.WriteString(bindingsCode)
 	}
 
@@ -436,46 +438,47 @@ func (g *MatchGenerator) generateBindings(p *dingoast.ConstructorPattern, parent
 
 		switch paramPattern := param.(type) {
 		case *dingoast.VariablePattern:
-			// Simple variable binding: x := *parentVar.Field (dereference pointer)
+			// Simple variable binding: x := v.Value (direct access, no pointer)
 			b.WriteString(g.indent())
 			b.WriteString(paramPattern.Name)
-			b.WriteString(" := *")
+			b.WriteString(" := ")
 			b.WriteString(parentVar)
 			b.WriteString(".")
 			b.WriteString(fieldName)
 			b.WriteString("\n")
 
 		case *dingoast.ConstructorPattern:
-			// Nested constructor: need nested switch
+			// Nested constructor: need nested type switch
 			tempVar := g.nextTemp()
 
-			// Extract the field to temp variable (dereference pointer)
+			// Extract the field to temp variable (direct access, no pointer)
 			b.WriteString(g.indent())
 			b.WriteString(tempVar)
-			b.WriteString(" := *")
+			b.WriteString(" := ")
 			b.WriteString(parentVar)
 			b.WriteString(".")
 			b.WriteString(fieldName)
 			b.WriteString("\n")
 
-			// Generate nested switch
-			nestedTagName := g.constructorToTag(paramPattern.Name)
+			// Generate nested type switch
+			nestedTypeName := g.constructorToType(paramPattern.Name)
 			b.WriteString(g.indent())
-			b.WriteString("switch ")
+			b.WriteString("switch vNested := ")
 			b.WriteString(tempVar)
-			b.WriteString(".tag {\n")
+			b.WriteString(".(type) {\n")
 
 			g.indentLevel++
 			b.WriteString(g.indent())
 			b.WriteString("case ")
-			b.WriteString(nestedTagName)
+			b.WriteString(nestedTypeName)
 			b.WriteString(":\n")
 
 			g.indentLevel++
 
 			// Recursively extract nested bindings
+			// Use vNested from the nested type switch
 			if len(paramPattern.Params) > 0 {
-				nestedBindings := g.generateBindings(paramPattern, tempVar, depth+1)
+				nestedBindings := g.generateBindings(paramPattern, "vNested", depth+1)
 				b.WriteString(nestedBindings)
 			}
 
@@ -557,58 +560,64 @@ func (g *MatchGenerator) generateBody(arm *dingoast.MatchArm, marker string) str
 	return b.String()
 }
 
-// constructorToTag converts constructor name to tag constant
-// Ok -> dgo.ResultTagOk, Err -> dgo.ResultTagErr, Some -> dgo.OptionTagSome, None -> dgo.OptionTagNone
-// For enums: UserCreated -> EventTagUserCreated (when enumName is set)
-func (g *MatchGenerator) constructorToTag(name string) string {
+// constructorToType converts constructor name to concrete type name for type switch
+// Ok -> ResultOk, Err -> ResultErr, Some -> OptionSome, None -> OptionNone
+// For enums: UserCreated -> EventUserCreated (when enumName is set)
+func (g *MatchGenerator) constructorToType(name string) string {
 	switch name {
 	case "Ok":
-		return "dgo.ResultTagOk"
+		return "ResultOk"
 	case "Err":
-		return "dgo.ResultTagErr"
+		return "ResultErr"
 	case "Some":
-		return "dgo.OptionTagSome"
+		return "OptionSome"
 	case "None":
-		return "dgo.OptionTagNone"
+		return "OptionNone"
 	default:
-		// Enum variants: EnumName_Variant -> EnumNameTagVariant
+		// Enum variants: EnumName_Variant -> EnumNameVariant
 		if strings.Contains(name, "_") {
 			parts := strings.Split(name, "_")
 			if len(parts) == 2 {
-				return parts[0] + "Tag" + parts[1]
+				return parts[0] + parts[1]
 			}
 		}
 		// For plain variant names, we need the enum type name
 		// This will be set from context (scrutinee type)
-		// For now, use the pattern: TypeTagVariant where Type is from scrutinee
+		// Use the pattern: TypeVariant where Type is from scrutinee
 		if g.enumTypeName != "" {
-			return g.enumTypeName + "Tag" + name
+			return g.enumTypeName + name
 		}
-		// Fallback: just append Tag
-		return name + "Tag"
+		// Fallback: just return as-is (for standalone types)
+		return name
 	}
 }
 
 // constructorToField converts constructor name and param index to field name
-// For Result: Ok -> Ok, Err -> Err (exported fields for pattern matching)
-// For Option: Some -> Some, None -> (no field)
-// For Enums: UserCreated with params [userID, email] -> usercreated_userID, usercreated_email
+// For Result/Option tuple variants: Use "Value" for single field, "Value0", "Value1" for multiple
+// For Enums with named fields: Use the actual field name
 func (g *MatchGenerator) constructorToField(constructorName string, paramIndex int, paramNames []string) string {
 	switch constructorName {
-	case "Ok":
-		return "Ok"
-	case "Err":
-		return "Err"
-	case "Some":
-		return "Some"
-	default:
-		// Enum variants: field name is lowercase(variant)_paramName
-		// e.g., UserCreated.userID -> usercreated_userID
-		if len(paramNames) > paramIndex {
-			return strings.ToLower(constructorName) + "_" + paramNames[paramIndex]
+	case "Ok", "Err", "Some":
+		// Tuple variants - use Value naming
+		if len(paramNames) == 1 {
+			return "Value"
 		}
-		// Fallback: just lowercase constructor name
-		return strings.ToLower(constructorName)
+		return fmt.Sprintf("Value%d", paramIndex)
+	case "None":
+		// None has no fields
+		return ""
+	default:
+		// Enum variants
+		// If paramNames has actual names (not generated), use them
+		if len(paramNames) > paramIndex && paramNames[paramIndex] != "_" && !strings.HasPrefix(paramNames[paramIndex], "param") {
+			// Named field - use as-is
+			return paramNames[paramIndex]
+		}
+		// Tuple variant - use Value naming
+		if len(paramNames) == 1 {
+			return "Value"
+		}
+		return fmt.Sprintf("Value%d", paramIndex)
 	}
 }
 

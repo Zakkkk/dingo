@@ -4,12 +4,12 @@ import "strings"
 
 // parseUserData demonstrates multi-value return with error propagation
 // Input: "john:admin:42" → (name, role, age)
-func parseUserData(input: string) (string, string, int, error) {
+func parseUserData(input string) (string, string, int, error) {
 	return extractUserFields(input)?
 }
 
 // extractUserFields simulates a function that returns multiple values
-func extractUserFields(data: string) (string, string, int, error) {
+func extractUserFields(data string) (string, string, int, error) {
 	parts := strings.Split(data, ":")
 	if len(parts) != 3 {
 		return "", "", 0, fmt.Errorf("invalid format")

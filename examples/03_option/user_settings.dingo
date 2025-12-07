@@ -25,12 +25,12 @@ type User struct {
 //   opt.Unwrap()         - Rust style alias for MustSome() (deprecated)
 //   opt.SomeOr(default)  - Returns default if None
 //   opt.SomeOrElse(fn)   - Computes default lazily via fn() if None
-func GetTheme(user: User) string {
+func GetTheme(user User) string {
 	return user.Settings.Theme.SomeOr("system")
 }
 
 // GetFontSize applies validation and returns CSS value
-func GetFontSize(user: User) string {
+func GetFontSize(user User) string {
 	// Check if font size is set and apply validation
 	if user.Settings.FontSize.IsSome() {
 		size := user.Settings.FontSize.MustSome()
@@ -46,7 +46,7 @@ func GetFontSize(user: User) string {
 }
 
 // ShouldSendNotification checks multiple optional settings
-func ShouldSendNotification(user: User, notificationType: string) bool {
+func ShouldSendNotification(user User, notificationType string) bool {
 	// Check if email notifications are enabled
 	if user.Settings.NotifyEmail.IsSome() {
 		return user.Settings.NotifyEmail.MustSome()
@@ -56,7 +56,7 @@ func ShouldSendNotification(user: User, notificationType: string) bool {
 }
 
 // FindUserByLanguage returns first user with matching language preference
-func FindUserByLanguage(users: []User, lang: string) Option<User> {
+func FindUserByLanguage(users []User, lang string) Option<User> {
 	for _, user := range users {
 		if user.Settings.Language.IsSome() && user.Settings.Language.MustSome() == lang {
 			return Some[User](user)

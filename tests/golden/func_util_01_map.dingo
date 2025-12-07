@@ -4,7 +4,7 @@ package main
 // Feature: Functional map utility
 // Complexity: basic
 
-func mapSlice(arr: []int, f: func(int) int) []int {
+func mapSlice(arr []int, f func(int) int) []int {
 	let result = make([]int, len(arr))
 	for i, v := range arr {
 		result[i] = f(v)

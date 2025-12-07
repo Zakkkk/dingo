@@ -129,23 +129,23 @@ func fetchUser(id string) ResultUserError {
 }
 
 func processUser(id string) ResultUserError {
-    __result0 := fetchUser(id)
-    if __result0.err != nil {
-        return ResultUserError{err: __result0.err}
+    tmp, err := fetchUser(id)
+    if err != nil {
+        return ResultUserError{err: err}
     }
-    user := *__result0.value
+    user := tmp
 
-    __result1 := validateUser(user)
-    if __result1.err != nil {
-        return ResultUserError{err: __result1.err}
+    tmp1, err1 := validateUser(user)
+    if err1 != nil {
+        return ResultUserError{err: err1}
     }
-    validated := *__result1.value
+    validated := tmp1
 
-    __result2 := saveUser(validated)
-    if __result2.err != nil {
-        return ResultUserError{err: __result2.err}
+    tmp2, err2 := saveUser(validated)
+    if err2 != nil {
+        return ResultUserError{err: err2}
     }
-    saved := *__result2.value
+    saved := tmp2
 
     return ResultUserError{value: &saved}
 }

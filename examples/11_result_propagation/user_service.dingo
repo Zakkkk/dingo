@@ -32,7 +32,7 @@ func (e ServiceError) Error() string {
 
 // Repository functions returning Result types
 // Implicit wrapping: just return the value or error directly
-func FindUser(db: *sql.DB, id: int) Result<User, ServiceError> {
+func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
 	var user User
@@ -47,7 +47,7 @@ func FindUser(db: *sql.DB, id: int) Result<User, ServiceError> {
 	return user
 }
 
-func FindOrdersByUser(db: *sql.DB, userID: int) Result<[]Order, ServiceError> {
+func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
 	rows := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)?
 		ServiceError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()
@@ -65,7 +65,7 @@ func FindOrdersByUser(db: *sql.DB, userID: int) Result<[]Order, ServiceError> {
 
 // Service function chaining multiple Result-returning functions
 // Guard let with pipe binding: explicit |err| for error access
-func GetUserOrderTotal(db: *sql.DB, userID: int) Result<float64, ServiceError> {
+func GetUserOrderTotal(db *sql.DB, userID int) Result<float64, ServiceError> {
 	// Get user - guard let unwraps or returns error
 	guard let user = FindUser(db, userID) else |err| { return Err(err) }
 
@@ -83,7 +83,7 @@ func GetUserOrderTotal(db: *sql.DB, userID: int) Result<float64, ServiceError> {
 
 // Another example: transferring funds between users
 // Guard let makes the happy path clear and linear
-func TransferFunds(db: *sql.DB, fromID: int, toID: int, amount: float64) Result<bool, ServiceError> {
+func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) Result<bool, ServiceError> {
 	// Find source user
 	guard let fromUser = FindUser(db, fromID) else |err| { return Err(err) }
 

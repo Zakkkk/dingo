@@ -19,12 +19,12 @@ func (AppError) NewDBError(err: error) AppError {
 	return AppError{Code: "DB_ERROR", Message: err.Error()}
 }
 
-func WrapIOError(err: error) AppError {
+func WrapIOError(err error) AppError {
 	return AppError{Code: "IO_ERROR", Message: err.Error()}
 }
 
 // Test mixing all three patterns in one function
-func ProcessData(db: *sql.DB, reader: io.Reader) Result<string, AppError> {
+func ProcessData(db *sql.DB, reader io.Reader) Result<string, AppError> {
 	// Pattern 1: Struct literal
 	let rows = db.Query("SELECT * FROM data")? AppError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()

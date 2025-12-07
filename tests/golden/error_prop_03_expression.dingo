@@ -1,5 +1,5 @@
 package main
 
-func parseInt(s: string) (int, error) {
+func parseInt(s string) (int, error) {
 	return Atoi(s)?
 }

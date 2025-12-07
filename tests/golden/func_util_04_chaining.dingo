@@ -4,7 +4,7 @@ package main
 // Feature: Method chaining with map/filter/reduce
 // Complexity: advanced
 
-func map(arr: []int, f: func(int) int) []int {
+func map(arr []int, f func(int) int) []int {
 	let result = make([]int, len(arr))
 	for i, v := range arr {
 		result[i] = f(v)
@@ -12,7 +12,7 @@ func map(arr: []int, f: func(int) int) []int {
 	return result
 }
 
-func filter(arr: []int, predicate: func(int) bool) []int {
+func filter(arr []int, predicate func(int) bool) []int {
 	let result = []int{}
 	for _, v := range arr {
 		if predicate(v) {
@@ -22,7 +22,7 @@ func filter(arr: []int, predicate: func(int) bool) []int {
 	return result
 }
 
-func reduce(arr: []int, initial: int, f: func(int, int) int) int {
+func reduce(arr []int, initial int, f func(int, int) int) int {
 	let result = initial
 	for _, v := range arr {
 		result = f(result, v)

@@ -218,7 +218,6 @@ All language features are implemented as plugins with **priority ordering**:
 | `safe_nav` | 60 | ✅ | Expression `?.` (with type inference) |
 | `null_coalesce` | 70 | ✅ | `??` operator |
 | `lambdas` | 80 | ✅ | `\|x\|` and `=>` syntax |
-| `type_annotations` | 100 | ✅ | `param: Type` → `param Type` |
 | `generics` | 110 | ✅ | `<T>` → `[T]` |
 | `let_binding` | 120 | ✅ | `let x =` → `x :=` |
 
@@ -338,7 +337,6 @@ Dingo delivers **TWO revolutionary benefits simultaneously**:
 
 1. **Transpiler** (`dingo build`) - Two-Stage Approach
    - **Stage 1: Preprocessor** - Text-based transformation (Dingo syntax → valid Go)
-     - TypeAnnotProcessor: `param: Type` → `param Type`
      - ErrorPropProcessor: `x?` → error handling code
      - EnumProcessor: `enum Name {}` → Go tagged unions
      - KeywordProcessor: Other Dingo keywords
@@ -1050,7 +1048,6 @@ All features are now implemented as plugins via `pkg/feature/`:
 | safe_nav | 60 | Character | ✅ Complete |
 | null_coalesce | 70 | Character | ✅ Complete |
 | lambdas | 80 | Character | ✅ Complete |
-| type_annotations | 100 | Token | ✅ Complete |
 | generics | 110 | Token | ✅ Complete |
 | let_binding | 120 | Token | ✅ Complete |
 
@@ -1074,12 +1071,12 @@ All features are now implemented as plugins via `pkg/feature/`:
 
 ✅ **Parser Approach**: Token-based transformation + go/parser
   - Character-level passes for complex syntax (enum, match, lambda)
-  - Token-level pass for simple syntax (type annotations, let, generics)
+  - Token-level pass for simple syntax (let, generics)
   - go/parser for final parsing to AST
   - **Replaces old regex-based preprocessor**
 
 ✅ **Pluggable Features**: Static registry with enable/disable config
-  - All 12 features implemented as plugins (`pkg/feature/builtin/`)
+  - All 11 features implemented as plugins (`pkg/feature/builtin/`)
   - Priority ordering (10-120) ensures correct execution order
   - Dependencies validated (match→enum, guard_let→error_prop, etc.)
   - Configuration via `dingo.toml` `[feature_matrix]` section
@@ -1227,8 +1224,8 @@ Dingo's value proposition is **syntax and ergonomics**, not a new type system. B
 **Recent Changes**:
 - 2025-12-07: Added `pkg/typechecker/` for go/types integration - infers expression types
 - 2025-12-07: Safe navigation now generates human-like code with type inference
-- 2025-12-07: All 12 features marked ✅ Complete (safe_nav, null_coalesce updated)
-- 2025-12-06: Pluggable feature system complete (`pkg/feature/`) - 12 built-in plugins
+- 2025-12-07: All 11 features marked ✅ Complete (safe_nav, null_coalesce updated)
+- 2025-12-06: Pluggable feature system complete (`pkg/feature/`) - 11 built-in plugins
 - 2025-12-06: FeatureMatrix config integration - enable/disable features via `dingo.toml`
 - 2025-12-05: Added "Dingo vs Borgo" architectural comparison and gopls strategy
 - 2025-12-05: New token-based parser (pkg/goparser/) replacing regex preprocessor

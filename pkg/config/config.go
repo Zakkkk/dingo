@@ -112,7 +112,6 @@ type FeatureMatrix struct {
 	Lambdas          *bool `toml:"lambdas"`           // |x| expr and x => expr
 
 	// Token-level features (transform after tokenization)
-	TypeAnnotations *bool `toml:"type_annotations"` // x: Type syntax
 	Generics        *bool `toml:"generics"`         // <T> syntax
 	LetBinding      *bool `toml:"let_binding"`      // let x = expr
 }
@@ -141,7 +140,6 @@ func (fm *FeatureMatrix) ToEnabledFeatures() map[string]bool {
 	addIfSet("lambdas", fm.Lambdas)
 
 	// Token-level features
-	addIfSet("type_annotations", fm.TypeAnnotations)
 	addIfSet("generics", fm.Generics)
 	addIfSet("let_binding", fm.LetBinding)
 
@@ -170,8 +168,6 @@ func (fm *FeatureMatrix) IsFeatureEnabled(name string) bool {
 		return fm.NullCoalesce == nil || *fm.NullCoalesce
 	case "lambdas":
 		return fm.Lambdas == nil || *fm.Lambdas
-	case "type_annotations":
-		return fm.TypeAnnotations == nil || *fm.TypeAnnotations
 	case "generics":
 		return fm.Generics == nil || *fm.Generics
 	case "let_binding":

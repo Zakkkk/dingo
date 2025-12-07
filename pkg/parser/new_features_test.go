@@ -3,6 +3,8 @@ package parser
 import (
 	"go/token"
 	"testing"
+
+	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
 // TestSafeNavigation tests parsing of the safe navigation operator (?.)
@@ -342,6 +344,138 @@ func process(data: *Data) string {
 			_, err := p.ParseFile(fset, "test.dingo", []byte(tt.input))
 			if err != nil {
 				t.Fatalf("ParseFile() error = %v", err)
+			}
+		})
+	}
+}
+
+// TestAdvancedErrorPropagation tests parsing of error propagation with context and transforms
+func TestAdvancedErrorPropagation(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "basic error propagation",
+			input: "getValue()?",
+		},
+		{
+			name:  "error propagation with string context",
+			input: `fetchData() ? "fetch failed"`,
+		},
+		{
+			name:  "error propagation with raw string context",
+			input: "readFile() ? `read failed`",
+		},
+		{
+			name:  "error propagation with rust-style lambda",
+			input: `loadUser() ? |err| wrap("user", err)`,
+		},
+		{
+			name:  "error propagation with typescript-style lambda (parens)",
+			input: `getData() ? (e) => fmt.Errorf("error: %w", e)`,
+		},
+		{
+			name:  "error propagation with typescript-style lambda (no parens)",
+			input: `fetchOrder() ? err => wrapError(err)`,
+		},
+		// NOTE: Chained safe navigation with method calls requires Phase 3+ implementation
+		// {
+		// 	name:  "chained with context",
+		// 	input: `foo()?.bar() ? "bar failed"`,
+		// },
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(0)
+			fset := token.NewFileSet()
+
+			_, err := p.ParseExpr(fset, tt.input)
+			if err != nil {
+				t.Fatalf("ParseExpr() error = %v", err)
+			}
+		})
+	}
+}
+
+// TestErrorPropagationAST tests that error propagation parses to correct AST nodes
+func TestErrorPropagationAST(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		hasContext      bool
+		hasTransform    bool
+		contextMessage  string
+		transformParams int
+	}{
+		{
+			name:         "basic - no context or transform",
+			input:        "getValue()?",
+			hasContext:   false,
+			hasTransform: false,
+		},
+		{
+			name:           "string context",
+			input:          `fetchData() ? "fetch failed"`,
+			hasContext:     true,
+			hasTransform:   false,
+			contextMessage: "fetch failed",
+		},
+		{
+			name:            "rust-style lambda transform",
+			input:           `loadUser() ? |err| wrap(err)`,
+			hasContext:      false,
+			hasTransform:    true,
+			transformParams: 1,
+		},
+		{
+			name:            "typescript-style lambda transform",
+			input:           `getData() ? (e) => fmt.Errorf("error: %w", e)`,
+			hasContext:      false,
+			hasTransform:    true,
+			transformParams: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewParser(0)
+			fset := token.NewFileSet()
+
+			expr, err := p.ParseExpr(fset, tt.input)
+			if err != nil {
+				t.Fatalf("ParseExpr() error = %v", err)
+			}
+
+			// Check it's an ErrorPropExpr
+			errorProp, ok := expr.(*ast.ErrorPropExpr)
+			if !ok {
+				t.Fatalf("expected ErrorPropExpr, got %T", expr)
+			}
+
+			// Check context
+			if tt.hasContext {
+				if errorProp.ErrorContext == nil {
+					t.Fatalf("expected ErrorContext to be set")
+				}
+				if errorProp.ErrorContext.Message != tt.contextMessage {
+					t.Fatalf("expected context message %q, got %q", tt.contextMessage, errorProp.ErrorContext.Message)
+				}
+			} else if errorProp.ErrorContext != nil {
+				t.Fatalf("expected ErrorContext to be nil, got %v", errorProp.ErrorContext)
+			}
+
+			// Check transform
+			if tt.hasTransform {
+				if errorProp.ErrorTransform == nil {
+					t.Fatalf("expected ErrorTransform to be set")
+				}
+				if len(errorProp.ErrorTransform.Params) != tt.transformParams {
+					t.Fatalf("expected %d transform params, got %d", tt.transformParams, len(errorProp.ErrorTransform.Params))
+				}
+			} else if errorProp.ErrorTransform != nil {
+				t.Fatalf("expected ErrorTransform to be nil, got %v", errorProp.ErrorTransform)
 			}
 		})
 	}

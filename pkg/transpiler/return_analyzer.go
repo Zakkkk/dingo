@@ -209,8 +209,57 @@ func (ra *ReturnAnalyzer) determineOptionWrapper(expr ast.Expr, returnInfo *Retu
 		}
 	}
 
-	// All non-nil values wrapped with Some
+	// Check if expression is already an Option[T] type (e.g., returning a variable of type Option[T])
+	// Strategy 1: Use type checker if available
+	if ra.checker != nil {
+		exprType := ra.checker.TypeOf(expr)
+		if exprType != nil {
+			// Check if the expression type is Option (named type check)
+			if named, ok := exprType.(*types.Named); ok {
+				typeName := named.Obj().Name()
+				if typeName == "Option" {
+					return WrapperSkip // Already Option[T], no wrapping needed
+				}
+			}
+		}
+	}
+
+	// Strategy 2: AST-based check for known Option[T] variable names
+	// Check if expr is an identifier that was declared with Option[T] type
+	if ident, ok := expr.(*ast.Ident); ok {
+		// This is a simple heuristic - if the variable was declared as Option[T],
+		// the type checker would catch it above. Here we do a simpler check.
+		if ident.Obj != nil {
+			if decl, ok := ident.Obj.Decl.(*ast.ValueSpec); ok {
+				if decl.Type != nil {
+					// Check if the declared type is Option[T]
+					if isOptionType(decl.Type) {
+						return WrapperSkip
+					}
+				}
+			}
+		}
+	}
+
+	// All non-nil, non-Option values wrapped with Some
 	return WrapperSome
+}
+
+// isOptionType checks if a type expression is Option[T] or dgo.Option[T]
+func isOptionType(expr ast.Expr) bool {
+	indexExpr, ok := expr.(*ast.IndexExpr)
+	if !ok {
+		return false
+	}
+	switch x := indexExpr.X.(type) {
+	case *ast.Ident:
+		return x.Name == "Option"
+	case *ast.SelectorExpr:
+		if ident, ok := x.X.(*ast.Ident); ok {
+			return ident.Name == "dgo" && x.Sel.Name == "Option"
+		}
+	}
+	return false
 }
 
 // isAlreadyWrapped checks if an expression is already a dgo.Ok/Err/Some/None call.

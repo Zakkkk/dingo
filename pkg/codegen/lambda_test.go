@@ -24,7 +24,8 @@ func TestLambdaCodeGen_RustStyleSimple(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func(x __TYPE_INFERENCE_NEEDED) { return x + 1 }"
+	// Expression lambdas without explicit return type get "any" as placeholder
+	expected := "func(x any) any { return x + 1 }"
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -48,7 +49,8 @@ func TestLambdaCodeGen_RustStyleTyped(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func(x int) { return x * 2 }"
+	// Expression lambdas without explicit return type get "any" as placeholder
+	expected := "func(x int) any { return x * 2 }"
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -120,7 +122,7 @@ func TestLambdaCodeGen_TypeScriptStyleSimple(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func(x __TYPE_INFERENCE_NEEDED) { return x + 1 }"
+	expected := "func(x any) any { return x + 1 }"
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -144,7 +146,7 @@ func TestLambdaCodeGen_TypeScriptStyleTyped(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func(x int) { return x * 2 }"
+	expected := "func(x int) any { return x * 2 }"
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -169,7 +171,7 @@ func TestLambdaCodeGen_MultipleParams(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func(x __TYPE_INFERENCE_NEEDED, y __TYPE_INFERENCE_NEEDED) { return x + y }"
+	expected := "func(x any, y any) any { return x + y }"
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -240,7 +242,7 @@ func TestLambdaCodeGen_NoParams(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	expected := "func() { return getValue() }"
+	expected := "func() any { return getValue() }"
 	actual := string(result.Output)
 
 	if actual != expected {

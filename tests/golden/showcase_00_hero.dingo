@@ -13,14 +13,14 @@ type User struct {
 }
 
 // Validation with explicit error returns
-func validateEmail(email: string) (string, error) {
+func validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", errors.New("email required")
 	}
 	return email, nil
 }
 
-func fetchUser(id: int) (*User, error) {
+func fetchUser(id int) (*User, error) {
 	// Simulate DB lookup
 	if id <= 0 {
 		return nil, errors.New("invalid user ID")
@@ -30,7 +30,7 @@ func fetchUser(id: int) (*User, error) {
 
 // Clean error handling with ? operator
 // Notice: Zero manual error checks!
-func getUserData(id: int, email: string) (*User, error) {
+func getUserData(id int, email string) (*User, error) {
 	let validEmail = validateEmail(email)?
 	let user = fetchUser(id)?
 

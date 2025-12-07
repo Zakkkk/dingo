@@ -13,7 +13,7 @@ func (e ServiceError) Error() string {
 }
 
 // Test basic struct literal with err.Error()
-func FindOrders(db: *sql.DB) Result<[]string, ServiceError> {
+func FindOrders(db *sql.DB) Result<[]string, ServiceError> {
 	let rows = db.Query("SELECT * FROM orders")? ServiceError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()
 	return ResultSliceStringServiceErrorOk([]string{"order1", "order2"})

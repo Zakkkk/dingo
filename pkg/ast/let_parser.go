@@ -64,10 +64,17 @@ func (p *LetParser) ParseLetDecl() (*LetDecl, int, error) {
 
 	p.skipWhitespace()
 
-	// Parse optional type annotation (: Type)
+	// Parse optional type annotation
 	var typeAnnot string
-	if p.peek() == ':' {
-		typeAnnot, err = p.parseTypeAnnotation()
+	// If next char is NOT '=' and NOT newline/semi, assume it is a type
+	if p.peek() != '=' && p.peek() != '\n' && p.peek() != ';' {
+		// Handle optional legacy colon
+		if p.peek() == ':' {
+			p.advance() // Skip ':'
+			p.skipWhitespace()
+		}
+
+		typeAnnot, err = p.parseType()
 		if err != nil {
 			return nil, p.pos, fmt.Errorf("invalid type annotation: %w", err)
 		}
@@ -133,15 +140,9 @@ func (p *LetParser) parseIdentString() (string, error) {
 	return string(p.src[start:p.pos]), nil
 }
 
-// parseTypeAnnotation parses a type annotation (: Type)
-// Returns the type annotation including the colon (as per AST comment)
-func (p *LetParser) parseTypeAnnotation() (string, error) {
-	if p.peek() != ':' {
-		return "", fmt.Errorf("expected ':' for type annotation")
-	}
-	p.advance() // Skip ':'
-	p.skipWhitespace()
-
+// parseType parses a type annotation
+// Returns the type string (e.g. "int", "[]string") without leading colon
+func (p *LetParser) parseType() (string, error) {
 	// Parse type expression (identifier, generic types, etc.)
 	// For now, simple implementation: read until '=' or newline
 	typeStart := p.pos
@@ -158,9 +159,7 @@ func (p *LetParser) parseTypeAnnotation() (string, error) {
 		p.advance()
 	}
 
-	// Return with colon included (as per AST comment)
-	// Format: ": Type" (colon + space + type)
-	return ": " + string(p.src[typeStart:p.pos]), nil
+	return string(p.src[typeStart:p.pos]), nil
 }
 
 // parseValue parses the initialization value expression

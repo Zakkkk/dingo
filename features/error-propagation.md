@@ -82,24 +82,92 @@ let user = match fetchUser(id) {
 
 ### Error Context (Advanced)
 
+Dingo provides three ways to add context to propagated errors:
+
+#### 1. String Context (`? "message"`)
+
+The simplest form - wraps the error with `fmt.Errorf`:
+
 ```dingo
-// Wrap errors with context
-func processOrder(orderID: string) -> Result<Order, Error> {
-    let order = fetchOrder(orderID)
-        .mapErr(|e| Error.wrap("fetch failed", e))?
-
-    let validated = validateOrder(order)
-        .mapErr(|e| Error.wrap("validation failed", e))?
-
-    return Ok(validated)
-}
-
-// Or with implicit wrapping
 func processOrder(orderID: string) -> Result<Order, Error> {
     let order = fetchOrder(orderID) ? "fetch failed"
     let validated = validateOrder(order) ? "validation failed"
     return Ok(validated)
 }
+```
+
+Transpiles to:
+```go
+func processOrder(orderID string) ResultOrderError {
+    tmp, err := fetchOrder(orderID)
+    if err != nil {
+        return ResultOrderError{err: fmt.Errorf("fetch failed: %w", err)}
+    }
+    order := tmp
+    // ...
+}
+```
+
+#### 2. Lambda Transform - Rust Style (`? |err| expr`)
+
+For custom error transformation using Rust-style lambda syntax:
+
+```dingo
+func loadUserData(userID: int) -> Result<UserData, AppError> {
+    let user = fetchUser(userID) ? |err| AppError.wrap("user fetch", err)
+    let posts = fetchPosts(user.ID) ? |e| AppError.wrap("posts fetch", e)
+    return Ok(UserData{user, posts})
+}
+```
+
+Transpiles to:
+```go
+func loadUserData(userID int) ResultUserDataAppError {
+    tmp, err := fetchUser(userID)
+    if err != nil {
+        return ResultUserDataAppError{err: func(err error) error { return AppError.wrap("user fetch", err) }(err)}
+    }
+    user := tmp
+    // ...
+}
+```
+
+#### 3. Lambda Transform - TypeScript Style (`? (err) => expr` or `? err => expr`)
+
+Same functionality with TypeScript/JavaScript arrow syntax:
+
+```dingo
+func loadConfig(path: string) -> Result<Config, error> {
+    let content = readFile(path) ? (e) => fmt.Errorf("read failed: %w", e)
+    let config = parseJSON(content) ? err => fmt.Errorf("parse failed: %w", err)
+    return Ok(config)
+}
+```
+
+#### Lambda Parameter Naming
+
+Lambda parameters can use any valid identifier:
+- `|err|` - full name
+- `|e|` - short form
+- `|error|` - verbose
+- All are equivalent
+
+#### Choosing Between Forms
+
+| Form | Use Case | Example |
+|------|----------|---------|
+| `? "message"` | Simple context, standard wrapping | `fetchUser(id) ? "user not found"` |
+| `? \|err\| expr` | Custom error types, complex transforms | `fetchUser(id) ? \|e\| AppError.fromDB(e)` |
+| `? (err) => expr` | JS/TS developers, same as above | `fetchUser(id) ? e => wrap(e)` |
+
+**Note:** Nested error transforms are NOT supported. Use separate statements:
+```dingo
+// ❌ Invalid - nested transforms
+let x = foo()? |e1| bar()? |e2| combine(e1, e2)
+
+// ✅ Valid - use separate statements
+let a = foo() ? |e| wrap("foo", e)
+let b = bar() ? |e| wrap("bar", e)
 ```
 
 ---
@@ -116,11 +184,11 @@ processUser(user)
 
 ```go
 // Transpiled Go
-__result0 := fetchUser(id)
-if __result0.err != nil {
-    return ResultUserError{err: __result0.err}
+tmp, err := fetchUser(id)
+if err != nil {
+    return ResultUserError{err: err}
 }
-user := *__result0.value
+user := tmp
 processUser(user)
 ```
 
@@ -133,13 +201,13 @@ let user = fetchUser(id) ? "failed to fetch user"
 
 ```go
 // Transpiled Go
-__result0 := fetchUser(id)
-if __result0.err != nil {
+tmp, err := fetchUser(id)
+if err != nil {
     return ResultUserError{
-        err: fmt.Errorf("failed to fetch user: %w", __result0.err),
+        err: fmt.Errorf("failed to fetch user: %w", err),
     }
 }
-user := *__result0.value
+user := tmp
 ```
 
 ### Chained Operations
@@ -157,23 +225,23 @@ func processOrder(id: string) -> Result<Order, Error> {
 ```go
 // Transpiled Go (readable, idiomatic)
 func processOrder(id string) ResultOrderError {
-    __result0 := fetchOrder(id)
-    if __result0.err != nil {
-        return ResultOrderError{err: __result0.err}
+    tmp, err := fetchOrder(id)
+    if err != nil {
+        return ResultOrderError{err: err}
     }
-    order := *__result0.value
+    order := tmp
 
-    __result1 := validateOrder(order)
-    if __result1.err != nil {
-        return ResultOrderError{err: __result1.err}
+    tmp1, err1 := validateOrder(order)
+    if err1 != nil {
+        return ResultOrderError{err: err1}
     }
-    validated := *__result1.value
+    validated := tmp1
 
-    __result2 := processPayment(validated)
-    if __result2.err != nil {
-        return ResultOrderError{err: __result2.err}
+    tmp2, err2 := processPayment(validated)
+    if err2 != nil {
+        return ResultOrderError{err: err2}
     }
-    paid := *__result2.value
+    paid := tmp2
 
     return ResultOrderError{value: &paid}
 }
@@ -347,11 +415,14 @@ type ErrorPropagationExpr struct {
 
 ```
 For each `expr?` in source:
-  1. Generate unique temp variable: __result{N}
-  2. Assign expression to temp: __result{N} := expr
-  3. Check for error: if __result{N}.err != nil
-  4. Early return with error: return Result{err: __result{N}.err}
-  5. Unwrap value: value := *__result{N}.value
+  1. Generate unique temp variable names (camelCase, 1-based):
+     - First: tmp, err
+     - Second: tmp1, err1
+     - Third: tmp2, err2
+  2. Assign expression to temp: tmp, err := expr
+  3. Check for error: if err != nil
+  4. Early return with error: return Result{err: err}
+  5. Unwrap value: value := tmp
   6. Continue with unwrapped value
 ```
 
@@ -497,17 +568,17 @@ Transpiles to:
 
 ```go
 func loadConfig(path string) ResultConfigIOError {
-    __result0 := osReadFile(path)
-    if __result0.err != nil {
-        return ResultConfigIOError{err: __result0.err}
+    tmp, err := osReadFile(path)
+    if err != nil {
+        return ResultConfigIOError{err: err}
     }
-    data := *__result0.value
+    data := tmp
 
-    __result1 := jsonUnmarshal(data)
-    if __result1.err != nil {
-        return ResultConfigIOError{err: __result1.err}
+    tmp1, err1 := jsonUnmarshal(data)
+    if err1 != nil {
+        return ResultConfigIOError{err: err1}
     }
-    config := *__result1.value
+    config := tmp1
 
     return ResultConfigIOError{value: &config}
 }

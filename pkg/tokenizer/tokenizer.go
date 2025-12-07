@@ -34,6 +34,12 @@ func NewWithFileSet(src []byte, fset *token.FileSet, filename string) *Tokenizer
 	}
 }
 
+// Source returns the original source bytes.
+// Use with Token.BytePos() and Token.ByteEnd() to extract original text.
+func (t *Tokenizer) Source() []byte {
+	return t.scanner.src
+}
+
 // Tokenize converts entire source to tokens
 func (t *Tokenizer) Tokenize() ([]Token, error) {
 	t.tokens = nil

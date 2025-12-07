@@ -11,7 +11,7 @@ import (
 )
 
 // Example 1: Result pattern match - user validation
-func validateAge(ageStr: string) -> Result<int, error> {
+func validateAge(ageStr string) -> Result<int, error> {
 	age, err := strconv.Atoi(ageStr)
 	if err != nil {
 		return Err(err)
@@ -22,7 +22,7 @@ func validateAge(ageStr: string) -> Result<int, error> {
 	return Ok(age)
 }
 
-func processAge(ageStr: string) -> string {
+func processAge(ageStr string) -> string {
 	result := validateAge(ageStr)
 
 	match result {
@@ -42,14 +42,14 @@ type User struct {
 	Age  int
 }
 
-func findUser(id: int) -> Option<User> {
+func findUser(id int) -> Option<User> {
 	if id == 1 {
 		return Some(User{ID: 1, Name: "Alice", Age: 30})
 	}
 	return None
 }
 
-func getUserName(id: int) -> string {
+func getUserName(id int) -> string {
 	userOpt := findUser(id)
 
 	match userOpt {
@@ -63,7 +63,7 @@ func getUserName(id: int) -> string {
 }
 
 // Example 3: Nested Result and Option
-func getUserAge(id: int) -> Result<int, string> {
+func getUserAge(id int) -> Result<int, string> {
 	userOpt := findUser(id)
 
 	match userOpt {
@@ -80,14 +80,14 @@ func getUserAge(id: int) -> Result<int, string> {
 }
 
 // Example 4: Complex Result with error handling
-func divideNumbers(a: int, b: int) -> Result<float64, string> {
+func divideNumbers(a int, b int) -> Result<float64, string> {
 	if b == 0 {
 		return Err("division by zero")
 	}
 	return Ok(float64(a) / float64(b))
 }
 
-func performDivision(a: int, b: int) -> string {
+func performDivision(a int, b int) -> string {
 	result := divideNumbers(a, b)
 
 	match result {
@@ -101,7 +101,7 @@ func performDivision(a: int, b: int) -> string {
 }
 
 // Example 5: Option with default value
-func getAgeDisplay(id: int) -> string {
+func getAgeDisplay(id int) -> string {
 	userOpt := findUser(id)
 
 	match userOpt {

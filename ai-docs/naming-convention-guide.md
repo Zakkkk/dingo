@@ -28,15 +28,15 @@ __coalesce0 := getValue()        // Looks like internal/private (wrong signal)
 __val0 := user.Name              // Not idiomatic Go
 ```
 
-### Rule 2: One-Based Indexing (Start at 1)
+### Rule 2: No-Number-First Pattern
 
-**Rationale**: More natural and human-readable. First variable is `1`, not `0`.
+**Rationale**: First variable has no number (cleaner), subsequent get 1-based numbers.
 
 ✅ **Correct**:
 ```go
-tmp1, err1 := fetchUser(id)
-tmp2, err2 := fetchProfile(user.ID)
-tmp3, err3 := fetchPosts(profile.ID)
+tmp, err := fetchUser(id)        // First: no number
+tmp1, err1 := fetchProfile(user.ID)  // Second: 1
+tmp2, err2 := fetchPosts(profile.ID) // Third: 2
 ```
 
 ❌ **Wrong**:
@@ -44,6 +44,13 @@ tmp3, err3 := fetchPosts(profile.ID)
 tmp0, err0 := fetchUser(id)      // Zero-based is unnatural
 tmp1, err1 := fetchProfile(user.ID)
 tmp2, err2 := fetchPosts(profile.ID)
+```
+
+❌ **Also Wrong**:
+```go
+tmp1, err1 := fetchUser(id)      // First should have no number
+tmp2, err2 := fetchProfile(user.ID)
+tmp3, err3 := fetchPosts(profile.ID)
 ```
 
 ### Rule 3: Counter Initialization Must Start at 1
@@ -77,66 +84,66 @@ ctx.TempVarCounter = 0  // Wrong! Initialize to 1
 
 ## Component-Specific Naming
 
-### Error Propagation (`pkg/preprocessor/error_prop.go`)
+### Error Propagation (`pkg/codegen/error_prop.go`)
 
 **Purpose**: Handle `?` operator for error propagation
-**Variables**: `tmp%d`, `err%d`
+**Variables**: `tmp`, `err` (first), then `tmp1`, `err1`, `tmp2`, `err2`, etc.
 
 ```go
 // Input: let user = fetchUser(id)?
 // Output:
-tmp1, err1 := fetchUser(id)
-if err1 != nil {
-    return User{}, err1
+tmp, err := fetchUser(id)
+if err != nil {
+    return User{}, err
 }
-user := tmp1
+user := tmp
 ```
 
-### Null Coalescing (`pkg/preprocessor/null_coalesce.go`)
+### Null Coalescing (`pkg/codegen/null_coalesce.go`)
 
 **Purpose**: Handle `??` operator for null coalescing
-**Variables**: `coalesce%d`
+**Variables**: `coalesce` (first), then `coalesce1`, `coalesce2`, etc.
 
 ```go
 // Input: result := a ?? b ?? c
 // Output:
 func() string {
-    coalesce1 := a
+    coalesce := a
+    if coalesce.IsSome() { return coalesce.Unwrap() }
+    coalesce1 := b
     if coalesce1.IsSome() { return coalesce1.Unwrap() }
-    coalesce2 := b
-    if coalesce2.IsSome() { return coalesce2.Unwrap() }
     return c
 }()
 ```
 
-### Safe Navigation (`pkg/preprocessor/safe_nav.go`)
+### Safe Navigation (`pkg/codegen/safe_nav.go`)
 
 **Purpose**: Handle `?.` operator for safe navigation
-**Variables**: `{base}%d` (e.g., `val1`, `user1`)
+**Variables**: `tmp` (first), then `tmp1`, `tmp2`, etc.
 
 ```go
 // Input: user?.profile?.name
 // Output:
 func() Option_string {
     if user.IsNone() { return None_string() }
-    val1 := user.Unwrap()
-    if val1.profile.IsNone() { return None_string() }
-    val2 := val1.profile.Unwrap()
-    return Some_string(val2.name)
+    tmp := user.Unwrap()
+    if tmp.profile.IsNone() { return None_string() }
+    tmp1 := tmp.profile.Unwrap()
+    return Some_string(tmp1.name)
 }()
 ```
 
-### Plugin Temps (`pkg/plugin/plugin.go`)
+### Plugin Temps (`pkg/codegen/`)
 
 **Purpose**: Generate unique temp vars for AST transformations
-**Variables**: `tmp%d`
+**Variables**: `tmp` (first), then `tmp1`, `tmp2`, etc.
 
 ```go
 // Input: Ok(42) -> needs IIFE for addressability
 // Output:
 Ok(func() *int {
-    tmp1 := 42
-    return &tmp1
+    tmp := 42
+    return &tmp
 }())
 ```
 
@@ -161,7 +168,7 @@ func TestErrorPropagation(t *testing.T) {
     result := transpile("let x = foo()?")
 
     // ✅ Correct assertions
-    assert.Contains(result, "tmp1, err1 :=")
+    assert.Contains(result, "tmp, err :=")
     assert.NotContains(result, "__tmp0")
 
     // ❌ Wrong assertions
@@ -177,9 +184,9 @@ When documenting generated code, use the new naming:
 ```markdown
 Error propagation generates the following code:
 \`\`\`go
-tmp1, err1 := fetchUser(id)
-if err1 != nil {
-    return nil, err1
+tmp, err := fetchUser(id)
+if err != nil {
+    return nil, err
 }
 \`\`\`
 ```
@@ -203,8 +210,8 @@ if __err0 != nil {
 - Inconsistent across generators
 
 **After (2025-11-20 onwards)**:
-- No underscores: `tmp1`, `err1`, `coalesce1`
-- One-based indexing: Start at `1`
+- No underscores: `tmp`, `err`, `coalesce` (first), then `tmp1`, `err1`, `coalesce1` (second)
+- No-number-first pattern: First variable has no number
 - Consistent across ALL generators
 
 **Migration**: All existing code and tests were updated on 2025-11-20. See `CHANGELOG.md` entry "Generated Variable Naming Convention (2025-11-20)" for details.

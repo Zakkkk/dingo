@@ -148,6 +148,11 @@ func (p *PrattParser) restoreState(state parserState) {
 	p.tokenizer.RestorePos(state.tokPos)
 }
 
+// source returns the original source bytes for extracting text.
+func (p *PrattParser) source() []byte {
+	return p.tokenizer.Source()
+}
+
 // curTokenIs checks if current token is of given type
 func (p *PrattParser) curTokenIs(t tokenizer.TokenKind) bool {
 	return p.curToken.Kind == t
@@ -290,16 +295,78 @@ func (p *PrattParser) parseGroupedExpression() ast.Expr {
 
 // Infix parse functions for Dingo operators
 
-// parseErrorPropagation handles the postfix ? operator (x?)
+// parseErrorPropagation handles the postfix ? operator (x?) with optional error transformation.
+//
+// Syntax patterns:
+//   - expr?                      (basic - propagate error as-is)
+//   - expr ? "message"           (context wrapping with fmt.Errorf)
+//   - expr ? |err| transform     (Rust-style lambda transform)
+//   - expr ? (err) => transform  (TypeScript-style lambda transform)
+//   - expr ? err => transform    (TypeScript single-param lambda)
+//
+// Examples:
+//
+//	value := getData()?
+//	order := fetchOrder(id) ? "fetch failed"
+//	user := loadUser(id) ? |err| wrap("user", err)
+//	config := loadConfig(path) ? (e) => fmt.Errorf("config: %w", e)
 func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 	questionPos := p.curToken.Pos
 	p.nextToken() // Consume the ? token
 
-	return &ast.ErrorPropExpr{
+	expr := &ast.ErrorPropExpr{
 		Question: questionPos,
-		Operand:  left, // Capture the operand expression
+		Operand:  left,
 		// ResultType and ErrorType will be filled by type checker during semantic analysis
 	}
+
+	// Pattern 1: ? "message" (string context)
+	if p.curTokenIs(tokenizer.STRING) {
+		msg := p.curToken.Lit
+		// Strip quotes if tokenizer includes them
+		if len(msg) >= 2 && msg[0] == '"' && msg[len(msg)-1] == '"' {
+			msg = msg[1 : len(msg)-1]
+		} else if len(msg) >= 2 && msg[0] == '`' && msg[len(msg)-1] == '`' {
+			// Raw string literals
+			msg = msg[1 : len(msg)-1]
+		}
+		expr.ErrorContext = &ast.ErrorContext{
+			Message:    msg,
+			MessagePos: p.curToken.Pos,
+		}
+		p.nextToken() // consume string
+		return expr
+	}
+
+	// Pattern 2: ? |err| transform (Rust-style lambda)
+	if p.curTokenIs(tokenizer.PIPE) {
+		lambda := p.parseRustLambda()
+		if lambda != nil {
+			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
+		}
+		return expr
+	}
+
+	// Pattern 3: ? (err) => transform (TypeScript-style lambda with parens)
+	if p.curTokenIs(tokenizer.LPAREN) && p.isTypeScriptLambda() {
+		lambda := p.parseTSLambda()
+		if lambda != nil {
+			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
+		}
+		return expr
+	}
+
+	// Pattern 4: ? err => transform (TypeScript single-param without parens)
+	if p.curTokenIs(tokenizer.IDENT) && p.peekTokenIs(tokenizer.ARROW) {
+		lambda := p.parseTSSingleParamLambda()
+		if lambda != nil {
+			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
+		}
+		return expr
+	}
+
+	// Pattern 5: basic ? (no transformation)
+	return expr
 }
 
 // parseNullCoalescing handles the infix ?? operator (a ?? b)

@@ -158,3 +158,182 @@ func TestErrorPropGeneratorCamelCaseNaming(t *testing.T) {
 		t.Errorf("second generation should use tmp1, err1:\n%s", code)
 	}
 }
+
+func TestErrorPropGeneratorWithStringContext(t *testing.T) {
+	tests := []struct {
+		name         string
+		message      string
+		returnTypes  []string
+		wantContains []string
+	}{
+		{
+			name:         "simple message",
+			message:      "fetch failed",
+			returnTypes:  []string{"nil"},
+			wantContains: []string{"tmp, err := foo()", `fmt.Errorf("fetch failed: %w", err)`, "tmp"},
+		},
+		{
+			name:         "message with special chars",
+			message:      "user \"john\" not found",
+			returnTypes:  []string{"0"},
+			wantContains: []string{`fmt.Errorf("user \"john\" not found: %w", err)`},
+		},
+		{
+			name:         "multiple return types",
+			message:      "validation error",
+			returnTypes:  []string{"nil", `""`},
+			wantContains: []string{`return nil, "", fmt.Errorf("validation error: %w", err)`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr := &ast.ErrorPropExpr{
+				Operand: &ast.RawExpr{Text: "foo()"},
+				ErrorContext: &ast.ErrorContext{
+					Message: tt.message,
+				},
+			}
+			gen := NewErrorPropGenerator(expr, tt.returnTypes)
+			result := gen.Generate()
+
+			code := string(result.Output)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(code, want) {
+					t.Errorf("generated code missing %q:\n%s", want, code)
+				}
+			}
+
+			// Verify NeedsFmt flag is set
+			if !gen.NeedsFmt {
+				t.Errorf("NeedsFmt should be true when using string context")
+			}
+		})
+	}
+}
+
+func TestErrorPropGeneratorWithLambdaTransform(t *testing.T) {
+	tests := []struct {
+		name         string
+		lambda       *ast.LambdaExpr
+		returnTypes  []string
+		wantContains []string
+	}{
+		{
+			name: "rust-style lambda",
+			lambda: &ast.LambdaExpr{
+				Style:  ast.RustStyle,
+				Params: []ast.LambdaParam{{Name: "err", Type: ""}},
+				Body:   `wrap("user", err)`,
+			},
+			returnTypes:  []string{"nil"},
+			wantContains: []string{`func(err any) { return wrap("user", err) }(err)`},
+		},
+		{
+			name: "typescript-style lambda",
+			lambda: &ast.LambdaExpr{
+				Style:  ast.TypeScriptStyle,
+				Params: []ast.LambdaParam{{Name: "e", Type: ""}},
+				Body:   `fmt.Errorf("error: %w", e)`,
+			},
+			returnTypes:  []string{"0"},
+			wantContains: []string{`func(e any) { return fmt.Errorf("error: %w", e) }(err)`},
+		},
+		{
+			name: "typed lambda parameter",
+			lambda: &ast.LambdaExpr{
+				Style:  ast.RustStyle,
+				Params: []ast.LambdaParam{{Name: "err", Type: "error"}},
+				Body:   `AppError{Cause: err}`,
+			},
+			returnTypes:  []string{"nil"},
+			wantContains: []string{`func(err error) { return AppError{Cause: err} }(err)`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr := &ast.ErrorPropExpr{
+				Operand:        &ast.RawExpr{Text: "loadData()"},
+				ErrorTransform: tt.lambda,
+			}
+			gen := NewErrorPropGenerator(expr, tt.returnTypes)
+			result := gen.Generate()
+
+			code := string(result.Output)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(code, want) {
+					t.Errorf("generated code missing %q:\n%s", want, code)
+				}
+			}
+
+			// Verify NeedsFmt is false (unless the lambda body uses fmt)
+			// The lambda transform doesn't automatically set NeedsFmt
+			if gen.NeedsFmt {
+				t.Errorf("NeedsFmt should be false when using lambda transform (lambda may or may not use fmt)")
+			}
+		})
+	}
+}
+
+func TestErrorPropGeneratorMutualExclusivity(t *testing.T) {
+	// Test that ErrorContext and ErrorTransform cannot both be set
+	// (The parser enforces this, but test the codegen behavior)
+
+	// Test with only context
+	t.Run("context only", func(t *testing.T) {
+		expr := &ast.ErrorPropExpr{
+			Operand: &ast.RawExpr{Text: "foo()"},
+			ErrorContext: &ast.ErrorContext{
+				Message: "error",
+			},
+			ErrorTransform: nil,
+		}
+		gen := NewErrorPropGenerator(expr, []string{"nil"})
+		result := gen.Generate()
+		code := string(result.Output)
+
+		if !strings.Contains(code, "fmt.Errorf") {
+			t.Errorf("expected fmt.Errorf for context, got:\n%s", code)
+		}
+	})
+
+	// Test with only transform
+	t.Run("transform only", func(t *testing.T) {
+		expr := &ast.ErrorPropExpr{
+			Operand:      &ast.RawExpr{Text: "foo()"},
+			ErrorContext: nil,
+			ErrorTransform: &ast.LambdaExpr{
+				Style:  ast.RustStyle,
+				Params: []ast.LambdaParam{{Name: "e", Type: ""}},
+				Body:   "wrap(e)",
+			},
+		}
+		gen := NewErrorPropGenerator(expr, []string{"nil"})
+		result := gen.Generate()
+		code := string(result.Output)
+
+		if !strings.Contains(code, "func(e") {
+			t.Errorf("expected lambda IIFE for transform, got:\n%s", code)
+		}
+	})
+
+	// Test with neither (basic ?)
+	t.Run("basic (neither)", func(t *testing.T) {
+		expr := &ast.ErrorPropExpr{
+			Operand:        &ast.RawExpr{Text: "foo()"},
+			ErrorContext:   nil,
+			ErrorTransform: nil,
+		}
+		gen := NewErrorPropGenerator(expr, []string{"nil"})
+		result := gen.Generate()
+		code := string(result.Output)
+
+		if strings.Contains(code, "fmt.Errorf") || strings.Contains(code, "func(") {
+			t.Errorf("expected plain err for basic ?, got:\n%s", code)
+		}
+		if !strings.Contains(code, "return nil, err") {
+			t.Errorf("expected plain error return, got:\n%s", code)
+		}
+	})
+}

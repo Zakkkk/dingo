@@ -61,7 +61,6 @@ null_coalesce = false    # Disable ?? operator
 lambdas = true           # |x| and => syntax
 
 # Token-level features
-type_annotations = true  # x: Type syntax
 generics = true          # <T> syntax
 let_binding = true       # let keyword
 ```
@@ -81,7 +80,6 @@ Features execute in a fixed priority order to ensure correct transformation:
 | 60 | `safe_nav` | Character | - |
 | 70 | `null_coalesce` | Character | `safe_nav` |
 | 80 | `lambdas` | Character | - |
-| 100 | `type_annotations` | Token | - |
 | 110 | `generics` | Token | - |
 | 120 | `let_binding` | Token | - |
 
@@ -119,7 +117,6 @@ enabled = true
 
 | Priority | Feature | Complexity | Timeline | Community Demand | Status | File |
 |----------|---------|------------|----------|------------------|--------|------|
-| **ARCH** | Type Annotations (`param: Type`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
 | **ARCH** | Generic Syntax (`<T>` → `[T]`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
 | **ARCH** | Keywords (`let`, `use`) | 🟢 Low | 1 week | ⭐⭐⭐⭐⭐ | ✅ Implemented | Token-level plugin |
 | **ARCH** | Source Maps | 🟡 Medium | 2 weeks | ⭐⭐⭐⭐⭐ | ✅ Implemented | TokenMapping |

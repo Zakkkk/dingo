@@ -111,14 +111,25 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 				return nil, err
 			}
 
-			// Detect context
-			context := detectContext(src, start)
+			// Get full context with statement boundaries using tokens
+			// Find the token index for the match keyword
+			matchTokenIdx := 0
+			for i, t := range allTokens {
+				if t.BytePos() == start {
+					matchTokenIdx = i
+					break
+				}
+			}
+			ctxInfo := detectContextFromTokens(allTokens, matchTokenIdx, end)
 
 			locations = append(locations, ExprLocation{
-				Kind:    ExprMatch,
-				Start:   start,
-				End:     end,
-				Context: context,
+				Kind:           ExprMatch,
+				Start:          start,
+				End:            end,
+				Context:        ctxInfo.Context,
+				StatementStart: ctxInfo.StatementStart,
+				StatementEnd:   ctxInfo.StatementEnd,
+				VarName:        ctxInfo.VarName,
 			})
 			continue
 		}
@@ -148,8 +159,9 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 			}
 		}
 
-		// TypeScript-style lambda: (params) => body
-		// This is harder to detect - need to look for pattern: ( ... ) =>
+		// TypeScript-style lambda: (params) => body or (params): RetType => body
+		// After TransformSource, this looks like: (params) => or (params) RetType =>
+		// Need to look for pattern: ( ... ) [optional IDENT] =>
 		if current.Kind == tokenizer.LPAREN {
 			// Save position to potentially rewind
 			savedPos := tok.Current()
@@ -169,10 +181,16 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 				if t.Kind == tokenizer.RPAREN {
 					depth--
 					if depth == 0 {
-						// Check if next is =>
+						// Check if next is => directly, or IDENT (return type) then =>
 						tok.Advance()
 						if tok.Current().Kind == tokenizer.ARROW {
 							isLambda = true
+						} else if tok.Current().Kind == tokenizer.IDENT {
+							// Could be return type annotation: ) RetType =>
+							tok.Advance()
+							if tok.Current().Kind == tokenizer.ARROW {
+								isLambda = true
+							}
 						}
 						break
 					}
@@ -411,8 +429,14 @@ func findLambdaEnd(tok *tokenizer.Tokenizer, style ExprKind) (int, error) {
 			tok.Advance()
 		}
 
-		// Expect =>
+		// Expect => or IDENT (return type) then =>
+		// After TransformSource, pattern is: ) RetType => or just ) =>
 		current := tok.Current()
+		if current.Kind == tokenizer.IDENT {
+			// Skip optional return type annotation
+			tok.Advance()
+			current = tok.Current()
+		}
 		if current.Kind != tokenizer.ARROW {
 			return 0, fmt.Errorf("expected => after lambda params, got %s", current.Kind)
 		}
@@ -464,14 +488,11 @@ func findLambdaEnd(tok *tokenizer.Tokenizer, style ExprKind) (int, error) {
 				return current.BytePos(), nil // End of expression
 			}
 		case tokenizer.NEWLINE:
-			// Newline can end expression-style lambda if not inside delimiters
+			// Newline ends expression-style lambda if not inside delimiters
+			// Expression lambdas like: (x) => x + 1  should end at the newline
+			// Block lambdas like: (x) => { ... } are handled by the RBRACE case
 			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
-				// Peek ahead to see if this is really the end
-				next := tok.PeekToken()
-				if next.Kind == tokenizer.RBRACE || next.Kind == tokenizer.RPAREN ||
-				   next.Kind == tokenizer.COMMA || next.Kind == tokenizer.SEMICOLON {
-					return current.BytePos(), nil
-				}
+				return current.BytePos(), nil
 			}
 		}
 
@@ -585,6 +606,13 @@ func detectContextFromTokens(tokens []tokenizer.Token, exprTokenIdx int, exprEnd
 
 		case tokenizer.LPAREN, tokenizer.COMMA:
 			result.Context = ContextArgument
+			// For argument context, find the start of the containing statement
+			// Scan backward to find newline/semicolon/brace that starts the statement
+			stmtStartIdx := findStatementStartFromTokens(tokens, i)
+			if stmtStartIdx >= 0 && stmtStartIdx < len(tokens) {
+				result.StatementStart = tokens[stmtStartIdx].BytePos()
+			}
+			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
 			return result
 
 		case tokenizer.NEWLINE, tokenizer.SEMICOLON, tokenizer.LBRACE:
@@ -596,12 +624,75 @@ func detectContextFromTokens(tokens []tokenizer.Token, exprTokenIdx int, exprEnd
 	return result
 }
 
-// findStatementEndFromTokens finds the end of a statement by scanning for NEWLINE or SEMICOLON
+// findStatementStartFromTokens scans backward to find the start of the current statement.
+// Returns the token index that starts the statement, or 0 if not found.
+func findStatementStartFromTokens(tokens []tokenizer.Token, fromIdx int) int {
+	braceDepth := 0
+	parenDepth := 0
+
+	for i := fromIdx - 1; i >= 0; i-- {
+		switch tokens[i].Kind {
+		case tokenizer.RBRACE:
+			braceDepth++
+		case tokenizer.LBRACE:
+			if braceDepth > 0 {
+				braceDepth--
+			} else {
+				// This brace opens a block, statement starts after it
+				return i + 1
+			}
+		case tokenizer.RPAREN:
+			parenDepth++
+		case tokenizer.LPAREN:
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case tokenizer.NEWLINE, tokenizer.SEMICOLON:
+			// Only treat as statement boundary if we're not inside braces/parens
+			if braceDepth == 0 && parenDepth == 0 {
+				return i + 1 // Statement starts after the newline/semicolon
+			}
+		}
+	}
+
+	// Didn't find a boundary, but don't return 0 (would be package declaration)
+	// Return the first non-trivial token after any leading stuff
+	for i := 0; i < len(tokens); i++ {
+		if tokens[i].Kind == tokenizer.IDENT && tokens[i].Lit == "func" {
+			// Found a func keyword, this could be a statement start
+			continue
+		}
+		if tokens[i].Kind == tokenizer.IDENT ||
+			tokens[i].Kind == tokenizer.IF ||
+			tokens[i].Kind == tokenizer.FOR ||
+			tokens[i].Kind == tokenizer.RETURN {
+			return i
+		}
+	}
+	return 0
+}
+
+// findStatementEndFromTokens finds the end of a statement by scanning for NEWLINE or SEMICOLON.
+// It tracks brace depth to skip newlines inside {} blocks (e.g., match expressions).
 func findStatementEndFromTokens(tokens []tokenizer.Token, startIdx int) int {
+	braceDepth := 0
+
 	for i := startIdx; i < len(tokens); i++ {
 		switch tokens[i].Kind {
+		case tokenizer.LBRACE:
+			braceDepth++
+		case tokenizer.RBRACE:
+			braceDepth--
+			// If we just closed all braces, the next newline/semicolon ends the statement
+			// Or if there's no more braces and we're at depth 0, the RBRACE itself might be the end
+			if braceDepth < 0 {
+				braceDepth = 0
+			}
 		case tokenizer.NEWLINE, tokenizer.SEMICOLON:
-			return tokens[i].BytePos()
+			// Only treat as statement end if we're not inside braces
+			if braceDepth == 0 {
+				return tokens[i].BytePos()
+			}
 		case tokenizer.EOF:
 			if i > 0 {
 				return tokens[i-1].ByteEnd()

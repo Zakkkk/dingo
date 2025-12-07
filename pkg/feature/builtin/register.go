@@ -20,7 +20,6 @@ func init() {
 	feature.Register(&LambdasPlugin{})        // 80
 
 	// Token-level plugins
-	feature.Register(&TypeAnnotationsPlugin{}) // 100
 	feature.Register(&GenericsPlugin{})        // 110
 	feature.Register(&LetBindingPlugin{})      // 120
 }

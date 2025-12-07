@@ -3,8 +3,8 @@ package codegen
 import (
 	"go/ast"
 	"go/parser"
+	"go/scanner"
 	"go/token"
-	"strings"
 )
 
 // InferReturnTypes analyzes the source to find the enclosing function's return types
@@ -73,31 +73,90 @@ func findEnclosingFunction(src []byte, exprPos int) *ast.FuncDecl {
 	return findEnclosingFunctionFallback(src, exprPos)
 }
 
-// findEnclosingFunctionFallback uses simple line-based scanning when go/parser fails
+// findEnclosingFunctionFallback uses go/scanner when go/parser fails.
+// This properly tokenizes the source to find the enclosing function declaration.
 func findEnclosingFunctionFallback(src []byte, exprPos int) *ast.FuncDecl {
-	// Find "func" keyword before exprPos
-	// Scan backward from exprPos to find the func signature
-	srcStr := string(src[:exprPos])
+	// Tokenize source up to exprPos using go/scanner
+	// Collect FUNC positions along with whether they're named (declarations)
+	var s scanner.Scanner
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
 
-	// Find last occurrence of "func " before exprPos
-	lastFunc := strings.LastIndex(srcStr, "func ")
-	if lastFunc == -1 {
+	type funcInfo struct {
+		pos     int
+		isNamed bool // true if it's a named function (declaration)
+	}
+	var funcs []funcInfo
+
+	s.Init(file, src, nil, 0)
+
+	var lastTok token.Token
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		offset := fset.Position(pos).Offset
+		if offset > exprPos {
+			break // Stop when we pass exprPos
+		}
+		if lastTok == token.FUNC && tok == token.IDENT {
+			// Previous token was FUNC, this is a name → function declaration
+			if len(funcs) > 0 {
+				funcs[len(funcs)-1].isNamed = true
+			}
+		}
+		if tok == token.FUNC {
+			funcs = append(funcs, funcInfo{pos: offset, isNamed: false})
+		}
+		lastTok = tok
+	}
+
+	if len(funcs) == 0 {
 		return nil
 	}
 
-	// Extract from "func" to the opening brace or exprPos
-	funcDecl := srcStr[lastFunc:]
-
-	// Find the signature - everything up to the opening brace
-	// Look for ) { or just { pattern
-	braceIdx := strings.Index(funcDecl, "{")
-	if braceIdx != -1 {
-		// Extract up to (but not including) the {
-		funcDecl = strings.TrimSpace(funcDecl[:braceIdx])
+	// Find the last NAMED function before exprPos (skip anonymous functions)
+	var lastFunc int = -1
+	for i := len(funcs) - 1; i >= 0; i-- {
+		if funcs[i].isNamed {
+			lastFunc = funcs[i].pos
+			break
+		}
 	}
 
-	// Now parse just the signature
-	fset := token.NewFileSet()
+	if lastFunc == -1 {
+		// No named functions found, try the last function anyway
+		lastFunc = funcs[len(funcs)-1].pos
+	}
+
+	// Find the opening brace using a new scanner with new file
+	remainder := src[lastFunc:]
+	fset2 := token.NewFileSet()
+	file2 := fset2.AddFile("", fset2.Base(), len(remainder))
+	s.Init(file2, remainder, nil, 0)
+	braceOffset := -1
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok == token.LBRACE {
+			braceOffset = fset2.Position(pos).Offset
+			break
+		}
+	}
+
+	// Extract the function signature
+	var funcDecl string
+	if braceOffset != -1 {
+		funcDecl = string(src[lastFunc : lastFunc+braceOffset])
+	} else {
+		funcDecl = string(src[lastFunc:exprPos])
+	}
+
+	// Parse just the signature
+	fset = token.NewFileSet()
 	wrapped := funcDecl + " {}"
 	f, err := parser.ParseFile(fset, "", "package p\n"+wrapped, 0)
 	if err == nil && len(f.Decls) > 0 {
@@ -154,7 +213,9 @@ func exprToTypeName(expr ast.Expr) string {
 	}
 }
 
-// zeroValueFor returns the zero value for a given type name
+// zeroValueFor returns the zero value for a given type name.
+// NOTE: This operates on type name strings from go/ast (parsed data),
+// not source code bytes. Simple prefix checks are used instead of strings package.
 func zeroValueFor(typeName string) string {
 	switch typeName {
 	case "int", "int8", "int16", "int32", "int64",
@@ -167,20 +228,32 @@ func zeroValueFor(typeName string) string {
 		return `""`
 	case "error":
 		return "nil"
+	case "interface{}", "any":
+		return "nil"
 	default:
 		// Pointer, slice, map, interface, chan, func
-		if strings.HasPrefix(typeName, "*") ||
-			strings.HasPrefix(typeName, "[]") ||
-			strings.HasPrefix(typeName, "map[") ||
-			strings.HasPrefix(typeName, "chan") ||
-			typeName == "interface{}" || typeName == "any" ||
-			strings.HasPrefix(typeName, "func") {
-			return "nil"
+		// Use character checks instead of strings.HasPrefix
+		if len(typeName) > 0 && typeName[0] == '*' {
+			return "nil" // Pointer
+		}
+		if len(typeName) >= 2 && typeName[:2] == "[]" {
+			return "nil" // Slice
+		}
+		if len(typeName) >= 4 && typeName[:4] == "map[" {
+			return "nil" // Map
+		}
+		if len(typeName) >= 4 && typeName[:4] == "chan" {
+			return "nil" // Channel
+		}
+		if len(typeName) >= 4 && typeName[:4] == "func" {
+			return "nil" // Function
 		}
 		// Named types from standard library that are nil-able
-		if strings.Contains(typeName, ".") {
-			// Likely a package.Type - assume nil
-			return "nil"
+		// Check for "." in type name (e.g., "http.Client")
+		for i := 0; i < len(typeName); i++ {
+			if typeName[i] == '.' {
+				return "nil" // package.Type - assume nil
+			}
 		}
 		// Struct or named type - use zero value literal
 		return typeName + "{}"

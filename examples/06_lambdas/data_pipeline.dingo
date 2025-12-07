@@ -17,7 +17,7 @@ type User struct {
 }
 
 // ProcessUsers demonstrates a data pipeline with lambdas
-func ProcessUsers(users: []User) {
+func ProcessUsers(users []User) {
 	// Filter active premium users over 18
 	// TypeScript-style: (params) => expr
 	eligible := Filter(users, (u) => u.Active && u.Premium && u.Age >= 18)
@@ -43,7 +43,7 @@ func ProcessUsers(users: []User) {
 }
 
 // Higher-order functions that accept lambdas
-func Filter[T any](items: []T, predicate: func(T) bool) []T {
+func Filter[T any](items []T, predicate func(T) bool) []T {
 	var result []T
 	for _, item := range items {
 		if predicate(item) {
@@ -53,7 +53,7 @@ func Filter[T any](items: []T, predicate: func(T) bool) []T {
 	return result
 }
 
-func Map[T, R any](items: []T, transform: func(T) R) []R {
+func Map[T, R any](items []T, transform func(T) R) []R {
 	result := make([]R, len(items))
 	for i, item := range items {
 		result[i] = transform(item)
@@ -61,7 +61,7 @@ func Map[T, R any](items: []T, transform: func(T) R) []R {
 	return result
 }
 
-func Reduce[T, R any](items: []T, initial: R, reducer: func(R, T) R) R {
+func Reduce[T, R any](items []T, initial R, reducer func(R, T) R) R {
 	result := initial
 	for _, item := range items {
 		result = reducer(result, item)
@@ -70,7 +70,7 @@ func Reduce[T, R any](items: []T, initial: R, reducer: func(R, T) R) R {
 }
 
 // Sorting with custom comparator
-func SortUsers(users: []User, compare: func(User, User) bool) []User {
+func SortUsers(users []User, compare func(User, User) bool) []User {
 	// Copy to avoid mutating original
 	sorted := make([]User, len(users))
 	copy(sorted, users)

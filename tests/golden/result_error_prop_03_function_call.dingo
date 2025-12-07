@@ -13,12 +13,12 @@ func (e ServiceError) Error() string {
 }
 
 // Wrapper function
-func WrapDBError(err: error) ServiceError {
+func WrapDBError(err error) ServiceError {
 	return ServiceError{Code: "DB_ERROR", Message: err.Error()}
 }
 
 // Test WrapFunc(err) pattern
-func FindProducts(db: *sql.DB) Result<[]string, ServiceError> {
+func FindProducts(db *sql.DB) Result<[]string, ServiceError> {
 	let rows = db.Query("SELECT * FROM products")? WrapDBError(err)
 	defer rows.Close()
 	return ResultSliceStringServiceErrorOk([]string{"product1", "product2"})

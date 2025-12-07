@@ -45,11 +45,11 @@ func readFile(path string) ([]byte, error) {
 	}
 }
 
-func TestParseLocalFunctions_DingoTypeAnnotations(t *testing.T) {
+func TestParseLocalFunctions_DingoSyntax(t *testing.T) {
 	source := []byte(`
 package main
 
-func getUserData(id: int) (User, error) {
+func getUserData(id int) (User, error) {
 	data := fetchFromDB(id)?
 	return data, nil
 }

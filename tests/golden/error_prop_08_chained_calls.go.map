@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "dingo_file": "error_prop_08_chained_calls.dingo",
-  "go_file": "error_prop_08_chained_calls.go",
+  "dingo_file": "/Users/jack/mag/dingo/tests/golden/error_prop_08_chained_calls.dingo",
+  "go_file": "/Users/jack/mag/dingo/tests/golden/error_prop_08_chained_calls.go",
   "mappings": [
     {
       "generated_line": 1,
@@ -85,10 +85,19 @@
       "name": "identity"
     },
     {
+      "generated_line": 15,
+      "generated_column": 1,
+      "original_line": 11,
+      "original_column": 1,
+      "processor_input_line": 0,
+      "length": 45,
+      "name": "identity"
+    },
+    {
       "generated_line": 16,
       "generated_column": 2,
       "original_line": 12,
-      "original_column": 26,
+      "original_column": 25,
       "processor_input_line": 0,
       "length": 1,
       "name": "error_prop"
@@ -124,7 +133,7 @@
       "generated_line": 23,
       "generated_column": 2,
       "original_line": 14,
-      "original_column": 33,
+      "original_column": 32,
       "processor_input_line": 0,
       "length": 1,
       "name": "error_prop"

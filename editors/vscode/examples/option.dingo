@@ -2,7 +2,7 @@
 package main
 
 // Function returning Option
-func findUserByEmail(email: string) -> Option<User> {
+func findUserByEmail(email string) -> Option<User> {
     if email == "" {
         return None
     }
@@ -17,13 +17,13 @@ func findUserByEmail(email: string) -> Option<User> {
 }
 
 // Using null coalescing operator
-func getUserName(email: string) -> string {
+func getUserName(email string) -> string {
     let user = findUserByEmail(email)
     return user.name ?? "Guest"
 }
 
 // Pattern matching on Option
-func displayUser(email: string) {
+func displayUser(email string) {
     match findUserByEmail(email) {
         Some(user) => {
             println("User found: ${user.name}")
@@ -35,7 +35,7 @@ func displayUser(email: string) {
 }
 
 // Chaining with error propagation
-func getVerifiedUser(email: string) -> Result<User, error> {
+func getVerifiedUser(email string) -> Result<User, error> {
     let user = findUserByEmail(email)?
 
     if !user.verified {

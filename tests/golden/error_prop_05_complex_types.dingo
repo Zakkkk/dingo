@@ -7,7 +7,7 @@ type User struct {
 	Name string
 }
 
-func fetchUser(id: int) (*User, error) {
+func fetchUser(id int) (*User, error) {
 	let data = ReadFile("user.json")?
 	return &User{ID: id, Name: string(data)}, nil
 }

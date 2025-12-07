@@ -1,6 +1,10 @@
 package ast
 
-import "go/token"
+import (
+	"strings"
+
+	"go/token"
+)
 
 // LetDecl represents a let/var declaration in Dingo
 // Example: let x: int = 5
@@ -40,12 +44,13 @@ func (d *LetDecl) ToGo() string {
 			}
 			result += name
 		}
-		// Add type annotation (remove leading colon if present)
-		typeAnnot := d.TypeAnnot
-		if len(typeAnnot) > 0 && typeAnnot[0] == ':' {
-			typeAnnot = typeAnnot[1:] // Remove leading colon
+		// Add type annotation (remove leading colon if present and ensure spacing)
+		cleanType := strings.TrimSpace(d.TypeAnnot)
+		cleanType = strings.TrimPrefix(cleanType, ":")
+		cleanType = strings.TrimSpace(cleanType) // Trim again in case of ":  int"
+		if len(cleanType) > 0 {
+			result += " " + cleanType
 		}
-		result += typeAnnot
 		// Add initialization if present
 		if d.HasInit {
 			result += " = " + d.Value

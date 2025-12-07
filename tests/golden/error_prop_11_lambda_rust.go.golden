@@ -1,0 +1,60 @@
+package main
+
+import "fmt"
+
+// Test: Error propagation with Rust-style lambda transform
+// Feature: error-propagation
+// Complexity: intermediate
+
+// This test demonstrates the ? |err| transform syntax for
+// custom error transformation using Rust-style lambdas.
+
+type AppError struct {
+	Context string
+	Cause   error
+}
+
+func (e AppError) Error() string {
+	return fmt.Sprintf("%s: %v", e.Context, e.Cause)
+}
+
+func wrap(ctx string, err error) error {
+	return AppError{Context: ctx, Cause: err}
+}
+
+func loadUserData(userID int) (UserData, error) {
+	tmp, err := fetchUser(userID)
+	if err != nil {
+		return UserData{}, func(err __TYPE_INFERENCE_NEEDED) { return wrap("user fetch", err) }(err)
+	}
+	user := tmp
+
+	tmp1, err1 := fetchPosts(user.ID)
+	if err1 != nil {
+		return UserData{}, func(e __TYPE_INFERENCE_NEEDED) { return wrap("posts fetch", e) }(err1)
+	}
+	posts := tmp1
+	return UserData{User: user, Posts: posts}, nil
+}
+
+type User struct {
+	ID   int
+	Name string
+}
+
+type Post struct {
+	Title string
+}
+
+type UserData struct {
+	User  User
+	Posts []Post
+}
+
+func fetchUser(id int) (User, error) {
+	return User{ID: id, Name: "Test"}, nil
+}
+
+func fetchPosts(userID int) ([]Post, error) {
+	return []Post{{Title: "Hello"}}, nil
+}

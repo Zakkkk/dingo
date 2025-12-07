@@ -1,0 +1,58 @@
+package main
+
+// Test: Guard Let with Tuple destructuring
+// Feature: Tuple binding for Result and Option types
+// Complexity: intermediate
+
+func parseCoords(input string) Result<(int, int), string> {
+	if input == "1,2" {
+		return Ok((1, 2))
+	}
+	return Err("invalid format")
+}
+
+func getUserData(id int) Option<(string, int)> {
+	if id == 1 {
+		return Some(("Alice", 30))
+	}
+	return Option_Tuple2_string_int_None()
+}
+
+func processCoords(input string) Result<string, string> {
+	// Guard let with tuple destructuring from Result
+	guard let (x, y) = parseCoords(input) else |err| {
+		return Err("Failed to parse: " + err)
+	}
+
+	// Convert ints to strings (simplified for test)
+	let xStr = "1"
+	let yStr = "2"
+	return Ok("Coordinates: x=" + xStr + ", y=" + yStr)
+}
+
+func processUserData(id int) Option<string> {
+	// Guard let with tuple destructuring from Option
+	guard let (name, age) = getUserData(id) else {
+		return Option_string_None()
+	}
+
+	// Convert age to string (simplified)
+	let ageStr = "30"
+	return Some("User: " + name + ", Age: " + ageStr)
+}
+
+func main() {
+	let result1 = processCoords("1,2")
+	if result1.IsOk() {
+		println("Result:", result1.Unwrap())
+	} else {
+		println("Error:", result1.UnwrapErr())
+	}
+
+	let result2 = processUserData(1)
+	if result2.IsSome() {
+		println("User data:", result2.Unwrap())
+	} else {
+		println("User not found")
+	}
+}

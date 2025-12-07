@@ -35,7 +35,7 @@ func (p *PrattParser) parseLambda() ast.Expr {
 }
 
 // isTypeScriptLambda performs lookahead to detect TypeScript lambda
-// Checks if current LPAREN starts a lambda: (params) => ...
+// Checks if current LPAREN starts a lambda: (params) => ... or (params): RetType => ...
 func (p *PrattParser) isTypeScriptLambda() bool {
 	if !p.curTokenIs(tokenizer.LPAREN) {
 		return false
@@ -49,36 +49,99 @@ func (p *PrattParser) isTypeScriptLambda() bool {
 
 	// Check for patterns:
 	// 1. () => ...  (no params)
-	// 2. (x) => ...  (single param)
-	// 3. (x: Type) => ...  (single param with type)
-	// 4. (x, y) => ...  (multiple params)
-	// 5. (x: Type, y: Type) => ...  (multiple params with types)
+	// 2. (): RetType => ...  (no params, return type)
+	// 3. (x) => ...  (single param)
+	// 4. (x): RetType => ...  (single param, return type)
+	// 5. (x: Type) => ...  (single param with Dingo-style type)
+	// 6. (x: Type): RetType => ...  (single param with Dingo-style type and return type)
+	// 7. (x, y) => ...  (multiple params)
+	// 8. (x: Type, y: Type): RetType => ...  (multiple params with types and return type)
+	// 9. (x Type) => ...  (single param with Go-style type, after TransformSource)
+	// 10. (x Type): RetType => ...  (Go-style type with return type)
 
 	isLambda := false
 
-	// Pattern 1: () =>
-	if p.curTokenIs(tokenizer.RPAREN) && p.peekTokenIs(tokenizer.ARROW) {
-		isLambda = true
+	// Pattern 1/2: () => ... or (): RetType => ...
+	if p.curTokenIs(tokenizer.RPAREN) {
+		p.nextToken() // move past RPAREN
+		// Check for optional return type
+		if p.curTokenIs(tokenizer.COLON) {
+			p.nextToken() // move past COLON
+			if p.curTokenIs(tokenizer.IDENT) {
+				p.nextToken() // move past return type
+			}
+		}
+		if p.curTokenIs(tokenizer.ARROW) {
+			isLambda = true
+		}
 	} else if p.curTokenIs(tokenizer.IDENT) {
 		// Could be param name, scan ahead
 		p.nextToken() // move past IDENT
 
-		// Check for: RPAREN, COLON, or COMMA
-		if p.curTokenIs(tokenizer.RPAREN) && p.peekTokenIs(tokenizer.ARROW) {
-			// Pattern 2: (x) =>
-			isLambda = true
+		// Check for: RPAREN, COLON, COMMA, or IDENT (Go-style type)
+		if p.curTokenIs(tokenizer.RPAREN) {
+			// (x) - check for return type or =>
+			p.nextToken() // move past RPAREN
+			if p.curTokenIs(tokenizer.COLON) {
+				p.nextToken() // move past COLON
+				if p.curTokenIs(tokenizer.IDENT) {
+					p.nextToken() // move past return type
+				}
+			}
+			if p.curTokenIs(tokenizer.ARROW) {
+				// Pattern 3/4: (x) => or (x): RetType =>
+				isLambda = true
+			}
 		} else if p.curTokenIs(tokenizer.COLON) {
-			// Pattern 3: (x: Type) =>
+			// Pattern 5/6/7/8: (x: Type) => or (x: Type, y: Type) =>
 			// Skip type annotation
 			p.nextToken() // move past COLON
 			if p.curTokenIs(tokenizer.IDENT) {
 				p.nextToken() // move past Type
-				if p.curTokenIs(tokenizer.RPAREN) && p.peekTokenIs(tokenizer.ARROW) {
+				if p.curTokenIs(tokenizer.RPAREN) {
+					// (x: Type) - check for return type or =>
+					p.nextToken() // move past RPAREN
+					if p.curTokenIs(tokenizer.COLON) {
+						p.nextToken() // move past COLON
+						if p.curTokenIs(tokenizer.IDENT) {
+							p.nextToken() // move past return type
+						}
+					}
+					if p.curTokenIs(tokenizer.ARROW) {
+						isLambda = true
+					}
+				} else if p.curTokenIs(tokenizer.COMMA) {
+					// Pattern 5/6/8: (x: Type, ...) - multiple typed params
 					isLambda = true
 				}
 			}
+		} else if p.curTokenIs(tokenizer.IDENT) {
+			// Pattern 9/10: Go-style type annotation (x Type) or (x Type, ...)
+			// After TransformSource, "x: Type" becomes "x Type"
+			p.nextToken() // move past Type
+			if p.curTokenIs(tokenizer.RPAREN) {
+				// (x Type) - check for return type or =>
+				p.nextToken() // move past RPAREN
+				if p.curTokenIs(tokenizer.COLON) {
+					// Dingo-style return type: ): RetType =>
+					p.nextToken() // move past COLON
+					if p.curTokenIs(tokenizer.IDENT) {
+						p.nextToken() // move past return type
+					}
+				} else if p.curTokenIs(tokenizer.IDENT) {
+					// Go-style return type (after TransformSource): ) RetType =>
+					// The colon was already transformed away
+					p.nextToken() // move past return type
+				}
+				if p.curTokenIs(tokenizer.ARROW) {
+					isLambda = true
+				}
+			} else if p.curTokenIs(tokenizer.COMMA) {
+				// Pattern 7: (x Type, ...) - multiple Go-style typed params
+				isLambda = true
+			}
 		} else if p.curTokenIs(tokenizer.COMMA) {
-			// Pattern 4/5: (x, ...) or (x: Type, ...)
+			// Pattern 4: (x, ...) - multiple params without types
 			isLambda = true // Assume lambda if we see comma after param
 		}
 	}
@@ -152,7 +215,7 @@ func (p *PrattParser) parseRustLambda() ast.Expr {
 	}
 }
 
-// parseTSLambda parses TypeScript-style lambda: (params) => body
+// parseTSLambda parses TypeScript-style lambda: (params) => body or (params): RetType => body
 func (p *PrattParser) parseTSLambda() ast.Expr {
 	lambdaPos := p.curToken.Pos
 
@@ -178,6 +241,30 @@ func (p *PrattParser) parseTSLambda() ast.Expr {
 
 	p.nextToken() // consume RPAREN
 
+	// Check for optional return type: : Type or just Type (after TransformSource)
+	var returnType string
+	if p.curTokenIs(tokenizer.COLON) {
+		// Dingo-style: ): Type =>
+		p.nextToken() // consume :
+		if p.curTokenIs(tokenizer.IDENT) {
+			returnType = p.curToken.Lit
+			p.nextToken() // consume return type
+		} else {
+			p.errors = append(p.errors, ParseError{
+				Pos:     p.curToken.Pos,
+				Line:    p.curToken.Line,
+				Column:  p.curToken.Column,
+				Message: "expected type after ':'",
+			})
+			return nil
+		}
+	} else if p.curTokenIs(tokenizer.IDENT) && p.peekTokenIs(tokenizer.ARROW) {
+		// Go-style (after TransformSource): ) Type =>
+		// The colon was already transformed away by TransformSource
+		returnType = p.curToken.Lit
+		p.nextToken() // consume return type
+	}
+
 	// Expect =>
 	if !p.curTokenIs(tokenizer.ARROW) {
 		p.errors = append(p.errors, ParseError{
@@ -198,7 +285,7 @@ func (p *PrattParser) parseTSLambda() ast.Expr {
 		LambdaPos:  lambdaPos,
 		Style:      ast.TypeScriptStyle,
 		Params:     params,
-		ReturnType: "", // TypeScript style doesn't have return type annotation before body
+		ReturnType: returnType,
 		Body:       body,
 		IsBlock:    isBlock,
 	}
@@ -275,7 +362,10 @@ func (p *PrattParser) parseLambdaParams(endToken tokenizer.TokenKind) []ast.Lamb
 }
 
 // parseLambdaParam parses a single lambda parameter with optional type annotation
-// Supports: x  or  x: Type
+// Supports:
+//   - x              (no type)
+//   - x: Type        (Dingo-style with colon)
+//   - x Type         (Go-style without colon, after TransformSource)
 func (p *PrattParser) parseLambdaParam() *ast.LambdaParam {
 	if !p.curTokenIs(tokenizer.IDENT) {
 		p.errors = append(p.errors, ParseError{
@@ -290,9 +380,9 @@ func (p *PrattParser) parseLambdaParam() *ast.LambdaParam {
 	paramName := p.curToken.Lit
 	paramType := ""
 
-	// Check for type annotation: : Type
+	// Check for type annotation: : Type (Dingo-style)
 	if p.peekTokenIs(tokenizer.COLON) {
-		p.nextToken() // consume IDENT
+		p.nextToken() // consume IDENT (param name)
 		p.nextToken() // consume COLON
 
 		if p.curTokenIs(tokenizer.IDENT) {
@@ -306,6 +396,11 @@ func (p *PrattParser) parseLambdaParam() *ast.LambdaParam {
 			})
 			return nil
 		}
+	} else if p.peekTokenIs(tokenizer.IDENT) {
+		// Go-style type annotation: x Type (after TransformSource removes colon)
+		// Type is followed by COMMA, RPAREN, or PIPE (for rust-style)
+		p.nextToken() // consume param name
+		paramType = p.curToken.Lit
 	}
 
 	return &ast.LambdaParam{
@@ -327,12 +422,14 @@ func (p *PrattParser) parseLambdaBody() (string, bool) {
 }
 
 // parseLambdaBlock parses a block body { statements }
-// Returns the raw block text and true (isBlock)
+// Returns the raw block text (preserving whitespace) and true (isBlock)
 func (p *PrattParser) parseLambdaBlock() (string, bool) {
-	var bodyTokens []string
+	// Record the starting byte position (at the opening brace)
+	startPos := p.curToken.BytePos()
 	braceDepth := 0
+	var endPos int
 
-	// Collect tokens until matching closing brace
+	// Scan tokens until matching closing brace
 	for {
 		if p.curTokenIs(tokenizer.EOF) {
 			p.errors = append(p.errors, ParseError{
@@ -349,17 +446,21 @@ func (p *PrattParser) parseLambdaBlock() (string, bool) {
 		} else if p.curTokenIs(tokenizer.RBRACE) {
 			braceDepth--
 			if braceDepth == 0 {
-				bodyTokens = append(bodyTokens, p.curToken.Lit)
+				endPos = p.curToken.ByteEnd()
 				p.nextToken() // consume closing brace
 				break
 			}
 		}
 
-		bodyTokens = append(bodyTokens, p.curToken.Lit)
 		p.nextToken()
 	}
 
-	return strings.Join(bodyTokens, " "), true
+	// Extract original source bytes (preserves whitespace/newlines)
+	src := p.source()
+	if endPos > startPos && endPos <= len(src) {
+		return string(src[startPos:endPos]), true
+	}
+	return "{}", true
 }
 
 // parseLambdaExpression parses an expression body

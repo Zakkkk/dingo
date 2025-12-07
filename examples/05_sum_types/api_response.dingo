@@ -29,7 +29,7 @@ enum PaymentStatus {
 
 // HandleAPIResponse processes the response appropriately
 // Each variant requires different handling - compiler ensures we handle all
-func HandleAPIResponse(resp: APIResponse) (bool, string) {
+func HandleAPIResponse(resp APIResponse) (bool, string) {
 	match resp {
 		Success { transactionID, amount } =>
 			return true, fmt.Sprintf("Payment of $%.2f succeeded: %s", amount, transactionID),
@@ -49,7 +49,7 @@ func HandleAPIResponse(resp: APIResponse) (bool, string) {
 }
 
 // CanRetryPayment checks if we should retry a failed payment
-func CanRetryPayment(status: PaymentStatus) bool {
+func CanRetryPayment(status PaymentStatus) bool {
 	match status {
 		Failed { canRetry, .. } => return canRetry,
 		Pending => return true,  // Not started yet
@@ -58,7 +58,7 @@ func CanRetryPayment(status: PaymentStatus) bool {
 }
 
 // GetStatusMessage generates user-friendly status message
-func GetStatusMessage(status: PaymentStatus) string {
+func GetStatusMessage(status PaymentStatus) string {
 	match status {
 		Pending =>
 			"Your payment is pending",

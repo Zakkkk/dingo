@@ -18,7 +18,7 @@ enum Event {
 
 // ProcessEvent handles all event types with exhaustive matching
 // The compiler ensures every Event variant is handled
-func ProcessEvent(event: Event) string {
+func ProcessEvent(event Event) string {
 	return match event {
 		UserCreated(userID, email) =>
 			fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID),
@@ -44,7 +44,7 @@ func ProcessEvent(event: Event) string {
 }
 
 // GetEventPriority uses guards for complex conditions
-func GetEventPriority(event: Event) int {
+func GetEventPriority(event Event) int {
 	return match event {
 		PaymentFailed(_, _) => 1,  // Highest priority
 		OrderPlaced(_, amount, _) if amount > 500 => 2,
@@ -54,7 +54,7 @@ func GetEventPriority(event: Event) int {
 }
 
 // FilterUserEvents extracts only user-related events
-func FilterUserEvents(events: []Event) []Event {
+func FilterUserEvents(events []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
 		isUserEvent := match event {

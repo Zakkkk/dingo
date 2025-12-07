@@ -619,7 +619,7 @@ Stage 2: go/parser (native Go parser)
 **Processor Order (Critical):**
 ```go
 processors := []Processor{
-    NewTypeAnnotProcessor(),
+    // NewTypeAnnotProcessor(),    // REMOVED 2025-12-08
     NewEnumProcessor(),
     NewKeywordProcessor(),
     NewTernaryProcessor(),      // 🔥 BEFORE error prop
