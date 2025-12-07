@@ -11,6 +11,29 @@ import (
 	"strings"
 )
 
+// untypedToTypedName converts untyped basic type kinds to their typed equivalents.
+// Returns empty string for already-typed basic types (caller should use typ.Name()).
+func untypedToTypedName(kind types.BasicKind) string {
+	switch kind {
+	case types.UntypedBool:
+		return "bool"
+	case types.UntypedInt:
+		return "int"
+	case types.UntypedRune:
+		return "rune"
+	case types.UntypedFloat:
+		return "float64"
+	case types.UntypedComplex:
+		return "complex128"
+	case types.UntypedString:
+		return "string"
+	case types.UntypedNil:
+		return "nil"
+	default:
+		return "" // not an untyped kind, use typ.Name()
+	}
+}
+
 // LambdaTypeInferrer rewrites function literal parameter and return types
 // based on the expected function type from call context.
 //
@@ -358,7 +381,13 @@ func (inf *LambdaTypeInferrer) typeToExpr(t types.Type) ast.Expr {
 
 	switch typ := t.(type) {
 	case *types.Basic:
-		return &ast.Ident{Name: typ.Name()}
+		// Handle untyped constants by converting to their typed equivalents
+		// using go/types Kind constants (no string manipulation)
+		name := untypedToTypedName(typ.Kind())
+		if name == "" {
+			name = typ.Name() // fallback for already-typed basics
+		}
+		return &ast.Ident{Name: name}
 
 	case *types.Pointer:
 		elem := inf.typeToExpr(typ.Elem())
