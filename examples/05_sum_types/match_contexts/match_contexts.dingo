@@ -1,0 +1,90 @@
+package main
+
+import "fmt"
+
+// Enum definition
+enum Status {
+    Pending
+    Active
+    Done
+}
+
+// Test 1: Assignment Context
+func testAssignment(status Status) {
+    x := match status {
+        Pending => "waiting"
+        Active => "running"
+        Done => "finished"
+    }
+    fmt.Println("Assignment result:", x)
+}
+
+// Test 2: Return Context
+func testReturn(status Status) string {
+    return match status {
+        Pending => "waiting"
+        Active => "running"
+        Done => "finished"
+    }
+}
+
+// Test 3: Argument Context
+func testArgument(status Status) {
+    fmt.Println("Argument result:", match status {
+        Pending => "waiting"
+        Active => "running"
+        Done => "finished"
+    })
+}
+
+// Test 4: Multiple contexts in one function
+func testMultiple(status Status) string {
+    // Assignment context
+    msg := match status {
+        Pending => "Job is pending"
+        Active => "Job is active"
+        Done => "Job is done"
+    }
+
+    // Argument context
+    fmt.Println("Status:", match status {
+        Pending => "PENDING"
+        Active => "ACTIVE"
+        Done => "DONE"
+    })
+
+    // Use the msg variable to avoid unused warning
+    fmt.Println("Message:", msg)
+
+    // Return context
+    return match status {
+        Pending => "waiting for resources"
+        Active => "processing"
+        Done => "completed successfully"
+    }
+}
+
+func main() {
+    pending := Pending()
+    active := Active()
+    done := Done()
+
+    fmt.Println("=== Test 1: Assignment Context ===")
+    testAssignment(pending)
+    testAssignment(active)
+    testAssignment(done)
+
+    fmt.Println("\n=== Test 2: Return Context ===")
+    fmt.Println("Return result:", testReturn(pending))
+    fmt.Println("Return result:", testReturn(active))
+    fmt.Println("Return result:", testReturn(done))
+
+    fmt.Println("\n=== Test 3: Argument Context ===")
+    testArgument(pending)
+    testArgument(active)
+    testArgument(done)
+
+    fmt.Println("\n=== Test 4: Multiple Contexts ===")
+    result := testMultiple(active)
+    fmt.Println("Final result:", result)
+}

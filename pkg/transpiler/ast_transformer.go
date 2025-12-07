@@ -54,6 +54,11 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 	var mappings []ast.SourceMapping
 	result := src
 
+	// Shared counter for unique temp var names across all expressions
+	// Since we process in reverse order (end→start), start counter high and decrement
+	// so that the first expression in the file gets the lowest number
+	tempCounter := len(locations)
+
 	// Transform each expression from end to beginning
 	for _, loc := range locations {
 		// Skip error propagation expressions - they're handled at statement level
@@ -112,7 +117,8 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 				VarName:        loc.VarName,
 				StatementStart: loc.StatementStart,
 				StatementEnd:   loc.StatementEnd,
-				EnumRegistry:   enumRegistry, // Pass enum registry for match pattern resolution
+				EnumRegistry:   enumRegistry,  // Pass enum registry for match pattern resolution
+				TempCounter:    &tempCounter,  // Share counter for unique temp var names
 			}
 
 			// For assignments and arguments, try to infer the type
@@ -133,10 +139,11 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 
 			genResult = codegen.GenerateExprWithContext(expr, ctx)
 		} else {
-			// For non-context generation, still pass registry for match expressions
-			if loc.Kind == ast.ExprMatch && len(enumRegistry) > 0 {
+			// For non-context generation, still pass registry and counter for match expressions
+			if loc.Kind == ast.ExprMatch {
 				ctx := &codegen.GenContext{
 					EnumRegistry: enumRegistry,
+					TempCounter:  &tempCounter,
 				}
 				genResult = codegen.GenerateExprWithContext(expr, ctx)
 			} else {
@@ -573,4 +580,72 @@ func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter 
 	buf.WriteString(tmpVar)
 
 	return buf.Bytes()
+}
+
+// transformGuardLetStatements transforms guard let statements.
+// This MUST run after error propagation but before expression-level transforms.
+//
+// Transforms:
+//   guard let user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
+//   guard let (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
+func transformGuardLetStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
+	locations, err := ast.FindGuardLetStatements(src)
+	if err != nil {
+		return src, nil, err
+	}
+
+	if len(locations) == 0 {
+		return src, nil, nil
+	}
+
+	// Sort by position (descending) to avoid position shifting
+	// Process from end to beginning so byte offsets remain valid
+	for i, j := 0, len(locations)-1; i < j; i, j = i+1, j-1 {
+		locations[i], locations[j] = locations[j], locations[i]
+	}
+
+	result := src
+	var mappings []ast.SourceMapping
+
+	// Share counter across all guard let statements
+	// Start at len(locations) and decrement, so first statement gets lowest numbers
+	counter := len(locations)
+
+	for _, loc := range locations {
+		// Infer type from expression and binding presence
+		// HasBinding (|err|) is a strong signal for Result type
+		exprType, err := codegen.InferExprTypeWithBinding(loc.ExprText, loc.HasBinding)
+		if err != nil {
+			return nil, nil, fmt.Errorf("line %d: cannot infer type: %w", loc.Line, err)
+		}
+
+		// Generate code with source context and shared counter
+		gen := codegen.NewGuardLetGenerator(loc, exprType)
+		gen.SourceBytes = src
+		gen.Counter = counter
+		counter-- // Decrement for next guard let
+		genResult := gen.Generate()
+
+		// Replace in result
+		oldLen := loc.End - loc.Start
+		generated := genResult.Output
+		newResult := make([]byte, 0, len(result)-oldLen+len(generated))
+		newResult = append(newResult, result[:loc.Start]...)
+		newResult = append(newResult, generated...)
+		newResult = append(newResult, result[loc.End:]...)
+		result = newResult
+
+		// Collect source mappings
+		for _, m := range genResult.Mappings {
+			mappings = append(mappings, ast.SourceMapping{
+				DingoStart: loc.Start + m.DingoStart,
+				DingoEnd:   loc.Start + m.DingoEnd,
+				GoStart:    loc.Start + m.GoStart,
+				GoEnd:      loc.Start + m.GoEnd,
+				Kind:       m.Kind,
+			})
+		}
+	}
+
+	return result, mappings, nil
 }

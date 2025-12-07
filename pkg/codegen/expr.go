@@ -6,11 +6,13 @@ import (
 
 // GenContext provides context for code generation to produce human-like output.
 type GenContext struct {
-	Context        ast.ExprContext // Statement context (return, assignment, argument)
-	VarName        string          // For assignments: variable name being assigned
-	VarType        string          // For assignments: inferred type (e.g., "*string")
-	StatementStart int             // Byte offset of containing statement start
-	StatementEnd   int             // Byte offset of containing statement end
+	Context        ast.ExprContext   // Statement context (return, assignment, argument)
+	VarName        string            // For assignments: variable name being assigned
+	VarType        string            // For assignments: inferred type (e.g., "*string")
+	StatementStart int               // Byte offset of containing statement start
+	StatementEnd   int               // Byte offset of containing statement end
+	EnumRegistry   map[string]string // Maps variant name to enum type name (e.g., "UserCreated" -> "Event")
+	TempCounter    *int              // Shared counter for unique temp var names across expressions
 }
 
 // GenerateExprWithContext generates Go code with context-aware output.
@@ -30,6 +32,15 @@ func GenerateExprWithContext(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 	}
 
 	switch e := expr.(type) {
+	case *ast.MatchExpr:
+		gen := &MatchCodeGen{
+			BaseGenerator: NewBaseGenerator(),
+			Match:         e,
+		}
+		if ctx != nil {
+			gen.Context = ctx
+		}
+		return gen.Generate()
 	case *ast.NullCoalesceExpr:
 		gen := NewNullCoalesceGenerator(e)
 		if ctx != nil {

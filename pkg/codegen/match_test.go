@@ -45,7 +45,7 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 				},
 				IsExpr: false,
 			},
-			expectedPart: "switch v := result.(type)",
+			expectedPart: "val := result",
 		},
 		{
 			name: "Some/None match",
@@ -74,7 +74,7 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 				},
 				IsExpr: false,
 			},
-			expectedPart: "case Some:",
+			expectedPart: "case OptionSome:",
 		},
 	}
 
@@ -86,6 +86,18 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 			code := string(result.Output)
 			if !strings.Contains(code, tt.expectedPart) {
 				t.Errorf("Generate() missing expected part %q\nGot: %s", tt.expectedPart, code)
+			}
+
+			// Verify value is cached (prevents double evaluation)
+			if !strings.Contains(code, "val :=") {
+				t.Errorf("Expected value caching, got: %s", code)
+			}
+
+			// Verify switch uses cached variable (not original expression)
+			if strings.Contains(code, "switch v") && strings.Contains(code, ".(type)") {
+				if !strings.Contains(code, "switch v1 := val.(type)") {
+					t.Errorf("Expected switch to use cached val, got: %s", code)
+				}
 			}
 		})
 	}
@@ -126,9 +138,14 @@ func TestMatchCodeGen_LiteralPattern(t *testing.T) {
 
 	code := string(result.Output)
 
-	// Check for switch statement
-	if !strings.Contains(code, "switch status") {
-		t.Errorf("Expected switch statement with scrutinee 'status', got: %s", code)
+	// Check for value caching
+	if !strings.Contains(code, "val := status") {
+		t.Errorf("Expected value caching 'val := status', got: %s", code)
+	}
+
+	// Check for switch statement using cached variable
+	if !strings.Contains(code, "switch val") {
+		t.Errorf("Expected switch statement using cached val, got: %s", code)
 	}
 
 	// Check for case clauses
@@ -392,8 +409,13 @@ func TestMatchCodeGen_NoConstructorPatterns(t *testing.T) {
 		t.Errorf("Expected value switch (no type assertion), got: %s", code)
 	}
 
-	// Should have switch statement
-	if !strings.Contains(code, "switch status") {
-		t.Errorf("Expected 'switch status', got: %s", code)
+	// Should have value caching
+	if !strings.Contains(code, "val := status") {
+		t.Errorf("Expected value caching, got: %s", code)
+	}
+
+	// Should have switch statement using cached variable
+	if !strings.Contains(code, "switch val") {
+		t.Errorf("Expected switch using cached val, got: %s", code)
 	}
 }
