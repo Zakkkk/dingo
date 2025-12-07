@@ -50,9 +50,16 @@ func (r Result[T, E]) IsErr() bool {
 }
 
 // Unwrap returns the Ok value, panics if Result is Err
+// Deprecated: Use MustOk() for Go-style naming
 func (r Result[T, E]) Unwrap() T {
+	return r.MustOk()
+}
+
+// MustOk returns the Ok value, panics if Result is Err
+// This follows Go's Must* convention for functions that panic on error
+func (r Result[T, E]) MustOk() T {
 	if r.Tag == ResultTagErr {
-		panic("called Unwrap on an Err value")
+		panic("called MustOk on an Err value")
 	}
 	return *r.Ok
 }
@@ -66,9 +73,16 @@ func (r Result[T, E]) UnwrapOr(defaultValue T) T {
 }
 
 // UnwrapErr returns the Err value, panics if Result is Ok
+// Deprecated: Use MustErr() for Go-style naming
 func (r Result[T, E]) UnwrapErr() E {
+	return r.MustErr()
+}
+
+// MustErr returns the Err value, panics if Result is Ok
+// This follows Go's Must* convention for functions that panic on error
+func (r Result[T, E]) MustErr() E {
 	if r.Tag == ResultTagOk {
-		panic("called UnwrapErr on an Ok value")
+		panic("called MustErr on an Ok value")
 	}
 	return *r.Err
 }

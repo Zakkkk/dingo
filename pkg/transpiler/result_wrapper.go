@@ -106,21 +106,40 @@ func (t *ResultWrapperTransformer) wrapReturnStatement(ret *ast.ReturnStmt, retu
 	ret.Results[0] = wrappedExpr
 }
 
-// createResultWrapper creates dgo.Ok[T,E](value) or dgo.Err[T,E](err).
+// createResultWrapper creates dgo.Ok[T, E](value) or dgo.Err[T](err).
+// Type argument requirements differ:
+//   - Ok[T, E](value T): Go infers T from value, but E is second param so Ok[X] sets T=X
+//     Therefore Ok NEEDS both type arguments
+//   - Err[T, E](err E): Go infers E from err, and T is first param so Err[X] sets T=X
+//     Therefore Err only needs T (single type argument)
 func (t *ResultWrapperTransformer) createResultWrapper(expr ast.Expr, wrapper WrapperType, returnInfo *ReturnTypeInfo) ast.Expr {
-	// Build: dgo.Ok[T, E](expr) or dgo.Err[T, E](expr)
 	constructorName := string(wrapper) // "Ok" or "Err"
 
+	if wrapper == WrapperOk {
+		// Ok needs both [T, E] - Go can't infer E
+		return &ast.CallExpr{
+			Fun: &ast.IndexListExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("dgo"),
+					Sel: ast.NewIdent(constructorName),
+				},
+				Indices: []ast.Expr{
+					cloneExpr(returnInfo.TAstExpr),
+					cloneExpr(returnInfo.EAstExpr),
+				},
+			},
+			Args: []ast.Expr{expr},
+		}
+	}
+
+	// Err only needs [T] - Go infers E from argument
 	return &ast.CallExpr{
-		Fun: &ast.IndexListExpr{
+		Fun: &ast.IndexExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent("dgo"),
 				Sel: ast.NewIdent(constructorName),
 			},
-			Indices: []ast.Expr{
-				cloneExpr(returnInfo.TAstExpr),
-				cloneExpr(returnInfo.EAstExpr),
-			},
+			Index: cloneExpr(returnInfo.TAstExpr),
 		},
 		Args: []ast.Expr{expr},
 	}

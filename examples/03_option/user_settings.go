@@ -2,13 +2,16 @@
 // Option<T> eliminates nil pointer panics by making absence explicit
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/MadAppGang/dingo/pkg/dgo"
+)
 
 type UserSettings struct {
-	Theme       Option[string]
-	FontSize    Option[int]
-	Language    Option[string]
-	NotifyEmail Option[bool]
+	Theme       dgo.Option[string]
+	FontSize    dgo.Option[int]
+	Language    dgo.Option[string]
+	NotifyEmail dgo.Option[bool]
 }
 
 type User struct {
@@ -19,6 +22,13 @@ type User struct {
 
 // GetTheme returns the user's theme or system default
 // No nil checks needed - Option forces explicit handling
+//
+// Alternative approaches for Option<T>:
+//
+//	opt.MustOk()         - Go style, panics if None (recommended)
+//	opt.Unwrap()         - Rust style alias for MustOk() (deprecated)
+//	opt.UnwrapOr(default) - Returns default if None
+//	opt.UnwrapOrElse(fn) - Computes default lazily via fn() if None
 func GetTheme(user User) string {
 	return user.Settings.Theme.UnwrapOr("system")
 }
@@ -27,7 +37,7 @@ func GetTheme(user User) string {
 func GetFontSize(user User) string {
 	// Check if font size is set and apply validation
 	if user.Settings.FontSize.IsSome() {
-		size := user.Settings.FontSize.Unwrap()
+		size := user.Settings.FontSize.MustOk()
 		if size < 10 {
 			return "10px"
 		}
@@ -43,20 +53,20 @@ func GetFontSize(user User) string {
 func ShouldSendNotification(user User, notificationType string) bool {
 	// Check if email notifications are enabled
 	if user.Settings.NotifyEmail.IsSome() {
-		return user.Settings.NotifyEmail.Unwrap()
+		return user.Settings.NotifyEmail.MustOk()
 	}
 	// Default behavior based on notification type
 	return notificationType == "critical"
 }
 
 // FindUserByLanguage returns first user with matching language preference
-func FindUserByLanguage(users []User, lang string) Option[User] {
+func FindUserByLanguage(users []User, lang string) dgo.Option[User] {
 	for _, user := range users {
-		if user.Settings.Language.IsSome() && user.Settings.Language.Unwrap() == lang {
-			return Some[User](user)
+		if user.Settings.Language.IsSome() && user.Settings.Language.MustOk() == lang {
+			return dgo.Some[User](Some[User](user))
 		}
 	}
-	return None[User]()
+	return dgo.Some[User](None[User]())
 }
 
 func main() {
@@ -90,6 +100,6 @@ func main() {
 
 	users := []User{alice, bob}
 	if spanish := FindUserByLanguage(users, "es"); spanish.IsSome() {
-		fmt.Printf("Spanish user: %s\n", spanish.Unwrap().Name) // "Bob"
+		fmt.Printf("Spanish user: %s\n", spanish.MustOk().Name) // "Bob"
 	}
 }

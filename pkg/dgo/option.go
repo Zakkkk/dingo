@@ -48,9 +48,16 @@ func (o Option[T]) IsNone() bool {
 }
 
 // Unwrap returns the contained value, panics if None
+// Deprecated: Use MustOk() for Go-style naming
 func (o Option[T]) Unwrap() T {
+	return o.MustOk()
+}
+
+// MustOk returns the contained value, panics if None
+// This follows Go's Must* convention for functions that panic on error
+func (o Option[T]) MustOk() T {
 	if o.Tag == OptionTagNone {
-		panic("called Unwrap on a None value")
+		panic("called MustOk on a None value")
 	}
 	return *o.Some
 }

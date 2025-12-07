@@ -11,7 +11,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
-// TestResultWrapper_SimpleOk tests wrapping a success value with dgo.Ok[T,E].
+// TestResultWrapper_SimpleOk tests wrapping a success value with dgo.Ok[T, E].
 func TestResultWrapper_SimpleOk(t *testing.T) {
 	source := `package main
 
@@ -28,7 +28,8 @@ func fetch() Result[string, error] {
 	}
 }
 
-// TestResultWrapper_SimpleErr tests wrapping an error value with dgo.Err[T,E].
+// TestResultWrapper_SimpleErr tests wrapping an error value with dgo.Err[T].
+// Go infers E from the error argument, so only T is specified.
 func TestResultWrapper_SimpleErr(t *testing.T) {
 	source := `package main
 
@@ -39,7 +40,7 @@ func fetch() Result[string, error] {
 }
 `
 
-	expected := `dgo.Err[string, error](errors.New("failed"))`
+	expected := `dgo.Err[string](errors.New("failed"))`
 
 	result := transformAndExtractReturn(t, source)
 	if !strings.Contains(result, expected) {
@@ -60,7 +61,7 @@ func fetch() Result[string, DBError] {
 }
 `
 
-	expected := `dgo.Err[string, DBError](DBError{Code: "ERR"})`
+	expected := `dgo.Err[string](DBError{Code: "ERR"})`
 
 	result := transformAndExtractReturn(t, source)
 	if !strings.Contains(result, expected) {
@@ -224,9 +225,9 @@ func fetch(id int) Result[string, error] {
 
 	result := transformAndPrint(t, source)
 
-	// Both returns should be wrapped
+	// Ok needs both [T, E], Err only needs [T]
 	okCount := strings.Count(result, "dgo.Ok[string, error]")
-	errCount := strings.Count(result, "dgo.Err[string, error]")
+	errCount := strings.Count(result, "dgo.Err[string](")
 
 	if okCount != 1 {
 		t.Errorf("Expected 1 dgo.Ok wrapper, got %d in:\n%s", okCount, result)
@@ -270,7 +271,7 @@ func outer() Result[int, error] {
 
 	result := transformAndPrint(t, source)
 
-	// Outer should be wrapped, inner should not
+	// Outer should be wrapped with Ok[T, E], inner should not
 	if !strings.Contains(result, "dgo.Ok[int, error](inner())") {
 		t.Errorf("Expected outer function to wrap inner() call, got: %s", result)
 	}

@@ -31,10 +31,10 @@ func FindUserByID(db *sql.DB, id int) dgo.Result[User, DBError] {
 	var user User
 	err := row.Scan(&user.ID, &user.Name, &user.Email)
 	if err == sql.ErrNoRows {
-		return dgo.Err[User, DBError](DBError{Code: "NOT_FOUND", Message: "user not found"})
+		return dgo.Err[User](DBError{Code: "NOT_FOUND", Message: "user not found"})
 	}
 	if err != nil {
-		return dgo.Err[User, DBError](DBError{Code: "SCAN_ERROR", Message: err.Error()})
+		return dgo.Err[User](DBError{Code: "SCAN_ERROR", Message: err.Error()})
 	}
 
 	return dgo.Ok[User, DBError](user)
@@ -45,18 +45,18 @@ func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) dgo.Result[
 	// Find source user - check for errors
 	fromResult := FindUserByID(db, fromID)
 	if fromResult.IsErr() {
-		return dgo.Err[bool, DBError](fromResult.UnwrapErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
+		return dgo.Err[bool](fromResult.MustErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
 	}
 
 	// Find destination user
 	toResult := FindUserByID(db, toID)
 	if toResult.IsErr() {
-		return dgo.Err[bool, DBError](toResult.UnwrapErr())
+		return dgo.Err[bool](toResult.MustErr())
 	}
 
 	// In real code: begin transaction, update balances, commit
 	fmt.Printf("Transferring $%.2f from %s to %s\n",
-		amount, fromResult.Unwrap().Name, toResult.Unwrap().Name)
+		amount, fromResult.MustOk().Name, toResult.MustOk().Name)
 
 	return dgo.Ok[bool, DBError](true)
 }
@@ -68,11 +68,16 @@ func main() {
 	result := FindUserByID(db, 123)
 
 	// Pattern: Must explicitly check and handle both cases
+	// Alternative approaches:
+	//   result.MustOk()    - Go style, panics if Err (recommended)
+	//   result.Unwrap()    - Rust style alias for MustOk() (deprecated)
+	//   result.UnwrapOr(defaultUser) - Returns default if Err
+	//   result.Expect("msg")         - Panics with custom message
 	if result.IsOk() {
-		user := result.Unwrap()
+		user := result.MustOk()
 		fmt.Printf("Found user: %s <%s>\n", user.Name, user.Email)
 	} else {
-		err := result.UnwrapErr()
+		err := result.MustErr()
 		fmt.Printf("Error: %s\n", err.Message)
 	}
 }

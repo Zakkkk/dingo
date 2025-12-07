@@ -103,10 +103,10 @@ func main() {
 	result := GetUserOrderTotal(db, 123)
 
 	if result.IsOk() {
-		total := result.Unwrap()
+		total := result.MustOk()
 		fmt.Printf("Total orders: $%.2f\n", total)
 	} else {
-		err := result.UnwrapErr()
+		err := result.MustErr()
 		fmt.Printf("Error [%s]: %s\n", err.Code, err.Message)
 	}
 }
