@@ -74,38 +74,41 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 		case ast.TupleKindTypeAlias:
 			// For type alias: type Point = (int, int)
 			// We can't use markers for type declarations - they must be valid Go types
-			// Solution: Generate the struct type directly in Pass 1
-			// type Point = struct { _0 int; _1 int }
+			// Solution: Generate the generic tuple type directly in Pass 1
+			// type Point = tuples.Tuple2[int, int]
 
 			// Use pre-computed positions from TupleLocation (no string scanning per CLAUDE.md)
 			replaceStart = loc.KeywordStart // Start of "type"
 			replaceEnd = loc.End            // End of tuple type
 
-			// Generate struct type using pre-parsed type content from finder
+			// Generate generic tuple type using pre-parsed type content from finder
 			// The prefix "type Name = " is preserved from source
 			typePrefix := result[loc.KeywordStart:loc.Start]
-			var structDef []byte
-			structDef = append(structDef, typePrefix...)
-			structDef = append(structDef, []byte("struct { ")...)
+			var tupleDef []byte
+			tupleDef = append(tupleDef, typePrefix...)
 
-			// Use pre-parsed TypeContent if available, otherwise use interface{}
+			// Use pre-parsed TypeContent if available
 			if len(loc.TypeContent) > 0 {
+				tupleDef = append(tupleDef, []byte(fmt.Sprintf("tuples.Tuple%d[", len(loc.TypeContent)))...)
 				for i, typeStr := range loc.TypeContent {
 					if i > 0 {
-						structDef = append(structDef, []byte("; ")...)
+						tupleDef = append(tupleDef, []byte(", ")...)
 					}
-					structDef = append(structDef, []byte(fmt.Sprintf("_%d %s", i, typeStr))...)
+					tupleDef = append(tupleDef, []byte(typeStr)...)
 				}
+				tupleDef = append(tupleDef, ']')
 			} else {
+				// Fallback: use any for unknown types
+				tupleDef = append(tupleDef, []byte(fmt.Sprintf("tuples.Tuple%d[", loc.Elements))...)
 				for i := 0; i < loc.Elements; i++ {
 					if i > 0 {
-						structDef = append(structDef, []byte("; ")...)
+						tupleDef = append(tupleDef, []byte(", ")...)
 					}
-					structDef = append(structDef, []byte(fmt.Sprintf("_%d interface{}", i))...)
+					tupleDef = append(tupleDef, []byte("any")...)
 				}
+				tupleDef = append(tupleDef, ']')
 			}
-			structDef = append(structDef, []byte(" }")...)
-			marker = structDef
+			marker = tupleDef
 
 		case ast.TupleKindLiteral:
 			// For literal, replace just the tuple expression
@@ -114,8 +117,8 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 
 		case ast.TupleKindFuncReturn:
 			// For function return types, we can't use markers - they must be valid Go types
-			// Generate an anonymous struct type directly
-			// Example: func foo() (float64, float64) → func foo() struct { _0 float64; _1 float64 }
+			// Generate a generic tuple type directly
+			// Example: func foo() (float64, float64) → func foo() tuples.Tuple2[float64, float64]
 			replaceStart = loc.Start
 			replaceEnd = loc.End
 
@@ -124,17 +127,17 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 				return nil, nil, fmt.Errorf("ElementsInfo not populated for func return tuple at byte %d - use FindTuples() to get properly populated TupleLocation", loc.Start)
 			}
 
-			// Generate anonymous struct using pre-parsed element types
-			var structDef []byte
-			structDef = append(structDef, []byte("struct { ")...)
+			// Generate generic tuple type using pre-parsed element types
+			var tupleDef []byte
+			tupleDef = append(tupleDef, []byte(fmt.Sprintf("tuples.Tuple%d[", len(loc.ElementsInfo)))...)
 			for i, elem := range loc.ElementsInfo {
 				if i > 0 {
-					structDef = append(structDef, []byte("; ")...)
+					tupleDef = append(tupleDef, []byte(", ")...)
 				}
-				structDef = append(structDef, []byte(fmt.Sprintf("_%d %s", i, elem.Name))...)
+				tupleDef = append(tupleDef, []byte(elem.Name)...)
 			}
-			structDef = append(structDef, []byte(" }")...)
-			marker = structDef
+			tupleDef = append(tupleDef, ']')
+			marker = tupleDef
 		}
 
 		// Splice marker into result

@@ -66,6 +66,14 @@ type TupleElementInfo struct {
 	Name string // Type name for type tuples, empty for value tuples
 }
 
+// ElementInfo contains position and name information for a tuple element.
+// Used for destructuring patterns and type alias elements.
+type ElementInfo struct {
+	Name  string // Element name or type name
+	Start int    // Byte offset start (inclusive)
+	End   int    // Byte offset end (exclusive)
+}
+
 // TupleLocation represents the location and context of a tuple
 type TupleLocation struct {
 	Kind         TupleKind

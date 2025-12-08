@@ -351,11 +351,6 @@ func TestTupleCodeGen_FromLocation_Destructure(t *testing.T) {
 		Start:    4,  // Position of (
 		End:      10, // Position after )
 		Elements: 2,
-		// ElementsInfo must be populated (no string manipulation per CLAUDE.md)
-		ElementsInfo: []ast.ElementInfo{
-			{Name: "x", Start: 5, End: 6},
-			{Name: "y", Start: 8, End: 9},
-		},
 	}
 
 	gen := NewTupleCodeGen()
@@ -365,7 +360,8 @@ func TestTupleCodeGen_FromLocation_Destructure(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	expected := `__tupleDest2__("x", "y", point)`
+	// New format includes positional paths for nested tuple support: "name:index"
+	expected := `__tupleDest2__("x:0", "y:1", point)`
 	actual := string(result)
 
 	if actual != expected {
@@ -380,11 +376,6 @@ func TestTupleCodeGen_FromLocation_TypeAlias(t *testing.T) {
 		Start:    13, // Position of (
 		End:      23, // Position after )
 		Elements: 2,
-		// ElementsInfo must be populated (no string manipulation per CLAUDE.md)
-		ElementsInfo: []ast.ElementInfo{
-			{Name: "int", Start: 14, End: 17},
-			{Name: "int", Start: 19, End: 22},
-		},
 	}
 
 	gen := NewTupleCodeGen()
@@ -479,24 +470,8 @@ func TestFormatTmpVar(t *testing.T) {
 	}
 }
 
-func TestFormatFieldIndex(t *testing.T) {
-	tests := []struct {
-		index    int
-		expected string
-	}{
-		{0, "0"},
-		{1, "1"},
-		{5, "5"},
-		{10, "10"},
-	}
-
-	for _, tt := range tests {
-		actual := formatFieldIndex(tt.index)
-		if actual != tt.expected {
-			t.Errorf("formatFieldIndex(%d): expected %s, got %s", tt.index, tt.expected, actual)
-		}
-	}
-}
+// Note: formatFieldIndex is now defined in pkg/ast/tuple.go as it's used
+// for AST-based tuple destructuring. Tests for it are in pkg/ast/tuple_test.go.
 
 // Benchmark tests
 

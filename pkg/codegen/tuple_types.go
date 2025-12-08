@@ -5,41 +5,44 @@ import (
 	"fmt"
 	goast "go/ast"
 	goparser "go/parser"
-	"go/printer"
 	"go/token"
 	"go/types"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
-// TupleTypeResolver uses go/types to resolve tuple marker functions to concrete types.
+// TupleTypeResolver uses go/types to resolve tuple marker functions to generic types.
 //
 // This is Pass 2 of the two-pass tuple pipeline:
 // - Pass 1 (tuple.go): Transform tuple syntax to markers (no type info needed)
-// - Pass 2 (this file): Use go/types to resolve markers to final structs
+// - Pass 2 (this file): Use go/types to resolve markers to generic tuple types
+//
+// Uses generic tuple types from runtime/tuples package:
+//   - tuples.Tuple2[A, B], tuples.Tuple3[A, B, C], etc.
+//   - Field names: First, Second, Third, Fourth, Fifth, Sixth, Seventh, Eighth, Ninth, Tenth
 //
 // Responsibilities:
 // 1. Parse marker-infused Go source with go/parser
 // 2. Type-check with go/types to get TypeInfo
-// 3. Resolve marker function calls to struct literals
+// 3. Resolve marker function calls to generic struct literals
 // 4. Resolve marker destructuring to field access
-// 5. Handle context-aware return types (infer from function signature)
-// 6. Type deduplication (same types share one struct)
-// 7. Generate source mappings
+// 5. Track type aliases to use alias names in generated code
+// 6. Generate source mappings
 type TupleTypeResolver struct {
-	info       *types.Info
-	fset       *token.FileSet
-	typeCache  map[string]string  // type signature → struct name (for deduplication)
-	structs    []structDefinition // Accumulated struct definitions
-	tmpCounter int                // Counter for unique tmp variable names per scope
+	info        *types.Info
+	fset        *token.FileSet
+	typeAliases map[string]string // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
+	tmpCounter  int               // Counter for unique tmp variable names per scope
+	needsImport bool              // Whether runtime/tuples import is needed
 }
 
-// structDefinition represents a generated tuple struct type
-type structDefinition struct {
-	name      string   // e.g., "Tuple2IntString"
-	elemTypes []string // e.g., ["int", "string"]
+// TupleFieldNames maps tuple indices to human-readable field names
+var TupleFieldNames = []string{
+	"First", "Second", "Third", "Fourth", "Fifth",
+	"Sixth", "Seventh", "Eighth", "Ninth", "Tenth",
 }
 
 // NewTupleTypeResolver creates a resolver from type-checked Go source.
@@ -79,43 +82,496 @@ func NewTupleTypeResolver(src []byte) (*TupleTypeResolver, error) {
 	}
 
 	return &TupleTypeResolver{
-		info:      info,
-		fset:      fset,
-		typeCache: make(map[string]string),
-		structs:   []structDefinition{},
+		info:        info,
+		fset:        fset,
+		typeAliases: make(map[string]string),
 	}, nil
 }
 
 // Resolve processes marker-infused source and generates final Go code.
 //
 // Input: Source with markers from Pass 1
-// Output: Final Go code with struct definitions and transformed expressions
+// Output: Final Go code with generic tuple types from runtime/tuples package
+//
+// Uses byte-level replacement to preserve comments exactly as they appear
+// in the source. The AST is only used for type information, not for output.
 func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 	fset := token.NewFileSet()
-	file, err := goparser.ParseFile(fset, "tuple.go", src, goparser.ParseComments)
+	file, err := goparser.ParseFile(fset, "tuple.go", src, 0) // No comments needed for AST
 	if err != nil {
 		return ast.CodeGenResult{}, fmt.Errorf("failed to parse source: %w", err)
 	}
 
-	// Transform markers in-place in the AST
-	r.transformMarkers(file)
+	// Collect all marker replacements (position -> replacement string)
+	replacements := r.collectMarkerReplacements(fset, file, src)
 
-	// Insert struct definitions into the AST (after imports, before other decls)
-	if len(r.structs) > 0 {
-		structDecls := r.generateStructDecls()
-		file.Decls = insertStructsAfterImports(file.Decls, structDecls)
+	// Sort replacements by position descending (transform from end to avoid offset shifts)
+	sort.Slice(replacements, func(i, j int) bool {
+		return replacements[i].start > replacements[j].start
+	})
+
+	// Apply byte-level replacements
+	result := src
+	for _, repl := range replacements {
+		newResult := make([]byte, 0, len(result)-(repl.end-repl.start)+len(repl.replacement))
+		newResult = append(newResult, result[:repl.start]...)
+		newResult = append(newResult, repl.replacement...)
+		newResult = append(newResult, result[repl.end:]...)
+		result = newResult
 	}
 
-	// Print the transformed AST back to source
-	var buf bytes.Buffer
-	if err := printer.Fprint(&buf, fset, file); err != nil {
-		return ast.CodeGenResult{}, fmt.Errorf("failed to print AST: %w", err)
+	// Add tuples import if needed (byte-level)
+	if r.needsImport {
+		result = addTuplesImportBytes(result)
 	}
 
 	return ast.CodeGenResult{
-		Output:   buf.Bytes(),
+		Output:   result,
 		Mappings: []ast.SourceMapping{},
 	}, nil
+}
+
+// markerReplacement represents a marker to be replaced with its position and replacement text.
+type markerReplacement struct {
+	start       int
+	end         int
+	replacement []byte
+}
+
+// collectMarkerReplacements walks the AST and collects all marker replacements.
+func (r *TupleTypeResolver) collectMarkerReplacements(fset *token.FileSet, file *goast.File, src []byte) []markerReplacement {
+	var replacements []markerReplacement
+
+	// Walk all declarations looking for markers
+	for _, decl := range file.Decls {
+		r.collectDeclReplacements(fset, decl, src, &replacements)
+	}
+
+	return replacements
+}
+
+// collectDeclReplacements collects marker replacements within a declaration.
+func (r *TupleTypeResolver) collectDeclReplacements(fset *token.FileSet, decl goast.Decl, src []byte, replacements *[]markerReplacement) {
+	switch d := decl.(type) {
+	case *goast.FuncDecl:
+		if d.Body != nil {
+			r.collectStmtListReplacements(fset, d.Body.List, src, replacements)
+		}
+	case *goast.GenDecl:
+		for _, spec := range d.Specs {
+			if vs, ok := spec.(*goast.ValueSpec); ok {
+				for _, val := range vs.Values {
+					r.collectExprReplacements(fset, val, src, replacements)
+				}
+			}
+		}
+	}
+}
+
+// collectStmtListReplacements collects marker replacements from a statement list.
+func (r *TupleTypeResolver) collectStmtListReplacements(fset *token.FileSet, stmts []goast.Stmt, src []byte, replacements *[]markerReplacement) {
+	for _, stmt := range stmts {
+		r.collectStmtReplacements(fset, stmt, src, replacements)
+	}
+}
+
+// collectStmtReplacements collects marker replacements from a single statement.
+func (r *TupleTypeResolver) collectStmtReplacements(fset *token.FileSet, stmt goast.Stmt, src []byte, replacements *[]markerReplacement) {
+	switch s := stmt.(type) {
+	case *goast.ExprStmt:
+		r.collectExprReplacements(fset, s.X, src, replacements)
+	case *goast.AssignStmt:
+		// Check for destructure marker: _ = __tupleDest*__(...)
+		if len(s.Lhs) == 1 && len(s.Rhs) == 1 {
+			if lhsIdent, ok := s.Lhs[0].(*goast.Ident); ok && lhsIdent.Name == "_" {
+				if call, ok := s.Rhs[0].(*goast.CallExpr); ok {
+					if fnIdent, ok := call.Fun.(*goast.Ident); ok && strings.HasPrefix(fnIdent.Name, "__tupleDest") {
+						// This is a destructure marker - generate replacement for whole statement
+						repl := r.generateDestructureReplacement(fset, s, call, src)
+						if repl != nil {
+							*replacements = append(*replacements, *repl)
+							return // Don't recurse into this statement
+						}
+					}
+				}
+			}
+		}
+		// Regular assignment - check RHS for literal markers
+		for _, rhs := range s.Rhs {
+			r.collectExprReplacements(fset, rhs, src, replacements)
+		}
+	case *goast.ReturnStmt:
+		for _, result := range s.Results {
+			r.collectExprReplacements(fset, result, src, replacements)
+		}
+	case *goast.IfStmt:
+		if s.Init != nil {
+			r.collectStmtReplacements(fset, s.Init, src, replacements)
+		}
+		r.collectExprReplacements(fset, s.Cond, src, replacements)
+		if s.Body != nil {
+			r.collectStmtListReplacements(fset, s.Body.List, src, replacements)
+		}
+		if s.Else != nil {
+			r.collectStmtReplacements(fset, s.Else, src, replacements)
+		}
+	case *goast.BlockStmt:
+		r.collectStmtListReplacements(fset, s.List, src, replacements)
+	case *goast.ForStmt:
+		if s.Init != nil {
+			r.collectStmtReplacements(fset, s.Init, src, replacements)
+		}
+		if s.Cond != nil {
+			r.collectExprReplacements(fset, s.Cond, src, replacements)
+		}
+		if s.Post != nil {
+			r.collectStmtReplacements(fset, s.Post, src, replacements)
+		}
+		if s.Body != nil {
+			r.collectStmtListReplacements(fset, s.Body.List, src, replacements)
+		}
+	case *goast.RangeStmt:
+		r.collectExprReplacements(fset, s.X, src, replacements)
+		if s.Body != nil {
+			r.collectStmtListReplacements(fset, s.Body.List, src, replacements)
+		}
+	case *goast.SwitchStmt:
+		if s.Init != nil {
+			r.collectStmtReplacements(fset, s.Init, src, replacements)
+		}
+		if s.Tag != nil {
+			r.collectExprReplacements(fset, s.Tag, src, replacements)
+		}
+		if s.Body != nil {
+			r.collectStmtListReplacements(fset, s.Body.List, src, replacements)
+		}
+	case *goast.CaseClause:
+		for _, expr := range s.List {
+			r.collectExprReplacements(fset, expr, src, replacements)
+		}
+		r.collectStmtListReplacements(fset, s.Body, src, replacements)
+	}
+}
+
+// collectExprReplacements collects marker replacements from an expression.
+func (r *TupleTypeResolver) collectExprReplacements(fset *token.FileSet, expr goast.Expr, src []byte, replacements *[]markerReplacement) {
+	if expr == nil {
+		return
+	}
+
+	switch e := expr.(type) {
+	case *goast.CallExpr:
+		// Check if this is a tuple literal marker
+		if ident, ok := e.Fun.(*goast.Ident); ok {
+			if strings.HasPrefix(ident.Name, "__tuple") && !strings.Contains(ident.Name, "Dest") && !strings.Contains(ident.Name, "Type") {
+				// This is a literal marker - generate replacement
+				repl := r.generateLiteralReplacement(fset, e, src)
+				if repl != nil {
+					*replacements = append(*replacements, *repl)
+					return // Don't recurse - nested markers are handled in replacement generation
+				}
+			}
+		}
+		// Not a marker - recurse into arguments
+		for _, arg := range e.Args {
+			r.collectExprReplacements(fset, arg, src, replacements)
+		}
+		r.collectExprReplacements(fset, e.Fun, src, replacements)
+
+	case *goast.BinaryExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+		r.collectExprReplacements(fset, e.Y, src, replacements)
+
+	case *goast.UnaryExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+
+	case *goast.ParenExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+
+	case *goast.IndexExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+		r.collectExprReplacements(fset, e.Index, src, replacements)
+
+	case *goast.SelectorExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+
+	case *goast.SliceExpr:
+		r.collectExprReplacements(fset, e.X, src, replacements)
+		if e.Low != nil {
+			r.collectExprReplacements(fset, e.Low, src, replacements)
+		}
+		if e.High != nil {
+			r.collectExprReplacements(fset, e.High, src, replacements)
+		}
+		if e.Max != nil {
+			r.collectExprReplacements(fset, e.Max, src, replacements)
+		}
+
+	case *goast.CompositeLit:
+		for _, elt := range e.Elts {
+			r.collectExprReplacements(fset, elt, src, replacements)
+		}
+
+	case *goast.KeyValueExpr:
+		r.collectExprReplacements(fset, e.Key, src, replacements)
+		r.collectExprReplacements(fset, e.Value, src, replacements)
+
+	case *goast.FuncLit:
+		if e.Body != nil {
+			r.collectStmtListReplacements(fset, e.Body.List, src, replacements)
+		}
+	}
+}
+
+// generateLiteralReplacement generates the replacement for a tuple literal marker.
+func (r *TupleTypeResolver) generateLiteralReplacement(fset *token.FileSet, call *goast.CallExpr, src []byte) *markerReplacement {
+	r.needsImport = true
+
+	// Get byte positions
+	start := fset.Position(call.Pos()).Offset
+	end := fset.Position(call.End()).Offset
+
+	// Get types of arguments
+	var elemTypes []types.Type
+	for _, arg := range call.Args {
+		var typ types.Type
+		typeAndVal, ok := r.info.Types[arg]
+		if ok && typeAndVal.Type != nil {
+			typ = typeAndVal.Type
+		} else {
+			typ = r.inferLiteralType(arg)
+		}
+		elemTypes = append(elemTypes, typ)
+	}
+
+	// Build the replacement string
+	arity := len(call.Args)
+	var buf strings.Builder
+
+	// Generic type: tuples.Tuple{N}[type1, type2, ...]
+	buf.WriteString(fmt.Sprintf("tuples.Tuple%d[", arity))
+	for i, t := range elemTypes {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(typeToGoString(t))
+	}
+	buf.WriteString("]{")
+
+	// Fields: First: val1, Second: val2, ...
+	for i, arg := range call.Args {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		fieldName := TupleFieldNames[i]
+		buf.WriteString(fieldName)
+		buf.WriteString(": ")
+
+		// Get the argument source, handling nested markers recursively
+		argStart := fset.Position(arg.Pos()).Offset
+		argEnd := fset.Position(arg.End()).Offset
+		argSrc := string(src[argStart:argEnd])
+
+		// Check if arg is a nested marker
+		if nestedCall, ok := arg.(*goast.CallExpr); ok {
+			if nestedIdent, ok := nestedCall.Fun.(*goast.Ident); ok {
+				if strings.HasPrefix(nestedIdent.Name, "__tuple") && !strings.Contains(nestedIdent.Name, "Dest") {
+					// Recursively generate nested replacement
+					nestedRepl := r.generateLiteralReplacement(fset, nestedCall, src)
+					if nestedRepl != nil {
+						argSrc = string(nestedRepl.replacement)
+					}
+				}
+			}
+		}
+
+		buf.WriteString(argSrc)
+	}
+	buf.WriteByte('}')
+
+	return &markerReplacement{
+		start:       start,
+		end:         end,
+		replacement: []byte(buf.String()),
+	}
+}
+
+// generateDestructureReplacement generates the replacement for a destructure marker statement.
+func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, stmt *goast.AssignStmt, call *goast.CallExpr, src []byte) *markerReplacement {
+	if len(call.Args) < 2 {
+		return nil
+	}
+
+	// Get byte positions for the whole statement: _ = __tupleDest*__(...)
+	start := fset.Position(stmt.Pos()).Offset
+	end := fset.Position(stmt.End()).Offset
+
+	// Last arg is the expression being destructured
+	valueExpr := call.Args[len(call.Args)-1]
+	valueStart := fset.Position(valueExpr.Pos()).Offset
+	valueEnd := fset.Position(valueExpr.End()).Offset
+	valueSrc := string(src[valueStart:valueEnd])
+
+	// Parse variable names and paths from string literals
+	type varBinding struct {
+		name string
+		path []int
+	}
+	var bindings []varBinding
+
+	for i := 0; i < len(call.Args)-1; i++ {
+		lit, ok := call.Args[i].(*goast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			continue
+		}
+		encoded := lit.Value[1 : len(lit.Value)-1]
+		name, path := parseEncodedBinding(encoded)
+		if name != "_" {
+			bindings = append(bindings, varBinding{name: name, path: path})
+		}
+	}
+
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	// Generate replacement statements
+	var buf strings.Builder
+
+	// Generate unique tmp variable name
+	r.tmpCounter++
+	tmpName := "tmp"
+	if r.tmpCounter > 1 {
+		tmpName = fmt.Sprintf("tmp%d", r.tmpCounter-1)
+	}
+
+	// Statement 1: tmp := expr
+	buf.WriteString(tmpName)
+	buf.WriteString(" := ")
+	buf.WriteString(valueSrc)
+	buf.WriteByte('\n')
+
+	// Statements 2+: varName := tmp.First.Second...
+	for _, b := range bindings {
+		buf.WriteString(b.name)
+		buf.WriteString(" := ")
+		buf.WriteString(tmpName)
+		for _, idx := range b.path {
+			buf.WriteByte('.')
+			buf.WriteString(TupleFieldNames[idx])
+		}
+		buf.WriteByte('\n')
+	}
+
+	// Remove trailing newline
+	result := strings.TrimRight(buf.String(), "\n")
+
+	return &markerReplacement{
+		start:       start,
+		end:         end,
+		replacement: []byte(result),
+	}
+}
+
+// addTuplesImportBytes adds the tuples import using byte-level manipulation.
+func addTuplesImportBytes(src []byte) []byte {
+	const tuplesImport = `"github.com/MadAppGang/dingo/runtime/tuples"`
+
+	// Check if already imported
+	if bytes.Contains(src, []byte(tuplesImport)) {
+		return src
+	}
+
+	// Find the import block
+	importIdx := bytes.Index(src, []byte("import ("))
+	if importIdx != -1 {
+		// Find the newline after "import ("
+		newlineIdx := bytes.IndexByte(src[importIdx:], '\n')
+		if newlineIdx != -1 {
+			insertPos := importIdx + newlineIdx + 1
+			// Insert the new import
+			newImport := []byte("\t" + tuplesImport + "\n")
+			result := make([]byte, 0, len(src)+len(newImport))
+			result = append(result, src[:insertPos]...)
+			result = append(result, newImport...)
+			result = append(result, src[insertPos:]...)
+			return result
+		}
+	}
+
+	// Fallback: find single import statement
+	singleImportIdx := bytes.Index(src, []byte("import "))
+	if singleImportIdx != -1 && importIdx == -1 {
+		// Find the end of the import line
+		lineEnd := bytes.IndexByte(src[singleImportIdx:], '\n')
+		if lineEnd != -1 {
+			// Convert single import to import block
+			// Find the import path
+			importStart := singleImportIdx + len("import ")
+			importPath := src[importStart : singleImportIdx+lineEnd]
+
+			// Create import block
+			var newImport strings.Builder
+			newImport.WriteString("import (\n\t")
+			newImport.Write(bytes.TrimSpace(importPath))
+			newImport.WriteString("\n\t")
+			newImport.WriteString(tuplesImport)
+			newImport.WriteString("\n)")
+
+			result := make([]byte, 0, len(src)+len(tuplesImport)+20)
+			result = append(result, src[:singleImportIdx]...)
+			result = append(result, []byte(newImport.String())...)
+			result = append(result, src[singleImportIdx+lineEnd:]...)
+			return result
+		}
+	}
+
+	return src
+}
+
+// addTuplesImport adds the runtime/tuples import to the file if not already present.
+func addTuplesImport(file *goast.File) {
+	const tuplesPath = `"github.com/MadAppGang/dingo/runtime/tuples"`
+
+	// Check if already imported
+	for _, imp := range file.Imports {
+		if imp.Path.Value == tuplesPath {
+			return // Already imported
+		}
+	}
+
+	// Create import spec
+	importSpec := &goast.ImportSpec{
+		Path: &goast.BasicLit{
+			Kind:  token.STRING,
+			Value: tuplesPath,
+		},
+	}
+
+	// Find or create import declaration
+	var importDecl *goast.GenDecl
+	for _, decl := range file.Decls {
+		if genDecl, ok := decl.(*goast.GenDecl); ok && genDecl.Tok == token.IMPORT {
+			importDecl = genDecl
+			break
+		}
+	}
+
+	if importDecl != nil {
+		// Add to existing import declaration
+		importDecl.Specs = append(importDecl.Specs, importSpec)
+	} else {
+		// Create new import declaration
+		newImport := &goast.GenDecl{
+			Tok:   token.IMPORT,
+			Specs: []goast.Spec{importSpec},
+		}
+		// Insert at beginning of declarations
+		file.Decls = append([]goast.Decl{newImport}, file.Decls...)
+	}
+
+	// Update file's Imports slice
+	file.Imports = append(file.Imports, importSpec)
 }
 
 // transformMarkers walks the AST and transforms marker function calls.
@@ -298,14 +754,15 @@ func parseEncodedBinding(encoded string) (string, []int) {
 }
 
 // buildFieldAccess creates a selector expression for nested field access.
-// Example: buildFieldAccess("tmp", [0, 1]) → tmp._0._1
+// Example: buildFieldAccess("tmp", [0, 1]) → tmp.First.Second
 func buildFieldAccess(base string, path []int) goast.Expr {
 	var result goast.Expr = goast.NewIdent(base)
 
 	for _, idx := range path {
+		fieldName := TupleFieldNames[idx]
 		result = &goast.SelectorExpr{
 			X:   result,
-			Sel: goast.NewIdent(fmt.Sprintf("_%d", idx)),
+			Sel: goast.NewIdent(fieldName),
 		}
 	}
 
@@ -443,8 +900,13 @@ func (r *TupleTypeResolver) transformExpr(expr goast.Expr) goast.Expr {
 	return expr
 }
 
-// resolveLiteralMarker transforms __tuple{N}__(args) to struct literal.
+// resolveLiteralMarker transforms __tuple{N}__(args) to generic struct literal.
+//
+// Example:
+//   __tuple2__(3.0, 4.0) → tuples.Tuple2[float64, float64]{First: 3.0, Second: 4.0}
 func (r *TupleTypeResolver) resolveLiteralMarker(call *goast.CallExpr) goast.Expr {
+	r.needsImport = true
+
 	// Get types of arguments
 	var elemTypes []types.Type
 	for _, arg := range call.Args {
@@ -462,26 +924,86 @@ func (r *TupleTypeResolver) resolveLiteralMarker(call *goast.CallExpr) goast.Exp
 		elemTypes = append(elemTypes, typ)
 	}
 
-	// Get or create struct name
-	structName := r.getOrCreateStructType(elemTypes)
-
 	// Transform arguments recursively (handle nested tuples)
 	for i, arg := range call.Args {
 		call.Args[i] = r.transformExpr(arg)
 	}
 
-	// Create struct literal: StructName{_0: arg0, _1: arg1, ...}
+	// Build the generic type: tuples.Tuple{N}[type1, type2, ...]
+	arity := len(call.Args)
+	genericTypeName := fmt.Sprintf("tuples.Tuple%d", arity)
+
+	// Build type parameters as index expression
+	var typeExpr goast.Expr = goast.NewIdent(genericTypeName)
+
+	// Add type parameters if we have type info
+	if len(elemTypes) > 0 {
+		typeParams := make([]goast.Expr, len(elemTypes))
+		for i, t := range elemTypes {
+			typeParams[i] = goast.NewIdent(typeToGoString(t))
+		}
+		// Create indexed expression for generics: tuples.Tuple2[float64, float64]
+		if arity == 1 {
+			typeExpr = &goast.IndexExpr{
+				X:     typeExpr,
+				Index: typeParams[0],
+			}
+		} else {
+			typeExpr = &goast.IndexListExpr{
+				X:       typeExpr,
+				Indices: typeParams,
+			}
+		}
+	}
+
+	// Create struct literal with named fields: {First: val1, Second: val2}
 	elts := make([]goast.Expr, len(call.Args))
 	for i, arg := range call.Args {
+		fieldName := TupleFieldNames[i]
 		elts[i] = &goast.KeyValueExpr{
-			Key:   goast.NewIdent(fmt.Sprintf("_%d", i)),
+			Key:   goast.NewIdent(fieldName),
 			Value: arg,
 		}
 	}
 
 	return &goast.CompositeLit{
-		Type: goast.NewIdent(structName),
+		Type: typeExpr,
 		Elts: elts,
+	}
+}
+
+// typeToGoString converts a types.Type to a Go type string suitable for generics.
+func typeToGoString(t types.Type) string {
+	switch typ := t.(type) {
+	case *types.Basic:
+		switch typ.Kind() {
+		case types.UntypedInt:
+			return "int"
+		case types.UntypedFloat:
+			return "float64"
+		case types.UntypedString:
+			return "string"
+		case types.UntypedBool:
+			return "bool"
+		case types.UntypedRune:
+			return "rune"
+		default:
+			return typ.Name()
+		}
+	case *types.Struct:
+		// For nested tuples, we need to generate the full generic type
+		// e.g., tuples.Tuple2[float64, float64]
+		numFields := typ.NumFields()
+		if numFields >= 2 && numFields <= 10 {
+			var fieldTypes []string
+			for i := 0; i < numFields; i++ {
+				fieldTypes = append(fieldTypes, typeToGoString(typ.Field(i).Type()))
+			}
+			return fmt.Sprintf("tuples.Tuple%d[%s]", numFields, strings.Join(fieldTypes, ", "))
+		}
+		return "any"
+	default:
+		return types.TypeString(t, nil)
 	}
 }
 
@@ -585,16 +1107,16 @@ func isInterface(t types.Type) bool {
 
 // constructStructType creates a *types.Struct from element types.
 // This is used by inferLiteralType to properly type nested tuples.
-// The struct has fields _0, _1, _2, etc. with the corresponding element types.
+// The struct has fields First, Second, Third, etc. with the corresponding element types.
 func (r *TupleTypeResolver) constructStructType(elemTypes []types.Type) types.Type {
 	if len(elemTypes) == 0 {
 		return types.NewInterfaceType(nil, nil)
 	}
 
-	// Create struct fields: _0, _1, _2, etc.
+	// Create struct fields: First, Second, Third, etc.
 	fields := make([]*types.Var, len(elemTypes))
 	for i, elemType := range elemTypes {
-		fieldName := fmt.Sprintf("_%d", i)
+		fieldName := TupleFieldNames[i]
 		fields[i] = types.NewField(token.NoPos, nil, fieldName, elemType, false)
 	}
 
@@ -602,220 +1124,3 @@ func (r *TupleTypeResolver) constructStructType(elemTypes []types.Type) types.Ty
 	return types.NewStruct(fields, nil)
 }
 
-// getOrCreateStructType returns the struct name for given element types.
-func (r *TupleTypeResolver) getOrCreateStructType(elemTypes []types.Type) string {
-	sig := r.getTypeSignature(elemTypes)
-
-	// Check cache
-	if name, exists := r.typeCache[sig]; exists {
-		return name
-	}
-
-	// Create new struct
-	name := r.generateStructName(elemTypes)
-	r.typeCache[sig] = name
-
-	// Store for later definition generation
-	typeStrings := make([]string, len(elemTypes))
-	for i, t := range elemTypes {
-		typeStrings[i] = types.TypeString(t, nil)
-	}
-	r.structs = append(r.structs, structDefinition{
-		name:      name,
-		elemTypes: typeStrings,
-	})
-
-	return name
-}
-
-// getTypeSignature creates a canonical signature for type deduplication.
-func (r *TupleTypeResolver) getTypeSignature(elemTypes []types.Type) string {
-	var parts []string
-	for _, t := range elemTypes {
-		parts = append(parts, types.TypeString(t, nil))
-	}
-	return strings.Join(parts, ",")
-}
-
-// generateStructName creates a CamelCase struct name from element types.
-func (r *TupleTypeResolver) generateStructName(elemTypes []types.Type) string {
-	var parts []string
-	parts = append(parts, "Tuple"+strconv.Itoa(len(elemTypes)))
-
-	for _, t := range elemTypes {
-		parts = append(parts, typeToNameComponent(t))
-	}
-
-	return strings.Join(parts, "")
-}
-
-// typeToNameComponent converts a Go type to a CamelCase name component.
-func typeToNameComponent(t types.Type) string {
-	switch typ := t.(type) {
-	case *types.Basic:
-		return basicTypeName(typ)
-	case *types.Pointer:
-		return "Ptr" + typeToNameComponent(typ.Elem())
-	case *types.Slice:
-		return "Slice" + typeToNameComponent(typ.Elem())
-	case *types.Map:
-		return "Map" + typeToNameComponent(typ.Key()) + typeToNameComponent(typ.Elem())
-	case *types.Named:
-		return typ.Obj().Name()
-	case *types.Interface:
-		if typ.Empty() {
-			return "Any"
-		}
-		return "Interface"
-	default:
-		return "Any"
-	}
-}
-
-// basicTypeName converts basic Go types to CamelCase names.
-func basicTypeName(t *types.Basic) string {
-	switch t.Kind() {
-	case types.Bool:
-		return "Bool"
-	case types.Int:
-		return "Int"
-	case types.Int8:
-		return "Int8"
-	case types.Int16:
-		return "Int16"
-	case types.Int32:
-		return "Int32"
-	case types.Int64:
-		return "Int64"
-	case types.Uint:
-		return "Uint"
-	case types.Uint8:
-		return "Uint8"
-	case types.Uint16:
-		return "Uint16"
-	case types.Uint32:
-		return "Uint32"
-	case types.Uint64:
-		return "Uint64"
-	case types.Float32:
-		return "Float32"
-	case types.Float64:
-		return "Float64"
-	case types.String:
-		return "String"
-	case types.UntypedInt:
-		return "Int"
-	case types.UntypedFloat:
-		return "Float64"
-	case types.UntypedString:
-		return "String"
-	case types.UntypedBool:
-		return "Bool"
-	case types.UntypedRune:
-		return "Rune"
-	case types.UntypedNil:
-		return "Any"
-	default:
-		return "Any"
-	}
-}
-
-// generateStructDefinitions creates the struct type definitions as a string.
-// NOTE: This is used for debugging/testing. Use generateStructDecls for AST-based insertion.
-func (r *TupleTypeResolver) generateStructDefinitions() string {
-	if len(r.structs) == 0 {
-		return ""
-	}
-
-	var result strings.Builder
-	result.WriteString("// Generated tuple types\n")
-
-	for _, s := range r.structs {
-		result.WriteString("type ")
-		result.WriteString(s.name)
-		result.WriteString(" struct {\n")
-		for i, elemType := range s.elemTypes {
-			result.WriteString("\t_")
-			result.WriteString(strconv.Itoa(i))
-			result.WriteString(" ")
-			result.WriteString(elemType)
-			result.WriteString("\n")
-		}
-		result.WriteString("}\n\n")
-	}
-
-	return result.String()
-}
-
-// generateStructDecls creates AST declaration nodes for tuple struct types.
-// This is used for AST-based struct insertion in Resolve().
-//
-// Note: We use a special position (1) for the Tok field to ensure go/printer
-// places the type keyword on the same line as the struct. Without position info,
-// go/printer may misplace comments between 'type' and the struct name.
-func (r *TupleTypeResolver) generateStructDecls() []goast.Decl {
-	var decls []goast.Decl
-
-	for _, s := range r.structs {
-		// Create struct fields with fresh positions
-		var fields []*goast.Field
-		for i, elemType := range s.elemTypes {
-			field := &goast.Field{
-				Names: []*goast.Ident{{Name: fmt.Sprintf("_%d", i)}},
-				Type:  &goast.Ident{Name: elemType},
-			}
-			fields = append(fields, field)
-		}
-
-		// Create struct type
-		structType := &goast.StructType{
-			Fields: &goast.FieldList{List: fields},
-		}
-
-		// Create type spec with fresh ident (no position info)
-		typeSpec := &goast.TypeSpec{
-			Name: &goast.Ident{Name: s.name},
-			Type: structType,
-		}
-
-		// Create GenDecl for type declaration
-		// Use TokPos=1 to give the type keyword a position, which helps
-		// go/printer format correctly without splitting 'type' from struct name
-		genDecl := &goast.GenDecl{
-			TokPos: 1,
-			Tok:    token.TYPE,
-			Specs:  []goast.Spec{typeSpec},
-		}
-
-		decls = append(decls, genDecl)
-	}
-
-	return decls
-}
-
-// insertStructsAfterImports inserts struct declarations after import declarations.
-// If there are no imports, structs are inserted at the beginning of declarations.
-func insertStructsAfterImports(decls []goast.Decl, structDecls []goast.Decl) []goast.Decl {
-	if len(structDecls) == 0 {
-		return decls
-	}
-
-	// Find the last import declaration
-	lastImportIdx := -1
-	for i, decl := range decls {
-		if genDecl, ok := decl.(*goast.GenDecl); ok && genDecl.Tok == token.IMPORT {
-			lastImportIdx = i
-		}
-	}
-
-	// Insert after imports (or at beginning if no imports)
-	insertIdx := lastImportIdx + 1
-
-	// Create new slice with capacity for all declarations
-	result := make([]goast.Decl, 0, len(decls)+len(structDecls))
-	result = append(result, decls[:insertIdx]...)
-	result = append(result, structDecls...)
-	result = append(result, decls[insertIdx:]...)
-
-	return result
-}

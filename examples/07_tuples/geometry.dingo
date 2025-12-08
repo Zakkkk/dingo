@@ -15,7 +15,7 @@ type BoundingBox = (Point2D, Point2D)
 
 // ParseCoordinates returns multiple related values
 // Without tuples, you'd need a struct or multiple returns
-func ParseCoordinates(input string) ((float64, float64), error) {
+func ParseCoordinates(input string) (Point2D, error) {
 	var x, y float64
 	_, err := fmt.Sscanf(input, "(%f,%f)", &x, &y)
 	if err != nil {

@@ -30,6 +30,167 @@ func NewTupleCodeGen() *TupleCodeGen {
 	}
 }
 
+// GenerateLiteral generates marker function call for tuple literal.
+//
+// Input: TupleLiteral AST node
+// Output: __tuple{N}__(elem1, elem2, ...)
+//
+// Example:
+//   (10, 20) → __tuple2__(10, 20)
+//   (a, b, c) → __tuple3__(a, b, c)
+//   ((1, 2), 3) → __tuple2__(__tuple2__(1, 2), 3)
+func (g *TupleCodeGen) GenerateLiteral(lit *ast.TupleLiteral) ast.CodeGenResult {
+	if lit == nil {
+		return ast.CodeGenResult{}
+	}
+
+	dingoStart := int(lit.Pos())
+	dingoEnd := int(lit.End())
+	outputStart := g.Buf.Len()
+
+	// Marker function: __tuple{N}__
+	elemCount := len(lit.Elements)
+	markerName := fmt.Sprintf("__tuple%d__", elemCount)
+	g.Write(markerName)
+	g.WriteByte('(')
+
+	// Generate elements
+	for i, elem := range lit.Elements {
+		if i > 0 {
+			g.Write(", ")
+		}
+
+		if elem.Nested != nil {
+			// Nested tuple - recursive generation
+			nestedGen := NewTupleCodeGen()
+			nestedResult := nestedGen.GenerateLiteral(elem.Nested)
+			g.Write(string(nestedResult.Output))
+		} else {
+			// Simple expression - pass through
+			g.Write(elem.Expr)
+		}
+	}
+
+	g.WriteByte(')')
+
+	// Create source mapping
+	outputEnd := g.Buf.Len()
+	result := g.Result()
+	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
+		dingoStart,
+		dingoEnd,
+		outputStart,
+		outputEnd,
+		"tuple_literal",
+	))
+
+	return result
+}
+
+// GenerateDestructure generates marker for tuple destructuring.
+//
+// Input: TupleDestructure AST node
+// Output: __tupleDest{N}__("name1", "name2", ..., expr)
+//
+// Wildcards are represented as "_" string literals.
+//
+// Example:
+//   let (x, y) = point → __tupleDest2__("x", "y", point)
+//   let (x, _) = pair → __tupleDest2__("x", "_", pair)
+//   let (x, _, z) = triple → __tupleDest3__("x", "_", "z", triple)
+func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeGenResult {
+	if dest == nil {
+		return ast.CodeGenResult{}
+	}
+
+	dingoStart := int(dest.Pos())
+	dingoEnd := int(dest.End())
+	outputStart := g.Buf.Len()
+
+	// Marker function: __tupleDest{N}__
+	elemCount := len(dest.Pattern)
+	markerName := fmt.Sprintf("__tupleDest%d__", elemCount)
+	g.Write(markerName)
+	g.WriteByte('(')
+
+	// Generate pattern as string literals
+	for i, elem := range dest.Pattern {
+		if i > 0 {
+			g.Write(", ")
+		}
+
+		// Quote the identifier name (including "_" for wildcards)
+		g.WriteByte('"')
+		g.Write(elem.Name)
+		g.WriteByte('"')
+	}
+
+	// Add the value expression
+	g.Write(", ")
+	g.Write(dest.Value)
+
+	g.WriteByte(')')
+
+	// Create source mapping
+	outputEnd := g.Buf.Len()
+	result := g.Result()
+	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
+		dingoStart,
+		dingoEnd,
+		outputStart,
+		outputEnd,
+		"tuple_destructure",
+	))
+
+	return result
+}
+
+// GenerateTypeAlias generates marker for tuple type alias.
+//
+// Input: Element types as strings
+// Output: __tupleType{N}__(type1, type2, ...)
+//
+// Example:
+//   ["int", "int"] → __tupleType2__(int, int)
+//   ["string", "int"] → __tupleType2__(string, int)
+func (g *TupleCodeGen) GenerateTypeAlias(elementTypes []string) ast.CodeGenResult {
+	if len(elementTypes) == 0 {
+		return ast.CodeGenResult{}
+	}
+
+	outputStart := g.Buf.Len()
+
+	// Marker function: __tupleType{N}__
+	elemCount := len(elementTypes)
+	markerName := fmt.Sprintf("__tupleType%d__", elemCount)
+	g.Write(markerName)
+	g.WriteByte('(')
+
+	// Generate type elements
+	for i, typeStr := range elementTypes {
+		if i > 0 {
+			g.Write(", ")
+		}
+		g.Write(typeStr)
+	}
+
+	g.WriteByte(')')
+
+	outputEnd := g.Buf.Len()
+	result := g.Result()
+
+	// Add mapping (positions are relative to output)
+	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
+		0, // Placeholder - caller should set actual dingo positions
+		0,
+		outputStart,
+		outputEnd,
+		"tuple_type_alias",
+	))
+
+	return result
+}
+
 // GenerateFromLocation generates marker code from a TupleLocation.
 //
 // This method dispatches to the appropriate generator based on the tuple kind.
@@ -196,25 +357,25 @@ func (g *TupleCodeGen) generateTypeAliasMarker(loc ast.TupleLocation, src []byte
 
 // generateFuncReturnMarker creates marker for function return tuple types.
 //
-// Example: func foo() (int, string) → struct { _0 int; _1 string }
+// Example: func foo() (int, string) → tuples.Tuple2[int, string]
 func (g *TupleCodeGen) generateFuncReturnMarker(loc ast.TupleLocation, src []byte) ([]byte, error) {
 	// For function return types, ElementsInfo should be populated by finder
 	if len(loc.ElementsInfo) == 0 {
 		return nil, fmt.Errorf("ElementsInfo not populated for func return tuple")
 	}
 
-	// Generate anonymous struct directly (can't use markers in type position)
+	// Generate generic tuple type directly (can't use markers in type position)
 	var result strings.Builder
-	result.WriteString("struct { ")
+	result.WriteString(fmt.Sprintf("tuples.Tuple%d[", len(loc.ElementsInfo)))
 
 	for i, elem := range loc.ElementsInfo {
 		if i > 0 {
-			result.WriteString("; ")
+			result.WriteString(", ")
 		}
-		result.WriteString(fmt.Sprintf("_%d %s", i, elem.Name))
+		result.WriteString(elem.Name)
 	}
 
-	result.WriteString(" }")
+	result.WriteByte(']')
 
 	return []byte(result.String()), nil
 }

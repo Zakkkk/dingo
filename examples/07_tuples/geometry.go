@@ -3,61 +3,37 @@
 package main
 
 import (
+	"github.com/MadAppGang/dingo/runtime/tuples"
 	"fmt"
 	"math"
 )
 
-type Tuple2Float64Float64 struct {
-	_0 float64
-	_1 float64
-}
-type Tuple2AnyAny struct {
-	_0 struct {
-		_0 float64
-		_1 float64
-	}
-	_1 struct {
-		_0 float64
-		_1 float64
-	}
-}
-
 // Point2D as a tuple - no need for a full struct definition
-type Point2D = struct {
-	_0 float64
-	_1 float64
-}
+type Point2D = tuples.Tuple2[float64, float64]
 
 // Bounding box as nested tuples: ((minX, minY), (maxX, maxY))
-type BoundingBox = struct {
-	_0 Point2D
-	_1 Point2D
-}
+type BoundingBox = tuples.Tuple2[Point2D, Point2D]
 
 // ParseCoordinates returns multiple related values
 // Without tuples, you'd need a struct or multiple returns
-func ParseCoordinates(input string) (struct {
-	_0 float64
-	_1 float64
-}, error) {
+func ParseCoordinates(input string) (Point2D, error) {
 	var x, y float64
 	_, err := fmt.Sscanf(input, "(%f,%f)", &x, &y)
 	if err != nil {
-		return Tuple2Float64Float64{_0: 0.0, _1: 0.0}, err
+		return tuples.Tuple2[float64, float64]{First: 0.0, Second: 0.0}, err
 	}
-	return Tuple2Float64Float64{_0: x, _1: y}, nil
+	return tuples.Tuple2[float64, float64]{First: x, Second: y}, nil
 }
 
 // Distance calculates distance between two points
 func Distance(p1 Point2D, p2 Point2D) float64 {
-	tmp :=
-		// Tuple destructuring
-		p1
-	x1 := tmp._0
-	y1 := tmp._1
+	// Tuple destructuring
+	tmp := p1
+	x1 := tmp.First
+	y1 := tmp.Second
 	tmp1 := p2
-	x2 := tmp1._0
-	y2 := tmp1._1
+	x2 := tmp1.First
+	y2 := tmp1.Second
 
 	dx := x2 - x1
 	dy := y2 - y1
@@ -67,30 +43,31 @@ func Distance(p1 Point2D, p2 Point2D) float64 {
 // Midpoint returns the point between two points
 func Midpoint(p1 Point2D, p2 Point2D) Point2D {
 	tmp2 := p1
-	x1 := tmp2._0
-	y1 := tmp2._1
+	x1 := tmp2.First
+	y1 := tmp2.Second
 	tmp3 := p2
-	x2 := tmp3._0
-	y2 := tmp3._1
-	return Tuple2Float64Float64{_0: (x1 + x2) / 2, _1: (y1 + y2) / 2}
+	x2 := tmp3.First
+	y2 := tmp3.Second
+	return tuples.Tuple2[float64, float64]{First: (x1 + x2) / 2, Second: (y1 + y2) / 2}
 }
 
 // CalculateBoundingBox finds the bounding box for a set of points
 func CalculateBoundingBox(points []Point2D) BoundingBox {
 	if len(points) == 0 {
-		return Tuple2AnyAny{_0: Tuple2Float64Float64{_0: 0.0, _1: 0.0}, _1: Tuple2Float64Float64{_0: 0.0, _1: 0.0}}
+		return tuples.Tuple2[tuples.Tuple2[float64, float64], tuples.Tuple2[float64, float64]]{First: tuples.Tuple2[float64, float64]{First: 0.0, Second: 0.0}, Second: tuples.Tuple2[float64, float64]{First: 0.0, Second: 0.0}}
 	}
+
 	tmp4 := points[0]
-	minX := tmp4._0
-	minY := tmp4._1
+	minX := tmp4.First
+	minY := tmp4.Second
 	tmp5 := points[0]
-	maxX := tmp5._0
-	maxY := tmp5._1
+	maxX := tmp5.First
+	maxY := tmp5.Second
 
 	for _, point := range points {
 		tmp6 := point
-		x := tmp6._0
-		y := tmp6._1
+		x := tmp6.First
+		y := tmp6.Second
 		if x < minX {
 			minX = x
 		}
@@ -105,7 +82,7 @@ func CalculateBoundingBox(points []Point2D) BoundingBox {
 		}
 	}
 
-	return Tuple2AnyAny{_0: Tuple2Float64Float64{_0: minX, _1: minY}, _1: Tuple2Float64Float64{_0: maxX, _1: maxY}}
+	return tuples.Tuple2[tuples.Tuple2[float64, float64], tuples.Tuple2[float64, float64]]{First: tuples.Tuple2[float64, float64]{First: minX, Second: minY}, Second: tuples.Tuple2[float64, float64]{First: maxX, Second: maxY}}
 }
 
 // TransformPoints applies a transformation to all points
@@ -119,13 +96,18 @@ func TransformPoints(points []Point2D, transform func(Point2D) Point2D) []Point2
 
 func main() {
 	// Create points using tuple syntax
-	points := []Point2D{Tuple2Float64Float64{_0: 0.0, _1: 0.0}, Tuple2Float64Float64{_0: 3.0, _1: 4.0}, Tuple2Float64Float64{_0: 6.0, _1: 0.0}, Tuple2Float64Float64{_0: 3.0, _1: -2.0}}
+	points := []Point2D{
+		tuples.Tuple2[float64, float64]{First: 0.0, Second: 0.0},
+		tuples.Tuple2[float64, float64]{First: 3.0, Second: 4.0},
+		tuples.Tuple2[float64, float64]{First: 6.0, Second: 0.0},
+		tuples.Tuple2[float64, float64]{First: 3.0, Second: -2.0},
+	}
 
 	fmt.Println("=== Points ===")
 	for i, p := range points {
 		tmp7 := p
-		x := tmp7._0
-		y := tmp7._1
+		x := tmp7.First
+		y := tmp7.Second
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 
@@ -136,32 +118,32 @@ func main() {
 	// Find midpoint
 	mid := Midpoint(points[0], points[2])
 	tmp8 := mid
-	mx := tmp8._0
-	my := tmp8._1
+	mx := tmp8.First
+	my := tmp8.Second
 	fmt.Printf("Midpoint P0-P2: (%.1f, %.1f)\n", mx, my)
 
 	// Calculate bounding box
 	bbox := CalculateBoundingBox(points)
 	tmp9 := bbox
-	minX := tmp9._0._0
-	minY := tmp9._0._1
-	maxX := tmp9._1._0
-	maxY := tmp9._1._1
+	minX := tmp9.First.First
+	minY := tmp9.First.Second
+	maxX := tmp9.Second.First
+	maxY := tmp9.Second.Second
 	fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
 
 	// Transform all points (scale by 2)
 	scaled := TransformPoints(points, func(p Point2D) Point2D {
 		tmp10 := p
-		x := tmp10._0
-		y := tmp10._1
-		return Tuple2Float64Float64{_0: x * 2, _1: y * 2}
+		x := tmp10.First
+		y := tmp10.Second
+		return tuples.Tuple2[float64, float64]{First: x * 2, Second: y * 2}
 	})
 
 	fmt.Println("\n=== Scaled Points (2x) ===")
 	for i, p := range scaled {
 		tmp11 := p
-		x := tmp11._0
-		y := tmp11._1
+		x := tmp11.First
+		y := tmp11.Second
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 }
