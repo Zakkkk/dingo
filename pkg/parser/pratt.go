@@ -678,7 +678,9 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	}
 
 	// Try parsing as ternary: parse true branch expression
-	trueExpr := p.ParseExpression(PrecTernary)
+	// Use higher precedence (PrecTernary + 1) to prevent consuming the colon
+	// This ensures the true branch doesn't try to parse as another ternary
+	trueExpr := p.ParseExpression(PrecTernary + 1)
 
 	// Check for colon to confirm ternary
 	if p.peekTokenIs(tokenizer.COLON) {
@@ -686,9 +688,11 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 		colonPos := p.curToken.Pos
 		p.nextToken() // consume :
 
-		// Right-associative: parse false branch at same precedence
+		// Right-associative: parse false branch at lower precedence
 		// This makes a ? b : c ? d : e parse as a ? b : (c ? d : e)
-		falseExpr := p.ParseExpression(PrecTernary)
+		// Use PrecTernary - 1 so the loop condition (minPrec < peekPrec) allows
+		// the next ternary to bind: (PrecTernary - 1) < PrecTernary = true
+		falseExpr := p.ParseExpression(PrecTernary - 1)
 
 		return &ast.TernaryExpr{
 			Cond:     left,
@@ -735,8 +739,8 @@ func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
 	rightStr := p.exprToString(right)
 
 	return &ast.RawExpr{
-		StartPos: opToken.Pos,
-		EndPos:   opToken.End,
+		StartPos: left.Pos(),
+		EndPos:   right.End(),
 		Text:     leftStr + " " + opToken.Lit + " " + rightStr,
 	}
 }

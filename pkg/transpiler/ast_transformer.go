@@ -70,7 +70,7 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 
 		// Handle expression types based on kind
 		switch loc.Kind {
-		case ast.ExprMatch, ast.ExprLambdaRust, ast.ExprLambdaTS, ast.ExprNullCoalesce, ast.ExprSafeNav:
+		case ast.ExprMatch, ast.ExprLambdaRust, ast.ExprLambdaTS, ast.ExprNullCoalesce, ast.ExprSafeNav, ast.ExprTernary:
 			// Expression-level transformation (supported types)
 		default:
 			// Unknown expression kind - skip
@@ -106,9 +106,9 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 				loc.Context == ast.ContextArgument
 		}
 
-		// Generate Go code with context for null coalesce/safe nav/match (human-like output)
+		// Generate Go code with context for null coalesce/safe nav/match/ternary (human-like output)
 		var genResult ast.CodeGenResult
-		if (loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav || loc.Kind == ast.ExprMatch) &&
+		if (loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav || loc.Kind == ast.ExprMatch || loc.Kind == ast.ExprTernary) &&
 			(loc.Context == ast.ContextReturn || loc.Context == ast.ContextAssignment || loc.Context == ast.ContextArgument) {
 			// Create context for human-like code generation
 			ctx := &codegen.GenContext{

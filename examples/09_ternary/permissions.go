@@ -1,15 +1,13 @@
-// Ternary Operator Example (Coming in Phase 3)
+// Ternary Operator Example
 //
-// Dingo will support C-style ternary expressions:
+// Dingo supports C-style ternary expressions:
 //
 //	condition ? valueIfTrue : valueIfFalse
 //
-// This transforms to a Go IIFE:
-//
-//	func() T { if condition { return valueIfTrue }; return valueIfFalse }()
-//
-// STATUS: Parser support planned for Phase 3
-// For now, use if/else or match expressions for inline conditionals.
+// Context-aware code generation produces human-readable Go:
+//   - Return context: if cond { return a }; return b
+//   - Assignment context: var x T; if cond { x = a } else { x = b }
+//   - Nested ternary: chained if/else statements
 package main
 
 import "fmt"
@@ -21,35 +19,16 @@ type User struct {
 	Verified bool
 }
 
-// === PLANNED SYNTAX (Phase 3) ===
-//
-// Simple ternary:
-//   status := user.IsAdmin ? "admin" : "user"
-//
-// Nested ternary:
-//   level := age >= 65 ? "senior" : age >= 18 ? "adult" : "minor"
-//
-// With function calls:
-//   result := isValid() ? getValue() : getDefault()
-
-// === CURRENT APPROACH: Use if/else ===
-
 // GetUserStatus returns status based on admin flag
 func GetUserStatus(user User) string {
-	// When ternary is available:
-	//   return user.IsAdmin ? "Administrator" : "Standard User"
-
 	if user.IsAdmin {
 		return "Administrator"
 	}
 	return "Standard User"
 }
 
-// GetAgeCategory returns category based on age
+// GetAgeCategory returns category based on age (nested ternary)
 func GetAgeCategory(age int) string {
-	// When ternary is available:
-	//   return age >= 65 ? "Senior" : age >= 18 ? "Adult" : "Minor"
-
 	if age >= 65 {
 		return "Senior"
 	}
@@ -61,20 +40,14 @@ func GetAgeCategory(age int) string {
 
 // GetDisplayName returns formatted name with optional badge
 func GetDisplayName(user User) string {
-	// When ternary is available:
-	//   return user.Verified ? fmt.Sprintf("%s ✓", user.Name) : user.Name
-
 	if user.Verified {
 		return fmt.Sprintf("%s ✓", user.Name)
 	}
 	return user.Name
 }
 
-// GetAccessLevel returns numeric access level
+// GetAccessLevel returns numeric access level (nested ternary with int)
 func GetAccessLevel(isAdmin bool, isVerified bool) int {
-	// When ternary is available:
-	//   return isAdmin ? 100 : isVerified ? 50 : 10
-
 	if isAdmin {
 		return 100
 	}
@@ -86,7 +59,6 @@ func GetAccessLevel(isAdmin bool, isVerified bool) int {
 
 func main() {
 	fmt.Println("=== Ternary Operator Example ===")
-	fmt.Println("(Syntax coming in Phase 3)\n")
 
 	admin := User{Name: "Alice", Age: 30, IsAdmin: true, Verified: true}
 	user := User{Name: "Bob", Age: 25, IsAdmin: false, Verified: true}

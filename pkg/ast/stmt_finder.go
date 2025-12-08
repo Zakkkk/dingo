@@ -39,6 +39,50 @@ type StmtLocation struct {
 	LambdaBodyEnd   int           // End byte position of lambda body
 }
 
+// findMatchingColonForErrorProp looks ahead from questionIdx to find a matching : at the same depth.
+// Returns the index of the colon token, or -1 if no matching colon is found.
+// This is used to distinguish ternary operators (? ... :) from error propagation (?).
+func findMatchingColonForErrorProp(tokens []tokenizer.Token, questionIdx int) int {
+	depth := 0
+	ternaryDepth := 0 // Track nested ternaries
+	for i := questionIdx + 1; i < len(tokens); i++ {
+		tok := tokens[i]
+		switch tok.Kind {
+		case tokenizer.LPAREN, tokenizer.LBRACKET, tokenizer.LBRACE:
+			depth++
+		case tokenizer.RPAREN, tokenizer.RBRACKET, tokenizer.RBRACE:
+			depth--
+			if depth < 0 {
+				// Hit closing delimiter of containing expression
+				return -1
+			}
+		case tokenizer.QUESTION:
+			// Check if this is a ternary ? (not ?? or ?.)
+			if i+1 < len(tokens) {
+				next := tokens[i+1]
+				if next.Kind != tokenizer.QUESTION && next.Kind != tokenizer.DOT {
+					// Nested ternary
+					ternaryDepth++
+				}
+			}
+		case tokenizer.COLON:
+			if depth == 0 {
+				if ternaryDepth > 0 {
+					// This colon closes a nested ternary
+					ternaryDepth--
+				} else {
+					// Found matching colon for our ? at depth 0
+					return i
+				}
+			}
+		case tokenizer.SEMICOLON, tokenizer.NEWLINE, tokenizer.EOF:
+			// Statement boundary - no matching colon
+			return -1
+		}
+	}
+	return -1
+}
+
 // FindErrorPropStatements finds statements containing error propagation
 func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 	tok := tokenizer.New(src)
@@ -123,6 +167,14 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 				}
 			}
 			if depth == 0 {
+				// CRITICAL: Check if this is a ternary operator (has matching :)
+				// Ternaries should NOT be treated as error propagation
+				colonIdx := findMatchingColonForErrorProp(tokens, i)
+				if colonIdx > i {
+					// This is a ternary expression, not error propagation
+					continue
+				}
+
 				// Found ? at statement level - check for advanced patterns
 				exprStart := findExprStart(tokens, startIdx, i)
 				loc := &StmtLocation{

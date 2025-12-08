@@ -16,6 +16,7 @@ const (
 	ExprErrorProp                    // expr?
 	ExprNullCoalesce                 // expr ?? default
 	ExprSafeNav                      // expr?.field
+	ExprTernary                      // cond ? a : b
 )
 
 // String returns string representation of ExprKind
@@ -33,6 +34,8 @@ func (k ExprKind) String() string {
 		return "null_coalesce"
 	case ExprSafeNav:
 		return "safe_nav"
+	case ExprTernary:
+		return "ternary"
 	default:
 		return fmt.Sprintf("ExprKind(%d)", k)
 	}
@@ -225,8 +228,8 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 			}
 		}
 
-		// Error propagation: expr?
-		// Must distinguish from ?? (null coalesce) and ?. (safe nav)
+		// Ternary operator: cond ? trueVal : falseVal
+		// Check FIRST before error propagation, since we can distinguish by looking for :
 		if current.Kind == tokenizer.QUESTION {
 			next := tok.PeekToken()
 			// Only standalone ? (not ?? or ?.)
@@ -241,15 +244,45 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 				}
 
 				if currentIdx > 0 {
-					// Find operand start by scanning backward
-					operandStart := findOperandStart(allTokens, currentIdx, src)
+					// Look ahead to see if there's a matching :
+					colonIdx := findMatchingColon(allTokens, currentIdx)
+					if colonIdx > currentIdx {
+						// This is a ternary! Find the full expression boundaries
+						// Condition starts before ?
+						condStart := findTernaryCondStart(allTokens, currentIdx, src)
+						// False expression ends after :
+						falseEnd := findTernaryFalseEnd(allTokens, colonIdx, src)
 
-					locations = append(locations, ExprLocation{
-						Kind:    ExprErrorProp,
-						Start:   operandStart,
-						End:     current.ByteEnd(), // After the ?
-						Context: detectContext(src, operandStart),
-					})
+						// Get context
+						ctxInfo := detectContextFromTokens(allTokens, findTokenIdxForBytePos(allTokens, condStart), falseEnd)
+
+						locations = append(locations, ExprLocation{
+							Kind:           ExprTernary,
+							Start:          condStart,
+							End:            falseEnd,
+							Context:        ctxInfo.Context,
+							StatementStart: ctxInfo.StatementStart,
+							StatementEnd:   ctxInfo.StatementEnd,
+							VarName:        ctxInfo.VarName,
+						})
+						// Skip past this ternary
+						tok.Reset()
+						for tok.Current().BytePos() < falseEnd && tok.Current().Kind != tokenizer.EOF {
+							tok.Advance()
+						}
+						continue
+					} else {
+						// No matching colon, must be error propagation
+						// Find operand start by scanning backward
+						operandStart := findOperandStart(allTokens, currentIdx, src)
+
+						locations = append(locations, ExprLocation{
+							Kind:    ExprErrorProp,
+							Start:   operandStart,
+							End:     current.ByteEnd(), // After the ?
+							Context: detectContext(src, operandStart),
+						})
+					}
 				}
 			}
 		}
@@ -924,3 +957,256 @@ func findSafeNavEnd(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, start
 		tok.Advance()
 	}
 }
+
+
+// findMatchingColon looks ahead from questionIdx to find a : token that matches this ? for ternary
+// Returns the token index of the matching :, or -1 if not found
+func findMatchingColon(tokens []tokenizer.Token, questionIdx int) int {
+	if questionIdx >= len(tokens)-1 {
+		return -1
+	}
+
+	// Track nesting depth to handle nested ternaries and other structures
+	depth := 0
+	parenDepth := 0
+	braceDepth := 0
+	bracketDepth := 0
+
+	for i := questionIdx + 1; i < len(tokens); i++ {
+		tok := tokens[i]
+
+		switch tok.Kind {
+		case tokenizer.LPAREN:
+			parenDepth++
+		case tokenizer.RPAREN:
+			parenDepth--
+		case tokenizer.LBRACE:
+			braceDepth++
+		case tokenizer.RBRACE:
+			braceDepth--
+			// If we hit } at depth 0, we're leaving the statement
+			if braceDepth < 0 {
+				return -1
+			}
+		case tokenizer.LBRACKET:
+			bracketDepth++
+		case tokenizer.RBRACKET:
+			bracketDepth--
+		case tokenizer.QUESTION:
+			// Nested ternary - increase depth
+			if i+1 < len(tokens) {
+				next := tokens[i+1]
+				if next.Kind != tokenizer.QUESTION && next.Kind != tokenizer.DOT {
+					depth++
+				}
+			}
+		case tokenizer.COLON:
+			// Check if this colon is at our depth level
+			if depth == 0 && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 {
+				// Found the matching colon!
+				return i
+			}
+			// If depth > 0, this belongs to a nested ternary
+			if depth > 0 {
+				depth--
+			} else {
+				// Colon in wrong context (like case:, struct field, etc.)
+				return -1
+			}
+		case tokenizer.SEMICOLON, tokenizer.COMMA:
+			// Statement/argument terminators at depth 0 mean no matching colon
+			if depth == 0 && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 {
+				return -1
+			}
+		case tokenizer.EOF:
+			return -1
+		}
+	}
+
+	return -1
+}
+
+// findTernaryCondStart scans backward from questionIdx to find where the condition starts
+func findTernaryCondStart(tokens []tokenizer.Token, questionIdx int, src []byte) int {
+	if questionIdx == 0 {
+		return 0
+	}
+
+	// Walk backward, tracking balanced delimiters
+	depth := 0
+	start := questionIdx - 1
+
+	for start >= 0 {
+		tok := tokens[start]
+
+		switch tok.Kind {
+		case tokenizer.RPAREN, tokenizer.RBRACKET:
+			depth++
+		case tokenizer.LPAREN, tokenizer.LBRACKET:
+			depth--
+			if depth < 0 {
+				return tokens[start+1].BytePos()
+			}
+		case tokenizer.DOT, tokenizer.QUESTION_DOT:
+			// Part of chain, continue backward
+		case tokenizer.IDENT, tokenizer.INT, tokenizer.FLOAT, tokenizer.STRING, tokenizer.CHAR, tokenizer.TRUE, tokenizer.FALSE, tokenizer.NIL:
+			// Keep scanning if at depth > 0
+			if depth == 0 {
+				// Check if previous token suggests this is part of larger expr
+				if start > 0 {
+					prev := tokens[start-1]
+					if prev.Kind != tokenizer.DOT && prev.Kind != tokenizer.QUESTION_DOT &&
+						!isOperator(prev.Kind) {
+						return tok.BytePos()
+					}
+				} else {
+					return tok.BytePos()
+				}
+			}
+		default:
+			// At depth 0, most other tokens end the backward scan
+			if depth == 0 {
+				// Binary operators are part of the condition
+				if isOperator(tok.Kind) {
+					// Continue scanning
+				} else if isBoundary(tok.Kind) {
+					return tokens[start+1].BytePos()
+				}
+			}
+		}
+
+		start--
+	}
+
+	// Reached beginning
+	if start < 0 && len(tokens) > 0 {
+		return tokens[0].BytePos()
+	}
+	return 0
+}
+
+// findTernaryFalseEnd scans forward from colonIdx to find where the false expression ends
+func findTernaryFalseEnd(tokens []tokenizer.Token, colonIdx int, src []byte) int {
+	if colonIdx >= len(tokens)-1 {
+		return tokens[colonIdx].ByteEnd()
+	}
+
+	// Walk forward, tracking balanced delimiters and nested ternaries
+	depth := 0
+	ternaryDepth := 0 // Track nested ternary depth
+	i := colonIdx + 1
+
+	for i < len(tokens) {
+		tok := tokens[i]
+
+		switch tok.Kind {
+		case tokenizer.LPAREN, tokenizer.LBRACKET, tokenizer.LBRACE:
+			depth++
+		case tokenizer.RPAREN, tokenizer.RBRACKET:
+			depth--
+			if depth < 0 {
+				return tokens[i-1].ByteEnd()
+			}
+		case tokenizer.RBRACE:
+			depth--
+			if depth < 0 {
+				return tokens[i-1].ByteEnd()
+			}
+		case tokenizer.QUESTION:
+			// Check if this is a ternary ? (not ?? or ?.)
+			if i+1 < len(tokens) {
+				next := tokens[i+1]
+				if next.Kind != tokenizer.QUESTION && next.Kind != tokenizer.DOT {
+					// Nested ternary - increase depth
+					ternaryDepth++
+				}
+			}
+		case tokenizer.COLON:
+			// Check if this colon belongs to a nested ternary or is a boundary
+			if ternaryDepth > 0 {
+				// This colon closes a nested ternary
+				ternaryDepth--
+			} else if depth == 0 {
+				// Colon at depth 0 and no nested ternary - could be case label or struct tag
+				// This ends our expression
+				return tokens[i-1].ByteEnd()
+			}
+		case tokenizer.SEMICOLON, tokenizer.COMMA:
+			if depth == 0 && ternaryDepth == 0 {
+				return tokens[i-1].ByteEnd()
+			}
+		case tokenizer.EOF:
+			if i > 0 {
+				return tokens[i-1].ByteEnd()
+			}
+			return tok.BytePos()
+		case tokenizer.NEWLINE:
+			// Newline at depth 0 and no nested ternary ends the expression
+			if depth == 0 && ternaryDepth == 0 {
+				return tokens[i-1].ByteEnd()
+			}
+		default:
+			// For non-delimiters, check if we're still in expression
+			if depth == 0 && ternaryDepth == 0 {
+				// Check for expression terminators
+				if isBoundary(tok.Kind) {
+					if i > colonIdx+1 {
+						return tokens[i-1].ByteEnd()
+					}
+				}
+			}
+		}
+
+		i++
+	}
+
+	// End of tokens
+	if i > 0 && i < len(tokens) {
+		return tokens[i-1].ByteEnd()
+	} else if len(tokens) > colonIdx {
+		return tokens[len(tokens)-1].ByteEnd()
+	}
+	return 0
+}
+
+// findTokenIdxForBytePos finds the token index for a given byte position
+func findTokenIdxForBytePos(tokens []tokenizer.Token, bytePos int) int {
+	for i, t := range tokens {
+		if t.BytePos() == bytePos {
+			return i
+		}
+		if t.BytePos() > bytePos {
+			if i > 0 {
+				return i - 1
+			}
+			return 0
+		}
+	}
+	if len(tokens) > 0 {
+		return len(tokens) - 1
+	}
+	return 0
+}
+
+// isOperator returns true if token is a binary operator
+func isOperator(kind tokenizer.TokenKind) bool {
+	switch kind {
+	case tokenizer.PLUS, tokenizer.MINUS, tokenizer.STAR, tokenizer.SLASH,
+		tokenizer.AND, tokenizer.OR, tokenizer.EQ,
+		tokenizer.NE, tokenizer.LT, tokenizer.GT, tokenizer.LE, tokenizer.GE,
+		tokenizer.QUESTION_QUESTION:
+		return true
+	}
+	return false
+}
+
+// isBoundary returns true if token marks a boundary that ends an expression
+func isBoundary(kind tokenizer.TokenKind) bool {
+	switch kind {
+	case tokenizer.SEMICOLON, tokenizer.COMMA, tokenizer.LBRACE, tokenizer.RBRACE,
+		tokenizer.COLON, tokenizer.EOF:
+		return true
+	}
+	return false
+}
+

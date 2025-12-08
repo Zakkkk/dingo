@@ -1,18 +1,22 @@
 package codegen
 
 import (
-	goast "go/ast"
-	"go/printer"
-	"go/token"
-
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
-// TernaryCodeGen generates Go IIFE from Dingo ternary expressions.
+// TernaryCodeGen generates Go code from Dingo ternary expressions.
 //
 // Transforms:
 //   cond ? trueVal : falseVal
-// To:
+//
+// With context (return):
+//   if cond { return trueVal }
+//   return falseVal
+//
+// With context (assignment):
+//   if cond { x = trueVal } else { x = falseVal }
+//
+// Without context (IIFE):
 //   func() T { if cond { return trueVal }; return falseVal }()
 //
 // Handles:
@@ -22,10 +26,125 @@ import (
 //   - Source mappings for LSP support
 type TernaryCodeGen struct {
 	*BaseGenerator
-	expr *ast.TernaryExpr
+	expr    *ast.TernaryExpr
+	Context *GenContext // Optional context for human-like code generation
 }
 
 // Generate produces Go code for the ternary expression.
+//
+// Output varies based on context:
+//   - Return context: if cond { return trueVal }; return falseVal
+//   - Assignment context: if cond { x = trueVal } else { x = falseVal }
+//   - IIFE (default): func() T { if cond { return trueVal }; return falseVal }()
+//
+// Source mappings track:
+//   - Ternary start position → entire generated code
+func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
+	if g.expr == nil {
+		return ast.CodeGenResult{}
+	}
+
+	// Check if we have context for human-like generation
+	if g.Context != nil && g.Context.Context == ast.ContextReturn {
+		return g.generateReturnContext()
+	}
+
+	if g.Context != nil && g.Context.Context == ast.ContextAssignment {
+		return g.generateAssignmentContext()
+	}
+
+	// Default: generate IIFE
+	return g.generateIIFE()
+}
+
+// generateReturnContext generates code for return statement context.
+//
+// Input:  return cond ? trueVal : falseVal
+// Output: if cond { return trueVal }
+//         return falseVal
+//
+// For nested ternaries in the false branch, recursively applies return context.
+func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
+	dingoStart := int(g.expr.Pos())
+	dingoEnd := int(g.expr.End())
+
+	// Mark this as statement-level output (not expression replacement)
+	var stmt []byte
+
+	// if cond {
+	stmt = append(stmt, []byte("if ")...)
+	stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	stmt = append(stmt, []byte(" {\n    return ")...)
+
+	// return trueVal
+	stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	stmt = append(stmt, []byte("\n}\n")...)
+
+	// Check if false branch is nested ternary - if so, use return context recursively
+	if nestedTernary, ok := g.expr.False.(*ast.TernaryExpr); ok {
+		// Recursively generate with return context
+		nestedGen := &TernaryCodeGen{
+			BaseGenerator: g.BaseGenerator,
+			expr:          nestedTernary,
+			Context:       g.Context, // Propagate return context
+		}
+		nestedResult := nestedGen.Generate()
+		stmt = append(stmt, nestedResult.StatementOutput...)
+	} else {
+		// Simple value: return falseVal
+		stmt = append(stmt, []byte("return ")...)
+		stmt = append(stmt, g.exprToBytes(g.expr.False, g.expr.FalseStr)...)
+	}
+
+	result := ast.CodeGenResult{
+		StatementOutput: stmt,
+		Mappings: []ast.SourceMapping{
+			ast.NewSourceMapping(dingoStart, dingoEnd, 0, len(stmt), "ternary"),
+		},
+	}
+
+	return result
+}
+
+// generateAssignmentContext generates code for assignment context.
+//
+// Input:  x := cond ? trueVal : falseVal
+// Output: var x TYPE
+//         if cond { x = trueVal } else { x = falseVal }
+func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
+	dingoStart := int(g.expr.Pos())
+	dingoEnd := int(g.expr.End())
+
+	var stmt []byte
+
+	// if cond {
+	stmt = append(stmt, []byte("if ")...)
+	stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	stmt = append(stmt, []byte(" {\n    ")...)
+	stmt = append(stmt, []byte(g.Context.VarName)...)
+	stmt = append(stmt, []byte(" = ")...)
+
+	// x = trueVal
+	stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	stmt = append(stmt, []byte("\n} else {\n    ")...)
+	stmt = append(stmt, []byte(g.Context.VarName)...)
+	stmt = append(stmt, []byte(" = ")...)
+
+	// x = falseVal
+	stmt = append(stmt, g.exprToBytes(g.expr.False, g.expr.FalseStr)...)
+	stmt = append(stmt, []byte("\n}")...)
+
+	result := ast.CodeGenResult{
+		StatementOutput: stmt,
+		Mappings: []ast.SourceMapping{
+			ast.NewSourceMapping(dingoStart, dingoEnd, 0, len(stmt), "ternary"),
+		},
+	}
+
+	return result
+}
+
+// generateIIFE generates an IIFE (Immediately Invoked Function Expression).
 //
 // Output format:
 //   func() T {
@@ -34,15 +153,7 @@ type TernaryCodeGen struct {
 //       }
 //       return falseVal
 //   }()
-//
-// Source mappings track:
-//   - Ternary start position → entire generated IIFE
-func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
-	if g.expr == nil {
-		return ast.CodeGenResult{}
-	}
-
-	// Track start position
+func (g *TernaryCodeGen) generateIIFE() ast.CodeGenResult {
 	dingoStart := int(g.expr.Pos())
 	dingoEnd := int(g.expr.End())
 	outputStart := g.Buf.Len()
@@ -58,7 +169,7 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 
 	// IIFE body
 	g.Write(" {\n")
-	g.generateBody()
+	g.generateIIFEBody()
 	g.Write("}()")
 
 	// Create mapping from ternary to generated IIFE
@@ -76,14 +187,14 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 	return result
 }
 
-// generateBody generates the if/return body of the IIFE.
+// generateIIFEBody generates the if/return body of the IIFE.
 //
 // Format:
 //     if cond {
 //         return trueVal
 //     }
 //     return falseVal
-func (g *TernaryCodeGen) generateBody() {
+func (g *TernaryCodeGen) generateIIFEBody() {
 	// if cond {
 	g.Write("    if ")
 	g.writeExpr(g.expr.Cond, g.expr.CondStr)
@@ -101,16 +212,51 @@ func (g *TernaryCodeGen) generateBody() {
 }
 
 // writeExpr writes an expression, preferring AST if available, falling back to string.
-func (g *TernaryCodeGen) writeExpr(expr goast.Expr, fallback string) {
+// Handles nested ternaries by recursively generating their IIFE code.
+func (g *TernaryCodeGen) writeExpr(expr ast.Expr, fallback string) {
 	if expr != nil {
-		// Use go/printer to format the AST expression
-		fset := token.NewFileSet()
-		if err := printer.Fprint(&g.Buf, fset, expr); err != nil {
-			// Fallback to string if printing fails
-			g.Write(fallback)
+		// Special case: nested ternary expression
+		if nestedTernary, ok := expr.(*ast.TernaryExpr); ok {
+			// Inherit result type from parent if not set
+			if nestedTernary.ResultType == "" {
+				nestedTernary.ResultType = g.expr.ResultType
+			}
+			// Recursively generate IIFE for nested ternary
+			nestedGen := &TernaryCodeGen{
+				BaseGenerator: g.BaseGenerator,
+				expr:          nestedTernary,
+			}
+			result := nestedGen.generateIIFE()
+			g.Buf.Write(result.Output)
+			return
 		}
+		// Use Dingo AST String() method
+		g.Write(expr.String())
 	} else {
 		// Legacy path: use string representation
 		g.Write(fallback)
 	}
+}
+
+// exprToBytes converts an expression to bytes, preferring AST if available.
+// Handles nested ternaries by recursively generating their IIFE code.
+func (g *TernaryCodeGen) exprToBytes(expr ast.Expr, fallback string) []byte {
+	if expr != nil {
+		// Special case: nested ternary expression
+		if nestedTernary, ok := expr.(*ast.TernaryExpr); ok {
+			// Inherit result type from parent if not set
+			if nestedTernary.ResultType == "" {
+				nestedTernary.ResultType = g.expr.ResultType
+			}
+			// Recursively generate IIFE for nested ternary
+			nestedGen := &TernaryCodeGen{
+				BaseGenerator: g.BaseGenerator,
+				expr:          nestedTernary,
+			}
+			result := nestedGen.generateIIFE()
+			return result.Output
+		}
+		return []byte(expr.String())
+	}
+	return []byte(fallback)
 }

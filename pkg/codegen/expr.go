@@ -59,6 +59,12 @@ func GenerateExprWithContext(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 			gen.Context = ctx
 		}
 		return gen.Generate()
+	case *ast.TernaryExpr:
+		gen := NewTernaryCodeGen(e)
+		if ctx != nil {
+			gen.Context = ctx
+		}
+		return gen.Generate()
 	default:
 		// For other expression types, use standard generation
 		return GenerateExpr(expr)
@@ -141,7 +147,7 @@ func NewErrorPropCodeGen(e *ast.ErrorPropExpr) Generator {
 
 // NewTernaryCodeGen creates a ternary operator codegen (ternary.go)
 // Implementation in ternary.go
-func NewTernaryCodeGen(e *ast.TernaryExpr) Generator {
+func NewTernaryCodeGen(e *ast.TernaryExpr) *TernaryCodeGen {
 	return &TernaryCodeGen{
 		BaseGenerator: NewBaseGenerator(),
 		expr:          e,
