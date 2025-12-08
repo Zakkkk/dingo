@@ -11,40 +11,50 @@ import (
 
 // Precedence levels for operators (higher = tighter binding)
 const (
-	PrecLowest      = iota
-	PrecTernary     // ? : (ternary)
-	PrecNullCoal    // ?? (null coalescing)
-	PrecLogicalOr   // ||
-	PrecLogicalAnd  // &&
-	PrecEquality    // == !=
-	PrecComparison  // < > <= >=
-	PrecAdditive    // + -
-	PrecMultiply    // * / %
-	PrecUnary       // ! - +
-	PrecPostfix     // ? ?. (error prop, safe nav)
-	PrecCall        // () [] .
+	PrecLowest     = iota
+	PrecTernary    // ? : (ternary)
+	PrecNullCoal   // ?? (null coalescing)
+	PrecLogicalOr  // ||
+	PrecLogicalAnd // &&
+	PrecEquality   // == !=
+	PrecComparison // < > <= >=
+	PrecAdditive   // + -
+	PrecMultiply   // * / %
+	PrecUnary      // ! - +
+	PrecPostfix    // ? ?. (error prop, safe nav)
+	PrecCall       // () [] .
 )
 
 // operatorPrecedence maps token types to their precedence levels
 var operatorPrecedence = map[tokenizer.TokenKind]int{
 	// Dingo operators
-	tokenizer.QUESTION:          PrecPostfix,   // x? (error propagation)
-	tokenizer.QUESTION_QUESTION: PrecNullCoal,  // a ?? b (null coalescing)
-	tokenizer.QUESTION_DOT:      PrecPostfix,   // x?.field (safe navigation)
+	tokenizer.QUESTION:          PrecTernary,  // ? : (ternary) - also handles x? (error prop) via disambiguation
+	tokenizer.QUESTION_QUESTION: PrecNullCoal, // a ?? b (null coalescing)
+	tokenizer.QUESTION_DOT:      PrecPostfix,  // x?.field (safe navigation)
 
 	// Standard Go operators
-	tokenizer.DOT:               PrecCall,      // x.y (selector/method call)
-	tokenizer.LPAREN:            PrecCall,      // x() (function call)
+	tokenizer.DOT:    PrecCall, // x.y (selector/method call)
+	tokenizer.LPAREN: PrecCall, // x() (function call)
 
-	// Standard Go operators (to be added as tokenizer is extended)
-	// These would be added when full Go expression parsing is needed
-	// For now, focusing on Dingo-specific operators per the plan
+	// Binary operators
+	tokenizer.OR:    PrecLogicalOr,  // ||
+	tokenizer.AND:   PrecLogicalAnd, // &&
+	tokenizer.EQ:    PrecEquality,   // ==
+	tokenizer.NE:    PrecEquality,   // !=
+	tokenizer.LT:    PrecComparison, // <
+	tokenizer.GT:    PrecComparison, // >
+	tokenizer.LE:    PrecComparison, // <=
+	tokenizer.GE:    PrecComparison, // >=
+	tokenizer.PLUS:  PrecAdditive,   // +
+	tokenizer.MINUS: PrecAdditive,   // -
+	tokenizer.STAR:  PrecMultiply,   // *
+	tokenizer.SLASH: PrecMultiply,   // /
 }
 
 // PrattParser implements a Pratt parser for expressions
 type PrattParser struct {
-	tokenizer  *tokenizer.Tokenizer
-	errors []ParseError
+	tokenizer *tokenizer.Tokenizer
+	errors    []ParseError
 
 	// Current and peek tokens
 	curToken  tokenizer.Token
@@ -90,17 +100,27 @@ func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	p.registerPrefix(tokenizer.TRUE, p.parseBoolLiteral)
 	p.registerPrefix(tokenizer.FALSE, p.parseBoolLiteral)
 	p.registerPrefix(tokenizer.LPAREN, p.parseGroupedOrLambda)
-	p.registerPrefix(tokenizer.PIPE, p.parseLambda) // Rust-style lambda: |x| expr
+	p.registerPrefix(tokenizer.PIPE, p.parseLambda)     // Rust-style lambda: |x| expr
 	p.registerPrefix(tokenizer.MATCH, p.parseMatchExpr) // Match expressions
 
 	// Register infix parse functions for Dingo operators
-	p.registerInfix(tokenizer.QUESTION, p.parseErrorPropagation)
+	p.registerInfix(tokenizer.QUESTION, p.parseQuestionOperator)
 	p.registerInfix(tokenizer.QUESTION_QUESTION, p.parseNullCoalescing)
 	p.registerInfix(tokenizer.QUESTION_DOT, p.parseSafeNavigation)
 
 	// Register infix parse functions for standard Go operators
 	p.registerInfix(tokenizer.DOT, p.parseSelectorExpr)
 	p.registerInfix(tokenizer.LPAREN, p.parseCallExpr)
+
+	// Register binary operators
+	binaryOps := []tokenizer.TokenKind{
+		tokenizer.OR, tokenizer.AND,
+		tokenizer.EQ, tokenizer.NE, tokenizer.LT, tokenizer.GT, tokenizer.LE, tokenizer.GE,
+		tokenizer.PLUS, tokenizer.MINUS, tokenizer.STAR, tokenizer.SLASH,
+	}
+	for _, op := range binaryOps {
+		p.registerInfix(op, p.parseBinaryExpr)
+	}
 
 	// Initialize current and peek tokens
 	p.nextToken()
@@ -575,4 +595,164 @@ func (p *PrattParser) addError(msg string) {
 		Column:  p.curToken.Column,
 		Message: msg,
 	})
+}
+
+// parseQuestionOperator handles both error propagation (?) and ternary (? :)
+// Disambiguates by looking ahead after parsing the first expression following ?
+//
+// Patterns:
+//   - expr?                        -> error propagation (postfix)
+//   - expr ? "message"             -> error propagation with context
+//   - expr ? |err| transform       -> error propagation with transform
+//   - cond ? trueVal : falseVal    -> ternary operator
+//
+// Disambiguation strategy:
+// 1. If ? is followed by terminator -> error propagation
+// 2. If ? is followed by string literal -> error propagation with context
+// 3. If ? is followed by pipe (|) -> error propagation with lambda
+// 4. Otherwise, parse expression and check for colon
+//    - If colon found -> ternary
+//    - If no colon -> error propagation
+func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
+	questionPos := p.curToken.Pos
+
+	// Save parser state for potential backtracking
+	state := p.saveState()
+
+	p.nextToken() // consume ?
+
+	// Pattern 1: ? followed by terminator = error propagation
+	if p.isExpressionTerminator() {
+		return &ast.ErrorPropExpr{
+			Question: questionPos,
+			Operand:  left,
+		}
+	}
+
+	// Pattern 1b: ? followed by another ? = first is error propagation, second will be ternary
+	// Example: getData()? ? "valid" : "invalid"
+	if p.curTokenIs(tokenizer.QUESTION) {
+		return &ast.ErrorPropExpr{
+			Question: questionPos,
+			Operand:  left,
+		}
+	}
+
+	// Pattern 2: ? "string" - could be error propagation OR ternary
+	// Disambiguate by checking if there's a colon after the string
+	if p.curTokenIs(tokenizer.STRING) {
+		// Lookahead: is there a colon after this string?
+		savedState2 := p.saveState()
+		p.nextToken() // move past string
+		hasColon := p.curTokenIs(tokenizer.COLON)
+		p.restoreState(savedState2) // restore to string token
+
+		if !hasColon {
+			// No colon = error propagation with context
+			p.restoreState(state)
+			p.nextToken() // re-consume ?
+			return p.parseErrorPropagation(left)
+		}
+		// Has colon = ternary, fall through to ternary parsing below
+	}
+
+	// Pattern 3: ? | = error propagation with lambda transform
+	if p.curTokenIs(tokenizer.PIPE) {
+		p.restoreState(state)
+		p.nextToken() // re-consume ?
+		return p.parseErrorPropagation(left)
+	}
+
+	// Pattern 4: ? ( where ( starts a lambda = error propagation with lambda
+	if p.curTokenIs(tokenizer.LPAREN) && p.isTypeScriptLambda() {
+		p.restoreState(state)
+		p.nextToken() // re-consume ?
+		return p.parseErrorPropagation(left)
+	}
+
+	// Pattern 5: ? ident => = error propagation with single-param lambda
+	if p.curTokenIs(tokenizer.IDENT) && p.peekTokenIs(tokenizer.ARROW) {
+		p.restoreState(state)
+		p.nextToken() // re-consume ?
+		return p.parseErrorPropagation(left)
+	}
+
+	// Try parsing as ternary: parse true branch expression
+	trueExpr := p.ParseExpression(PrecTernary)
+
+	// Check for colon to confirm ternary
+	if p.peekTokenIs(tokenizer.COLON) {
+		p.nextToken() // move to :
+		colonPos := p.curToken.Pos
+		p.nextToken() // consume :
+
+		// Right-associative: parse false branch at same precedence
+		// This makes a ? b : c ? d : e parse as a ? b : (c ? d : e)
+		falseExpr := p.ParseExpression(PrecTernary)
+
+		return &ast.TernaryExpr{
+			Cond:     left,
+			Question: questionPos,
+			True:     trueExpr,
+			Colon:    colonPos,
+			False:    falseExpr,
+		}
+	}
+
+	// No colon found - this is error propagation without context
+	// Backtrack and parse as error propagation
+	p.restoreState(state)
+	p.nextToken() // re-consume ?
+	return p.parseErrorPropagation(left)
+}
+
+// isExpressionTerminator returns true if current token ends an expression
+func (p *PrattParser) isExpressionTerminator() bool {
+	switch p.curToken.Kind {
+	case tokenizer.EOF, tokenizer.SEMICOLON, tokenizer.RPAREN,
+		tokenizer.RBRACE, tokenizer.COMMA, tokenizer.COLON,
+		tokenizer.RBRACKET:
+		return true
+	}
+	return false
+}
+
+// parseBinaryExpr parses binary expressions (left-associative)
+// Handles operators like: +, -, *, /, ==, !=, <, >, <=, >=, &&, ||
+func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
+	opToken := p.curToken
+	precedence := p.curPrecedence()
+
+	p.nextToken() // consume operator
+
+	// Left-associative: parse right operand at precedence + 1
+	// This prevents same-precedence operators from binding on the right
+	// and allows lower-precedence operators (like ternary) to bind at top level
+	right := p.ParseExpression(precedence + 1)
+
+	// Build RawExpr with formatted binary expression
+	leftStr := p.exprToString(left)
+	rightStr := p.exprToString(right)
+
+	return &ast.RawExpr{
+		StartPos: opToken.Pos,
+		EndPos:   opToken.End,
+		Text:     leftStr + " " + opToken.Lit + " " + rightStr,
+	}
+}
+
+// exprToString converts an AST expression to its string representation
+func (p *PrattParser) exprToString(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.DingoIdent:
+		return e.Name
+	case *ast.RawExpr:
+		return e.Text
+	default:
+		// Fallback to String() method if available
+		if stringer, ok := expr.(interface{ String() string }); ok {
+			return stringer.String()
+		}
+		return ""
+	}
 }

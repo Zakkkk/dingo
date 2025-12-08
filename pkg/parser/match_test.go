@@ -406,11 +406,11 @@ func containsSubstring(s, substr string) bool {
 // Helper to create a simple token for testing
 func makeToken(kind tokenizer.TokenKind, lit string) tokenizer.Token {
 	return tokenizer.Token{
-		Kind: kind,
-		Pos:  token.Pos(1),
-		End:  token.Pos(1),
-		Lit:  lit,
-		Line: 1,
+		Kind:   kind,
+		Pos:    token.Pos(1),
+		End:    token.Pos(1),
+		Lit:    lit,
+		Line:   1,
 		Column: 1,
 	}
 }

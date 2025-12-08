@@ -70,30 +70,30 @@ func TestNullCoalescing(t *testing.T) {
 }
 
 // TestTernary tests parsing of the ternary operator (? :)
-// TODO(Phase 3+): Ternary operator parsing not yet implemented
-// The transformation logic exists in pkg/plugin/builtin/ternary.go but parser support is deferred
 func TestTernary(t *testing.T) {
-	t.Skip("Ternary parsing not yet implemented - deferred to Phase 3+")
-
 	tests := []struct {
 		name  string
 		input string
 	}{
 		{
-			name:  "simple ternary",
-			input: "age >= 18 ? adult : minor",
+			name:  "simple ternary with strings",
+			input: `age >= 18 ? "adult" : "minor"`,
 		},
 		{
-			name:  "nested ternary",
-			input: "x > 0 ? positive : x < 0 ? negative : zero",
+			name:  "ternary with numbers",
+			input: "x > 0 ? 1 : 0",
 		},
 		{
 			name:  "ternary with function calls",
 			input: "isValid() ? getValue() : getDefault()",
 		},
 		{
-			name:  "ternary with strings",
+			name:  "ternary with boolean condition",
 			input: `status ? "active" : "inactive"`,
+		},
+		{
+			name:  "nested ternary",
+			input: `x > 0 ? "positive" : x < 0 ? "negative" : "zero"`,
 		},
 	}
 
@@ -102,9 +102,14 @@ func TestTernary(t *testing.T) {
 			p := NewParser(0)
 			fset := token.NewFileSet()
 
-			_, err := p.ParseExpr(fset, tt.input)
+			expr, err := p.ParseExpr(fset, tt.input)
 			if err != nil {
 				t.Fatalf("ParseExpr() error = %v", err)
+			}
+
+			// Verify it's a TernaryExpr
+			if _, ok := expr.(*ast.TernaryExpr); !ok {
+				t.Fatalf("expected *ast.TernaryExpr, got %T", expr)
 			}
 		})
 	}
@@ -170,17 +175,14 @@ func TestLambda(t *testing.T) {
 }
 
 // TestOperatorPrecedence tests that operators have correct precedence
-// TODO(Phase 3+): Some tests require ternary parsing which is not yet implemented
 func TestOperatorPrecedence(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		skip  bool
 	}{
 		{
 			name:  "ternary lower than null coalescing",
 			input: "a ?? b ? c : d",
-			skip:  true, // Requires ternary parsing
 		},
 		{
 			name:  "null coalescing lower than comparison",
@@ -193,20 +195,15 @@ func TestOperatorPrecedence(t *testing.T) {
 		{
 			name:  "ternary with safe navigation",
 			input: "user?.isActive ? enabled : disabled",
-			skip:  true, // Requires ternary parsing
 		},
 		{
 			name:  "complex expression",
 			input: "user?.age >= 18 ? adult : minor ?? unknown",
-			skip:  true, // Requires ternary parsing
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip {
-				t.Skip("Requires ternary parsing (deferred to Phase 3+)")
-			}
 			p := NewParser(0)
 			fset := token.NewFileSet()
 
@@ -482,13 +479,11 @@ func TestErrorPropagationAST(t *testing.T) {
 }
 
 // TestDisambiguation tests that similar operators are properly disambiguated
-// TODO(Phase 3+): Some tests require ternary parsing which is not yet implemented
 func TestDisambiguation(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected string
-		skip     bool
 	}{
 		{
 			name:     "question mark - error propagation",
@@ -507,24 +502,40 @@ func TestDisambiguation(t *testing.T) {
 		},
 		{
 			name:     "question colon - ternary",
-			input:    "x > 0 ? positive : negative",
+			input:    `x > 0 ? "positive" : "negative"`,
 			expected: "ternary",
-			skip:     true, // Requires ternary parsing
+		},
+		{
+			name:     "error prop as ternary condition",
+			input:    `getData()? ? "valid" : "invalid"`,
+			expected: "ternary with error prop condition",
+		},
+		{
+			name:     "error prop with context vs ternary",
+			input:    `getUser() ? "failed"`,
+			expected: "error propagation with context",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip {
-				t.Skip("Requires ternary parsing (deferred to Phase 3+)")
-			}
 			p := NewParser(0)
 			fset := token.NewFileSet()
 
-			_, err := p.ParseExpr(fset, tt.input)
+			expr, err := p.ParseExpr(fset, tt.input)
 			if err != nil {
 				t.Fatalf("ParseExpr() error = %v, expected %s", err, tt.expected)
 			}
+
+			// Verify parsing succeeded and returned a node
+			// The specific type may be wrapped in ExprWrapper or other internal types
+			if expr == nil {
+				t.Fatalf("ParseExpr returned nil for %s", tt.expected)
+			}
+
+			// Just verify we got something back - detailed type checking
+			// would require unwrapping internal parser representations
+			t.Logf("Parsed %q as %T", tt.input, expr)
 		})
 	}
 }

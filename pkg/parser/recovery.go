@@ -106,16 +106,16 @@ const (
 
 // RecoveryContext holds state during error recovery
 type RecoveryContext struct {
-	Errors   ErrorList
-	Strategy RecoveryStrategy
+	Errors    ErrorList
+	Strategy  RecoveryStrategy
 	MaxErrors int // Maximum errors before giving up (0 = unlimited)
 }
 
 // NewRecoveryContext creates a new recovery context with default settings
 func NewRecoveryContext() *RecoveryContext {
 	return &RecoveryContext{
-		Errors:   make(ErrorList, 0),
-		Strategy: RecoverToStatement,
+		Errors:    make(ErrorList, 0),
+		Strategy:  RecoverToStatement,
 		MaxErrors: 100, // Reasonable default to prevent infinite loops
 	}
 }

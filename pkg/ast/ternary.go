@@ -1,7 +1,6 @@
 package ast
 
 import (
-	"go/ast"
 	"go/token"
 )
 
@@ -9,11 +8,11 @@ import (
 // Transforms to IIFE: func() T { if cond { return trueVal }; return falseVal }()
 type TernaryExpr struct {
 	// AST-based fields (new, for AST migration)
-	Cond     ast.Expr  // Condition expression
+	Cond     Expr      // Condition expression (Dingo AST)
 	Question token.Pos // Position of ? operator
-	True     ast.Expr  // True branch expression
+	True     Expr      // True branch expression (Dingo AST)
 	Colon    token.Pos // Position of : operator
-	False    ast.Expr  // False branch expression
+	False    Expr      // False branch expression (Dingo AST)
 
 	// Legacy string-based fields (for preprocessor backward compatibility)
 	CondStr    string // Condition as string

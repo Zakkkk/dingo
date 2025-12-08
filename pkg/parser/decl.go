@@ -117,7 +117,7 @@ func (p *StmtParser) parseVarSpec() *ast.ValueSpec {
 
 	// Check for initialization (= expr)
 	if p.curTokenIs(tokenizer.ASSIGN) {
-		p.nextToken() // consume '='
+		p.nextToken()                     // consume '='
 		_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
 		// TODO: Convert Dingo AST to go/ast during transformation
 	}
@@ -227,9 +227,9 @@ func (p *StmtParser) synchronizeToDecl() {
 		switch p.curToken.Kind {
 		case tokenizer.VAR, tokenizer.ENUM:
 			return
-		// TODO: Add other declaration keywords when added to lexer
-		// case tokenizer.CONST, tokenizer.TYPE, tokenizer.FUNC:
-		//     return
+			// TODO: Add other declaration keywords when added to lexer
+			// case tokenizer.CONST, tokenizer.TYPE, tokenizer.FUNC:
+			//     return
 		}
 		p.nextToken()
 	}

@@ -272,3 +272,176 @@ func TestTernaryCodeGen_OutputCompiles(t *testing.T) {
 		})
 	}
 }
+
+// TestTernaryCodeGen_ASTExpressions tests ternary with AST-based expressions
+func TestTernaryCodeGen_ASTExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		condSrc  string
+		trueSrc  string
+		falseSrc string
+		wantCond string
+		wantTrue string
+		wantFalse string
+	}{
+		{
+			name:      "identifiers",
+			condSrc:   "isValid",
+			trueSrc:   "x",
+			falseSrc:  "y",
+			wantCond:  "isValid",
+			wantTrue:  "x",
+			wantFalse: "y",
+		},
+		{
+			name:      "binary comparison",
+			condSrc:   "x > 0",
+			trueSrc:   "positive",
+			falseSrc:  "negative",
+			wantCond:  "x > 0",
+			wantTrue:  "positive",
+			wantFalse: "negative",
+		},
+		{
+			name:      "function calls",
+			condSrc:   "hasPermission()",
+			trueSrc:   "allow()",
+			falseSrc:  "deny()",
+			wantCond:  "hasPermission()",
+			wantTrue:  "allow()",
+			wantFalse: "deny()",
+		},
+		{
+			name:      "selector expressions",
+			condSrc:   "user.Active",
+			trueSrc:   "user.Name",
+			falseSrc:  `"inactive"`,
+			wantCond:  "user.Active",
+			wantTrue:  "user.Name",
+			wantFalse: `"inactive"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse AST expressions
+			condExpr, _ := parser.ParseExpr(tt.condSrc)
+			trueExpr, _ := parser.ParseExpr(tt.trueSrc)
+			falseExpr, _ := parser.ParseExpr(tt.falseSrc)
+
+			expr := &ast.TernaryExpr{
+				Cond:  condExpr,
+				True:  trueExpr,
+				False: falseExpr,
+			}
+
+			gen := NewTernaryCodeGen(expr)
+			result := gen.Generate()
+
+			got := string(result.Output)
+
+			// Verify AST expressions are rendered correctly
+			if !strings.Contains(got, "if "+tt.wantCond+" {") {
+				t.Errorf("condition not rendered correctly, want 'if %s {', got:\n%s", tt.wantCond, got)
+			}
+			if !strings.Contains(got, "return "+tt.wantTrue) {
+				t.Errorf("true branch not rendered correctly, want 'return %s', got:\n%s", tt.wantTrue, got)
+			}
+			if !strings.Contains(got, "return "+tt.wantFalse) {
+				t.Errorf("false branch not rendered correctly, want 'return %s', got:\n%s", tt.wantFalse, got)
+			}
+		})
+	}
+}
+
+// TestTernaryCodeGen_NestedTernary tests nested ternary expressions
+func TestTernaryCodeGen_NestedTernary(t *testing.T) {
+	// Inner ternary: y < 0 ? "negative" : "zero"
+	innerTernary := &ast.TernaryExpr{
+		CondStr:  "y < 0",
+		TrueStr:  `"negative"`,
+		FalseStr: `"zero"`,
+	}
+
+	// Parse inner ternary as an expression to use as false branch of outer
+	innerGen := NewTernaryCodeGen(innerTernary)
+	innerResult := innerGen.Generate()
+	innerCode := string(innerResult.Output)
+
+	// Outer ternary: x > 0 ? "positive" : <inner>
+	// For this test, we'll use string representation
+	outerTernary := &ast.TernaryExpr{
+		CondStr:  "x > 0",
+		TrueStr:  `"positive"`,
+		FalseStr: innerCode,
+	}
+
+	gen := NewTernaryCodeGen(outerTernary)
+	result := gen.Generate()
+
+	got := string(result.Output)
+
+	// Verify nested structure
+	if !strings.Contains(got, "if x > 0 {") {
+		t.Error("Missing outer condition")
+	}
+	if !strings.Contains(got, `return "positive"`) {
+		t.Error("Missing outer true branch")
+	}
+	// Inner IIFE should be in false branch
+	if !strings.Contains(got, "func()") {
+		t.Error("Missing inner IIFE in false branch")
+	}
+}
+
+// TestTernaryCodeGen_EdgeCases tests edge cases
+func TestTernaryCodeGen_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		expr *ast.TernaryExpr
+		want string
+	}{
+		{
+			name: "empty result type",
+			expr: &ast.TernaryExpr{
+				CondStr:  "true",
+				TrueStr:  "1",
+				FalseStr: "2",
+				// No ResultType
+			},
+			want: "func() {", // No explicit return type
+		},
+		{
+			name: "explicit result type",
+			expr: &ast.TernaryExpr{
+				CondStr:    "true",
+				TrueStr:    "1",
+				FalseStr:   "2",
+				ResultType: "int",
+			},
+			want: "func() int {", // Explicit int return
+		},
+		{
+			name: "complex result type",
+			expr: &ast.TernaryExpr{
+				CondStr:    "valid",
+				TrueStr:    "result",
+				FalseStr:   "nil",
+				ResultType: "*MyStruct",
+			},
+			want: "func() *MyStruct {", // Pointer type
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gen := NewTernaryCodeGen(tt.expr)
+			result := gen.Generate()
+
+			got := string(result.Output)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("Expected output to contain %q, got:\n%s", tt.want, got)
+			}
+		})
+	}
+}

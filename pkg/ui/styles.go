@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/MadAppGang/dingo/pkg/ui/mascot"
 )
 
 // Color palette - carefully chosen for readability and aesthetics
@@ -120,12 +121,49 @@ func NewBuildOutput() *BuildOutput {
 	}
 }
 
-// PrintHeader prints the main Dingo header
+// PrintHeader prints the main Dingo header with ASCII mascot
 func (b *BuildOutput) PrintHeader(version string) {
-	header := styleHeader.Render("🐕 Dingo Compiler")
-	versionBadge := styleVersion.Render("v" + version)
+	// Get mascot frame for idle state (static, not compiling)
+	m := mascot.New(mascot.WithInitialState(mascot.StateIdle))
+	frame := m.Render()
 
-	fmt.Println(header + " " + versionBadge)
+	// Styles for title
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
+	versionStyle := lipgloss.NewStyle().Foreground(colorSubtle)
+	taglineStyle := lipgloss.NewStyle().Foreground(colorMuted).Italic(true)
+
+	// Title info to show next to mascot (plain text, no box)
+	titleLines := []string{
+		"",
+		"  " + titleStyle.Render("Dingo Compiler"),
+		"  " + versionStyle.Render("v" + version),
+		"",
+		"  " + taglineStyle.Render("Transpiling to Go..."),
+	}
+
+	// Apply color to mascot
+	mascotColor := lipgloss.NewStyle().Foreground(colorPrimary)
+
+	// Print mascot with title info on the right (side by side)
+	maxLines := len(frame)
+	if len(titleLines) > maxLines {
+		maxLines = len(titleLines)
+	}
+
+	for i := 0; i < maxLines; i++ {
+		mascotLine := ""
+		if i < len(frame) {
+			mascotLine = mascotColor.Render(frame[i])
+		}
+
+		titleLine := ""
+		if i < len(titleLines) {
+			titleLine = titleLines[i]
+		}
+
+		fmt.Printf("%s%s\n", mascotLine, titleLine)
+	}
+	fmt.Println()
 }
 
 // PrintBuildStart prints the build start message
@@ -219,38 +257,67 @@ func (b *BuildOutput) PrintStep(step Step) {
 	}
 }
 
-// PrintSummary prints the final build summary
+// PrintSummary prints the final build summary with mascot
 func (b *BuildOutput) PrintSummary(success bool, errorMsg string) {
 	elapsed := time.Since(b.startTime)
 
 	fmt.Println() // Extra line before summary
 
-	var summaryLine string
+	// Get mascot for success or failure
+	var m *mascot.Mascot
 	if success {
-		icon := "✨"
-		message := "Success!"
-		duration := formatDuration(elapsed)
-
-		summaryLine = fmt.Sprintf("%s %s Built in %s",
-			icon,
-			styleSuccess.Render(message),
-			styleStepTime.Render(duration),
-		)
+		m = mascot.New(mascot.WithInitialState(mascot.StateSuccess))
 	} else {
-		icon := "💥"
-		message := "Build failed"
+		m = mascot.New(mascot.WithInitialState(mascot.StateFailed))
+	}
+	frame := m.Render()
 
-		summaryLine = fmt.Sprintf("%s %s",
-			icon,
-			styleError.Render(message),
-		)
+	// Apply color based on status
+	var mascotColor lipgloss.Style
+	if success {
+		mascotColor = lipgloss.NewStyle().Foreground(colorSuccess)
+	} else {
+		mascotColor = lipgloss.NewStyle().Foreground(colorError)
+	}
 
+	// Build summary lines
+	var summaryLines []string
+	if success {
+		duration := formatDuration(elapsed)
+		summaryLines = []string{
+			"",
+			"  " + styleSuccess.Render("Build Successful!"),
+			"  " + styleStepTime.Render("Completed in " + duration),
+		}
+	} else {
+		summaryLines = []string{
+			"",
+			"  " + styleError.Render("Build Failed"),
+		}
 		if errorMsg != "" {
-			summaryLine += "\n" + styleError.Render("   Error: ") + errorMsg
+			summaryLines = append(summaryLines, "  "+styleError.Render("Error: ")+errorMsg)
 		}
 	}
 
-	fmt.Println(styleSummary.Render(summaryLine))
+	// Print mascot with summary on the right
+	maxLines := len(frame)
+	if len(summaryLines) > maxLines {
+		maxLines = len(summaryLines)
+	}
+
+	for i := 0; i < maxLines; i++ {
+		mascotLine := ""
+		if i < len(frame) {
+			mascotLine = mascotColor.Render(frame[i])
+		}
+
+		summaryLine := ""
+		if i < len(summaryLines) {
+			summaryLine = summaryLines[i]
+		}
+
+		fmt.Printf("%s%s\n", mascotLine, summaryLine)
+	}
 }
 
 // PrintError prints an error message

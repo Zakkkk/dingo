@@ -7,157 +7,148 @@ import (
 )
 
 // Event sum type - all possible events in the system
+type Event interface{ isEvent() }
 
-type EventTag uint8
-
-const (
-	EventTagUserCreated EventTag = iota
-	EventTagUserDeleted
-	EventTagOrderPlaced
-	EventTagOrderShipped
-	EventTagPaymentReceived
-	EventTagPaymentFailed
-)
-
-type Event struct {
-	tag                         EventTag
-	orderplaced_amount          *float64
-	orderplaced_orderID         *string
-	orderplaced_userID          *int
-	ordershipped_orderID        *string
-	ordershipped_trackingNumber *string
-	paymentfailed_orderID       *string
-	paymentfailed_reason        *string
-	paymentreceived_amount      *float64
-	paymentreceived_orderID     *string
-	usercreated_email           *string
-	usercreated_userID          *int
-	userdeleted_userID          *int
+type EventUserCreated struct {
+	userID int
+	email  string
 }
 
-func EventUserCreated(userID int, email string) Event {
-	return Event{tag: EventTagUserCreated, usercreated_userID: &userID, usercreated_email: &email}
+func (EventUserCreated) isEvent() {}
+func NewEventUserCreated(userID int, email string) Event {
+	return EventUserCreated{userID: userID, email: email}
 }
-func EventUserDeleted(userID int) Event {
-	return Event{tag: EventTagUserDeleted, userdeleted_userID: &userID}
+
+type EventUserDeleted struct{ userID int }
+
+func (EventUserDeleted) isEvent()          {}
+func NewEventUserDeleted(userID int) Event { return EventUserDeleted{userID: userID} }
+
+type EventOrderPlaced struct {
+	orderID string
+	amount  float64
+	userID  int
 }
-func EventOrderPlaced(orderID string, amount float64, userID int) Event {
-	return Event{tag: EventTagOrderPlaced, orderplaced_orderID: &orderID, orderplaced_amount: &amount, orderplaced_userID: &userID}
+
+func (EventOrderPlaced) isEvent() {}
+func NewEventOrderPlaced(orderID string, amount float64, userID int) Event {
+	return EventOrderPlaced{orderID: orderID, amount: amount, userID: userID}
 }
-func EventOrderShipped(orderID string, trackingNumber string) Event {
-	return Event{tag: EventTagOrderShipped, ordershipped_orderID: &orderID, ordershipped_trackingNumber: &trackingNumber}
+
+type EventOrderShipped struct {
+	orderID        string
+	trackingNumber string
 }
-func EventPaymentReceived(orderID string, amount float64) Event {
-	return Event{tag: EventTagPaymentReceived, paymentreceived_orderID: &orderID, paymentreceived_amount: &amount}
+
+func (EventOrderShipped) isEvent() {}
+func NewEventOrderShipped(orderID string, trackingNumber string) Event {
+	return EventOrderShipped{orderID: orderID, trackingNumber: trackingNumber}
 }
-func EventPaymentFailed(orderID string, reason string) Event {
-	return Event{tag: EventTagPaymentFailed, paymentfailed_orderID: &orderID, paymentfailed_reason: &reason}
+
+type EventPaymentReceived struct {
+	orderID string
+	amount  float64
 }
-func (e Event) IsUserCreated() bool {
-	return e.tag == EventTagUserCreated
+
+func (EventPaymentReceived) isEvent() {}
+func NewEventPaymentReceived(orderID string, amount float64) Event {
+	return EventPaymentReceived{orderID: orderID, amount: amount}
 }
-func (e Event) IsUserDeleted() bool {
-	return e.tag == EventTagUserDeleted
+
+type EventPaymentFailed struct {
+	orderID string
+	reason  string
 }
-func (e Event) IsOrderPlaced() bool {
-	return e.tag == EventTagOrderPlaced
-}
-func (e Event) IsOrderShipped() bool {
-	return e.tag == EventTagOrderShipped
-}
-func (e Event) IsPaymentReceived() bool {
-	return e.tag == EventTagPaymentReceived
-}
-func (e Event) IsPaymentFailed() bool {
-	return e.tag == EventTagPaymentFailed
+
+func (EventPaymentFailed) isEvent() {}
+func NewEventPaymentFailed(orderID string, reason string) Event {
+	return EventPaymentFailed{orderID: orderID, reason: reason}
 }
 
 // ProcessEvent handles all event types with exhaustive matching
 // The compiler ensures every Event variant is handled
 func ProcessEvent(event Event) string {
-	tmp := event
-	switch tmp.tag {
-	case EventTagUserCreated:
-		userID := *tmp.usercreated_userID
-		email := *tmp.usercreated_email
-		return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID) // dingo:M:1
-	case EventTagUserDeleted:
-		userID := *tmp.userdeleted_userID
-		return fmt.Sprintf("User #%d data archived", userID) // dingo:M:1
-	case EventTagOrderPlaced:
-		orderID := *tmp.orderplaced_orderID
-		amount := *tmp.orderplaced_amount
-		userID := *tmp.orderplaced_userID
+	val3 := event
+	switch v4 := val3.(type) {
+	case EventUserCreated:
+		userID := v4.userID
+		email := v4.email
+		return fmt.Sprintf("Welcome email sent to %s (user #%d)", email, userID)
+	case EventUserDeleted:
+		userID := v4.userID
+		return fmt.Sprintf("User #%d data archived", userID)
+	case EventOrderPlaced:
+		orderID := v4.orderID
+		amount := v4.amount
+		userID := v4.userID
 		if amount > 1000 {
-			return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount) // dingo:M:1
+			return fmt.Sprintf("HIGH VALUE: Order %s ($%.2f) flagged for review", orderID, amount)
 		} else {
-			return fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID) // dingo:M:1
+			return fmt.Sprintf("Order %s confirmed for user #%d", orderID, userID)
 		}
-	case EventTagOrderShipped:
-		orderID := *tmp.ordershipped_orderID
-		trackingNumber := *tmp.ordershipped_trackingNumber
-		return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber) // dingo:M:1
-	case EventTagPaymentReceived:
-		orderID := *tmp.paymentreceived_orderID
-		amount := *tmp.paymentreceived_amount
-		return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID) // dingo:M:1
-	case EventTagPaymentFailed:
-		orderID := *tmp.paymentfailed_orderID
-		reason := *tmp.paymentfailed_reason
-		return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason) // dingo:M:1
+	case EventOrderShipped:
+		orderID := v4.orderID
+		trackingNumber := v4.trackingNumber
+		return fmt.Sprintf("Order %s shipped: %s", orderID, trackingNumber)
+	case EventPaymentReceived:
+		orderID := v4.orderID
+		amount := v4.amount
+		return fmt.Sprintf("Payment $%.2f received for order %s", amount, orderID)
+	case EventPaymentFailed:
+		orderID := v4.orderID
+		reason := v4.reason
+		return fmt.Sprintf("ALERT: Payment failed for %s - %s", orderID, reason)
 	}
-	panic("non-exhaustive match")
-
+	panic("unreachable: exhaustive match")
 }
 
 // GetEventPriority uses guards for complex conditions
 func GetEventPriority(event Event) int {
-	tmp := event
-	switch tmp.tag {
-	case EventTagPaymentFailed:
-		return 1 // dingo:M:1
-	case EventTagOrderPlaced:
-		amount := *tmp.orderplaced_amount
+	val1 := event
+	switch v2 := val1.(type) {
+	case EventPaymentFailed:
+		return 1
+	case EventOrderPlaced:
+		amount := v2.amount
 		if amount > 500 {
-			return 2 // dingo:M:1
+			return 2
 		}
-	case EventTagUserCreated:
-		return 3 // dingo:M:1
+	case EventUserCreated:
+		return 3
 	default:
-		return 4 // dingo:M:1
+		return 4
 	}
-	panic("non-exhaustive match")
-
+	panic("unreachable: exhaustive match")
 }
 
 // FilterUserEvents extracts only user-related events
 func FilterUserEvents(events []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
-		isUserEvent = func() bool {
-			tmp := event
-			switch tmp.tag {
-			case EventTagUserCreated:
-				return true // dingo:M:1
-			case EventTagUserDeleted:
-				return true // dingo:M:1
-			default:
-				return false // dingo:M:1
-			}
-		}()
+		var isUserEvent bool
+		val := event
+		switch val.(type) {
+		case EventUserCreated:
+			isUserEvent = true
+		case EventUserDeleted:
+			isUserEvent = true
+		default:
+			isUserEvent = false
+		}
 		if isUserEvent {
 			userEvents = append(userEvents, event)
 		}
 	}
 	return userEvents
 }
+
 func main() {
 	events := []Event{
-		Event.UserCreated(1, "alice@example.com"),
-		Event.OrderPlaced("ORD-001", 1500.00, 1),
-		Event.PaymentReceived("ORD-001", 1500.00),
-		Event.OrderShipped("ORD-001", "TRK-12345"),
-		Event.PaymentFailed("ORD-002", "insufficient funds"),
+		NewEventUserCreated(1, "alice@example.com"),
+		NewEventOrderPlaced("ORD-001", 1500.00, 1),
+		NewEventPaymentReceived("ORD-001", 1500.00),
+		NewEventOrderShipped("ORD-001", "TRK-12345"),
+		NewEventPaymentFailed("ORD-002", "insufficient funds"),
 	}
 
 	fmt.Println("=== Processing Events ===")

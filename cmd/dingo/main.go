@@ -9,10 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
+	"github.com/MadAppGang/dingo/pkg/ui/mascot"
 )
 
 var (
@@ -29,7 +32,6 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 		Version: version,
 		SilenceUsage: true, // Don't show usage on errors
 		Run: func(cmd *cobra.Command, args []string) {
-			// Show colorful help when no command is provided
 			ui.PrintDingoHelp(version)
 		},
 	}
@@ -51,6 +53,7 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 	rootCmd.AddCommand(buildCmd())
 	rootCmd.AddCommand(runCmd())
 	rootCmd.AddCommand(versionCmd())
+	rootCmd.AddCommand(mascotCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		// Error is already printed by cobra
@@ -314,14 +317,14 @@ func runDingoFile(inputPath string, programArgs []string) error {
 	buildDuration := time.Since(buildStart)
 
 	// Show build status
-	fmt.Printf("  📝 Compiled %s → %s (%s)\n",
+	fmt.Printf("  Compiled %s -> %s (%s)\n",
 		filepath.Base(inputPath),
 		filepath.Base(outputPath),
 		formatDuration(buildDuration))
 	fmt.Println()
 
 	// Step 2: Run with go run
-	fmt.Println("  🚀 Running...")
+	fmt.Println("  Running...")
 	fmt.Println()
 
 	// Prepare go run command
@@ -432,4 +435,185 @@ func expandPattern(pattern string) ([]string, error) {
 	}
 
 	return files, nil
+}
+
+// mascotCmd creates the mascot debug command
+func mascotCmd() *cobra.Command {
+	var (
+		state     string
+		animate   bool
+		duration  int
+		listAll   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "mascot [state]",
+		Short: "Debug command to test mascot animations and states",
+		Long: `Display the Dingo mascot in various states for debugging.
+
+Available states:
+  idle       - Default idle state
+  compiling  - Compiling/loading animation
+  running    - Running state
+  success    - Success celebration
+  failed     - Error/failed state
+  thinking   - Thinking animation
+  help       - Friendly help pose
+
+Examples:
+  dingo mascot                    # Show default mascot
+  dingo mascot --state success    # Show success state
+  dingo mascot --state compiling --animate --duration 5
+  dingo mascot --list             # List all available states`,
+		Run: func(cmd *cobra.Command, args []string) {
+			if listAll {
+				listMascotStates()
+				return
+			}
+
+			// Parse state from args or flag
+			stateStr := state
+			if len(args) > 0 {
+				stateStr = args[0]
+			}
+			if stateStr == "" {
+				stateStr = "idle"
+			}
+
+			runMascotDebug(stateStr, animate, duration)
+		},
+	}
+
+	cmd.Flags().StringVarP(&state, "state", "s", "", "Mascot state to display")
+	cmd.Flags().BoolVarP(&animate, "animate", "a", false, "Show animation (if available for state)")
+	cmd.Flags().IntVarP(&duration, "duration", "d", 3, "Animation duration in seconds")
+	cmd.Flags().BoolVarP(&listAll, "list", "l", false, "List all available states")
+
+	return cmd
+}
+
+// listMascotStates prints available mascot states
+func listMascotStates() {
+	fmt.Println("Available mascot states:")
+	fmt.Println()
+	states := []struct {
+		name string
+		desc string
+	}{
+		{"idle", "Default idle state with occasional blink"},
+		{"compiling", "Compiling/loading with spinner animation"},
+		{"running", "Running state"},
+		{"success", "Success celebration with happy face"},
+		{"failed", "Error/failed state with sad face"},
+		{"thinking", "Thinking animation, looking around"},
+		{"help", "Friendly help pose"},
+	}
+	for _, s := range states {
+		fmt.Printf("  %-12s %s\n", s.name, s.desc)
+	}
+	fmt.Println()
+	fmt.Println("Use: dingo mascot <state> [--animate] [--duration N]")
+}
+
+// runMascotDebug displays the mascot in the specified state
+func runMascotDebug(stateStr string, animate bool, durationSec int) {
+	// Force color output for debug command (even in non-TTY)
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	// Map string to MascotState
+	stateMap := map[string]mascot.MascotState{
+		"idle":      mascot.StateIdle,
+		"compiling": mascot.StateCompiling,
+		"running":   mascot.StateRunning,
+		"success":   mascot.StateSuccess,
+		"failed":    mascot.StateFailed,
+		"thinking":  mascot.StateThinking,
+		"help":      mascot.StateHelp,
+	}
+
+	// Map state to color scheme
+	colorMap := map[string]mascot.ColorScheme{
+		"idle":      mascot.DefaultColorScheme,
+		"compiling": mascot.CompileColorScheme,
+		"running":   mascot.DefaultColorScheme,
+		"success":   mascot.SuccessColorScheme,
+		"failed":    mascot.FailureColorScheme,
+		"thinking":  mascot.DefaultColorScheme,
+		"help":      mascot.DefaultColorScheme,
+	}
+
+	state, ok := stateMap[stateStr]
+	if !ok {
+		fmt.Printf("Unknown state: %s\n", stateStr)
+		fmt.Println("Use 'dingo mascot --list' to see available states")
+		os.Exit(1)
+	}
+
+	colorScheme := colorMap[stateStr]
+
+	fmt.Printf("Showing mascot state: %s\n", stateStr)
+	if animate {
+		fmt.Printf("Animation duration: %d seconds\n", durationSec)
+	}
+	fmt.Println()
+
+	// Create mascot
+	m := mascot.New(
+		mascot.WithInitialState(state),
+		mascot.WithColorScheme(colorScheme),
+		mascot.WithWriter(os.Stdout),
+	)
+
+	if animate {
+		// For animation, render frames with colors in a loop
+		runColoredAnimation(m, colorScheme, durationSec)
+	} else {
+		// Show single static frame with colors
+		frame := m.Render()
+		for _, line := range frame {
+			fmt.Println(colorScheme.ApplyBodyColor(line))
+		}
+	}
+}
+
+// runColoredAnimation runs an animation with colors applied to each frame
+func runColoredAnimation(m *mascot.Mascot, colorScheme mascot.ColorScheme, durationSec int) {
+	// Get animation frames based on state
+	frames := mascot.GetAnimationFrames(m)
+	if len(frames) == 0 {
+		fmt.Println("No animation frames available")
+		return
+	}
+
+	// Hide cursor during animation
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h") // Show cursor on exit
+
+	endTime := time.Now().Add(time.Duration(durationSec) * time.Second)
+	frameIndex := 0
+	lastHeight := 0
+
+	for time.Now().Before(endTime) {
+		// Clear previous frame
+		if lastHeight > 0 {
+			// Move cursor up
+			fmt.Printf("\033[%dA", lastHeight)
+		}
+
+		// Get current frame
+		frame := frames[frameIndex]
+		lastHeight = len(frame)
+
+		// Print frame with colors
+		for _, line := range frame {
+			// Clear line and print
+			fmt.Print("\033[2K") // Clear entire line
+			fmt.Println(colorScheme.ApplyBodyColor(line))
+		}
+
+		// Advance to next frame (loop)
+		frameIndex = (frameIndex + 1) % len(frames)
+
+		time.Sleep(150 * time.Millisecond)
+	}
 }

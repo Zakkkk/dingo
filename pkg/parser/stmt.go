@@ -79,7 +79,7 @@ func (p *StmtParser) parseVarStmt() ast.Stmt {
 
 	// Check for assignment
 	if p.curTokenIs(tokenizer.ASSIGN) {
-		p.nextToken() // consume '='
+		p.nextToken()                     // consume '='
 		_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
 	}
 
@@ -167,8 +167,8 @@ func (p *StmtParser) parseAssignment() ast.Stmt {
 
 	// Check for multiple LHS (x, y = ...)
 	for p.peekTokenIs(tokenizer.COMMA) {
-		p.nextToken() // consume ','
-		p.nextToken() // move to next expression
+		p.nextToken()                     // consume ','
+		p.nextToken()                     // move to next expression
 		_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
 	}
 
@@ -190,8 +190,8 @@ func (p *StmtParser) parseAssignment() ast.Stmt {
 
 	// Check for multiple RHS
 	for p.peekTokenIs(tokenizer.COMMA) {
-		p.nextToken() // consume ','
-		p.nextToken() // move to next expression
+		p.nextToken()                     // consume ','
+		p.nextToken()                     // move to next expression
 		_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
 	}
 
@@ -215,8 +215,8 @@ func (p *StmtParser) parseReturnStmt() *ast.ReturnStmt {
 
 		// Check for multiple return values
 		for p.peekTokenIs(tokenizer.COMMA) {
-			p.nextToken() // consume ','
-			p.nextToken() // move to next expression
+			p.nextToken()                     // consume ','
+			p.nextToken()                     // move to next expression
 			_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
 		}
 	}
@@ -251,7 +251,7 @@ func (p *StmtParser) parseIfStmt() *ast.IfStmt {
 
 		// Parse actual condition
 		_ = p.ParseExpression(PrecLowest) // Parse but don't use yet
-		cond = nil // Placeholder
+		cond = nil                        // Placeholder
 	} else {
 		// No init statement, first expression is the condition
 		cond = nil // Placeholder

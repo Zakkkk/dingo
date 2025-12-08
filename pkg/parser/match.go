@@ -195,9 +195,10 @@ func (p *PrattParser) parseMatchArm() *ast.MatchArm {
 
 // parsePattern parses a pattern (recursive for nested patterns)
 // Grammar:
-//   pattern := '_' | literal | identifier | constructor | tuple
-//   constructor := IDENT '(' pattern (',' pattern)* ')'
-//   tuple := '(' pattern (',' pattern)* ')'
+//
+//	pattern := '_' | literal | identifier | constructor | tuple
+//	constructor := IDENT '(' pattern (',' pattern)* ')'
+//	tuple := '(' pattern (',' pattern)* ')'
 func (p *PrattParser) parsePattern() ast.Pattern {
 	tok := p.curToken
 
