@@ -1,4 +1,13 @@
-// Dingo Feature Showcase - Key features working together
+// Dingo Feature Showcase - ALL 12 features
+// This file demonstrates every Dingo feature.
+//
+// KNOWN BUGS (see BUGS.md):
+// - Bug 1: Lambda type inference fails (generates `any` instead of concrete types)
+// - Bug 2: Ternary with `let` doesn't declare variable
+// - Bug 3: Tuple destructuring mishandles Go multiple returns
+//
+// To build: dingo build showcase.dingo
+// To test:  go build showcase.go (will show errors from bugs above)
 package main
 
 import "fmt"
@@ -10,7 +19,7 @@ enum Status {
 	Done { code: int }
 }
 
-// Simple structs
+// === Types ===
 type User struct {
 	ID       int
 	Name     string
@@ -22,7 +31,7 @@ type Settings struct {
 	Language *string
 }
 
-// === 4. RESULT type ===
+// === 4. RESULT ===
 func fetchUser(id int) Result<User, string> {
 	if id <= 0 {
 		return Err[User]("invalid id")
@@ -35,7 +44,66 @@ func fetchUser(id int) Result<User, string> {
 	})
 }
 
-// Demo function with multiple features
+// === 5. OPTION ===
+func findUser(name string) Option<User> {
+	if name == "" {
+		return None[User]()
+	}
+	return Some[User](User{ID: 1, Name: name})
+}
+
+// === 3. ERROR PROPAGATION ===
+func loadConfig() (string, error) {
+	return "config-data", nil
+}
+
+func processConfig() (string, error) {
+	// Pattern 1: Basic ?
+	let cfg = loadConfig()?
+
+	// Pattern 2: String context
+	let cfg2 = loadConfig() ? "config load failed"
+
+	// Pattern 3: Lambda transform
+	let cfg3 = loadConfig()? |e| fmt.Errorf("wrapped: %w", e)
+
+	return fmt.Sprintf("%s|%s|%s", cfg, cfg2, cfg3), nil
+}
+
+// === 6. LAMBDAS ===
+// BUG: Type inference generates `any` instead of `int`
+// See BUGS.md Bug 1
+func useLambdas() {
+	// Rust-style lambda
+	fn1 := |x| x * 2
+
+	// TypeScript-style lambda
+	fn2 := (x) => x * 3
+
+	fmt.Println(fn1(5), fn2(5))
+}
+
+// === 7. TUPLES ===
+func getPoint() (int, int) {
+	return 10, 20
+}
+
+// === 11. GUARD LET ===
+func guardLetDemo() string {
+	// Guard let with Option
+	guard let user = findUser("Bob") else {
+		return "user not found"
+	}
+
+	// Guard let with Result
+	guard let fetched = fetchUser(42) else |err| {
+		return fmt.Sprintf("fetch failed: %s", err)
+	}
+
+	return fmt.Sprintf("Found: %s, Fetched: %s", user.Name, fetched.Name)
+}
+
+// === MAIN DEMO ===
 func demo() string {
 	lang := "en"
 	user := User{
@@ -44,13 +112,17 @@ func demo() string {
 		Settings: &Settings{Theme: "dark", Language: &lang},
 	}
 
-	// 8. SAFE NAVIGATION
+	// === 8. SAFE NAVIGATION ===
 	let userLang = user.Settings?.Language
 
-	// 10. NULL COALESCE
+	// === 10. NULL COALESCE ===
 	let displayLang = userLang ?? "default"
 
-	// 2. MATCH on enum
+	// === 9. TERNARY ===
+	// BUG: Generates assignment without declaration - See BUGS.md Bug 2
+	let greeting = user.ID > 0 ? "Welcome" : "Hello"
+
+	// === 2. MATCH ===
 	let status = NewStatusActive("working")
 	let statusMsg = match status {
 		StatusPending => "pending",
@@ -58,20 +130,35 @@ func demo() string {
 		StatusDone { code } => fmt.Sprintf("done:%d", code),
 	}
 
-	// 12. LET binding
-	let result = fmt.Sprintf("User: %s, Lang: %s, Status: %s",
-		user.Name, displayLang, statusMsg)
+	// === 7. TUPLES (destructuring) ===
+	// BUG: Mishandles Go multiple returns as tuple struct - See BUGS.md Bug 3
+	let (x, y) = getPoint()
+
+	// === 12. LET binding ===
+	let result = fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
+		greeting, user.Name, displayLang, statusMsg, x, y)
 
 	return result
 }
 
 func main() {
-	// Test basic demo
+	fmt.Println("=== Demo ===")
 	fmt.Println(demo())
 
-	// Test Result
+	fmt.Println("\n=== Result ===")
 	r := fetchUser(42)
 	if r.IsOk() {
 		fmt.Println("Fetched:", r.MustOk().Name)
 	}
+
+	fmt.Println("\n=== Guard Let ===")
+	fmt.Println(guardLetDemo())
+
+	fmt.Println("\n=== Error Prop ===")
+	if cfg, err := processConfig(); err == nil {
+		fmt.Println("Config:", cfg)
+	}
+
+	fmt.Println("\n=== Lambdas ===")
+	useLambdas()
 }

@@ -1,4 +1,6 @@
-// Dingo Feature Showcase - Key features working together
+// Dingo Feature Showcase - ALL 12 features
+// This file demonstrates every Dingo feature.
+// Some may have bugs - see comments.
 package main
 
 import (
@@ -24,7 +26,7 @@ type StatusDone struct{ code int }
 func (StatusDone) isStatus()        {}
 func NewStatusDone(code int) Status { return StatusDone{code: code} }
 
-// Simple structs
+// === Types ===
 type User struct {
 	ID       int
 	Name     string
@@ -36,7 +38,7 @@ type Settings struct {
 	Language *string
 }
 
-// === 4. RESULT type ===
+// === 4. RESULT ===
 func fetchUser(id int) dgo.Result[User, string] {
 	if id <= 0 {
 		return dgo.Err[User]("invalid id")
@@ -49,7 +51,85 @@ func fetchUser(id int) dgo.Result[User, string] {
 	})
 }
 
-// Demo function with multiple features
+// === 5. OPTION ===
+func findUser(name string) dgo.Option[User] {
+	if name == "" {
+		return dgo.None[User]()
+	}
+	return dgo.Some[User](User{ID: 1, Name: name})
+}
+
+// === 3. ERROR PROPAGATION ===
+func loadConfig() (string, error) {
+	return "config-data", nil
+}
+
+func processConfig() (string, error) {
+	// Pattern 1: Basic ?
+	tmp, err := loadConfig()
+	if err != nil {
+		return "", err
+	}
+	cfg := tmp
+
+	// Pattern 2: String context
+	tmp1, err1 := loadConfig()
+	if err1 != nil {
+		return "", fmt.Errorf("config load failed: %w", err1)
+	}
+	cfg2 := tmp1
+
+	// Pattern 3: Lambda transform
+	tmp2, err2 := loadConfig()
+	if err2 != nil {
+		return "", fmt.Errorf("wrapped: %w", err2)
+	}
+	cfg3 := tmp2
+
+	return fmt.Sprintf("%s|%s|%s", cfg, cfg2, cfg3), nil
+}
+
+// === 6. LAMBDAS ===
+func useLambdas() {
+	// Rust-style lambda
+	fn1 := func(x any) any { return x * 2 }
+
+	// TypeScript-style lambda
+	fn2 := func(x any) any { return x * 3 }
+
+	fmt.Println(fn1(5), fn2(5))
+}
+
+// === 7. TUPLES ===
+func getPoint() (int, int) {
+	return 10, 20
+}
+
+// === 11. GUARD LET ===
+func guardLetDemo() string {
+	// Guard let with Option
+	tmp := findUser("Bob")
+	if tmp.IsNone() {
+
+		return "user not found"
+
+	}
+	user := *tmp.Some
+
+	// Guard let with Result
+	tmp1 := fetchUser(42)
+	if tmp1.IsErr() {
+		err := *tmp1.Err
+
+		return fmt.Sprintf("fetch failed: %s", err)
+
+	}
+	fetched := *tmp1.Ok
+
+	return fmt.Sprintf("Found: %s, Fetched: %s", user.Name, fetched.Name)
+}
+
+// === MAIN DEMO ===
 func demo() string {
 	lang := "en"
 	user := User{
@@ -58,13 +138,16 @@ func demo() string {
 		Settings: &Settings{Theme: "dark", Language: &lang},
 	}
 
-	// 8. SAFE NAVIGATION
-	var userLang *string
-	if user.Settings != nil {
-		userLang = user.Settings.Language
-	}
+	// === 8. SAFE NAVIGATION ===
+	userLang := func() *string {
+		tmp := user.Settings
+		if tmp == nil {
+			return nil
+		}
+		return tmp.Language
+	}()
 
-	// 10. NULL COALESCE
+	// === 10. NULL COALESCE ===
 	displayLang := func() string {
 		if userLang != nil {
 			return *userLang
@@ -72,7 +155,14 @@ func demo() string {
 		return "default"
 	}()
 
-	// 2. MATCH on enum
+	// === 9. TERNARY ===
+	if user.ID > 0 {
+		greeting = "Welcome"
+	} else {
+		greeting = "Hello"
+	}
+
+	// === 2. MATCH ===
 	status := NewStatusActive("working")
 	var statusMsg string
 	val := status
@@ -87,20 +177,36 @@ func demo() string {
 		statusMsg = fmt.Sprintf("done:%d", code)
 	}
 
-	// 12. LET binding
-	result := fmt.Sprintf("User: %s, Lang: %s, Status: %s",
-		user.Name, displayLang, statusMsg)
+	// === 7. TUPLES (destructuring) ===
+	tmp := getPoint()
+	x := tmp.First
+	y := tmp.Second
+
+	// === 12. LET binding ===
+	result := fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
+		greeting, user.Name, displayLang, statusMsg, x, y)
 
 	return result
 }
 
 func main() {
-	// Test basic demo
+	fmt.Println("=== Demo ===")
 	fmt.Println(demo())
 
-	// Test Result
+	fmt.Println("\n=== Result ===")
 	r := fetchUser(42)
 	if r.IsOk() {
 		fmt.Println("Fetched:", r.MustOk().Name)
 	}
+
+	fmt.Println("\n=== Guard Let ===")
+	fmt.Println(guardLetDemo())
+
+	fmt.Println("\n=== Error Prop ===")
+	if cfg, err := processConfig(); err == nil {
+		fmt.Println("Config:", cfg)
+	}
+
+	fmt.Println("\n=== Lambdas ===")
+	useLambdas()
 }
