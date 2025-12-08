@@ -75,7 +75,10 @@ func findMatchingColonForErrorProp(tokens []tokenizer.Token, questionIdx int) in
 					return i
 				}
 			}
-		case tokenizer.SEMICOLON, tokenizer.NEWLINE, tokenizer.EOF:
+		case tokenizer.NEWLINE, tokenizer.COMMENT:
+			// Skip newlines and comments - ternaries can be multi-line
+			continue
+		case tokenizer.SEMICOLON, tokenizer.EOF:
 			// Statement boundary - no matching colon
 			return -1
 		}

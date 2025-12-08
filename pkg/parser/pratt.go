@@ -621,6 +621,9 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 
 	p.nextToken() // consume ?
 
+	// Skip newlines and comments after ?
+	p.consumeNewlinesAndComments()
+
 	// Pattern 1: ? followed by terminator = error propagation
 	if p.isExpressionTerminator() {
 		return &ast.ErrorPropExpr{
@@ -644,13 +647,13 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 		// Lookahead: is there a colon after this string?
 		savedState2 := p.saveState()
 		p.nextToken() // move past string
-		hasColon := p.curTokenIs(tokenizer.COLON)
+		p.consumePeekNewlinesAndComments() // Skip newlines/comments before checking
+		hasColon := p.peekTokenIs(tokenizer.COLON)
 		p.restoreState(savedState2) // restore to string token
 
 		if !hasColon {
 			// No colon = error propagation with context
 			p.restoreState(state)
-			p.nextToken() // re-consume ?
 			return p.parseErrorPropagation(left)
 		}
 		// Has colon = ternary, fall through to ternary parsing below
@@ -659,21 +662,18 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	// Pattern 3: ? | = error propagation with lambda transform
 	if p.curTokenIs(tokenizer.PIPE) {
 		p.restoreState(state)
-		p.nextToken() // re-consume ?
 		return p.parseErrorPropagation(left)
 	}
 
 	// Pattern 4: ? ( where ( starts a lambda = error propagation with lambda
 	if p.curTokenIs(tokenizer.LPAREN) && p.isTypeScriptLambda() {
 		p.restoreState(state)
-		p.nextToken() // re-consume ?
 		return p.parseErrorPropagation(left)
 	}
 
 	// Pattern 5: ? ident => = error propagation with single-param lambda
 	if p.curTokenIs(tokenizer.IDENT) && p.peekTokenIs(tokenizer.ARROW) {
 		p.restoreState(state)
-		p.nextToken() // re-consume ?
 		return p.parseErrorPropagation(left)
 	}
 
@@ -682,11 +682,17 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	// This ensures the true branch doesn't try to parse as another ternary
 	trueExpr := p.ParseExpression(PrecTernary + 1)
 
+	// Skip newlines and comments before checking for colon
+	p.consumePeekNewlinesAndComments()
+
 	// Check for colon to confirm ternary
 	if p.peekTokenIs(tokenizer.COLON) {
 		p.nextToken() // move to :
 		colonPos := p.curToken.Pos
 		p.nextToken() // consume :
+
+		// Skip newlines and comments after :
+		p.consumeNewlinesAndComments()
 
 		// Right-associative: parse false branch at lower precedence
 		// This makes a ? b : c ? d : e parse as a ? b : (c ? d : e)
@@ -706,7 +712,6 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	// No colon found - this is error propagation without context
 	// Backtrack and parse as error propagation
 	p.restoreState(state)
-	p.nextToken() // re-consume ?
 	return p.parseErrorPropagation(left)
 }
 
@@ -715,10 +720,33 @@ func (p *PrattParser) isExpressionTerminator() bool {
 	switch p.curToken.Kind {
 	case tokenizer.EOF, tokenizer.SEMICOLON, tokenizer.RPAREN,
 		tokenizer.RBRACE, tokenizer.COMMA, tokenizer.COLON,
-		tokenizer.RBRACKET:
+		tokenizer.RBRACKET, tokenizer.NEWLINE:
 		return true
 	}
 	return false
+}
+
+// consumeNewlinesAndComments consumes all NEWLINE and COMMENT tokens at current position.
+// This allows multi-line ternary expressions with optional inline comments.
+// Returns the number of tokens skipped.
+func (p *PrattParser) consumeNewlinesAndComments() int {
+	count := 0
+	for p.curTokenIs(tokenizer.NEWLINE) || p.curTokenIs(tokenizer.COMMENT) {
+		p.nextToken()
+		count++
+	}
+	return count
+}
+
+// consumePeekNewlinesAndComments advances past any NEWLINE/COMMENT in peek position.
+// Useful when checking what token comes after newlines/comments.
+func (p *PrattParser) consumePeekNewlinesAndComments() int {
+	count := 0
+	for p.peekTokenIs(tokenizer.NEWLINE) || p.peekTokenIs(tokenizer.COMMENT) {
+		p.nextToken()
+		count++
+	}
+	return count
 }
 
 // parseBinaryExpr parses binary expressions (left-associative)

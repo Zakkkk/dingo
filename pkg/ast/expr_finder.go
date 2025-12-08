@@ -617,8 +617,12 @@ func detectContextFromTokens(tokens []tokenizer.Token, exprTokenIdx int, exprEnd
 				// Statement starts at the identifier
 				result.StatementStart = tokens[i-1].BytePos()
 			}
-			// Find statement end (scan forward for NEWLINE or SEMICOLON)
-			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			// Find statement end (use exprEnd if provided, otherwise search)
+			if exprEnd > 0 {
+				result.StatementEnd = exprEnd
+			} else {
+				result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			}
 			return result
 
 		case tokenizer.ASSIGN: // =
@@ -628,13 +632,23 @@ func detectContextFromTokens(tokens []tokenizer.Token, exprTokenIdx int, exprEnd
 				result.VarName = tokens[i-1].Lit
 				result.StatementStart = tokens[i-1].BytePos()
 			}
-			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			// Find statement end (use exprEnd if provided, otherwise search)
+			if exprEnd > 0 {
+				result.StatementEnd = exprEnd
+			} else {
+				result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			}
 			return result
 
 		case tokenizer.RETURN:
 			result.Context = ContextReturn
 			result.StatementStart = tok.BytePos()
-			result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			// Find statement end (use exprEnd if provided, otherwise search)
+			if exprEnd > 0 {
+				result.StatementEnd = exprEnd
+			} else {
+				result.StatementEnd = findStatementEndFromTokens(tokens, exprTokenIdx)
+			}
 			return result
 
 		case tokenizer.LPAREN, tokenizer.COMMA:
@@ -1018,6 +1032,9 @@ func findMatchingColon(tokens []tokenizer.Token, questionIdx int) int {
 			if depth == 0 && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 {
 				return -1
 			}
+		case tokenizer.NEWLINE, tokenizer.COMMENT:
+			// Skip newlines and comments - ternaries can be multi-line
+			continue
 		case tokenizer.EOF:
 			return -1
 		}
@@ -1141,10 +1158,43 @@ func findTernaryFalseEnd(tokens []tokenizer.Token, colonIdx int, src []byte) int
 			}
 			return tok.BytePos()
 		case tokenizer.NEWLINE:
-			// Newline at depth 0 and no nested ternary ends the expression
+			// Newlines can appear in multi-line ternaries
+			// At depth 0, check if next token continues the expression
 			if depth == 0 && ternaryDepth == 0 {
-				return tokens[i-1].ByteEnd()
+				// Look ahead to see if the expression continues after newline
+				if i+1 < len(tokens) {
+					nextTok := tokens[i+1]
+					// Keywords like let, return, func, var, const, type, etc. start new statements
+					if isStatementStartKeyword(nextTok.Kind) {
+						return tokens[i-1].ByteEnd()
+					}
+					// If next token can start/continue an expression, check more carefully
+					if isExprToken(nextTok.Kind) || isOperator(nextTok.Kind) {
+						// For IDENT specifically, need to check if it looks like a new statement
+						// e.g., "let x = ..." after a ternary should NOT be included
+						if nextTok.Kind == tokenizer.IDENT {
+							// If we see IDENT followed by := or =, it's a new statement
+							if i+2 < len(tokens) {
+								afterIdent := tokens[i+2]
+								if afterIdent.Kind == tokenizer.DEFINE || afterIdent.Kind == tokenizer.ASSIGN {
+									return tokens[i-1].ByteEnd()
+								}
+							}
+						}
+						// Continue scanning - expression continues
+					} else {
+						// Next token doesn't continue expression - terminate here
+						return tokens[i-1].ByteEnd()
+					}
+				} else {
+					// No more tokens after newline
+					return tokens[i-1].ByteEnd()
+				}
 			}
+			// If inside delimiters or nested ternary, newline doesn't terminate
+		case tokenizer.COMMENT:
+			// Skip comments - ternaries can have comments
+			continue
 		default:
 			// For non-delimiters, check if we're still in expression
 			if depth == 0 && ternaryDepth == 0 {
@@ -1205,6 +1255,30 @@ func isBoundary(kind tokenizer.TokenKind) bool {
 	switch kind {
 	case tokenizer.SEMICOLON, tokenizer.COMMA, tokenizer.LBRACE, tokenizer.RBRACE,
 		tokenizer.COLON, tokenizer.EOF:
+		return true
+	}
+	return false
+}
+
+// isExprToken returns true if the token can be part of an expression
+func isExprToken(kind tokenizer.TokenKind) bool {
+	switch kind {
+	case tokenizer.IDENT, tokenizer.INT, tokenizer.FLOAT, tokenizer.STRING, tokenizer.CHAR,
+		tokenizer.TRUE, tokenizer.FALSE, tokenizer.NIL,
+		tokenizer.LPAREN, tokenizer.LBRACKET, tokenizer.LBRACE,
+		tokenizer.NOT, tokenizer.MINUS, tokenizer.PLUS,
+		tokenizer.QUESTION:
+		return true
+	}
+	return false
+}
+
+// isStatementStartKeyword returns true if the token starts a new statement
+func isStatementStartKeyword(kind tokenizer.TokenKind) bool {
+	switch kind {
+	case tokenizer.LET, tokenizer.VAR, tokenizer.CONST, tokenizer.TYPE,
+		tokenizer.FUNC, tokenizer.RETURN, tokenizer.IF, tokenizer.FOR,
+		tokenizer.SWITCH, tokenizer.PACKAGE, tokenizer.IMPORT:
 		return true
 	}
 	return false

@@ -451,13 +451,20 @@ func (g *NullCoalesceGenerator) generateIIFEContent(chain []safeNavSegment, base
 }
 
 // generateStandard generates a standard null coalesce IIFE.
+// Handles pointer-to-value coalescing: *string ?? "default" → string
 func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
 	dingoStart := int(g.expr.Pos())
 	dingoEnd := int(g.expr.End())
 	outputStart := g.Buf.Len()
 
-	// Infer return type from operands
+	// Infer return type from operands (use right side type for pointer ?? value case)
 	returnType := g.inferType(g.expr.Left, g.expr.Right)
+
+	// Check if right is a literal value (needs dereference when left is pointer)
+	needsDeref := g.needsDereference()
+
+	// Generate left expression
+	leftSrc := g.dingoExprToString(g.expr.Left)
 
 	// Generate IIFE wrapper: func() TYPE {
 	g.Write("func() ")
@@ -465,9 +472,8 @@ func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
 	g.Write(" {\n")
 	g.Write("\tif ")
 
-	// Generate left expression
+	// Generate left expression for nil check
 	leftStart := g.Buf.Len()
-	leftSrc := g.dingoExprToString(g.expr.Left)
 	g.Write(leftSrc)
 	leftEnd := g.Buf.Len()
 
@@ -475,7 +481,10 @@ func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
 	g.Write(" != nil {\n")
 	g.Write("\t\treturn ")
 
-	// Return left expression
+	// Return left expression (with dereference if pointer ?? value)
+	if needsDeref {
+		g.Write("*")
+	}
 	g.Write(leftSrc)
 	g.Write("\n\t}\n")
 
@@ -555,6 +564,23 @@ func (g *NullCoalesceGenerator) dingoExprToString(expr ast.Expr) string {
 		}
 		return "/* unknown */"
 	}
+}
+
+// needsDereference checks if the left operand needs to be dereferenced.
+// This is true when right is a non-pointer literal (string, int, bool).
+// Example: setting ?? "default" where setting is *string → need to dereference
+func (g *NullCoalesceGenerator) needsDereference() bool {
+	if g.expr.Right == nil {
+		return false
+	}
+	if raw, ok := g.expr.Right.(*ast.RawExpr); ok {
+		typ := g.inferTypeFromText(raw.Text)
+		// If right is a literal (string, int, bool, float64), assume left is pointer
+		// This heuristic works because ?? is used for nil coalescing
+		// and literals can't be nil, so left must be nilable (pointer)
+		return typ == "string" || typ == "int" || typ == "bool" || typ == "float64"
+	}
+	return false
 }
 
 // inferType attempts to infer concrete type from operands

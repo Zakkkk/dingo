@@ -1,6 +1,8 @@
 package codegen
 
 import (
+	"strings"
+
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
@@ -230,11 +232,12 @@ func (g *TernaryCodeGen) writeExpr(expr ast.Expr, fallback string) {
 			g.Buf.Write(result.Output)
 			return
 		}
-		// Use Dingo AST String() method
-		g.Write(expr.String())
+		// Use Dingo AST String() method, trimming whitespace to avoid
+		// Go parser issues with newlines (e.g., "return \n value" becomes "return value")
+		g.Write(strings.TrimSpace(expr.String()))
 	} else {
-		// Legacy path: use string representation
-		g.Write(fallback)
+		// Legacy path: use string representation, also trimmed
+		g.Write(strings.TrimSpace(fallback))
 	}
 }
 
@@ -256,7 +259,7 @@ func (g *TernaryCodeGen) exprToBytes(expr ast.Expr, fallback string) []byte {
 			result := nestedGen.generateIIFE()
 			return result.Output
 		}
-		return []byte(expr.String())
+		return []byte(strings.TrimSpace(expr.String()))
 	}
-	return []byte(fallback)
+	return []byte(strings.TrimSpace(fallback))
 }
