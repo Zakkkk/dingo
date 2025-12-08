@@ -284,6 +284,9 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 		case ast.StmtErrorPropReturn:
 			// return foo()?
 			generated = generateErrorPropReturnAdvanced(exprBytes, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+		case ast.StmtErrorPropBare:
+			// foo()?
+			generated = generateErrorPropBareAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
 		}
 
 		// Replace in result
@@ -582,6 +585,119 @@ func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter 
 	// return tmpVar
 	buf.WriteString("return ")
 	buf.WriteString(tmpVar)
+
+	return buf.Bytes()
+}
+
+// generateErrorPropBareAdvanced generates code for bare statement error propagation.
+//
+// Uses InferExprReturnCount to detect:
+// - Single-return functions (like row.Scan()) → generates: err := expr
+// - Multi-return functions (like db.Query()) → generates: _, err := expr
+//
+// For external packages where detection fails, defaults to multi-return (_, err :=).
+//
+// Basic (ErrorPropBasic):
+//   err := expr; if err != nil { return ..., err }  (single-return)
+//   _, err := expr; if err != nil { return ..., err }  (multi-return)
+//
+// Context (ErrorPropContext):
+//   err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }
+//
+// Lambda (ErrorPropLambda):
+//   err := expr; if err != nil { return ..., transformedError }
+func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+	var buf bytes.Buffer
+
+	// Generate unique variable names
+	var errVar string
+	if *counter == 1 {
+		errVar = "err"
+	} else {
+		errVar = fmt.Sprintf("err%d", *counter-1)
+	}
+	*counter--
+
+	// Detect return count: 1 = single (error only), 2+ = multi (T, error)
+	returnCount := codegen.InferExprReturnCount(src, expr, exprPos)
+
+	// Detect if enclosing function returns Result type
+	resultOkType := codegen.InferEnclosingFunctionReturnsResult(src, exprPos)
+	isResultReturn := resultOkType != ""
+
+	// Generate assignment based on return count
+	if returnCount == 1 {
+		// Single return: err := expr
+		buf.WriteString(errVar)
+		buf.WriteString(" := ")
+	} else {
+		// Multi-return or unknown: _, err := expr (safe default)
+		buf.WriteString("_, ")
+		buf.WriteString(errVar)
+		buf.WriteString(" := ")
+	}
+	buf.Write(expr)
+	buf.WriteByte('\n')
+
+	// if err != nil { return ERROR_VALUE }
+	buf.WriteString("if ")
+	buf.WriteString(errVar)
+	buf.WriteString(" != nil {\n\treturn ")
+
+	// For Result-returning functions, we don't need zero values for other returns
+	// Just return the error wrapped in dgo.Err[T]
+	if !isResultReturn {
+		for i, zv := range returnTypes {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(zv)
+		}
+		if len(returnTypes) > 0 {
+			buf.WriteString(", ")
+		}
+	}
+
+	// Generate the error value based on kind and return type
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", err)
+		errExpr := fmt.Sprintf(`fmt.Errorf("%s: %%w", %s)`, errorContext, errVar)
+		if isResultReturn {
+			buf.WriteString("dgo.Err[")
+			buf.WriteString(resultOkType)
+			buf.WriteString("](")
+			buf.WriteString(errExpr)
+			buf.WriteString(")")
+		} else {
+			buf.WriteString(errExpr)
+		}
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with error var in body, emit directly (no IIFE)
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, errVar)
+		if isResultReturn {
+			buf.WriteString("dgo.Err[")
+			buf.WriteString(resultOkType)
+			buf.WriteString("](")
+			buf.Write(substituted)
+			buf.WriteString(")")
+		} else {
+			buf.Write(substituted)
+		}
+	default:
+		// Basic: just return err
+		if isResultReturn {
+			buf.WriteString("dgo.Err[")
+			buf.WriteString(resultOkType)
+			buf.WriteString("](")
+			buf.WriteString(errVar)
+			buf.WriteString(")")
+		} else {
+			buf.WriteString(errVar)
+		}
+	}
+
+	buf.WriteString("\n}")
 
 	return buf.Bytes()
 }

@@ -30,6 +30,38 @@ func InferReturnTypes(src []byte, exprPos int) []string {
 	return zeroValues
 }
 
+// InferReturnTypeNames analyzes the source to find the enclosing function's return types
+// and returns the actual type names (not zero values).
+// Returns nil if unable to determine types.
+func InferReturnTypeNames(src []byte, exprPos int) []string {
+	funcDecl := findEnclosingFunction(src, exprPos)
+	if funcDecl == nil {
+		return nil
+	}
+	return parseReturnTypes(funcDecl)
+}
+
+// InferEnclosingFunctionReturnsResult checks if the enclosing function returns a Result type.
+// Returns the Result's T type if it does, empty string otherwise.
+// For example, for `func foo() Result<User, error>`, returns "User".
+func InferEnclosingFunctionReturnsResult(src []byte, exprPos int) string {
+	typeNames := InferReturnTypeNames(src, exprPos)
+	if len(typeNames) == 0 {
+		return ""
+	}
+
+	// Check each return type for Result pattern
+	for _, typeName := range typeNames {
+		if IsResultType(typeName) {
+			okType := ExtractResultOkType(typeName)
+			if okType != "" {
+				return okType
+			}
+		}
+	}
+	return ""
+}
+
 // findEnclosingFunction finds the function declaration that contains exprPos
 func findEnclosingFunction(src []byte, exprPos int) *ast.FuncDecl {
 	// First try: parse as complete file
@@ -208,9 +240,191 @@ func exprToTypeName(expr ast.Expr) string {
 		return "chan " + exprToTypeName(t.Value)
 	case *ast.FuncType:
 		return "func"
+	case *ast.IndexExpr:
+		// Generic type with single parameter: Result[T]
+		return exprToTypeName(t.X) + "[" + exprToTypeName(t.Index) + "]"
+	case *ast.IndexListExpr:
+		// Generic type with multiple parameters: Result[T, E]
+		result := exprToTypeName(t.X) + "["
+		for i, idx := range t.Indices {
+			if i > 0 {
+				result += ", "
+			}
+			result += exprToTypeName(idx)
+		}
+		result += "]"
+		return result
 	default:
 		return "interface{}"
 	}
+}
+
+// InferExprReturnCount determines how many values an expression returns.
+// Returns 1 for single-return expressions (like row.Scan() returning just error),
+// Returns 2 for multi-return expressions (like db.Query() returning (*Rows, error)),
+// Returns -1 if detection fails (fallback to multi-return assumption).
+//
+// This function attempts to type-check the expression by:
+// 1. Extracting the function being called from the expression
+// 2. Finding the function declaration in the source
+// 3. Counting return values from the signature
+//
+// For external package functions (like sql.Row.Scan), detection may fail
+// and the caller should use the fallback value.
+func InferExprReturnCount(src []byte, exprBytes []byte, exprPos int) int {
+	// Parse the expression using go/parser to extract method name
+	exprStr := string(exprBytes)
+	methodName := extractMethodName(exprStr)
+	if methodName != "" {
+		// Check if this method is defined in the current source
+		count := findMethodReturnCount(src, methodName)
+		if count > 0 {
+			return count
+		}
+	}
+
+	// For external packages, we can't easily determine return count without full type info
+	// Return -1 to signal caller should use fallback
+	return -1
+}
+
+// extractMethodName extracts the method/function name from a call expression
+// using go/parser to properly parse the expression AST.
+// e.g., "row.Scan(&user.ID)" -> "Scan", "foo()" -> "foo"
+func extractMethodName(expr string) string {
+	// Parse as Go expression using go/parser
+	parsedExpr, err := parser.ParseExpr(expr)
+	if err != nil {
+		return ""
+	}
+
+	// Check if it's a call expression
+	callExpr, ok := parsedExpr.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+
+	// Extract the function/method name from the call
+	return extractFuncName(callExpr.Fun)
+}
+
+// extractFuncName extracts the function name from a call's Fun expression
+func extractFuncName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		// Simple function call: foo()
+		return e.Name
+	case *ast.SelectorExpr:
+		// Method call: obj.Method() or pkg.Func()
+		return e.Sel.Name
+	case *ast.IndexExpr:
+		// Generic function: foo[T]()
+		return extractFuncName(e.X)
+	case *ast.IndexListExpr:
+		// Generic function with multiple type params: foo[T, U]()
+		return extractFuncName(e.X)
+	default:
+		return ""
+	}
+}
+
+// findMethodReturnCount searches the source for a function/method with the given name
+// and returns its return count, or 0 if not found.
+//
+// NOTE: This function sanitizes Dingo-specific '?' syntax to allow go/parser to work.
+// This is NOT byte-based code transformation - all actual analysis is done via go/ast.
+// The sanitization is necessary because we need to parse function signatures that
+// exist in the same file as error propagation expressions, and go/parser cannot
+// handle the '?' character. The actual return count detection is performed entirely
+// through ast.Inspect on the parsed AST.
+func findMethodReturnCount(src []byte, methodName string) int {
+	// Sanitize source: replace Dingo's '?' with space to allow go/parser to work.
+	// This preserves byte positions while making the source valid Go syntax.
+	sanitized := make([]byte, len(src))
+	copy(sanitized, src)
+	for i := 0; i < len(sanitized); i++ {
+		if sanitized[i] == '?' {
+			sanitized[i] = ' '
+		}
+	}
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", sanitized, parser.ParseComments)
+	if err != nil {
+		return 0
+	}
+
+	var returnCount int
+	ast.Inspect(f, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok {
+			return true
+		}
+		if fn.Name.Name == methodName {
+			if fn.Type.Results != nil {
+				returnCount = fn.Type.Results.NumFields()
+			}
+			return false
+		}
+		return true
+	})
+
+	return returnCount
+}
+
+// IsResultType checks if a type string represents a Result type (dgo.Result or Result)
+func IsResultType(typeStr string) bool {
+	// Check for dgo.Result[T, E] or Result[T, E]
+	for i := 0; i < len(typeStr); i++ {
+		if typeStr[i] == '.' {
+			// Has package prefix, check for dgo.Result
+			remaining := typeStr[i+1:]
+			if len(remaining) >= 6 && remaining[:6] == "Result" {
+				return true
+			}
+		}
+	}
+	// Check for unqualified Result
+	if len(typeStr) >= 6 && typeStr[:6] == "Result" {
+		return true
+	}
+	return false
+}
+
+// ExtractResultOkType extracts the T from Result[T, E] or dgo.Result[T, E]
+// Returns empty string if not a Result type or extraction fails
+func ExtractResultOkType(typeStr string) string {
+	// Find "Result[" in the string
+	resultIdx := -1
+	for i := 0; i <= len(typeStr)-7; i++ {
+		if typeStr[i:i+7] == "Result[" {
+			resultIdx = i + 7
+			break
+		}
+	}
+	if resultIdx == -1 {
+		return ""
+	}
+
+	// Extract until first comma or ]
+	depth := 1
+	start := resultIdx
+	for i := resultIdx; i < len(typeStr); i++ {
+		switch typeStr[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return typeStr[start:i]
+			}
+		case ',':
+			if depth == 1 {
+				return typeStr[start:i]
+			}
+		}
+	}
+	return ""
 }
 
 // zeroValueFor returns the zero value for a given type name.

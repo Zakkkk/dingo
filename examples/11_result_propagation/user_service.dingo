@@ -43,7 +43,11 @@ func GetUserBasic(db *sql.DB, id int) (User, error) {
 
 	var user User
 	// Basic ? just propagates the error as-is
-	row.Scan(&user.ID, &user.Name, &user.Email)?
+	// Note: Scan returns only error, so use explicit error handling
+	err := row.Scan(&user.ID, &user.Name, &user.Email)
+	if err != nil {
+		return User{}, err
+	}
 
 	return user, nil
 }
@@ -57,7 +61,11 @@ func GetUserWithContext(db *sql.DB, id int) (User, error) {
 
 	var user User
 	// String context adds a descriptive wrapper
-	row.Scan(&user.ID, &user.Name, &user.Email) ? "failed to scan user row"
+	// Note: Scan returns only error, so use explicit error handling
+	err := row.Scan(&user.ID, &user.Name, &user.Email)
+	if err != nil {
+		return User{}, fmt.Errorf("failed to scan user row: %w", err)
+	}
 
 	return user, nil
 }
@@ -83,6 +91,7 @@ func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
 
 func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
 	// Pattern 3: Explicit |err| lambda binding
+	// Note: db.Query returns (*sql.Rows, error) - supports ?
 	rows := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)?
 		|err| ServiceError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()
@@ -90,9 +99,11 @@ func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
 	var orders []Order
 	for rows.Next() {
 		var order Order
-		// Same pattern - explicit binding, clear transformation
-		rows.Scan(&order.ID, &order.UserID, &order.Total)?
-			|err| ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
+		// Note: Scan returns only error, so use explicit error handling
+		err := rows.Scan(&order.ID, &order.UserID, &order.Total)
+		if err != nil {
+			return ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
+		}
 		orders = append(orders, order)
 	}
 	return orders
@@ -103,9 +114,10 @@ func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
 
 func GetUserOrderTotal(db *sql.DB, userID int) Result<float64, ServiceError> {
 	// guard let unwraps Result or returns error via explicit |err|
-	guard let user = FindUser(db, userID) else |err| { return Err(err) }
+	// Note: Err[float64] explicit type parameter needed for type inference
+	guard let user = FindUser(db, userID) else |err| { return Err<float64>(err) }
 
-	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err(err) }
+	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err<float64>(err) }
 
 	var total float64
 	for _, order := range orders {

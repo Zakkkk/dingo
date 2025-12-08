@@ -11,6 +11,7 @@ const (
 	StmtErrorPropAssign StmtKind = iota // x := foo()?
 	StmtErrorPropLet                    // let x = foo()?
 	StmtErrorPropReturn                 // return foo()?
+	StmtErrorPropBare                   // foo()?
 )
 
 // ErrorPropKind represents the type of error transformation
@@ -103,6 +104,7 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 		// Pattern 1: IDENT := ... ?
 		// Pattern 2: let IDENT = ... ?
 		// Pattern 3: return ... ?
+		// Pattern 4: expr? (bare statement)
 
 		if t.Kind == tokenizer.IDENT || t.Kind == tokenizer.UNDERSCORE {
 			// Check for "ident :=" or "_ :=" pattern
@@ -111,6 +113,18 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 				if loc != nil {
 					loc.Kind = StmtErrorPropAssign
 					loc.VarName = t.Lit
+					locations = append(locations, *loc)
+					// Skip past this statement
+					i = findTokenAtByte(tokens, loc.End)
+				}
+				continue
+			}
+			// Check for bare error propagation: expr?
+			// IDENT not followed by := could be start of a bare expression
+			if !isPrecededByAssignOrReturn(tokens, i) {
+				loc := scanForQuestionMark(tokens, i)
+				if loc != nil {
+					loc.Kind = StmtErrorPropBare
 					locations = append(locations, *loc)
 					// Skip past this statement
 					i = findTokenAtByte(tokens, loc.End)
@@ -138,10 +152,52 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 				// Skip past this statement
 				i = findTokenAtByte(tokens, loc.End)
 			}
+		} else if isExpressionStarter(t.Kind) {
+			// Check for bare error propagation: expr?
+			// This handles non-IDENT expression starters (parentheses, literals, etc.)
+			// Note: IDENT is handled above, so this won't fire for IDENT tokens
+			// even though isExpressionStarter returns true for IDENT
+			if !isPrecededByAssignOrReturn(tokens, i) {
+				loc := scanForQuestionMark(tokens, i)
+				if loc != nil {
+					loc.Kind = StmtErrorPropBare
+					locations = append(locations, *loc)
+					// Skip past this statement
+					i = findTokenAtByte(tokens, loc.End)
+				}
+			}
 		}
 	}
 
 	return locations, nil
+}
+
+// isExpressionStarter checks if a token can start an expression
+func isExpressionStarter(kind tokenizer.TokenKind) bool {
+	return kind == tokenizer.IDENT ||
+		kind == tokenizer.LPAREN ||
+		kind == tokenizer.INT ||
+		kind == tokenizer.FLOAT ||
+		kind == tokenizer.STRING ||
+		kind == tokenizer.TRUE ||
+		kind == tokenizer.FALSE ||
+		kind == tokenizer.NIL
+}
+
+// isPrecededByAssignOrReturn checks if the current position is preceded by := or = or return
+func isPrecededByAssignOrReturn(tokens []tokenizer.Token, startIdx int) bool {
+	// Look backwards for assignment or return on the same statement
+	for i := startIdx - 1; i >= 0; i-- {
+		t := tokens[i]
+		switch t.Kind {
+		case tokenizer.DEFINE, tokenizer.ASSIGN, tokenizer.RETURN:
+			return true
+		case tokenizer.NEWLINE, tokenizer.SEMICOLON:
+			// Hit statement boundary without finding assignment/return
+			return false
+		}
+	}
+	return false
 }
 
 // scanForQuestionMark scans forward from startIdx looking for a statement ending with ?
@@ -188,8 +244,13 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 				}
 
 				// Look at what follows the ?
-				if i+1 < len(tokens) {
-					next := tokens[i+1]
+				// Skip NEWLINE tokens to support multi-line lambda patterns
+				nextIdx := i + 1
+				for nextIdx < len(tokens) && tokens[nextIdx].Kind == tokenizer.NEWLINE {
+					nextIdx++
+				}
+				if nextIdx < len(tokens) {
+					next := tokens[nextIdx]
 
 					// Pattern: ? "message" (string context)
 					if next.Kind == tokenizer.STRING {
@@ -209,7 +270,7 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 
 					// Pattern: ? |param| body (Rust-style lambda)
 					if next.Kind == tokenizer.PIPE {
-						if parsed := parseRustLambdaTransform(tokens, i+1); parsed != nil {
+						if parsed := parseRustLambdaTransform(tokens, nextIdx); parsed != nil {
 							loc.ErrorKind = ErrorPropLambda
 							loc.LambdaParam = parsed.param
 							loc.LambdaBodyStart = parsed.bodyStart
@@ -221,7 +282,7 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 
 					// Pattern: ? (param) => body (TypeScript-style with parens)
 					if next.Kind == tokenizer.LPAREN {
-						if parsed := parseTSLambdaTransform(tokens, i+1); parsed != nil {
+						if parsed := parseTSLambdaTransform(tokens, nextIdx); parsed != nil {
 							loc.ErrorKind = ErrorPropLambda
 							loc.LambdaParam = parsed.param
 							loc.LambdaBodyStart = parsed.bodyStart
@@ -233,8 +294,8 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 
 					// Pattern: ? param => body (TypeScript-style single param, no parens)
 					if next.Kind == tokenizer.IDENT {
-						if i+2 < len(tokens) && tokens[i+2].Kind == tokenizer.ARROW {
-							if parsed := parseTSSingleParamLambdaTransform(tokens, i+1); parsed != nil {
+						if nextIdx+1 < len(tokens) && tokens[nextIdx+1].Kind == tokenizer.ARROW {
+							if parsed := parseTSSingleParamLambdaTransform(tokens, nextIdx); parsed != nil {
 								loc.ErrorKind = ErrorPropLambda
 								loc.LambdaParam = parsed.param
 								loc.LambdaBodyStart = parsed.bodyStart
