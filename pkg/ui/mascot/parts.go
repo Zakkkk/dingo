@@ -25,7 +25,7 @@ var Ears = struct {
 		"     ▄▀▄    ▄▀▄       ",
 	},
 	DROOPY: []string{
-		"     ▄  ▄  ▄  ▄       ",
+		"     ▄▀▄    ▄▀▄       ",
 	},
 }
 
@@ -38,7 +38,7 @@ var Head = struct {
 		"     █  ▀▀▀▀▀  █      ",
 	},
 	DROOPY: []string{
-		"     █  ▄▄▄▄▄  █      ",
+		"     █  ▀▀▀▀▀  █      ",
 	},
 }
 

@@ -30,7 +30,8 @@ func main() {
 It provides Result/Option types, pattern matching, error propagation,
 and other quality-of-life features while maintaining 100% Go ecosystem compatibility.`,
 		Version: version,
-		SilenceUsage: true, // Don't show usage on errors
+		SilenceUsage:  true, // Don't show usage on errors
+		SilenceErrors: true, // We handle error display ourselves
 		Run: func(cmd *cobra.Command, args []string) {
 			ui.PrintDingoHelp(version)
 		},
@@ -60,6 +61,10 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 		os.Exit(1)
 	}
 }
+
+// Global flags
+var simulateSlow bool
+var noMascot bool
 
 func buildCmd() *cobra.Command {
 	var (
@@ -91,6 +96,8 @@ Examples:
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (single file only)")
 	cmd.Flags().StringVarP(&outdir, "outdir", "O", "", "Output directory (mirrors source structure)")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "Watch for file changes and rebuild")
+	cmd.Flags().BoolVar(&simulateSlow, "slow", false, "Simulate slow build (3s delay) for testing animation")
+	cmd.Flags().BoolVar(&noMascot, "no-mascot", false, "Disable mascot and animation (plain text output)")
 
 	return cmd
 }
@@ -158,18 +165,26 @@ func runBuild(files []string, output, outdir string, watch bool) error {
 		return fmt.Errorf("failed to expand workspace patterns: %w", err)
 	}
 
-	// Create beautiful output handler
-	buildUI := ui.NewBuildOutput()
-
-	// Print header
-	buildUI.PrintHeader(version)
-
-	// Print build start
-	buildUI.PrintBuildStart(len(expandedFiles))
-
 	// Output directory not yet supported
 	if outdir != "" {
 		return fmt.Errorf("--outdir flag is not currently supported")
+	}
+
+	// Create build UI (always - mascot shown at end)
+	buildUI := ui.NewSimpleBuildUI()
+	buildUI.Start()
+	defer buildUI.Stop()
+
+	// Print header
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+	versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+	fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version))
+
+	// Print build start
+	if len(expandedFiles) == 1 {
+		fmt.Println("Building 1 file")
+	} else {
+		fmt.Printf("Building %d files\n", len(expandedFiles))
 	}
 
 	// Build each file
@@ -185,29 +200,25 @@ func runBuild(files []string, output, outdir string, watch bool) error {
 			outputPath = output
 		}
 
-		if err := buildFile(file, outputPath, buildUI); err != nil {
+		if err := buildFileSimple(file, outputPath, buildUI); err != nil {
 			success = false
 			lastError = err
-			buildUI.PrintError(err.Error())
+			buildUI.SetStatus(mascot.StateFailed, "Build failed!", "see error above")
+			fmt.Printf("  ✗ %s\n", err.Error())
 			break
 		}
 		transpiled++
 	}
 
-	// Print summary
+	// Final status
 	if success {
-		summary := fmt.Sprintf("Transpiled: %d files", transpiled)
-		buildUI.PrintSummary(true, summary)
+		buildUI.SetStatus(mascot.StateSuccess, "Build successful!", fmt.Sprintf("%d file(s) transpiled", transpiled))
 		if watch {
-			fmt.Println()
-			buildUI.PrintInfo("Watch mode not yet implemented")
+			fmt.Println("\nℹ Watch mode not yet implemented")
 		}
-	} else {
-		buildUI.PrintSummary(false, lastError.Error())
-		return lastError
 	}
 
-	return nil
+	return lastError
 }
 
 func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
@@ -273,6 +284,220 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 	})
 
 	return nil
+}
+
+// buildFileSimple builds a single file with animated spinner during steps
+func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) error {
+	if outputPath == "" {
+		// Default: replace .dingo with .go
+		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
+			outputPath = inputPath[:len(inputPath)-6] + ".go"
+		} else {
+			outputPath = inputPath + ".go"
+		}
+	}
+
+	// Get just the filename for display
+	fileName := filepath.Base(inputPath)
+
+	// File header
+	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
+	arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+	outputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
+	fmt.Printf("  %s %s %s\n\n",
+		inputStyle.Render(inputPath),
+		arrowStyle.Render("→"),
+		outputStyle.Render(outputPath))
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
+	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
+
+	// Step 1: Read source (with spinner)
+	var src []byte
+	var readDuration time.Duration
+	err := runWithSpinner("Read", func() error {
+		start := time.Now()
+		var err error
+		src, err = os.ReadFile(inputPath)
+		readDuration = time.Since(start)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	fmt.Printf("  %s Read        Done %s\n",
+		successStyle.Render("✓"),
+		timeStyle.Render("("+formatDuration(readDuration)+")"))
+
+	// Step 2: Transpile (with spinner - this is the long one)
+	var goSource []byte
+	var transpileDuration time.Duration
+	buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", fileName)
+	err = runWithSpinner("Transpile", func() error {
+		start := time.Now()
+		var err error
+		goSource, err = transpiler.PureASTTranspile(src, inputPath)
+		// Simulate slow build if --slow flag is set
+		if simulateSlow {
+			time.Sleep(3 * time.Second)
+		}
+		transpileDuration = time.Since(start)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("transpilation error: %w", err)
+	}
+	fmt.Printf("  %s Transpile   Done %s\n",
+		successStyle.Render("✓"),
+		timeStyle.Render("("+formatDuration(transpileDuration)+")"))
+
+	// Step 3: Write output (with spinner)
+	var writeDuration time.Duration
+	err = runWithSpinner("Write", func() error {
+		start := time.Now()
+		err := os.WriteFile(outputPath, goSource, 0o644)
+		writeDuration = time.Since(start)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to write output: %w", err)
+	}
+	fmt.Printf("  %s Write       Done %s\n",
+		successStyle.Render("✓"),
+		timeStyle.Render("("+formatDuration(writeDuration)+")"))
+	fmt.Printf("    %s\n\n", timeStyle.Render(fmt.Sprintf("%d bytes written", len(goSource))))
+
+	return nil
+}
+
+// runWithSpinner runs a function while showing animated mascot
+func runWithSpinner(stepName string, fn func() error) error {
+	// No animation in plain mode
+	if noMascot {
+		return fn()
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- fn()
+	}()
+
+	frameIdx := 0
+	ticker := time.NewTicker(120 * time.Millisecond)
+	defer ticker.Stop()
+
+	// Mascot frames with spinner eyes
+	mascotFrames := [][]string{
+		{
+			"     ▄▀▄    ▄▀▄       ",
+			"     █  ▀▀▀▀▀  █      ",
+			"     █  ◜   ◜  █      ",
+			"     ▀▄   ▲   ▄▀      ",
+			"       ▀▄▄▄▄▄▀        ",
+			"      ▄█▀   ▀█▄       ",
+			"     ██  ███  ██      ",
+			"     ▀█▄▄▀ ▀▄▄█▀      ",
+		},
+		{
+			"     ▄▀▄    ▄▀▄       ",
+			"     █  ▀▀▀▀▀  █      ",
+			"     █  ◝   ◝  █      ",
+			"     ▀▄   ▲   ▄▀      ",
+			"       ▀▄▄▄▄▄▀        ",
+			"      ▄█▀   ▀█▄       ",
+			"     ██  ███  ██      ",
+			"     ▀█▄▄▀ ▀▄▄█▀      ",
+		},
+		{
+			"     ▄▀▄    ▄▀▄       ",
+			"     █  ▀▀▀▀▀  █      ",
+			"     █  ◞   ◞  █      ",
+			"     ▀▄   ▲   ▄▀      ",
+			"       ▀▄▄▄▄▄▀        ",
+			"      ▄█▀   ▀█▄       ",
+			"     ██  ███  ██      ",
+			"     ▀█▄▄▀ ▀▄▄█▀      ",
+		},
+		{
+			"     ▄▀▄    ▄▀▄       ",
+			"     █  ▀▀▀▀▀  █      ",
+			"     █  ◟   ◟  █      ",
+			"     ▀▄   ▲   ▄▀      ",
+			"       ▀▄▄▄▄▄▀        ",
+			"      ▄█▀   ▀█▄       ",
+			"     ██  ███  ██      ",
+			"     ▀█▄▄▄▀ ▀▄▄█▀      ",
+		},
+	}
+
+	mascotColor := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+	statusStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
+	separatorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#45475A"))
+
+	// Status text to show next to mascot
+	statusLines := []string{
+		"",
+		statusStyle.Render(stepName + "..."),
+		detailStyle.Render("please wait"),
+	}
+
+	// Draw initial mascot
+	drawMascotFrame := func(frame []string) {
+		// Separator
+		fmt.Println(separatorStyle.Render("────────────────────────────────────────────────────────────"))
+
+		maxLines := len(frame)
+		for i := 0; i < maxLines; i++ {
+			mascotLine := mascotColor.Render(frame[i])
+			statusLine := ""
+			if i < len(statusLines) {
+				statusLine = "  " + statusLines[i]
+			}
+			fmt.Printf("%s%s\n", mascotLine, statusLine)
+		}
+	}
+
+	// Hide cursor
+	fmt.Print("\033[?25l")
+
+	// Draw first frame
+	drawMascotFrame(mascotFrames[frameIdx])
+	mascotHeight := len(mascotFrames[0]) + 1 // +1 for separator
+
+	for {
+		select {
+		case err := <-done:
+			// Move cursor up and clear mascot area
+			fmt.Printf("\033[%dA", mascotHeight)
+			for i := 0; i < mascotHeight; i++ {
+				fmt.Print("\033[2K\n")
+			}
+			fmt.Printf("\033[%dA", mascotHeight)
+			// Show cursor
+			fmt.Print("\033[?25h")
+			return err
+		case <-ticker.C:
+			frameIdx = (frameIdx + 1) % len(mascotFrames)
+			// Move cursor up to redraw mascot
+			fmt.Printf("\033[%dA", mascotHeight)
+			drawMascotFrame(mascotFrames[frameIdx])
+		}
+	}
+}
+
+// formatDuration formats a duration in human-readable form
+func formatDuration(d time.Duration) string {
+	switch {
+	case d < time.Microsecond:
+		return fmt.Sprintf("%dns", d.Nanoseconds())
+	case d < time.Millisecond:
+		return fmt.Sprintf("%dµs", d.Microseconds())
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	default:
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	}
 }
 
 func runDingoFile(inputPath string, programArgs []string) error {
@@ -352,19 +577,6 @@ func runDingoFile(inputPath string, programArgs []string) error {
 	}
 
 	return nil
-}
-
-func formatDuration(d time.Duration) string {
-	switch {
-	case d < time.Microsecond:
-		return fmt.Sprintf("%dns", d.Nanoseconds())
-	case d < time.Millisecond:
-		return fmt.Sprintf("%dµs", d.Microseconds())
-	case d < time.Second:
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	default:
-		return fmt.Sprintf("%.2fs", d.Seconds())
-	}
 }
 
 // expandWorkspacePatterns expands workspace patterns like ./... to actual .dingo files

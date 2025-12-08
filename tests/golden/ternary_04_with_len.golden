@@ -1,0 +1,30 @@
+package main
+
+type Config struct {
+	Region *string
+}
+
+// Test: ternary with len(safe_nav) in return context
+func GetRegion(c *Config) string {
+	var tmp int
+	if c != nil && c.Region != nil {
+		tmp = len(*c.Region)
+	}
+	if tmp > 0 {
+		return *c.Region
+	}
+	return "us-east-1"
+}
+
+// Test: ternary with len(safe_nav) in local variable context
+func TestNilConfig() string {
+	var c *Config = nil
+	var tmp int
+	if c != nil && c.Region != nil {
+		tmp = len(*c.Region)
+	}
+	if tmp > 0 {
+		return "has"
+	}
+	return "none"
+}

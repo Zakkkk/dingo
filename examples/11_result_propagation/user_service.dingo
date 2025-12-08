@@ -1,5 +1,8 @@
-// Real-world example: User service with Result types and implicit wrapping
-// Shows how Result<T, E> enables clean, explicit error handling
+// Result Propagation Example: Three patterns for error handling with ?
+//
+// Pattern 1: expr?              - propagate error as-is
+// Pattern 2: expr ? "message"   - wrap with string context
+// Pattern 3: expr ? |e| f(e)    - transform with explicit lambda binding
 package main
 
 import (
@@ -30,8 +33,39 @@ func (e ServiceError) Error() string {
 	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 }
 
-// Repository functions returning Result types
-// Implicit wrapping: just return the value or error directly
+// === Pattern 1: Basic ? - propagate error as-is ===
+// Use when error is already descriptive enough
+// Works with functions returning (T, error)
+
+func GetUserBasic(db *sql.DB, id int) (User, error) {
+	// Simple propagation - error passes through unchanged
+	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
+
+	var user User
+	// Basic ? just propagates the error as-is
+	row.Scan(&user.ID, &user.Name, &user.Email)?
+
+	return user, nil
+}
+
+// === Pattern 2: String context ? "message" ===
+// Use for simple context wrapping without custom error types
+// Generates: fmt.Errorf("message: %w", err)
+
+func GetUserWithContext(db *sql.DB, id int) (User, error) {
+	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
+
+	var user User
+	// String context adds a descriptive wrapper
+	row.Scan(&user.ID, &user.Name, &user.Email) ? "failed to scan user row"
+
+	return user, nil
+}
+
+// === Pattern 3: Lambda ? |err| transform(err) ===
+// Use for custom error types or complex transformations
+// Explicit |err| binding - no magic implicit variables
+
 func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
@@ -48,31 +82,31 @@ func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
 }
 
 func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
+	// Pattern 3: Explicit |err| lambda binding
 	rows := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)?
-		ServiceError{Code: "DB_ERROR", Message: err.Error()}
+		|err| ServiceError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()
 
 	var orders []Order
 	for rows.Next() {
 		var order Order
-		// Note: Scan returns only error, not (T, error), so we use explicit error handling
+		// Same pattern - explicit binding, clear transformation
 		rows.Scan(&order.ID, &order.UserID, &order.Total)?
-			 ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
+			|err| ServiceError{Code: "SCAN_ERROR", Message: err.Error()}
 		orders = append(orders, order)
 	}
 	return orders
 }
 
-// Service function chaining multiple Result-returning functions
-// Guard let with pipe binding: explicit |err| for error access
+// === Combining patterns with guard let ===
+// guard let also uses explicit |err| binding for consistency
+
 func GetUserOrderTotal(db *sql.DB, userID int) Result<float64, ServiceError> {
-	// Get user - guard let unwraps or returns error
+	// guard let unwraps Result or returns error via explicit |err|
 	guard let user = FindUser(db, userID) else |err| { return Err(err) }
 
-	// Get orders - same pattern, clean and readable
 	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err(err) }
 
-	// Calculate total
 	var total float64
 	for _, order := range orders {
 		total += order.Total
@@ -81,25 +115,37 @@ func GetUserOrderTotal(db *sql.DB, userID int) Result<float64, ServiceError> {
 	return total  // Implicit wrapping to Ok
 }
 
-// Another example: transferring funds between users
-// Guard let makes the happy path clear and linear
-func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) Result<bool, ServiceError> {
-	// Find source user
-	guard let fromUser = FindUser(db, fromID) else |err| { return Err(err) }
+// === All three patterns in one function ===
+// Demonstrates mixing patterns based on context
 
-	// Find destination user
-	guard let toUser = FindUser(db, toID) else |err| { return Err(err) }
+func ProcessUserOrder(db *sql.DB, userID int, orderID int) (string, error) {
+	// Pattern 1: Basic ? - error is descriptive enough
+	let user = GetUserBasic(db, userID)?
 
-	fmt.Printf("Transferring $%.2f from %s to %s\n",
-		amount, fromUser.Name, toUser.Name)
+	// Pattern 2: String context - add simple context
+	let order = getOrderByID(db, orderID) ? "order lookup failed"
 
-	return true
+	// Pattern 3: Lambda - custom error transformation
+	let validated = validateOrder(order, user)?
+		|e| fmt.Errorf("validation failed for user %d: %w", userID, e)
+
+	return fmt.Sprintf("Processed order %d for %s", validated.ID, user.Name), nil
+}
+
+// Helper functions
+func getOrderByID(db *sql.DB, id int) (Order, error) {
+	return Order{ID: id, Total: 99.99}, nil
+}
+
+func validateOrder(order Order, user User) (Order, error) {
+	order.UserID = user.ID
+	return order, nil
 }
 
 func main() {
 	var db *sql.DB // Would be initialized in real code
 
-	// Using the service with proper error handling
+	// Using Result type with guard let
 	result := GetUserOrderTotal(db, 123)
 
 	if result.IsOk() {

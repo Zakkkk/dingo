@@ -121,48 +121,14 @@ func NewBuildOutput() *BuildOutput {
 	}
 }
 
-// PrintHeader prints the main Dingo header with ASCII mascot
+// PrintHeader prints the main Dingo header (text only, mascot shown at summary)
 func (b *BuildOutput) PrintHeader(version string) {
-	// Get mascot frame for idle state (static, not compiling)
-	m := mascot.New(mascot.WithInitialState(mascot.StateIdle))
-	frame := m.Render()
-
 	// Styles for title
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
 	versionStyle := lipgloss.NewStyle().Foreground(colorSubtle)
-	taglineStyle := lipgloss.NewStyle().Foreground(colorMuted).Italic(true)
 
-	// Title info to show next to mascot (plain text, no box)
-	titleLines := []string{
-		"",
-		"  " + titleStyle.Render("Dingo Compiler"),
-		"  " + versionStyle.Render("v" + version),
-		"",
-		"  " + taglineStyle.Render("Transpiling to Go..."),
-	}
-
-	// Apply color to mascot
-	mascotColor := lipgloss.NewStyle().Foreground(colorPrimary)
-
-	// Print mascot with title info on the right (side by side)
-	maxLines := len(frame)
-	if len(titleLines) > maxLines {
-		maxLines = len(titleLines)
-	}
-
-	for i := 0; i < maxLines; i++ {
-		mascotLine := ""
-		if i < len(frame) {
-			mascotLine = mascotColor.Render(frame[i])
-		}
-
-		titleLine := ""
-		if i < len(titleLines) {
-			titleLine = titleLines[i]
-		}
-
-		fmt.Printf("%s%s\n", mascotLine, titleLine)
-	}
+	// Simple text header (no mascot - mascot will be shown at the end)
+	fmt.Println(titleStyle.Render("🐕 Dingo") + " " + versionStyle.Render("v"+version))
 	fmt.Println()
 }
 

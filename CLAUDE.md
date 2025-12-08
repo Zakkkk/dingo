@@ -104,6 +104,14 @@ Variable naming:
 - Golden tests: `tests/golden/` - see `GOLDEN_TEST_GUIDELINES.md`
 - Run: `go test ./...`
 
+## Running Dingo in Claude Code
+
+Always use `--no-mascot` flag when running dingo build in Claude Code terminal:
+```bash
+./dingo build --no-mascot examples/03_option/user_settings.dingo
+```
+This disables animation which doesn't render properly in Claude Code.
+
 ## References
 
 - Research: `ai-docs/claude-research.md`, `ai-docs/gemini_research.md`
