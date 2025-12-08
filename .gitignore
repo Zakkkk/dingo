@@ -56,4 +56,4 @@ langingpage/debug-reports
 langingpage/review-reports
 dingo-lsp
 dingo-test
-dingo
+dingo.claude/settings.local.json
