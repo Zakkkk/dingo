@@ -50,7 +50,13 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("transform error: %w", err)
 	}
 
-	// Step 2: Transform statement-level error propagation (MUST run before expression transforms)
+	// Step 2: Transform tuples - Pass 1 (syntax to markers)
+	transformedSource, tupleMappings, err := transformTuplePass1(transformedSource)
+	if err != nil {
+		return nil, fmt.Errorf("tuple pass 1 error: %w", err)
+	}
+
+	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
 	transformedSource, stmtMappings, err := transformErrorPropStatements(transformedSource)
 	if err != nil {
 		return nil, fmt.Errorf("statement transform error: %w", err)
@@ -70,8 +76,9 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	}
 
 	// TODO: Store mappings for LSP integration
-	// Combine token mappings, statement mappings, guard let mappings, and AST mappings
+	// Combine token mappings, tuple mappings, statement mappings, guard let mappings, and AST mappings
 	_ = tokenMappings
+	_ = tupleMappings
 	_ = stmtMappings
 	_ = guardLetMappings
 	_ = astMappings
@@ -81,6 +88,28 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	goFile, err := goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("parse error: %w", err)
+	}
+
+	// Step 3.1: Type-check the Go AST (needed for tuple Pass 2)
+	pkgName := goFile.Name.Name
+	typeChecker, typeErr := typechecker.New(fset, goFile, pkgName)
+
+	// Step 3.2: Transform tuples - Pass 2 (resolve types and generate final structs)
+	// This must happen AFTER go/types has analyzed the AST
+	if typeErr == nil && typeChecker != nil {
+		tuplePass2Result, tupleErr := transformTuplePass2(fset, goFile, typeChecker, transformedSource)
+		if tupleErr == nil {
+			// Update the transformed source with type-resolved tuple code
+			transformedSource = tuplePass2Result
+			// Re-parse with updated source
+			goFile, err = goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
+			if err != nil {
+				return nil, fmt.Errorf("parse error after tuple pass 2: %w", err)
+			}
+			// Re-create type checker for subsequent steps
+			typeChecker, typeErr = typechecker.New(fset, goFile, pkgName)
+		}
+		// If tuple Pass 2 fails, continue with markers (they're valid Go)
 	}
 
 	// Step 3.5: None inference - rewrite bare None/None() to None[T]()
@@ -96,9 +125,13 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	// Step 4: Run type inference to replace interface{} with actual types
 	var checker *typechecker.Checker
 	if inferTypes {
-		// Extract actual package name from AST instead of hardcoded "main"
-		pkgName := goFile.Name.Name
-		checker, err = typechecker.New(fset, goFile, pkgName)
+		// Reuse type checker from tuple Pass 2 if available
+		if typeErr == nil && typeChecker != nil {
+			checker = typeChecker
+		} else {
+			// Create new type checker
+			checker, err = typechecker.New(fset, goFile, pkgName)
+		}
 		if err != nil {
 			// Type checker unavailable - will fall back to AST-based heuristics
 			// for Result/Option wrapping (checks error variable names, function calls)

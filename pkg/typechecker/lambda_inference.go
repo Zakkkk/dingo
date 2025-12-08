@@ -261,6 +261,8 @@ func (inf *LambdaTypeInferrer) rewriteFuncLit(fn *ast.FuncLit, expected *types.S
 }
 
 // rewriteParams updates function literal parameter types.
+// It rebuilds the FieldList with fresh position info to avoid go/printer
+// adding trailing commas from stale position data.
 func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Signature) bool {
 	if fn.Type.Params == nil || len(fn.Type.Params.List) == 0 {
 		return false
@@ -273,8 +275,9 @@ func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Si
 	}
 
 	paramIdx := 0
+	newFields := make([]*ast.Field, len(fn.Type.Params.List))
 
-	for _, field := range fn.Type.Params.List {
+	for i, field := range fn.Type.Params.List {
 		// Handle multiple names in single field: (a, b int)
 		numNames := len(field.Names)
 		if numNames == 0 {
@@ -288,13 +291,29 @@ func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Si
 				expectedType := expectedParams.At(paramIdx).Type()
 				newTypeExpr := inf.typeToExpr(expectedType)
 				if newTypeExpr != nil {
-					field.Type = newTypeExpr
+					// Create a fresh Field with no position info to avoid
+					// go/printer trailing comma issues
+					newFields[i] = &ast.Field{
+						Names: field.Names,
+						Type:  newTypeExpr,
+					}
 					changed = true
+					paramIdx += numNames
+					continue
 				}
 			}
 		}
 
+		// Keep original field (unchanged)
+		newFields[i] = field
 		paramIdx += numNames
+	}
+
+	if changed {
+		// Replace the FieldList with a fresh one to clear stale position info
+		fn.Type.Params = &ast.FieldList{
+			List: newFields,
+		}
 	}
 
 	return changed
@@ -394,6 +413,26 @@ func (inf *LambdaTypeInferrer) typeToExpr(t types.Type) ast.Expr {
 		if elem != nil {
 			return &ast.StarExpr{X: elem}
 		}
+
+	case *types.Alias:
+		// For type aliases (Go 1.22+), use the alias name
+		// type Point2D = struct { _0 float64; _1 float64 }
+		// When seen in a function signature, we want "Point2D" not the underlying struct
+		obj := typ.Obj()
+		if obj != nil {
+			name := obj.Name()
+			pkg := obj.Pkg()
+			alias := inf.getPackageAlias(pkg)
+			if alias != "" && alias != "main" {
+				return &ast.SelectorExpr{
+					X:   &ast.Ident{Name: alias},
+					Sel: &ast.Ident{Name: name},
+				}
+			}
+			return &ast.Ident{Name: name}
+		}
+		// Fallback to underlying type
+		return inf.typeToExpr(typ.Underlying())
 
 	case *types.Named:
 		// For named types, use the type name

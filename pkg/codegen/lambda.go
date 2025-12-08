@@ -53,14 +53,14 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 
 	// Return type
 	// - If explicitly specified: use it
-	// - If expression body (not block): needs return type, use "any" as placeholder
-	// - If block body: may or may not return, user is responsible
+	// - Otherwise: use "any" as placeholder for type inference
+	// The LambdaTypeInferrer will refine this if the lambda is used in a typed context
 	if g.expr.ReturnType != "" {
 		g.WriteByte(' ')
 		g.Write(g.expr.ReturnType)
-	} else if !g.expr.IsBlock {
-		// Expression lambdas always return - use "any" as placeholder
-		// The LambdaTypeInferrer will refine this if the lambda is used in a typed context
+	} else {
+		// All lambdas use "any" as placeholder - type inference will fix it
+		// For block lambdas with no return, the type checker will validate
 		g.Write(" any")
 	}
 

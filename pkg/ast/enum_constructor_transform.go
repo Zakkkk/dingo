@@ -271,6 +271,7 @@ func matchQualifiedConstructor(src []byte, pos int, registry map[string]string) 
 }
 
 // matchUnqualifiedConstructor matches Variant(...) where Variant is in registry
+// Also matches EnumVariant(...) pattern (e.g., StatusActive() → NewStatusActive())
 func matchUnqualifiedConstructor(src []byte, pos int, registry map[string]string) *constructorMatch {
 	// Check that previous character is NOT part of an identifier (word boundary)
 	if pos > 0 && isIdentChar(src[pos-1]) {
@@ -283,7 +284,7 @@ func matchUnqualifiedConstructor(src []byte, pos int, registry map[string]string
 		return nil
 	}
 
-	// Scan identifier (variant name)
+	// Scan identifier (full name: could be "Active" or "StatusActive")
 	i := pos
 	for i < len(src) && isIdentChar(src[i]) {
 		i++
@@ -291,7 +292,7 @@ func matchUnqualifiedConstructor(src []byte, pos int, registry map[string]string
 	if i == pos {
 		return nil
 	}
-	variantName := string(src[pos:i])
+	fullName := string(src[pos:i])
 
 	// Expect '('
 	if i >= len(src) || src[i] != '(' {
@@ -299,8 +300,8 @@ func matchUnqualifiedConstructor(src []byte, pos int, registry map[string]string
 	}
 	parenStart := i
 
-	// Check if this variant is in registry (unqualified lookup)
-	if enumName, ok := registry[variantName]; ok {
+	// Strategy 1: Check if fullName is directly in registry (e.g., "Active")
+	if enumName, ok := registry[fullName]; ok {
 		// Find matching closing paren
 		parenEnd := findMatchingBracket(src, parenStart, '(')
 		if parenEnd == -1 {
@@ -319,10 +320,41 @@ func matchUnqualifiedConstructor(src []byte, pos int, registry map[string]string
 			start:       pos,
 			end:         parenEnd + 1,
 			enumName:    enumName,
-			variantName: variantName,
+			variantName: fullName,
 			hasArgs:     hasArgs,
 			argStart:    argStart,
 			argEnd:      argEnd,
+		}
+	}
+
+	// Strategy 2: Check if fullName matches EnumVariant pattern (e.g., "StatusActive")
+	// Try to split into EnumName + VariantName by checking all possible enum names
+	for variantName, enumName := range registry {
+		// Check if fullName == enumName + variantName
+		expectedFull := enumName + variantName
+		if fullName == expectedFull {
+			// Found match: StatusActive matches Status + Active
+			parenEnd := findMatchingBracket(src, parenStart, '(')
+			if parenEnd == -1 {
+				return nil
+			}
+
+			hasArgs := parenEnd > parenStart+1
+			var argStart, argEnd int
+			if hasArgs {
+				argStart = parenStart + 1
+				argEnd = parenEnd
+			}
+
+			return &constructorMatch{
+				start:       pos,
+				end:         parenEnd + 1,
+				enumName:    enumName,
+				variantName: variantName,
+				hasArgs:     hasArgs,
+				argStart:    argStart,
+				argEnd:      argEnd,
+			}
 		}
 	}
 

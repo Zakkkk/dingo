@@ -1,54 +1,16 @@
 package ast
 
-import (
-	"bytes"
-	"fmt"
-)
-
-// CodeGenResult contains generated Go code and source mappings.
-// All AST-based code generators return this type to enable LSP integration.
-type CodeGenResult struct {
-	Output   []byte          // Generated Go source code (expression-level)
-	Mappings []SourceMapping // Dingo → Go position mappings
-
-	// Statement-level code generation (for human-like output)
-	// If StatementOutput is non-empty, replace entire statement instead of just expression
-	StatementOutput []byte // Multi-line statement replacement (e.g., if/else blocks)
-
-	// For argument context: code to hoist before the statement
-	HoistedCode []byte // Declarations to insert before statement
-	Replacement []byte // Expression replacement (e.g., variable name)
-
-	// Error indicates code generation failed
-	Error *CodeGenError // Compile-time error (halts transpilation)
-}
-
-// CodeGenError represents a compile-time error during code generation.
-type CodeGenError struct {
-	Position int    // Byte offset in Dingo source
-	Message  string // Error message
-	Hint     string // Suggestion for fixing the error
-}
-
-// SourceMapping tracks the relationship between original Dingo source
-// and generated Go code for LSP features (hover, goto-definition, etc.).
+// SourceMapping represents a mapping from Dingo source positions to Go output positions.
+// Used by the LSP for translating positions between the two representations.
 type SourceMapping struct {
-	DingoStart int    // Original Dingo byte position (inclusive)
-	DingoEnd   int    // Original Dingo byte position (exclusive)
-	GoStart    int    // Generated Go byte position (inclusive)
-	GoEnd      int    // Generated Go byte position (exclusive)
-	Kind       string // Feature type: "enum", "match", "lambda", "error_prop", etc.
+	DingoStart int    // Start byte offset in Dingo source (inclusive)
+	DingoEnd   int    // End byte offset in Dingo source (exclusive)
+	GoStart    int    // Start byte offset in Go output (inclusive)
+	GoEnd      int    // End byte offset in Go output (exclusive)
+	Kind       string // Type of mapping (e.g., "tuple_literal", "tuple_destructure")
 }
 
-// NewCodeGenResult creates a result with output and optional mappings.
-func NewCodeGenResult(output []byte, mappings ...SourceMapping) CodeGenResult {
-	return CodeGenResult{
-		Output:   output,
-		Mappings: mappings,
-	}
-}
-
-// NewSourceMapping creates a mapping with all positions.
+// NewSourceMapping creates a new SourceMapping with the given positions.
 func NewSourceMapping(dingoStart, dingoEnd, goStart, goEnd int, kind string) SourceMapping {
 	return SourceMapping{
 		DingoStart: dingoStart,
@@ -59,161 +21,74 @@ func NewSourceMapping(dingoStart, dingoEnd, goStart, goEnd int, kind string) Sou
 	}
 }
 
-// Merge combines multiple code generation results.
-// Adjusts Go positions in subsequent results to account for previous output.
-func Merge(results ...CodeGenResult) CodeGenResult {
-	if len(results) == 0 {
-		return CodeGenResult{}
+// CodeGenResult represents the output of a code generation operation.
+// It contains the generated Go code and any source mappings.
+type CodeGenResult struct {
+	Output          []byte          // Generated Go code
+	Mappings        []SourceMapping // Source mappings for LSP
+	StatementOutput []byte          // Statement-level output (for hoisting)
+	HoistedCode     []byte          // Code to hoist before the expression
+	Error           *CodeGenError   // Error if code generation failed
+}
+
+// CodeGenError represents an error during code generation.
+type CodeGenError struct {
+	Message  string
+	Pos      int    // Position in source where error occurred
+	Position int    // Line/column position (for LSP)
+	Hint     string // Optional hint for fixing the error
+}
+
+// NewCodeGenResult creates a new CodeGenResult with the given output.
+// Mappings default to empty if not provided.
+func NewCodeGenResult(output []byte, mappings ...[]SourceMapping) CodeGenResult {
+	var m []SourceMapping
+	if len(mappings) > 0 {
+		m = mappings[0]
 	}
-	if len(results) == 1 {
-		return results[0]
-	}
-
-	var output bytes.Buffer
-	var allMappings []SourceMapping
-
-	goOffset := 0
-	for _, result := range results {
-		// Write output
-		output.Write(result.Output)
-
-		// Adjust and append mappings
-		for _, mapping := range result.Mappings {
-			adjusted := mapping
-			adjusted.GoStart += goOffset
-			adjusted.GoEnd += goOffset
-			allMappings = append(allMappings, adjusted)
-		}
-
-		goOffset += len(result.Output)
-	}
-
 	return CodeGenResult{
-		Output:   output.Bytes(),
-		Mappings: allMappings,
+		Output:   output,
+		Mappings: m,
 	}
 }
 
-// AdjustGoPositions shifts all Go positions by the given offset.
-// Used when inserting generated code into existing source.
-func (r *CodeGenResult) AdjustGoPositions(offset int) {
-	for i := range r.Mappings {
-		r.Mappings[i].GoStart += offset
-		r.Mappings[i].GoEnd += offset
-	}
-}
-
-// AdjustDingoPositions shifts all Dingo positions by the given offset.
-// Used when processing fragments of larger source files.
-func (r *CodeGenResult) AdjustDingoPositions(offset int) {
-	for i := range r.Mappings {
-		r.Mappings[i].DingoStart += offset
-		r.Mappings[i].DingoEnd += offset
-	}
-}
-
-// String returns a human-readable representation for debugging.
-func (m SourceMapping) String() string {
-	return fmt.Sprintf("%s: Dingo[%d:%d] → Go[%d:%d]",
-		m.Kind, m.DingoStart, m.DingoEnd, m.GoStart, m.GoEnd)
-}
-
-// Validate checks if the mapping has valid positions.
-func (m SourceMapping) Validate() error {
-	if m.DingoStart < 0 {
-		return fmt.Errorf("invalid DingoStart: %d (must be >= 0)", m.DingoStart)
-	}
-	if m.DingoEnd <= m.DingoStart {
-		return fmt.Errorf("invalid DingoEnd: %d (must be > DingoStart %d)", m.DingoEnd, m.DingoStart)
-	}
-	if m.GoStart < 0 {
-		return fmt.Errorf("invalid GoStart: %d (must be >= 0)", m.GoStart)
-	}
-	if m.GoEnd <= m.GoStart {
-		return fmt.Errorf("invalid GoEnd: %d (must be > GoStart %d)", m.GoEnd, m.GoStart)
-	}
-	if m.Kind == "" {
-		return fmt.Errorf("missing Kind field")
-	}
-	return nil
-}
-
-// ValidateAll checks if all mappings in the result are valid.
-func (r CodeGenResult) ValidateAll() error {
-	for i, mapping := range r.Mappings {
-		if err := mapping.Validate(); err != nil {
-			return fmt.Errorf("mapping %d: %w", i, err)
-		}
-	}
-	return nil
-}
-
-// MappingBuilder helps construct source mappings incrementally.
-// Useful for tracking positions during code generation.
+// MappingBuilder helps build source mappings incrementally.
 type MappingBuilder struct {
-	mappings   []SourceMapping
-	currentGo  int // Current position in generated Go code
-	baseOffset int // Base Dingo offset for relative positions
+	mappings []SourceMapping
 }
 
-// NewMappingBuilder creates a builder starting at position 0.
+// NewMappingBuilder creates a new MappingBuilder.
 func NewMappingBuilder() *MappingBuilder {
 	return &MappingBuilder{
-		mappings:  make([]SourceMapping, 0, 8),
-		currentGo: 0,
+		mappings: make([]SourceMapping, 0),
 	}
 }
 
-// NewMappingBuilderWithOffset creates a builder with a base Dingo offset.
-func NewMappingBuilderWithOffset(baseOffset int) *MappingBuilder {
-	return &MappingBuilder{
-		mappings:   make([]SourceMapping, 0, 8),
-		currentGo:  0,
-		baseOffset: baseOffset,
-	}
-}
-
-// Add records a mapping and advances the current Go position.
-func (b *MappingBuilder) Add(dingoStart, dingoEnd int, goLength int, kind string) {
+// Add adds a new source mapping with a single output position.
+// This is the simplified form used by match.go and other existing code.
+// The goPos is used for both GoStart and GoEnd.
+func (b *MappingBuilder) Add(dingoStart, dingoEnd, goPos int, kind string) {
 	b.mappings = append(b.mappings, SourceMapping{
-		DingoStart: b.baseOffset + dingoStart,
-		DingoEnd:   b.baseOffset + dingoEnd,
-		GoStart:    b.currentGo,
-		GoEnd:      b.currentGo + goLength,
+		DingoStart: dingoStart,
+		DingoEnd:   dingoEnd,
+		GoStart:    goPos,
+		GoEnd:      goPos,
 		Kind:       kind,
 	})
-	b.currentGo += goLength
 }
 
-// AddBytes records a mapping for generated bytes and advances position.
-func (b *MappingBuilder) AddBytes(dingoStart, dingoEnd int, goCode []byte, kind string) {
-	b.Add(dingoStart, dingoEnd, len(goCode), kind)
+// AddRange adds a new source mapping with explicit start and end positions.
+func (b *MappingBuilder) AddRange(dingoStart, dingoEnd, goStart, goEnd int, kind string) {
+	b.mappings = append(b.mappings, SourceMapping{
+		DingoStart: dingoStart,
+		DingoEnd:   dingoEnd,
+		GoStart:    goStart,
+		GoEnd:      goEnd,
+		Kind:       kind,
+	})
 }
 
-// Skip advances the Go position without adding a mapping.
-// Used for generated code that doesn't map back to Dingo source.
-func (b *MappingBuilder) Skip(goLength int) {
-	b.currentGo += goLength
-}
-
-// SkipBytes advances the Go position by the length of the bytes.
-func (b *MappingBuilder) SkipBytes(goCode []byte) {
-	b.currentGo += len(goCode)
-}
-
-// Build returns the accumulated mappings.
+// Build returns the accumulated source mappings.
 func (b *MappingBuilder) Build() []SourceMapping {
 	return b.mappings
-}
-
-// CurrentGoPosition returns the current position in generated Go code.
-func (b *MappingBuilder) CurrentGoPosition() int {
-	return b.currentGo
-}
-
-// Reset clears mappings and resets positions (reuses builder).
-func (b *MappingBuilder) Reset() {
-	b.mappings = b.mappings[:0]
-	b.currentGo = 0
-	b.baseOffset = 0
 }
