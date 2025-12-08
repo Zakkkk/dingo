@@ -1064,6 +1064,8 @@ func findTernaryCondStart(tokens []tokenizer.Token, questionIdx int, src []byte)
 			if depth < 0 {
 				return tokens[start+1].BytePos()
 			}
+			// When depth reaches 0 after closing a group, the expression starts at this paren
+			// Continue scanning to see if there's more (e.g., operators before the paren)
 		case tokenizer.DOT, tokenizer.QUESTION_DOT:
 			// Part of chain, continue backward
 		case tokenizer.IDENT, tokenizer.INT, tokenizer.FLOAT, tokenizer.STRING, tokenizer.CHAR, tokenizer.TRUE, tokenizer.FALSE, tokenizer.NIL:
@@ -1073,13 +1075,21 @@ func findTernaryCondStart(tokens []tokenizer.Token, questionIdx int, src []byte)
 				if start > 0 {
 					prev := tokens[start-1]
 					if prev.Kind != tokenizer.DOT && prev.Kind != tokenizer.QUESTION_DOT &&
-						!isOperator(prev.Kind) {
+						!isOperator(prev.Kind) && prev.Kind != tokenizer.LPAREN {
 						return tok.BytePos()
 					}
 				} else {
 					return tok.BytePos()
 				}
 			}
+		case tokenizer.RETURN, tokenizer.IF, tokenizer.FOR, tokenizer.SWITCH, tokenizer.CASE,
+			tokenizer.VAR, tokenizer.CONST, tokenizer.TYPE, tokenizer.FUNC, tokenizer.LET,
+			tokenizer.ASSIGN, tokenizer.DEFINE:
+			// Statement-starting keywords and assignment operators are boundaries
+			if start+1 < len(tokens) {
+				return tokens[start+1].BytePos()
+			}
+			return tok.ByteEnd()
 		default:
 			// At depth 0, most other tokens end the backward scan
 			if depth == 0 {

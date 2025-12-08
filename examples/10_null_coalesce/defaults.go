@@ -88,24 +88,24 @@ func GetDatabaseURL(env *EnvConfig) string {
 	return "postgres://localhost:5432/app"
 }
 
-// GetRegion - chained ternary for multiple env var fallbacks
+// GetRegion - demonstrates len(safe_nav) with ternary fallback and null-state inference
 func GetRegion(env *EnvConfig) string {
-	var region string
+	// Use len(env?.Region) > 0 to check if region is set and non-empty
+	// Null-state inference: env?.Region in true branch becomes *env.Region (no IIFE)
+	// aws := os.Getenv("AWS_REGION")
+	// def := os.Getenv("REGION")
+	var tmp int
 	if env != nil && env.Region != nil {
-		region = *env.Region
-	} else {
-		region = ""
+		tmp = len(*env.Region)
 	}
-	aws := os.Getenv("AWS_REGION")
-	def := os.Getenv("REGION")
-	if region != "" {
-		return region
+	if tmp > 0 {
+		return *env.Region
 	}
-	if aws != "" {
-		return aws
+	if os.Getenv("AWS_REGION") != "" {
+		return os.Getenv("AWS_REGION")
 	}
-	if def != "" {
-		return def
+	if os.Getenv("REGION") != "" {
+		return os.Getenv("REGION")
 	}
 	return "us-east-1"
 }

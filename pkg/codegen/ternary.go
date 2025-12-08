@@ -66,6 +66,11 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 //         return falseVal
 //
 // For nested ternaries in the false branch, recursively applies return context.
+// Handles hoisting: if the condition contains BuiltinCallExpr like len(c?.Region),
+// the hoisted code is prepended before the if statement.
+//
+// Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
+// the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 	dingoStart := int(g.expr.Pos())
 	dingoEnd := int(g.expr.End())
@@ -73,13 +78,40 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 	// Mark this as statement-level output (not expression replacement)
 	var stmt []byte
 
+	// Create context for transforming condition (enables hoisting for BuiltinCallExpr)
+	counter := 0
+	ctx := &GenContext{
+		Context:     ast.ContextArgument,
+		TempCounter: &counter,
+	}
+
+	// Detect len(x?.y) > 0 pattern for null-state inference
+	nullStatePattern := DetectLenSafeNavPattern(g.expr.Cond)
+
+	// Transform condition - this may produce hoisted code
+	condResult := TransformExprForTernary(g.expr.Cond, ctx)
+
+	// Prepend hoisted code (e.g., var tmp int; if ... { tmp = len(...) })
+	if len(condResult.HoistedCode) > 0 {
+		stmt = append(stmt, condResult.HoistedCode...)
+	}
+
 	// if cond {
 	stmt = append(stmt, []byte("if ")...)
-	stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	if len(condResult.Output) > 0 {
+		stmt = append(stmt, condResult.Output...)
+	} else {
+		stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	}
 	stmt = append(stmt, []byte(" {\n    return ")...)
 
-	// return trueVal
-	stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	// return trueVal - with null-state optimization if pattern matches
+	if nullStatePattern != nil && MatchesSafeNavPath(g.expr.True, nullStatePattern) {
+		// Optimized: direct dereference instead of IIFE
+		stmt = append(stmt, []byte(nullStatePattern.ToDerefExpr())...)
+	} else {
+		stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	}
 	stmt = append(stmt, []byte("\n}\n")...)
 
 	// Check if false branch is nested ternary - if so, use return context recursively
@@ -113,21 +145,54 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 // Input:  x := cond ? trueVal : falseVal
 // Output: var x TYPE
 //         if cond { x = trueVal } else { x = falseVal }
+//
+// Handles hoisting: if the condition contains BuiltinCallExpr like len(c?.Region),
+// the hoisted code is prepended before the if statement.
+//
+// Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
+// the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
 	dingoStart := int(g.expr.Pos())
 	dingoEnd := int(g.expr.End())
 
 	var stmt []byte
 
+	// Create context for transforming condition (enables hoisting for BuiltinCallExpr)
+	counter := 0
+	ctx := &GenContext{
+		Context:     ast.ContextArgument,
+		TempCounter: &counter,
+	}
+
+	// Detect len(x?.y) > 0 pattern for null-state inference
+	nullStatePattern := DetectLenSafeNavPattern(g.expr.Cond)
+
+	// Transform condition - this may produce hoisted code
+	condResult := TransformExprForTernary(g.expr.Cond, ctx)
+
+	// Prepend hoisted code (e.g., var tmp int; if ... { tmp = len(...) })
+	if len(condResult.HoistedCode) > 0 {
+		stmt = append(stmt, condResult.HoistedCode...)
+	}
+
 	// if cond {
 	stmt = append(stmt, []byte("if ")...)
-	stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	if len(condResult.Output) > 0 {
+		stmt = append(stmt, condResult.Output...)
+	} else {
+		stmt = append(stmt, g.exprToBytes(g.expr.Cond, g.expr.CondStr)...)
+	}
 	stmt = append(stmt, []byte(" {\n    ")...)
 	stmt = append(stmt, []byte(g.Context.VarName)...)
 	stmt = append(stmt, []byte(" = ")...)
 
-	// x = trueVal
-	stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	// x = trueVal - with null-state optimization if pattern matches
+	if nullStatePattern != nil && MatchesSafeNavPath(g.expr.True, nullStatePattern) {
+		// Optimized: direct dereference instead of IIFE
+		stmt = append(stmt, []byte(nullStatePattern.ToDerefExpr())...)
+	} else {
+		stmt = append(stmt, g.exprToBytes(g.expr.True, g.expr.TrueStr)...)
+	}
 	stmt = append(stmt, []byte("\n} else {\n    ")...)
 	stmt = append(stmt, []byte(g.Context.VarName)...)
 	stmt = append(stmt, []byte(" = ")...)
@@ -192,19 +257,54 @@ func (g *TernaryCodeGen) generateIIFE() ast.CodeGenResult {
 // generateIIFEBody generates the if/return body of the IIFE.
 //
 // Format:
-//     if cond {
-//         return trueVal
-//     }
-//     return falseVal
+//
+//	if cond {
+//	    return trueVal
+//	}
+//	return falseVal
+//
+// Handles hoisting: if the condition contains BuiltinCallExpr like len(c?.Region),
+// the hoisted code is placed at the start of the IIFE body.
+//
+// Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
+// the true branch is optimized to `*x.y` (direct dereference, no nested IIFE).
 func (g *TernaryCodeGen) generateIIFEBody() {
+	// Create context for transforming condition (enables hoisting for BuiltinCallExpr)
+	counter := 0
+	ctx := &GenContext{
+		Context:     ast.ContextArgument,
+		TempCounter: &counter,
+	}
+
+	// Detect len(x?.y) > 0 pattern for null-state inference
+	nullStatePattern := DetectLenSafeNavPattern(g.expr.Cond)
+
+	// Transform condition - this may produce hoisted code
+	condResult := TransformExprForTernary(g.expr.Cond, ctx)
+
+	// Write hoisted code at start of IIFE body
+	if len(condResult.HoistedCode) > 0 {
+		g.Write("    ")
+		g.Buf.Write(condResult.HoistedCode)
+	}
+
 	// if cond {
 	g.Write("    if ")
-	g.writeExpr(g.expr.Cond, g.expr.CondStr)
+	if len(condResult.Output) > 0 {
+		g.Buf.Write(condResult.Output)
+	} else {
+		g.writeExpr(g.expr.Cond, g.expr.CondStr)
+	}
 	g.Write(" {\n")
 
-	// return trueVal
+	// return trueVal - with null-state optimization if pattern matches
 	g.Write("        return ")
-	g.writeExpr(g.expr.True, g.expr.TrueStr)
+	if nullStatePattern != nil && MatchesSafeNavPath(g.expr.True, nullStatePattern) {
+		// Optimized: direct dereference instead of nested IIFE
+		g.Write(nullStatePattern.ToDerefExpr())
+	} else {
+		g.writeExpr(g.expr.True, g.expr.TrueStr)
+	}
 	g.Write("\n    }\n")
 
 	// return falseVal
@@ -214,26 +314,32 @@ func (g *TernaryCodeGen) generateIIFEBody() {
 }
 
 // writeExpr writes an expression, preferring AST if available, falling back to string.
-// Handles nested ternaries by recursively generating their IIFE code.
+// Handles nested Dingo expressions by recursively generating their code.
 func (g *TernaryCodeGen) writeExpr(expr ast.Expr, fallback string) {
 	if expr != nil {
-		// Special case: nested ternary expression
-		if nestedTernary, ok := expr.(*ast.TernaryExpr); ok {
+		// Check for Dingo expression types that need code generation
+		switch e := expr.(type) {
+		case *ast.TernaryExpr:
 			// Inherit result type from parent if not set
-			if nestedTernary.ResultType == "" {
-				nestedTernary.ResultType = g.expr.ResultType
+			if e.ResultType == "" {
+				e.ResultType = g.expr.ResultType
 			}
 			// Recursively generate IIFE for nested ternary
 			nestedGen := &TernaryCodeGen{
 				BaseGenerator: g.BaseGenerator,
-				expr:          nestedTernary,
+				expr:          e,
 			}
 			result := nestedGen.generateIIFE()
 			g.Buf.Write(result.Output)
 			return
+		case *ast.NullCoalesceExpr, *ast.SafeNavExpr, *ast.SafeNavCallExpr, *ast.MatchExpr, *ast.LambdaExpr, *ast.BuiltinCallExpr:
+			// Use GenerateExpr for other Dingo expression types
+			result := GenerateExpr(expr)
+			g.Buf.Write(result.Output)
+			return
 		}
-		// Use Dingo AST String() method, trimming whitespace to avoid
-		// Go parser issues with newlines (e.g., "return \n value" becomes "return value")
+		// For other expressions (RawExpr, DingoIdent, etc.), use String()
+		// Trim whitespace to avoid Go parser issues with newlines
 		g.Write(strings.TrimSpace(expr.String()))
 	} else {
 		// Legacy path: use string representation, also trimmed
@@ -242,23 +348,29 @@ func (g *TernaryCodeGen) writeExpr(expr ast.Expr, fallback string) {
 }
 
 // exprToBytes converts an expression to bytes, preferring AST if available.
-// Handles nested ternaries by recursively generating their IIFE code.
+// Handles nested Dingo expressions by recursively generating their code.
 func (g *TernaryCodeGen) exprToBytes(expr ast.Expr, fallback string) []byte {
 	if expr != nil {
-		// Special case: nested ternary expression
-		if nestedTernary, ok := expr.(*ast.TernaryExpr); ok {
+		// Check for Dingo expression types that need code generation
+		switch e := expr.(type) {
+		case *ast.TernaryExpr:
 			// Inherit result type from parent if not set
-			if nestedTernary.ResultType == "" {
-				nestedTernary.ResultType = g.expr.ResultType
+			if e.ResultType == "" {
+				e.ResultType = g.expr.ResultType
 			}
 			// Recursively generate IIFE for nested ternary
 			nestedGen := &TernaryCodeGen{
 				BaseGenerator: g.BaseGenerator,
-				expr:          nestedTernary,
+				expr:          e,
 			}
 			result := nestedGen.generateIIFE()
 			return result.Output
+		case *ast.NullCoalesceExpr, *ast.SafeNavExpr, *ast.SafeNavCallExpr, *ast.MatchExpr, *ast.LambdaExpr, *ast.BuiltinCallExpr:
+			// Use GenerateExpr for other Dingo expression types
+			result := GenerateExpr(expr)
+			return result.Output
 		}
+		// For other expressions (RawExpr, DingoIdent, etc.), use String()
 		return []byte(strings.TrimSpace(expr.String()))
 	}
 	return []byte(strings.TrimSpace(fallback))

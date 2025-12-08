@@ -65,6 +65,12 @@ func GenerateExprWithContext(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 			gen.Context = ctx
 		}
 		return gen.Generate()
+	case *ast.BuiltinCallExpr:
+		gen := NewBuiltinCallCodeGen(e)
+		if ctx != nil {
+			gen.Context = ctx
+		}
+		return gen.Generate()
 	default:
 		// For other expression types, use standard generation
 		return GenerateExpr(expr)
@@ -106,6 +112,8 @@ func GenerateExpr(expr ast.Expr) ast.CodeGenResult {
 		return NewSafeNavCodeGen(e).Generate()
 	case *ast.SafeNavCallExpr:
 		return NewSafeNavCallCodeGen(e).Generate()
+	case *ast.BuiltinCallExpr:
+		return NewBuiltinCallCodeGen(e).Generate()
 	case *ast.RawExpr:
 		// RawExpr is pass-through - just return the text
 		return ast.NewCodeGenResult([]byte(e.Text))

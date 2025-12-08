@@ -45,6 +45,11 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 		return src, nil, nil
 	}
 
+	// Filter out only expressions that are nested inside ternary expressions
+	// These will be handled by the ternary's codegen via GenerateExpr
+	// Other expressions (e.g., standalone safe nav) should still be processed
+	locations = filterExprNestedInTernary(locations)
+
 	// Sort by position descending (highest offset first)
 	// This allows transformation from end to beginning, avoiding offset shifts
 	sort.Slice(locations, func(i, j int) bool {
@@ -647,4 +652,51 @@ func transformGuardLetStatements(src []byte) ([]byte, []ast.SourceMapping, error
 	}
 
 	return result, mappings, nil
+}
+
+// filterExprNestedInTernary removes expressions that are nested inside ternary expressions.
+// These will be handled by the ternary's codegen via GenerateExpr.
+// Other expressions (e.g., standalone safe nav, null coalesce) should still be processed.
+//
+// Example: For input "len(config?.Region) > 0 ? x : y", FindDingoExpressions returns:
+//   - Ternary at 0-30
+//   - SafeNav at 4-20
+//
+// After filtering, only the ternary is returned.
+// The SafeNav will be handled when parsing/generating the ternary's condition.
+func filterExprNestedInTernary(locations []ast.ExprLocation) []ast.ExprLocation {
+	if len(locations) <= 1 {
+		return locations
+	}
+
+	// Mark which expressions are nested inside ternary expressions
+	isNestedInTernary := make([]bool, len(locations))
+
+	for i := range locations {
+		for j := range locations {
+			if i == j {
+				continue
+			}
+			// Only filter if the outer expression is a ternary
+			if locations[j].Kind != ast.ExprTernary {
+				continue
+			}
+			// Check if locations[i] is fully contained within the ternary locations[j]
+			if locations[j].Start <= locations[i].Start && locations[i].End <= locations[j].End {
+				// locations[i] is nested inside a ternary
+				isNestedInTernary[i] = true
+				break
+			}
+		}
+	}
+
+	// Return only expressions not nested in ternary
+	var result []ast.ExprLocation
+	for i, loc := range locations {
+		if !isNestedInTernary[i] {
+			result = append(result, loc)
+		}
+	}
+
+	return result
 }

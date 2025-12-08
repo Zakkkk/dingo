@@ -99,9 +99,14 @@ func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	p.registerPrefix(tokenizer.STRING, p.parseStringLiteral)
 	p.registerPrefix(tokenizer.TRUE, p.parseBoolLiteral)
 	p.registerPrefix(tokenizer.FALSE, p.parseBoolLiteral)
+	p.registerPrefix(tokenizer.NIL, p.parseNilLiteral)
 	p.registerPrefix(tokenizer.LPAREN, p.parseGroupedOrLambda)
 	p.registerPrefix(tokenizer.PIPE, p.parseLambda)     // Rust-style lambda: |x| expr
 	p.registerPrefix(tokenizer.MATCH, p.parseMatchExpr) // Match expressions
+	p.registerPrefix(tokenizer.STAR, p.parseUnaryExpr)  // *x (dereference)
+	p.registerPrefix(tokenizer.MINUS, p.parseUnaryExpr) // -x (negation)
+	p.registerPrefix(tokenizer.NOT, p.parseUnaryExpr)   // !x (logical not)
+	p.registerPrefix(tokenizer.AND, p.parseUnaryExpr)   // &x (address-of)
 
 	// Register infix parse functions for Dingo operators
 	p.registerInfix(tokenizer.QUESTION, p.parseQuestionOperator)
@@ -285,6 +290,44 @@ func (p *PrattParser) parseBoolLiteral() ast.Expr {
 		StartPos: p.curToken.Pos,
 		EndPos:   p.curToken.End,
 		Text:     lit,
+	}
+}
+
+func (p *PrattParser) parseNilLiteral() ast.Expr {
+	return &ast.RawExpr{
+		StartPos: p.curToken.Pos,
+		EndPos:   p.curToken.End,
+		Text:     "nil",
+	}
+}
+
+// parseUnaryExpr handles unary operators: *, -, !, &
+func (p *PrattParser) parseUnaryExpr() ast.Expr {
+	opToken := p.curToken
+	opLit := opToken.Lit
+	if opLit == "" {
+		// Use token kind as literal if tokenizer doesn't provide it
+		switch opToken.Kind {
+		case tokenizer.STAR:
+			opLit = "*"
+		case tokenizer.MINUS:
+			opLit = "-"
+		case tokenizer.NOT:
+			opLit = "!"
+		case tokenizer.AND:
+			opLit = "&"
+		}
+	}
+
+	p.nextToken() // consume operator
+
+	// Parse operand with high precedence (unary binds tightly)
+	operand := p.ParseExpression(PrecUnary)
+
+	return &ast.RawExpr{
+		StartPos: opToken.Pos,
+		EndPos:   operand.End(),
+		Text:     opLit + operand.String(),
 	}
 }
 
@@ -537,18 +580,33 @@ func (p *PrattParser) parseSelectorExpr(left ast.Expr) ast.Expr {
 
 // parseCallExpr handles the infix LPAREN operator (function calls)
 // This allows parsing expressions like fmt.Sprintf("hello %s", name)
+//
+// For built-in functions (len, cap) with Dingo expressions in arguments,
+// returns BuiltinCallExpr to enable special code generation with hoisting.
 func (p *PrattParser) parseCallExpr(left ast.Expr) ast.Expr {
-	// Current token is LPAREN (not used in RawExpr approach)
-	_ = p.curToken.Pos
+	lparenPos := p.curToken.Pos
+	if left == nil {
+		return nil
+	}
+	funcPos := left.Pos()
 
-	// Parse arguments
-	args := []string{}
+	// Check if this is a built-in function call (len or cap)
+	funcName := ""
+	if ident, ok := left.(*ast.DingoIdent); ok {
+		funcName = ident.Name
+	} else if raw, ok := left.(*ast.RawExpr); ok {
+		funcName = raw.Text
+	}
+	isBuiltin := funcName == "len" || funcName == "cap"
+
+	// Parse arguments as Expr (preserving AST for Dingo expressions)
+	var argsExpr []ast.Expr
 	if !p.peekTokenIs(tokenizer.RPAREN) {
 		// Parse first argument
 		p.nextToken()
 		arg := p.ParseExpression(PrecLowest)
 		if arg != nil {
-			args = append(args, arg.String())
+			argsExpr = append(argsExpr, arg)
 		}
 
 		// Parse remaining arguments
@@ -557,7 +615,7 @@ func (p *PrattParser) parseCallExpr(left ast.Expr) ast.Expr {
 			p.nextToken() // move to next argument
 			arg := p.ParseExpression(PrecLowest)
 			if arg != nil {
-				args = append(args, arg.String())
+				argsExpr = append(argsExpr, arg)
 			}
 		}
 	}
@@ -568,17 +626,34 @@ func (p *PrattParser) parseCallExpr(left ast.Expr) ast.Expr {
 	}
 	rparenPos := p.curToken.End
 
-	// Build the full call expression as RawExpr
+	// For built-in functions with Dingo expressions, return BuiltinCallExpr
+	if isBuiltin {
+		builtinExpr := &ast.BuiltinCallExpr{
+			Func:    funcName,
+			FuncPos: funcPos,
+			Args:    argsExpr,
+			RParen:  rparenPos,
+		}
+		// Only return BuiltinCallExpr if it contains Dingo expressions
+		// Otherwise fall through to RawExpr for simpler code generation
+		if builtinExpr.ContainsDingoExpr() {
+			return builtinExpr
+		}
+	}
+
+	// Build the full call expression as RawExpr (default path)
 	funcText := left.String()
 	argsText := ""
-	for i, arg := range args {
+	for i, arg := range argsExpr {
 		if i > 0 {
 			argsText += ", "
 		}
-		argsText += arg
+		argsText += arg.String()
 	}
 
 	fullText := funcText + "(" + argsText + ")"
+
+	_ = lparenPos // suppress unused warning
 
 	return &ast.RawExpr{
 		StartPos: left.Pos(),
@@ -646,9 +721,9 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	if p.curTokenIs(tokenizer.STRING) {
 		// Lookahead: is there a colon after this string?
 		savedState2 := p.saveState()
-		p.nextToken() // move past string
-		p.consumePeekNewlinesAndComments() // Skip newlines/comments before checking
-		hasColon := p.peekTokenIs(tokenizer.COLON)
+		p.nextToken() // move past string - now ON the next token
+		p.consumeNewlinesAndComments() // Skip newlines/comments at current position
+		hasColon := p.curTokenIs(tokenizer.COLON) // Check current, not peek
 		p.restoreState(savedState2) // restore to string token
 
 		if !hasColon {
@@ -751,6 +826,10 @@ func (p *PrattParser) consumePeekNewlinesAndComments() int {
 
 // parseBinaryExpr parses binary expressions (left-associative)
 // Handles operators like: +, -, *, /, ==, !=, <, >, <=, >=, &&, ||
+//
+// If either operand contains Dingo expressions (SafeNavExpr, BuiltinCallExpr, etc.),
+// returns a BinaryExpr to preserve the AST structure for codegen.
+// Otherwise, returns a RawExpr for simpler processing.
 func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
 	opToken := p.curToken
 	precedence := p.curPrecedence()
@@ -762,7 +841,18 @@ func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
 	// and allows lower-precedence operators (like ternary) to bind at top level
 	right := p.ParseExpression(precedence + 1)
 
-	// Build RawExpr with formatted binary expression
+	// If either operand contains Dingo expressions, preserve AST structure
+	// This enables proper code generation for nested expressions
+	if containsDingoExpr(left) || containsDingoExpr(right) {
+		return &ast.BinaryExpr{
+			X:     left,
+			OpPos: opToken.Pos,
+			Op:    opToken.Lit,
+			Y:     right,
+		}
+	}
+
+	// For simple expressions (no Dingo syntax), use RawExpr for efficiency
 	leftStr := p.exprToString(left)
 	rightStr := p.exprToString(right)
 
@@ -770,6 +860,24 @@ func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
 		StartPos: left.Pos(),
 		EndPos:   right.End(),
 		Text:     leftStr + " " + opToken.Lit + " " + rightStr,
+	}
+}
+
+// containsDingoExpr checks if an expression contains Dingo-specific syntax
+func containsDingoExpr(expr ast.Expr) bool {
+	if expr == nil {
+		return false
+	}
+	switch e := expr.(type) {
+	case *ast.SafeNavExpr, *ast.SafeNavCallExpr, *ast.NullCoalesceExpr,
+		*ast.TernaryExpr, *ast.MatchExpr, *ast.LambdaExpr, *ast.ErrorPropExpr:
+		return true
+	case *ast.BuiltinCallExpr:
+		return e.ContainsDingoExpr()
+	case *ast.BinaryExpr:
+		return e.ContainsDingoExpr()
+	default:
+		return false
 	}
 }
 
