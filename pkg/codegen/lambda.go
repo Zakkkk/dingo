@@ -1,6 +1,8 @@
 package codegen
 
 import (
+	"strings"
+
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
@@ -53,16 +55,17 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 
 	// Return type
 	// - If explicitly specified: use it
-	// - Otherwise: use "any" as placeholder for type inference
-	// The LambdaTypeInferrer will refine this if the lambda is used in a typed context
+	// - If expression body (has return stmt): default to 'any' as placeholder
+	// - If block body: NO DEFAULT (may be void)
+	// The type inferrer will replace 'any' with actual types when in call context
 	if g.expr.ReturnType != "" {
 		g.WriteByte(' ')
 		g.Write(g.expr.ReturnType)
-	} else {
-		// All lambdas use "any" as placeholder - type inference will fix it
-		// For block lambdas with no return, the type checker will validate
+	} else if !g.expr.IsBlock {
+		// Expression body - add 'any' return type so { return ... } is valid
 		g.Write(" any")
 	}
+	// Block bodies have no default return type (may be void)
 
 	// Body
 	g.WriteByte(' ')
@@ -104,8 +107,7 @@ func (g *LambdaCodeGen) generateParams() {
 		if param.Type != "" {
 			g.Write(param.Type)
 		} else {
-			// Type inference placeholder (valid Go 1.18+ syntax)
-			// Will be replaced by actual type in type inference pass
+			// Use "any" as placeholder - type inferrer will replace with actual type
 			g.Write("any")
 		}
 	}
@@ -117,15 +119,66 @@ func (g *LambdaCodeGen) generateParams() {
 //   - Wraps in { return ... }
 //
 // For block bodies:
-//   - Uses body as-is (already has { ... })
+//   - If has return type and single expression: adds implicit return
+//   - Otherwise: uses body as-is (already has { ... })
 func (g *LambdaCodeGen) generateBody() {
 	if g.expr.IsBlock {
-		// Block body - pass through
-		g.Write(g.expr.Body)
+		// Block body - check if we need implicit return
+		if g.expr.ReturnType != "" && g.needsImplicitReturn() {
+			g.writeBlockWithImplicitReturn()
+		} else {
+			// Pass through as-is
+			g.Write(g.expr.Body)
+		}
 	} else {
 		// Expression body - wrap in { return ... }
 		g.Write("{ return ")
 		g.Write(g.expr.Body)
 		g.Write(" }")
 	}
+}
+
+// needsImplicitReturn checks if a block body needs an implicit return.
+// Returns true if the block contains a single expression without return/if/for/switch.
+func (g *LambdaCodeGen) needsImplicitReturn() bool {
+	body := g.expr.Body
+	if len(body) < 2 {
+		return false
+	}
+
+	// Remove outer braces and trim whitespace
+	inner := strings.TrimSpace(body[1 : len(body)-1])
+	if inner == "" {
+		return false
+	}
+
+	// If already has return, don't add another
+	if strings.HasPrefix(inner, "return ") || strings.HasPrefix(inner, "return\t") || inner == "return" {
+		return false
+	}
+
+	// If contains control flow statements, don't add implicit return
+	// These indicate multi-statement blocks
+	if strings.Contains(inner, "if ") || strings.Contains(inner, "for ") ||
+		strings.Contains(inner, "switch ") || strings.Contains(inner, "select ") ||
+		strings.Contains(inner, "go ") || strings.Contains(inner, "defer ") {
+		return false
+	}
+
+	// If contains semicolons or newlines with statements, it's multi-statement
+	if strings.Contains(inner, ";") || strings.Contains(inner, "\n") {
+		return false
+	}
+
+	return true
+}
+
+// writeBlockWithImplicitReturn writes a block body with return added.
+// Transforms { expr } to { return expr }
+func (g *LambdaCodeGen) writeBlockWithImplicitReturn() {
+	body := g.expr.Body
+	inner := strings.TrimSpace(body[1 : len(body)-1])
+	g.Write("{ return ")
+	g.Write(inner)
+	g.Write(" }")
 }

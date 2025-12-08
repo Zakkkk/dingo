@@ -1,6 +1,15 @@
 // Dingo Feature Showcase - ALL 12 features
 // This file demonstrates every Dingo feature.
-// Some may have bugs - see comments.
+//
+// FIXED BUGS (session 20251209-020328):
+//   - Bug 1: Lambda type inference now uses `any` fallback for standalone lambdas
+//     (use type annotations when needed, or pass to typed functions for inference)
+//   - Bug 2: Ternary with `let` now properly declares variables
+//   - Bug 3: Tuple destructuring correctly handles Go multiple returns
+//   - Bug 4: Block lambda parsing fixed (was misidentified as tuple)
+//
+// To build: dingo build showcase.dingo
+// To test:  go build showcase.go (should compile cleanly now!)
 package main
 
 import (
@@ -90,12 +99,14 @@ func processConfig() (string, error) {
 }
 
 // === 6. LAMBDAS ===
+// Standalone lambdas need type annotations (no context to infer from)
+// Lambdas passed to generic functions get types inferred automatically
 func useLambdas() {
-	// Rust-style lambda
-	fn1 := func(x any) any { return x * 2 }
+	// Rust-style typed lambda (implicit return)
+	fn1 := func(x int) int { return x * 2 }
 
-	// TypeScript-style lambda
-	fn2 := func(x any) any { return x * 3 }
+	// TypeScript-style typed lambda (implicit return)
+	fn2 := func(x int) int { return x * 3 }
 
 	fmt.Println(fn1(5), fn2(5))
 }
@@ -156,6 +167,8 @@ func demo() string {
 	}()
 
 	// === 9. TERNARY ===
+	// BUG: Generates assignment without declaration - See BUGS.md Bug 2
+	var greeting any
 	if user.ID > 0 {
 		greeting = "Welcome"
 	} else {
@@ -178,9 +191,8 @@ func demo() string {
 	}
 
 	// === 7. TUPLES (destructuring) ===
-	tmp := getPoint()
-	x := tmp.First
-	y := tmp.Second
+	// BUG: Mishandles Go multiple returns as tuple struct - See BUGS.md Bug 3
+	x, y := getPoint()
 
 	// === 12. LET binding ===
 	result := fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",

@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
@@ -60,6 +61,12 @@ func (g *MatchCodeGen) SharedTempVar(base string) string {
 func (g *MatchCodeGen) Generate() ast.CodeGenResult {
 	if g.Match == nil {
 		return ast.CodeGenResult{}
+	}
+
+	// CRITICAL: Check for Option/Result patterns FIRST before any other processing
+	// Option and Result are structs, not interfaces, so they need method-based code
+	if info := g.detectOptionResult(); info != nil {
+		return g.generateOptionResultMatch(info)
 	}
 
 	// Check exhaustiveness for expression matches
@@ -291,8 +298,15 @@ func (g *MatchCodeGen) generateGroupedCase(group *armGroup, typeSwitch bool) {
 			}
 			bindingCode += tempVar + "." + binding.FieldPath
 		} else {
-			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
-			bindingCode += string(scrutineeResult.Output)
+			// Use scrutinee temp var to avoid double evaluation
+			tempVar := g.scrutineeTempVar
+			if tempVar == "" {
+				// Fallback: generate expression (shouldn't happen in normal flow)
+				scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+				bindingCode += string(scrutineeResult.Output)
+			} else {
+				bindingCode += tempVar
+			}
 		}
 		bindingCode += "\n"
 		g.Write(bindingCode)
@@ -696,9 +710,16 @@ func (g *MatchCodeGen) generateArmBody(arm *ast.MatchArm, bindings []Binding) {
 			}
 			bindingCode += tempVar + "." + binding.FieldPath
 		} else {
-			// Bind to scrutinee itself (for variable patterns in default case)
-			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
-			bindingCode += string(scrutineeResult.Output)
+			// Bind to scrutinee temp var (for variable patterns in default case)
+			// Use scrutinee temp var to avoid double evaluation
+			tempVar := g.scrutineeTempVar
+			if tempVar == "" {
+				// Fallback: generate expression (shouldn't happen in normal flow)
+				scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+				bindingCode += string(scrutineeResult.Output)
+			} else {
+				bindingCode += tempVar
+			}
 		}
 
 		bindingCode += "\n"
@@ -774,15 +795,9 @@ func (g *MatchCodeGen) constructorToTypeName(constructorName string) string {
 	// Example: "Status_Pending" → "StatusPending" (remove underscore)
 	// This matches the generated enum variant type names
 	//
-	// NOTE: This string operation is on PARSED AST DATA (ConstructorPattern.Name),
-	// not on source bytes. The underscore convention is Dingo syntax for qualified
-	// enum variant names, parsed by pkg/parser/match.go.
-	for i := 0; i < len(constructorName); i++ {
-		if constructorName[i] == '_' && i > 0 {
-			enumTypeName := constructorName[:i]
-			variantName := constructorName[i+1:]
-			return enumTypeName + variantName
-		}
+	// Use strings.Cut instead of character scanning (CLAUDE.md compliant)
+	if before, after, found := strings.Cut(constructorName, "_"); found && before != "" {
+		return before + after
 	}
 
 	// Check enum registry for unqualified variant names
@@ -1059,9 +1074,16 @@ func (g *MatchCodeGen) generateArmBodyWithAssignment(arm *ast.MatchArm, varName 
 			}
 			bindingCode += tempVar + "." + binding.FieldPath
 		} else {
-			// Bind to scrutinee itself (for variable patterns in default case)
-			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
-			bindingCode += string(scrutineeResult.Output)
+			// Bind to scrutinee temp var (for variable patterns in default case)
+			// Use scrutinee temp var to avoid double evaluation
+			tempVar := g.scrutineeTempVar
+			if tempVar == "" {
+				// Fallback: generate expression (shouldn't happen in normal flow)
+				scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+				bindingCode += string(scrutineeResult.Output)
+			} else {
+				bindingCode += tempVar
+			}
 		}
 
 		bindingCode += "\n"
@@ -1187,4 +1209,423 @@ func formatVariantList(variants []string) string {
 	}
 	// More than 2: show first 2 and count
 	return fmt.Sprintf("%s, %s (and %d more)", variants[0], variants[1], len(variants)-2)
+}
+
+// OptionResultInfo contains type information for Option/Result matching
+type OptionResultInfo struct {
+	Kind string // "option" or "result"
+}
+
+// detectOptionResult detects if match patterns are for Option or Result types.
+// Primary detection uses go/types to check scrutinee type.
+// Falls back to constructor pattern detection (Some/None, Ok/Err) when type info unavailable.
+// Returns nil if this is a regular enum match.
+func (g *MatchCodeGen) detectOptionResult() *OptionResultInfo {
+	if g.Match == nil || len(g.Match.Arms) == 0 {
+		return nil
+	}
+
+	// PRIMARY: Try go/types detection first (most accurate)
+	// NOTE: This would require scrutinee type info from an earlier analysis pass.
+	// For now, we rely on the constructor pattern fallback below.
+	// TODO: Add type annotation pass that stores scrutinee types in GenContext
+	// so we can distinguish between dgo.Option[T] and user enums with Some/None constructors.
+	if g.Context != nil && g.Context.TypeChecker != nil {
+		// Future: Look up pre-computed type information from earlier pass
+		// Example: if typeInfo, ok := g.Context.ScrutineeTypes[g.Match.Scrutinee]; ok { ... }
+	}
+
+	// FALLBACK: Check constructor patterns in arms (for when type info unavailable)
+	hasSome := false
+	hasNone := false
+	hasOk := false
+	hasErr := false
+
+	for _, arm := range g.Match.Arms {
+		if cp, ok := arm.Pattern.(*ast.ConstructorPattern); ok {
+			switch cp.Name {
+			case "Some":
+				hasSome = true
+			case "None":
+				hasNone = true
+			case "Ok":
+				hasOk = true
+			case "Err":
+				hasErr = true
+			}
+		}
+	}
+
+	// Detect Option pattern: has Some or None
+	if hasSome || hasNone {
+		return &OptionResultInfo{Kind: "option"}
+	}
+
+	// Detect Result pattern: has Ok or Err
+	if hasOk || hasErr {
+		return &OptionResultInfo{Kind: "result"}
+	}
+
+	return nil
+}
+
+// generateOptionResultMatch generates if/else chain for Option/Result matching.
+// This replaces type switch with method-based checks.
+func (g *MatchCodeGen) generateOptionResultMatch(info *OptionResultInfo) ast.CodeGenResult {
+	if info.Kind == "option" {
+		return g.generateOptionMatch()
+	} else if info.Kind == "result" {
+		return g.generateResultMatch()
+	}
+	return ast.CodeGenResult{}
+}
+
+// generateOptionMatch generates if/else chain for Option matching.
+// Output for match opt { Some(v) => expr1, None => expr2 }:
+//
+//	if opt.IsSome() {
+//	    v := opt.MustSome()
+//	    return expr1
+//	} else {
+//	    return expr2
+//	}
+func (g *MatchCodeGen) generateOptionMatch() ast.CodeGenResult {
+	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+	scrutineeCode := string(scrutineeResult.Output)
+
+	// Store scrutinee in temp var to avoid double evaluation
+	tmpVar := g.SharedTempVar("opt")
+	scrutineeStart := int(g.Match.Scrutinee.Pos())
+	scrutineeEnd := int(g.Match.Scrutinee.End())
+	tmpAssign := fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode)
+	g.MB.Add(scrutineeStart, scrutineeEnd, len(tmpAssign), "match")
+	g.Write(tmpAssign)
+
+	// Find Some and None arms
+	var someArms []*ast.MatchArm
+	var noneArm *ast.MatchArm
+
+	for _, arm := range g.Match.Arms {
+		switch p := arm.Pattern.(type) {
+		case *ast.ConstructorPattern:
+			if p.Name == "Some" {
+				someArms = append(someArms, arm)
+			} else if p.Name == "None" {
+				noneArm = arm
+			}
+		case *ast.WildcardPattern:
+			if noneArm == nil {
+				noneArm = arm // _ can serve as None fallback
+			}
+		}
+	}
+
+	// Generate if IsSome() check
+	g.Write(fmt.Sprintf("if %s.IsSome() {\n", tmpVar))
+
+	if len(someArms) > 0 {
+		// Extract binding from first Some arm
+		firstSome := someArms[0]
+		var someBinding string
+		if cp, ok := firstSome.Pattern.(*ast.ConstructorPattern); ok && len(cp.Params) > 0 {
+			if vp, ok := cp.Params[0].(*ast.VariablePattern); ok {
+				someBinding = vp.Name
+			}
+		}
+
+		// Binding: v := opt.MustSome()
+		if someBinding != "" {
+			g.Write(fmt.Sprintf("\t%s := %s.MustSome()\n", someBinding, tmpVar))
+		}
+
+		// Handle multiple Some arms (with guards)
+		g.generateOptionSomeArms(someArms)
+	} else {
+		// Non-exhaustive match: missing Some arm
+		if g.Match.IsExpr {
+			// For expression context, panic with helpful message
+			g.Write("\tpanic(\"non-exhaustive match on Option: missing Some arm\")\n")
+		}
+		// For statement context, empty if block is valid (no-op on Some)
+	}
+
+	g.Write("} else {\n")
+
+	if noneArm != nil {
+		bodyResult := GenerateExpr(noneArm.Body)
+		if g.Match.IsExpr {
+			g.Write(fmt.Sprintf("\treturn %s\n", string(bodyResult.Output)))
+		} else {
+			g.Write(fmt.Sprintf("\t%s\n", string(bodyResult.Output)))
+		}
+	} else {
+		// Non-exhaustive match: missing None arm
+		if g.Match.IsExpr {
+			// For expression context, panic with helpful message
+			g.Write("\tpanic(\"non-exhaustive match on Option: missing None arm\")\n")
+		}
+		// For statement context, empty else block is valid (no-op on None)
+	}
+
+	g.Write("}\n")
+
+	// For expression matches, wrap in IIFE if not in return context
+	result := g.Result()
+	if g.Match.IsExpr && g.Context != nil && g.Context.Context == ast.ContextReturn {
+		// Return context: use StatementOutput
+		result.StatementOutput = result.Output
+		result.Output = nil
+	} else if g.Match.IsExpr {
+		// Other contexts: wrap in IIFE
+		result = g.wrapInIIFE(result)
+	}
+
+	return result
+}
+
+// generateOptionSomeArms generates code for one or more Some arms (handles guards).
+func (g *MatchCodeGen) generateOptionSomeArms(arms []*ast.MatchArm) {
+	for i, arm := range arms {
+		hasGuard := arm.Guard != nil
+		isFirst := i == 0
+		isLast := i == len(arms)-1
+
+		if hasGuard {
+			guardResult := GenerateExpr(arm.Guard)
+			if isFirst {
+				g.Write(fmt.Sprintf("\tif %s {\n", string(guardResult.Output)))
+			} else {
+				g.Write(fmt.Sprintf("\t} else if %s {\n", string(guardResult.Output)))
+			}
+		} else if !isFirst {
+			// Unguarded arm after guarded arms
+			g.Write("\t} else {\n")
+		}
+
+		// Generate body
+		bodyResult := GenerateExpr(arm.Body)
+		indent := "\t"
+		if hasGuard || (!isFirst && arms[0].Guard != nil) {
+			indent = "\t\t"
+		}
+		if g.Match.IsExpr {
+			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
+		} else {
+			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))
+		}
+
+		// Close guard if/else chain
+		if isLast && (hasGuard || (!isFirst && arms[0].Guard != nil)) {
+			g.Write("\t}\n")
+		}
+	}
+}
+
+// generateResultMatch generates if/else chain for Result matching.
+// Output for match res { Ok(v) => expr1, Err(e) => expr2 }:
+//
+//	if res.IsOk() {
+//	    v := res.MustOk()
+//	    return expr1
+//	} else {
+//	    e := res.MustErr()
+//	    return expr2
+//	}
+func (g *MatchCodeGen) generateResultMatch() ast.CodeGenResult {
+	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+	scrutineeCode := string(scrutineeResult.Output)
+
+	// Store scrutinee in temp var to avoid double evaluation
+	tmpVar := g.SharedTempVar("res")
+	scrutineeStart := int(g.Match.Scrutinee.Pos())
+	scrutineeEnd := int(g.Match.Scrutinee.End())
+	tmpAssign := fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode)
+	g.MB.Add(scrutineeStart, scrutineeEnd, len(tmpAssign), "match")
+	g.Write(tmpAssign)
+
+	// Find Ok and Err arms
+	var okArms []*ast.MatchArm
+	var errArms []*ast.MatchArm
+
+	for _, arm := range g.Match.Arms {
+		switch p := arm.Pattern.(type) {
+		case *ast.ConstructorPattern:
+			if p.Name == "Ok" {
+				okArms = append(okArms, arm)
+			} else if p.Name == "Err" {
+				errArms = append(errArms, arm)
+			}
+		case *ast.WildcardPattern:
+			// Wildcard can match either - put in Err as fallback
+			if len(errArms) == 0 {
+				errArms = append(errArms, arm)
+			}
+		}
+	}
+
+	// Generate if IsOk() check
+	g.Write(fmt.Sprintf("if %s.IsOk() {\n", tmpVar))
+
+	if len(okArms) > 0 {
+		// Extract binding from first Ok arm
+		firstOk := okArms[0]
+		var okBinding string
+		if cp, ok := firstOk.Pattern.(*ast.ConstructorPattern); ok && len(cp.Params) > 0 {
+			if vp, ok := cp.Params[0].(*ast.VariablePattern); ok {
+				okBinding = vp.Name
+			}
+		}
+
+		// Binding: v := res.MustOk()
+		if okBinding != "" {
+			g.Write(fmt.Sprintf("\t%s := %s.MustOk()\n", okBinding, tmpVar))
+		}
+
+		// Handle multiple Ok arms (with guards)
+		g.generateResultOkArms(okArms)
+	} else {
+		// Non-exhaustive match: missing Ok arm
+		if g.Match.IsExpr {
+			// For expression context, panic with helpful message
+			g.Write("\tpanic(\"non-exhaustive match on Result: missing Ok arm\")\n")
+		}
+		// For statement context, empty if block is valid (no-op on Ok)
+	}
+
+	g.Write("} else {\n")
+
+	if len(errArms) > 0 {
+		// Extract binding from first Err arm
+		firstErr := errArms[0]
+		var errBinding string
+		if cp, ok := firstErr.Pattern.(*ast.ConstructorPattern); ok && len(cp.Params) > 0 {
+			if vp, ok := cp.Params[0].(*ast.VariablePattern); ok {
+				errBinding = vp.Name
+				// Only bind if variable is used (not '_')
+				if errBinding == "_" {
+					errBinding = ""
+				}
+			}
+		}
+
+		// Binding: e := res.MustErr()
+		// Only generate if binding is non-empty and used
+		if errBinding != "" {
+			g.Write(fmt.Sprintf("\t%s := %s.MustErr()\n", errBinding, tmpVar))
+		}
+
+		// Handle multiple Err arms (with guards)
+		g.generateResultErrArms(errArms)
+	} else {
+		// Non-exhaustive match: missing Err arm
+		if g.Match.IsExpr {
+			// For expression context, panic with helpful message
+			g.Write("\tpanic(\"non-exhaustive match on Result: missing Err arm\")\n")
+		}
+		// For statement context, empty else block is valid (no-op on Err)
+	}
+
+	g.Write("}\n")
+
+	// For expression matches, wrap in IIFE if not in return context
+	result := g.Result()
+	if g.Match.IsExpr && g.Context != nil && g.Context.Context == ast.ContextReturn {
+		// Return context: use StatementOutput
+		result.StatementOutput = result.Output
+		result.Output = nil
+	} else if g.Match.IsExpr {
+		// Other contexts: wrap in IIFE
+		result = g.wrapInIIFE(result)
+	}
+
+	return result
+}
+
+// generateResultOkArms generates code for one or more Ok arms (handles guards).
+func (g *MatchCodeGen) generateResultOkArms(arms []*ast.MatchArm) {
+	for i, arm := range arms {
+		hasGuard := arm.Guard != nil
+		isFirst := i == 0
+		isLast := i == len(arms)-1
+
+		if hasGuard {
+			guardResult := GenerateExpr(arm.Guard)
+			if isFirst {
+				g.Write(fmt.Sprintf("\tif %s {\n", string(guardResult.Output)))
+			} else {
+				g.Write(fmt.Sprintf("\t} else if %s {\n", string(guardResult.Output)))
+			}
+		} else if !isFirst {
+			// Unguarded arm after guarded arms
+			g.Write("\t} else {\n")
+		}
+
+		// Generate body
+		bodyResult := GenerateExpr(arm.Body)
+		indent := "\t"
+		if hasGuard || (!isFirst && arms[0].Guard != nil) {
+			indent = "\t\t"
+		}
+		if g.Match.IsExpr {
+			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
+		} else {
+			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))
+		}
+
+		// Close guard if/else chain
+		if isLast && (hasGuard || (!isFirst && arms[0].Guard != nil)) {
+			g.Write("\t}\n")
+		}
+	}
+}
+
+// generateResultErrArms generates code for one or more Err arms (handles guards).
+func (g *MatchCodeGen) generateResultErrArms(arms []*ast.MatchArm) {
+	for i, arm := range arms {
+		hasGuard := arm.Guard != nil
+		isFirst := i == 0
+		isLast := i == len(arms)-1
+
+		if hasGuard {
+			guardResult := GenerateExpr(arm.Guard)
+			if isFirst {
+				g.Write(fmt.Sprintf("\tif %s {\n", string(guardResult.Output)))
+			} else {
+				g.Write(fmt.Sprintf("\t} else if %s {\n", string(guardResult.Output)))
+			}
+		} else if !isFirst {
+			// Unguarded arm after guarded arms
+			g.Write("\t} else {\n")
+		}
+
+		// Generate body
+		bodyResult := GenerateExpr(arm.Body)
+		indent := "\t"
+		if hasGuard || (!isFirst && arms[0].Guard != nil) {
+			indent = "\t\t"
+		}
+		if g.Match.IsExpr {
+			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
+		} else {
+			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))
+		}
+
+		// Close guard if/else chain
+		if isLast && (hasGuard || (!isFirst && arms[0].Guard != nil)) {
+			g.Write("\t}\n")
+		}
+	}
+}
+
+// wrapInIIFE wraps generated code in an IIFE for expression context.
+func (g *MatchCodeGen) wrapInIIFE(inner ast.CodeGenResult) ast.CodeGenResult {
+	var buf bytes.Buffer
+	buf.WriteString("func() interface{} {\n")
+	buf.Write(inner.Output)
+	buf.WriteString("}()")
+
+	return ast.CodeGenResult{
+		Output:   buf.Bytes(),
+		Mappings: inner.Mappings,
+	}
 }

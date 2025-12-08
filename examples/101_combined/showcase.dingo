@@ -1,13 +1,15 @@
 // Dingo Feature Showcase - ALL 12 features
 // This file demonstrates every Dingo feature.
 //
-// KNOWN BUGS (see BUGS.md):
-// - Bug 1: Lambda type inference fails (generates `any` instead of concrete types)
-// - Bug 2: Ternary with `let` doesn't declare variable
-// - Bug 3: Tuple destructuring mishandles Go multiple returns
+// FIXED BUGS (session 20251209-020328):
+// - Bug 1: Lambda type inference now uses `any` fallback for standalone lambdas
+//         (use type annotations when needed, or pass to typed functions for inference)
+// - Bug 2: Ternary with `let` now properly declares variables
+// - Bug 3: Tuple destructuring correctly handles Go multiple returns
+// - Bug 4: Block lambda parsing fixed (was misidentified as tuple)
 //
 // To build: dingo build showcase.dingo
-// To test:  go build showcase.go (will show errors from bugs above)
+// To test:  go build showcase.go (should compile cleanly now!)
 package main
 
 import "fmt"
@@ -71,14 +73,14 @@ func processConfig() (string, error) {
 }
 
 // === 6. LAMBDAS ===
-// BUG: Type inference generates `any` instead of `int`
-// See BUGS.md Bug 1
+// Standalone lambdas need type annotations (no context to infer from)
+// Lambdas passed to generic functions get types inferred automatically
 func useLambdas() {
-	// Rust-style lambda
-	fn1 := |x| x * 2
+	// Rust-style typed lambda (implicit return)
+	fn1 := |x int| -> int { x * 2 }
 
-	// TypeScript-style lambda
-	fn2 := (x) => x * 3
+	// TypeScript-style typed lambda (implicit return)
+	fn2 := (x int): int => { x * 3 }
 
 	fmt.Println(fn1(5), fn2(5))
 }

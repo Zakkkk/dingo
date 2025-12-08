@@ -24,7 +24,8 @@ func TestLambdaCodeGen_RustStyleSimple(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	// Expression lambdas without explicit return type get "any" as placeholder
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func(x any) any { return x + 1 }"
 	actual := string(result.Output)
 
@@ -49,7 +50,8 @@ func TestLambdaCodeGen_RustStyleTyped(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
-	// Expression lambdas without explicit return type get "any" as placeholder
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func(x int) any { return x * 2 }"
 	actual := string(result.Output)
 
@@ -122,6 +124,8 @@ func TestLambdaCodeGen_TypeScriptStyleSimple(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func(x any) any { return x + 1 }"
 	actual := string(result.Output)
 
@@ -146,6 +150,8 @@ func TestLambdaCodeGen_TypeScriptStyleTyped(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func(x int) any { return x * 2 }"
 	actual := string(result.Output)
 
@@ -171,6 +177,8 @@ func TestLambdaCodeGen_MultipleParams(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func(x any, y any) any { return x + y }"
 	actual := string(result.Output)
 
@@ -242,6 +250,8 @@ func TestLambdaCodeGen_NoParams(t *testing.T) {
 	gen := NewLambdaCodeGen(lambda)
 	result := gen.Generate()
 
+	// Expression lambdas without explicit return type get 'any' return type
+	// Type inferrer will replace 'any' with actual type from call context
 	expected := "func() any { return getValue() }"
 	actual := string(result.Output)
 

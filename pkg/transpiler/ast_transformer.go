@@ -138,6 +138,12 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 						varType := typechecker.InferMatchResultType(matchExpr, result)
 						ctx.VarType = varType
 					}
+				case ast.ExprTernary:
+					// Infer type from ternary branches
+					if ternaryExpr, ok := expr.(*ast.TernaryExpr); ok {
+						varType := inferTernaryType(ternaryExpr, result)
+						ctx.VarType = varType
+					}
 				}
 			}
 
@@ -414,6 +420,56 @@ func inferSafeNavType(fullSource []byte, exprSrc []byte) string {
 	}
 
 	return sc.GetExprType(chainExpr)
+}
+
+// inferTernaryType attempts to infer the type of a ternary expression from its branches.
+// It analyzes both the true and false branches to determine a common type.
+//
+// Example:
+//
+//	ternary: user.ID > 0 ? "Welcome" : "Hello"
+//	Returns: "string"
+//
+// Returns empty string if type cannot be inferred.
+func inferTernaryType(ternary *ast.TernaryExpr, fullSource []byte) string {
+	// Use go/types to infer the type from the true branch (most specific)
+	// This handles literals, complex expressions, and typed constants correctly
+	if ternary.True != nil {
+		if trueStr := ternary.True.String(); trueStr != "" && trueStr != "?:" {
+			typeStr := inferExprTypeFromSource(fullSource, []byte(trueStr))
+			if typeStr != "" {
+				return typeStr
+			}
+		}
+	}
+
+	// Fallback: try false branch using go/types
+	if ternary.False != nil {
+		if falseStr := ternary.False.String(); falseStr != "" && falseStr != "?:" {
+			typeStr := inferExprTypeFromSource(fullSource, []byte(falseStr))
+			if typeStr != "" {
+				return typeStr
+			}
+		}
+	}
+
+	// If go/types can't infer, return empty (codegen will use 'any')
+	return ""
+}
+
+// inferExprTypeFromSource attempts to infer an expression's type using go/types.
+func inferExprTypeFromSource(fullSource []byte, exprSrc []byte) string {
+	// Convert Dingo syntax to Go for type checking
+	goSource := bytes.ReplaceAll(fullSource, []byte("?."), []byte("."))
+	goSource = removeNullCoalesce(goSource)
+
+	// Type check the converted source
+	sc := typechecker.NewSourceChecker()
+	if err := sc.ParseAndCheck("probe.go", goSource); err != nil {
+		return ""
+	}
+
+	return sc.GetExprType(string(exprSrc))
 }
 
 // removeNullCoalesce removes ?? operators and their right operands for type inference.

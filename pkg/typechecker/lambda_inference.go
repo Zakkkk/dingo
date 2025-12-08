@@ -170,8 +170,8 @@ func (inf *LambdaTypeInferrer) getFunctionType(fun ast.Expr) *types.Signature {
 }
 
 // getInstantiatedSignature extracts the instantiated signature for a generic function call.
-// This is the primary method for resolving generic function types, as it uses the
-// already-instantiated signature from go/types' type inference.
+// Prefers manual resolution over go/types' inference when lambdas with typed parameters are present,
+// as this allows us to infer return types from lambda bodies.
 func (inf *LambdaTypeInferrer) getInstantiatedSignature(call *ast.CallExpr) *types.Signature {
 	// Extract the function identifier from various call forms
 	var id *ast.Ident
@@ -204,8 +204,40 @@ func (inf *LambdaTypeInferrer) getInstantiatedSignature(call *ast.CallExpr) *typ
 		return nil
 	}
 
-	// Check Info.Instances for instantiated signature
-	// This map is populated by go/types when it infers generic type arguments
+	// Check if any lambda arguments have typed parameters (not 'any')
+	// If so, prefer manual resolution to leverage body inference
+	hasTypedLambda := false
+	for _, arg := range call.Args {
+		if funcLit, ok := arg.(*ast.FuncLit); ok {
+			if funcLit.Type.Params != nil {
+				for _, field := range funcLit.Type.Params.List {
+					if !inf.isAnyType(field.Type) {
+						hasTypedLambda = true
+						break
+					}
+				}
+			}
+			if hasTypedLambda {
+				break
+			}
+		}
+	}
+
+	// If we have typed lambdas, try manual resolution first (for body inference)
+	if hasTypedLambda {
+		genericSig := inf.getGenericSignature(call.Fun)
+		if genericSig != nil && genericSig.TypeParams() != nil && genericSig.TypeParams().Len() > 0 {
+			typeArgs := inf.resolveTypeParamsFromArgs(call, genericSig)
+			if len(typeArgs) > 0 {
+				instantiated := inf.instantiateSignature(genericSig, typeArgs)
+				if instantiated != nil {
+					return instantiated
+				}
+			}
+		}
+	}
+
+	// Fallback to go/types' inference from Info.Instances
 	if instance, ok := inf.info.Instances[id]; ok {
 		if sig, ok := instance.Type.(*types.Signature); ok {
 			return sig
@@ -213,26 +245,21 @@ func (inf *LambdaTypeInferrer) getInstantiatedSignature(call *ast.CallExpr) *typ
 	}
 
 	// Fallback: try Info.Types[call.Fun]
-	// This works for some cases where Instances doesn't have an entry
-	// BUT: If the signature still has type parameters, we need Phase 2 resolution
 	if tv, ok := inf.info.Types[call.Fun]; ok {
 		if sig, ok := tv.Type.(*types.Signature); ok {
 			// Only return if it's already instantiated (no type parameters)
 			if sig.TypeParams() == nil || sig.TypeParams().Len() == 0 {
 				return sig
 			}
-			// Signature has type parameters - fall through to Phase 2
+			// Signature has type parameters - fall through to manual resolution
 		}
 	}
 
-	// Phase 2: Manual type parameter resolution
-	// If Info.Instances is empty (common for transpiled code), resolve manually
+	// Manual type parameter resolution (for cases without typed lambdas)
 	genericSig := inf.getGenericSignature(call.Fun)
 	if genericSig != nil && genericSig.TypeParams() != nil && genericSig.TypeParams().Len() > 0 {
-		// Resolve type parameters from concrete argument types
 		typeArgs := inf.resolveTypeParamsFromArgs(call, genericSig)
 		if len(typeArgs) > 0 {
-			// Instantiate the generic signature with resolved type arguments
 			instantiated := inf.instantiateSignature(genericSig, typeArgs)
 			return instantiated
 		}
@@ -291,11 +318,24 @@ func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Si
 				expectedType := expectedParams.At(paramIdx).Type()
 				newTypeExpr := inf.typeToExpr(expectedType)
 				if newTypeExpr != nil {
-					// Create a fresh Field with no position info to avoid
-					// go/printer trailing comma issues
+					// Create fresh Names with no position info to avoid
+					// go/printer trailing comma issues from stale position data
+					freshNames := make([]*ast.Ident, len(field.Names))
+					for j, name := range field.Names {
+						freshNames[j] = &ast.Ident{
+							NamePos: token.NoPos,
+							Name:    name.Name,
+						}
+					}
+
+					// Create a fresh Field with no position info
 					newFields[i] = &ast.Field{
-						Names: field.Names,
+						Names: freshNames,
 						Type:  newTypeExpr,
+						// Explicitly zero all position fields
+						Doc:     nil,
+						Tag:     nil,
+						Comment: nil,
 					}
 					changed = true
 					paramIdx += numNames
@@ -311,8 +351,12 @@ func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Si
 
 	if changed {
 		// Replace the FieldList with a fresh one to clear stale position info
+		// Explicitly set Opening and Closing to token.NoPos to prevent go/printer
+		// from adding trailing commas
 		fn.Type.Params = &ast.FieldList{
-			List: newFields,
+			Opening: token.NoPos,
+			List:    newFields,
+			Closing: token.NoPos,
 		}
 	}
 
@@ -323,12 +367,26 @@ func (inf *LambdaTypeInferrer) rewriteParams(fn *ast.FuncLit, expected *types.Si
 func (inf *LambdaTypeInferrer) rewriteResults(fn *ast.FuncLit, expected *types.Signature) bool {
 	expectedResults := expected.Results()
 	if expectedResults == nil || expectedResults.Len() == 0 {
-		// Expected function has no return value
+		// Expected function has no return value (void function)
+		changed := false
+
+		// Remove return type from signature if present
 		if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 {
-			// Lambda has return type but shouldn't - don't change
-			// This would be a type error caught by go/types
+			fn.Type.Results = nil
+			changed = true
 		}
-		return false
+
+		// Fix body: remove return statements for single-expression bodies
+		// Pattern: { return expr } → { expr }
+		if fn.Body != nil && len(fn.Body.List) == 1 {
+			if retStmt, ok := fn.Body.List[0].(*ast.ReturnStmt); ok && len(retStmt.Results) == 1 {
+				// Replace return statement with expression statement
+				fn.Body.List[0] = &ast.ExprStmt{X: retStmt.Results[0]}
+				changed = true
+			}
+		}
+
+		return changed
 	}
 
 	changed := false
@@ -701,6 +759,8 @@ func (inf *LambdaTypeInferrer) getGenericSignature(fun ast.Expr) *types.Signatur
 // resolveTypeParamsFromArgs resolves type parameters by analyzing concrete argument types.
 // For Filter[T](items []T, predicate func(T) bool), if we see Filter(users, ...) where
 // users is []User, we resolve T=User.
+//
+// Also attempts to infer return type parameters from lambda body expressions.
 func (inf *LambdaTypeInferrer) resolveTypeParamsFromArgs(call *ast.CallExpr, genericSig *types.Signature) []types.Type {
 	if genericSig.TypeParams() == nil || genericSig.TypeParams().Len() == 0 {
 		return nil
@@ -711,11 +771,6 @@ func (inf *LambdaTypeInferrer) resolveTypeParamsFromArgs(call *ast.CallExpr, gen
 
 	params := genericSig.Params()
 	for i, arg := range call.Args {
-		// Skip lambda arguments - they're what we're trying to infer!
-		if _, ok := arg.(*ast.FuncLit); ok {
-			continue
-		}
-
 		// Get parameter index (handle variadic later)
 		if i >= params.Len() {
 			continue
@@ -723,6 +778,13 @@ func (inf *LambdaTypeInferrer) resolveTypeParamsFromArgs(call *ast.CallExpr, gen
 
 		// Get expected parameter type (with type parameters)
 		paramType := params.At(i).Type()
+
+		// Special handling for lambda arguments - infer from body
+		if funcLit, ok := arg.(*ast.FuncLit); ok {
+			// Extract type parameters from lambda body return expressions
+			inf.inferTypeParamsFromLambdaBody(funcLit, paramType, subst)
+			continue
+		}
 
 		// Get concrete argument type
 		tv, ok := inf.info.Types[arg]
@@ -745,8 +807,8 @@ func (inf *LambdaTypeInferrer) resolveTypeParamsFromArgs(call *ast.CallExpr, gen
 		if concreteType, ok := subst[tp]; ok {
 			typeArgs[i] = concreteType
 		} else {
-			// Use 'any' for unresolved type parameters (common when lambda body uses the type param)
-			// Phase 3 will improve this by analyzing lambda bodies
+			// Use 'any' for unresolved type parameters
+			// This is a safe fallback when inference fails
 			typeArgs[i] = types.Universe.Lookup("any").Type()
 		}
 	}
@@ -883,4 +945,96 @@ func (inf *LambdaTypeInferrer) instantiateSignature(genericSig *types.Signature,
 	}
 
 	return sig
+}
+
+// inferTypeParamsFromLambdaBody attempts to infer type parameters from a lambda's body.
+// For example, given Map[T, R](items []T, transform func(T) R):
+// - If lambda body returns `user.Name` where Name is string, infer R=string
+// - If expected param type is func(T) R, match return type R to body's return expression
+//
+// NOTE: This only works if lambda parameters have already been typed (not 'any').
+// The multi-pass type inference in pure_pipeline.go handles this:
+// Pass 1: Infer T from non-lambda args, rewrite lambda params
+// Pass 2: Re-type-check, now lambda body is typed, infer R from return expr
+func (inf *LambdaTypeInferrer) inferTypeParamsFromLambdaBody(
+	funcLit *ast.FuncLit,
+	expectedParamType types.Type,
+	subst map[*types.TypeParam]types.Type,
+) {
+	// Extract function signature from expected parameter type
+	expectedSig, ok := expectedParamType.(*types.Signature)
+	if !ok {
+		return
+	}
+
+	// Only process if the function has a return type
+	if expectedSig.Results() == nil || expectedSig.Results().Len() == 0 {
+		return
+	}
+
+	// Check if lambda parameters are still 'any' - if so, skip body inference
+	// Body inference only works after parameters have been typed
+	if funcLit.Type.Params != nil {
+		for _, field := range funcLit.Type.Params.List {
+			if inf.isAnyType(field.Type) {
+				// Parameters not yet typed - skip body inference for this pass
+				// Will retry on next pass after params are rewritten
+				return
+			}
+		}
+	}
+
+	// Get the return type from expected signature (may contain type parameters)
+	expectedReturnType := expectedSig.Results().At(0).Type()
+
+	// Find return expression in lambda body
+	returnExpr := inf.extractReturnExpression(funcLit.Body)
+	if returnExpr == nil {
+		return
+	}
+
+	// Get the type of the return expression using go/types
+	tv, ok := inf.info.Types[returnExpr]
+	if !ok {
+		return
+	}
+	actualReturnType := tv.Type
+
+	// Match actual return type to expected return type (which may have type params)
+	// Example: actualReturnType=string, expectedReturnType=R → sets subst[R]=string
+	inf.matchTypeToParam(actualReturnType, expectedReturnType, subst)
+}
+
+// extractReturnExpression finds the return expression in a lambda body.
+// Handles both expression lambdas ({ return expr }) and simple expression statements ({ expr }).
+func (inf *LambdaTypeInferrer) extractReturnExpression(body *ast.BlockStmt) ast.Expr {
+	if body == nil || len(body.List) == 0 {
+		return nil
+	}
+
+	// Check for single-statement body
+	if len(body.List) == 1 {
+		switch stmt := body.List[0].(type) {
+		case *ast.ReturnStmt:
+			// { return expr }
+			if len(stmt.Results) > 0 {
+				return stmt.Results[0]
+			}
+		case *ast.ExprStmt:
+			// { expr } - treated as implicit return
+			return stmt.X
+		}
+	}
+
+	// For multi-statement bodies, find the last return statement
+	// Walk backwards through statements to find return
+	for i := len(body.List) - 1; i >= 0; i-- {
+		if retStmt, ok := body.List[i].(*ast.ReturnStmt); ok {
+			if len(retStmt.Results) > 0 {
+				return retStmt.Results[0]
+			}
+		}
+	}
+
+	return nil
 }

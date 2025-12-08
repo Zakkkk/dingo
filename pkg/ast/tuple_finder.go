@@ -405,6 +405,61 @@ func detectDestructuring(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, 
 	return TupleLocation{}, false
 }
 
+// isLambdaParameters checks if LPAREN at currentIdx starts lambda parameters
+// by looking for => after the matching RPAREN.
+// Pattern: (params) => body
+func isLambdaParameters(allTokens []tokenizer.Token, currentIdx int) bool {
+	if allTokens[currentIdx].Kind != tokenizer.LPAREN {
+		return false
+	}
+
+	// Scan forward to find matching RPAREN
+	depth := 0
+	for i := currentIdx; i < len(allTokens); i++ {
+		switch allTokens[i].Kind {
+		case tokenizer.LPAREN:
+			depth++
+		case tokenizer.RPAREN:
+			depth--
+			if depth == 0 {
+				// Found matching RPAREN - check next token
+				if i+1 < len(allTokens) && allTokens[i+1].Kind == tokenizer.ARROW {
+					return true // (params) =>
+				}
+				// Also check for optional return type: ) Type => or ): Type =>
+				if i+1 < len(allTokens) {
+					next := allTokens[i+1]
+					if next.Kind == tokenizer.IDENT || next.Kind == tokenizer.COLON {
+						// Could be return type annotation
+						// Scan forward past optional type annotation to look for ARROW
+						j := i + 1
+						if next.Kind == tokenizer.COLON {
+							j++ // skip colon
+						}
+						// Skip type tokens (IDENT, brackets, etc.)
+						for j < len(allTokens) {
+							if allTokens[j].Kind == tokenizer.ARROW {
+								return true // ) Type => or ): Type =>
+							}
+							// Stop at tokens that indicate end of type annotation
+							if allTokens[j].Kind != tokenizer.IDENT &&
+								allTokens[j].Kind != tokenizer.LBRACKET &&
+								allTokens[j].Kind != tokenizer.RBRACKET &&
+								allTokens[j].Kind != tokenizer.STAR {
+								break
+							}
+							j++
+						}
+					}
+				}
+				return false
+			}
+		}
+	}
+
+	return false
+}
+
 // detectTupleLiteral checks if LPAREN starts a tuple literal
 // Pattern: (expr1, expr2, ...) - but NOT foo(a, b) or (a + b)
 func detectTupleLiteral(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, src []byte) (TupleLocation, bool) {
@@ -432,6 +487,14 @@ func detectTupleLiteral(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, s
 			tok.Advance()
 			return TupleLocation{}, false
 		}
+	}
+
+	// Check if this is a lambda parameter list by looking for => after closing paren
+	// Pattern: (params) => body or (..., (params) => body, ...)
+	// We need to scan forward to find the matching ) and check what follows
+	if isLambdaParameters(allTokens, currentIdx) {
+		tok.Advance()
+		return TupleLocation{}, false
 	}
 
 	savedPos := tok.SavePos()

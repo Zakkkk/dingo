@@ -2,17 +2,19 @@ package codegen
 
 import (
 	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
 // GenContext provides context for code generation to produce human-like output.
 type GenContext struct {
-	Context        ast.ExprContext   // Statement context (return, assignment, argument)
-	VarName        string            // For assignments: variable name being assigned
-	VarType        string            // For assignments: inferred type (e.g., "*string")
-	StatementStart int               // Byte offset of containing statement start
-	StatementEnd   int               // Byte offset of containing statement end
-	EnumRegistry   map[string]string // Maps variant name to enum type name (e.g., "UserCreated" -> "Event")
-	TempCounter    *int              // Shared counter for unique temp var names across expressions
+	Context        ast.ExprContext      // Statement context (return, assignment, argument)
+	VarName        string               // For assignments: variable name being assigned
+	VarType        string               // For assignments: inferred type (e.g., "*string")
+	StatementStart int                  // Byte offset of containing statement start
+	StatementEnd   int                  // Byte offset of containing statement end
+	EnumRegistry   map[string]string    // Maps variant name to enum type name (e.g., "UserCreated" -> "Event")
+	TempCounter    *int                 // Shared counter for unique temp var names across expressions
+	TypeChecker    *typechecker.Checker // For go/types queries (e.g., detecting Option/Result types in match)
 }
 
 // GenerateExprWithContext generates Go code with context-aware output.

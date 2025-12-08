@@ -280,7 +280,6 @@ func (p *PrattParser) parseTSLambda() ast.Expr {
 
 	// Parse body
 	body, isBlock := p.parseLambdaBody()
-
 	return &ast.LambdaExpr{
 		LambdaPos:  lambdaPos,
 		Style:      ast.TypeScriptStyle,
@@ -387,6 +386,7 @@ func (p *PrattParser) parseLambdaParam() *ast.LambdaParam {
 
 		if p.curTokenIs(tokenizer.IDENT) {
 			paramType = p.curToken.Lit
+			// Token will be consumed by caller's nextToken()
 		} else {
 			p.errors = append(p.errors, ParseError{
 				Pos:     p.curToken.Pos,
@@ -401,7 +401,9 @@ func (p *PrattParser) parseLambdaParam() *ast.LambdaParam {
 		// Type is followed by COMMA, RPAREN, or PIPE (for rust-style)
 		p.nextToken() // consume param name
 		paramType = p.curToken.Lit
+		// Token will be consumed by caller's nextToken()
 	}
+	// If no type annotation, param name token will be consumed by caller's nextToken()
 
 	return &ast.LambdaParam{
 		Name: paramName,

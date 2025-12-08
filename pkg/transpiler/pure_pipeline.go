@@ -75,6 +75,7 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("AST transform error: %w", err)
 	}
 
+
 	// TODO: Store mappings for LSP integration
 	// Combine token mappings, tuple mappings, statement mappings, guard let mappings, and AST mappings
 	_ = tokenMappings

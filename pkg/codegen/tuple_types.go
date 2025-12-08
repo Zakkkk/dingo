@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	goast "go/ast"
+	goformat "go/format"
 	goparser "go/parser"
 	"go/token"
 	"go/types"
@@ -120,9 +121,22 @@ func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 		result = newResult
 	}
 
-	// Add tuples import if needed (byte-level)
+	// Add tuples import if needed (AST-based)
 	if r.needsImport {
-		result = addTuplesImportBytes(result)
+		// Parse result to add import via AST
+		fsetFinal := token.NewFileSet()
+		fileFinal, err := goparser.ParseFile(fsetFinal, "tuple.go", result, goparser.ParseComments)
+		if err != nil {
+			return ast.CodeGenResult{}, fmt.Errorf("failed to parse result for import: %w", err)
+		}
+		addTuplesImport(fileFinal)
+
+		// Format back to bytes
+		var buf bytes.Buffer
+		if err := goformat.Node(&buf, fsetFinal, fileFinal); err != nil {
+			return ast.CodeGenResult{}, fmt.Errorf("failed to format with import: %w", err)
+		}
+		result = buf.Bytes()
 	}
 
 	return ast.CodeGenResult{
@@ -413,10 +427,6 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 	valueSrc := string(src[valueStart:valueEnd])
 
 	// Parse variable names and paths from string literals
-	type varBinding struct {
-		name string
-		path []int
-	}
 	var bindings []varBinding
 
 	for i := 0; i < len(call.Args)-1; i++ {
@@ -435,7 +445,14 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 		return nil
 	}
 
-	// Generate replacement statements
+	// CRITICAL: Detect if valueExpr is a Go function call with multiple returns
+	// vs. a Dingo tuple struct expression
+	if r.isGoMultiReturnCall(valueExpr) {
+		// Generate Go multi-return assignment: x, y := func()
+		return r.generateGoMultiReturnReplacement(start, end, bindings, valueSrc)
+	}
+
+	// Generate Dingo tuple destructuring: tmp := expr; x := tmp.First; y := tmp.Second
 	var buf strings.Builder
 
 	// Generate unique tmp variable name
@@ -473,60 +490,92 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 	}
 }
 
-// addTuplesImportBytes adds the tuples import using byte-level manipulation.
-func addTuplesImportBytes(src []byte) []byte {
-	const tuplesImport = `"github.com/MadAppGang/dingo/runtime/tuples"`
-
-	// Check if already imported
-	if bytes.Contains(src, []byte(tuplesImport)) {
-		return src
+// isGoMultiReturnCall detects if expr is a function call that returns multiple Go values.
+// Uses go/types to check the function signature.
+// Returns true for Go multi-return, false for Dingo tuple structs.
+// Defaults to true (Go multi-return) if type information is unavailable.
+func (r *TupleTypeResolver) isGoMultiReturnCall(expr goast.Expr) bool {
+	// Check if expr is a call expression
+	call, ok := expr.(*goast.CallExpr)
+	if !ok {
+		// Not a function call - must be a tuple struct expression
+		return false
 	}
 
-	// Find the import block
-	importIdx := bytes.Index(src, []byte("import ("))
-	if importIdx != -1 {
-		// Find the newline after "import ("
-		newlineIdx := bytes.IndexByte(src[importIdx:], '\n')
-		if newlineIdx != -1 {
-			insertPos := importIdx + newlineIdx + 1
-			// Insert the new import
-			newImport := []byte("\t" + tuplesImport + "\n")
-			result := make([]byte, 0, len(src)+len(newImport))
-			result = append(result, src[:insertPos]...)
-			result = append(result, newImport...)
-			result = append(result, src[insertPos:]...)
-			return result
+	// If we have type info, use go/types to check the signature
+	if r.info != nil && r.info.Types != nil {
+		if tv, ok := r.info.Types[call]; ok && tv.Type != nil {
+			// Check if the type is a tuple (multiple return values from signature)
+			if tuple, isTuple := tv.Type.(*types.Tuple); isTuple {
+				// This is a tuple type - check if it's from multiple returns
+				// A tuple with 2+ elements from a function call is Go multi-return
+				return tuple.Len() >= 2
+			}
+			// Check if it's a named type (like tuples.Tuple2[T1, T2])
+			if named, isNamed := tv.Type.(*types.Named); isNamed {
+				typeName := named.Obj().Name()
+				// If it starts with "Tuple", it's a Dingo tuple struct
+				if strings.HasPrefix(typeName, "Tuple") {
+					return false
+				}
+			}
+		}
+
+		// Check the function being called - does it return multiple values?
+		if fnType, ok := r.info.Types[call.Fun]; ok {
+			if sig, isSig := fnType.Type.(*types.Signature); isSig {
+				results := sig.Results()
+				if results != nil && results.Len() >= 2 {
+					// Function returns multiple values - this is Go multi-return
+					return true
+				}
+			}
 		}
 	}
 
-	// Fallback: find single import statement
-	singleImportIdx := bytes.Index(src, []byte("import "))
-	if singleImportIdx != -1 && importIdx == -1 {
-		// Find the end of the import line
-		lineEnd := bytes.IndexByte(src[singleImportIdx:], '\n')
-		if lineEnd != -1 {
-			// Convert single import to import block
-			// Find the import path
-			importStart := singleImportIdx + len("import ")
-			importPath := src[importStart : singleImportIdx+lineEnd]
-
-			// Create import block
-			var newImport strings.Builder
-			newImport.WriteString("import (\n\t")
-			newImport.Write(bytes.TrimSpace(importPath))
-			newImport.WriteString("\n\t")
-			newImport.WriteString(tuplesImport)
-			newImport.WriteString("\n)")
-
-			result := make([]byte, 0, len(src)+len(tuplesImport)+20)
-			result = append(result, src[:singleImportIdx]...)
-			result = append(result, []byte(newImport.String())...)
-			result = append(result, src[singleImportIdx+lineEnd:]...)
-			return result
+	// Heuristic fallback: if the call returns something that looks like a tuple marker,
+	// it's a Dingo tuple. Otherwise, default to Go multi-return (more common).
+	if ident, ok := call.Fun.(*goast.Ident); ok {
+		if strings.HasPrefix(ident.Name, "__tuple") {
+			return false // Dingo tuple marker
 		}
 	}
 
-	return src
+	// Default to Go multi-return (per user guidance in plan)
+	return true
+}
+
+// varBinding represents a variable binding with its name and access path
+type varBinding struct {
+	name string
+	path []int
+}
+
+// generateGoMultiReturnReplacement generates code for Go multiple return values.
+// Input: let (x, y) = getPoint() where getPoint() returns (int, int)
+// Output: x, y := getPoint()
+func (r *TupleTypeResolver) generateGoMultiReturnReplacement(start, end int, bindings []varBinding, valueSrc string) *markerReplacement {
+	var buf strings.Builder
+
+	// Generate variable list: x, y, z
+	for i, b := range bindings {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(b.name)
+	}
+
+	// Add assignment operator
+	buf.WriteString(" := ")
+
+	// Add function call
+	buf.WriteString(valueSrc)
+
+	return &markerReplacement{
+		start:       start,
+		end:         end,
+		replacement: []byte(buf.String()),
+	}
 }
 
 // addTuplesImport adds the runtime/tuples import to the file if not already present.
@@ -668,10 +717,6 @@ func (r *TupleTypeResolver) expandDestructureMarker(call *goast.CallExpr) []goas
 	valueExpr := call.Args[len(call.Args)-1]
 
 	// Parse variable names and paths from string literals
-	type varBinding struct {
-		name string
-		path []int
-	}
 	var bindings []varBinding
 
 	for i := 0; i < len(call.Args)-1; i++ {

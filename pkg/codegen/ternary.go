@@ -170,6 +170,21 @@ func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
 	// Transform condition - this may produce hoisted code
 	condResult := TransformExprForTernary(g.expr.Cond, ctx)
 
+	// Prepend variable declaration before the if statement
+	// This ensures the variable is declared in the outer scope
+	if g.Context != nil && g.Context.VarName != "" {
+		stmt = append(stmt, []byte("var ")...)
+		stmt = append(stmt, []byte(g.Context.VarName)...)
+		stmt = append(stmt, []byte(" ")...)
+		if g.Context.VarType != "" {
+			stmt = append(stmt, []byte(g.Context.VarType)...)
+		} else {
+			// Fallback to any if type unknown (Go 1.18+)
+			stmt = append(stmt, []byte("any")...)
+		}
+		stmt = append(stmt, []byte("\n")...)
+	}
+
 	// Prepend hoisted code (e.g., var tmp int; if ... { tmp = len(...) })
 	if len(condResult.HoistedCode) > 0 {
 		stmt = append(stmt, condResult.HoistedCode...)

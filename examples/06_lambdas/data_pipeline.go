@@ -20,15 +20,15 @@ type User struct {
 func ProcessUsers(users []User) {
 	// Filter active premium users over 18
 	// TypeScript-style: (params) => expr
-	eligible := Filter(users, func(u User,) bool { return u.Active && u.Premium && u.Age >= 18 })
+	eligible := Filter(users, func(u User) bool { return u.Active && u.Premium && u.Age >= 18 })
 
 	// Transform to display format
 	// Rust-style: |params| expr
-	names := Map(eligible, func(u User,) any { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
+	names := Map(eligible, func(u User) string { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
 
 	// Multi-line lambda for complex logic
 	// TypeScript-style with block
-	summary := Reduce(eligible, "", func(acc string, u User,) string {
+	summary := Reduce(eligible, "", func(acc string, u User) string {
 		if acc == "" {
 			return u.Name
 		}
@@ -98,7 +98,7 @@ func main() {
 	ProcessUsers(users)
 
 	// Sort by age (ascending) using lambda
-	byAge := SortUsers(users, func(a User, b User,) bool { return a.Age < b.Age })
+	byAge := SortUsers(users, func(a User, b User) bool { return a.Age < b.Age })
 
 	fmt.Println("\nUsers by age:")
 	for _, u := range byAge {
@@ -106,7 +106,7 @@ func main() {
 	}
 
 	// Sort by name using lambda
-	byName := SortUsers(users, func(a User, b User,) bool { return strings.ToLower(a.Name) < strings.ToLower(b.Name) })
+	byName := SortUsers(users, func(a User, b User) bool { return strings.ToLower(a.Name) < strings.ToLower(b.Name) })
 
 	fmt.Println("\nUsers by name:")
 	for _, u := range byName {

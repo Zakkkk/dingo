@@ -45,7 +45,7 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 				},
 				IsExpr: false,
 			},
-			expectedPart: "val := result",
+			expectedPart: "res.IsOk()", // NEW: method-based Result matching
 		},
 		{
 			name: "Some/None match",
@@ -74,7 +74,7 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 				},
 				IsExpr: false,
 			},
-			expectedPart: "case OptionSome:",
+			expectedPart: "opt.IsSome()", // NEW: method-based Option matching
 		},
 	}
 
@@ -89,11 +89,16 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 			}
 
 			// Verify value is cached (prevents double evaluation)
-			if !strings.Contains(code, "val :=") {
+			// New Option/Result codegen uses opt/res as temp var
+			hasCaching := strings.Contains(code, "val :=") ||
+				         strings.Contains(code, "opt :=") ||
+				         strings.Contains(code, "res :=")
+			if !hasCaching {
 				t.Errorf("Expected value caching, got: %s", code)
 			}
 
 			// Verify switch uses cached variable (not original expression)
+			// Only applicable for enum type switches, not Option/Result method-based matches
 			if strings.Contains(code, "switch v") && strings.Contains(code, ".(type)") {
 				if !strings.Contains(code, "switch v1 := val.(type)") {
 					t.Errorf("Expected switch to use cached val, got: %s", code)
