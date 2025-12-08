@@ -1,0 +1,77 @@
+// Dingo Feature Showcase - Key features working together
+package main
+
+import "fmt"
+
+// === 1. ENUM ===
+enum Status {
+	Pending
+	Active { message: string }
+	Done { code: int }
+}
+
+// Simple structs
+type User struct {
+	ID       int
+	Name     string
+	Settings *Settings
+}
+
+type Settings struct {
+	Theme    string
+	Language *string
+}
+
+// === 4. RESULT type ===
+func fetchUser(id int) Result<User, string> {
+	if id <= 0 {
+		return Err[User]("invalid id")
+	}
+	lang := "en"
+	return Ok[User, string](User{
+		ID:       id,
+		Name:     "Alice",
+		Settings: &Settings{Theme: "dark", Language: &lang},
+	})
+}
+
+// Demo function with multiple features
+func demo() string {
+	lang := "en"
+	user := User{
+		ID:       42,
+		Name:     "Alice",
+		Settings: &Settings{Theme: "dark", Language: &lang},
+	}
+
+	// 8. SAFE NAVIGATION
+	let userLang = user.Settings?.Language
+
+	// 10. NULL COALESCE
+	let displayLang = userLang ?? "default"
+
+	// 2. MATCH on enum
+	let status = NewStatusActive("working")
+	let statusMsg = match status {
+		StatusPending => "pending",
+		StatusActive { message } => message,
+		StatusDone { code } => fmt.Sprintf("done:%d", code),
+	}
+
+	// 12. LET binding
+	let result = fmt.Sprintf("User: %s, Lang: %s, Status: %s",
+		user.Name, displayLang, statusMsg)
+
+	return result
+}
+
+func main() {
+	// Test basic demo
+	fmt.Println(demo())
+
+	// Test Result
+	r := fetchUser(42)
+	if r.IsOk() {
+		fmt.Println("Fetched:", r.MustOk().Name)
+	}
+}

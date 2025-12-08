@@ -423,10 +423,12 @@ func detectTupleLiteral(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, s
 		return TupleLocation{}, false
 	}
 
-	// Check if previous token is IDENT - if so, this is a function call
+	// Check if previous token indicates this is a function call:
+	// - IDENT( = normal function call: foo(...)
+	// - RBRACKET( = generic function call: foo[T](...) or Ok[User, string](...)
 	if currentIdx > 0 {
 		prev := allTokens[currentIdx-1]
-		if prev.Kind == tokenizer.IDENT {
+		if prev.Kind == tokenizer.IDENT || prev.Kind == tokenizer.RBRACKET {
 			tok.Advance()
 			return TupleLocation{}, false
 		}

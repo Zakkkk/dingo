@@ -73,10 +73,16 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 		offset := file.Offset(t.pos)
 
 		// Track parentheses for parameter context
+		// IMPORTANT: We only set inParamList for function DECLARATIONS, not function CALLS.
+		// Function calls like Ok[User](User{ID: 1}) should NOT have colons transformed.
 		if t.tok == gotoken.LPAREN {
 			if i > 0 {
 				prev := tokens[i-1]
-				if prev.tok == gotoken.IDENT || prev.tok == gotoken.RBRACK || prev.tok == gotoken.FUNC {
+				// FUNC( = function type literal: func(x: int)
+				// IDENT( = function declaration after name: func foo(x: int)
+				// NOTE: Do NOT include RBRACK - that's for generic function CALLS: Ok[T](...)
+				// which contain struct literals where colons should be preserved
+				if prev.tok == gotoken.FUNC || prev.tok == gotoken.IDENT {
 					inParamList = true
 				}
 			}
