@@ -223,7 +223,6 @@ func detectTypeAlias(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, src 
 	elemCount := 0
 	hasComma := false
 	var typeContent []string
-	var currentType []byte
 	typeStart2 := tok.Current().BytePos() // Start of first type element
 
 	for depth > 0 {
@@ -235,7 +234,6 @@ func detectTypeAlias(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, src 
 		switch current.Kind {
 		case tokenizer.LPAREN:
 			depth++
-			currentType = append(currentType, src[current.BytePos():current.ByteEnd()]...)
 		case tokenizer.RPAREN:
 			depth--
 			if depth == 0 {
@@ -261,7 +259,6 @@ func detectTypeAlias(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, src 
 					TypeContent:  typeContent,
 				}, true
 			}
-			currentType = append(currentType, src[current.BytePos():current.ByteEnd()]...)
 		case tokenizer.COMMA:
 			if depth == 1 {
 				// Collect type before this comma
@@ -271,11 +268,7 @@ func detectTypeAlias(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, src 
 				hasComma = true
 				// Next type starts after this comma
 				typeStart2 = current.ByteEnd()
-			} else {
-				currentType = append(currentType, src[current.BytePos():current.ByteEnd()]...)
 			}
-		default:
-			currentType = append(currentType, src[current.BytePos():current.ByteEnd()]...)
 		}
 
 		tok.Advance()
@@ -361,7 +354,6 @@ func detectDestructuring(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, 
 				for {
 					exprTok := tok.Current()
 					if exprTok.Kind == tokenizer.EOF || exprTok.Kind == tokenizer.NEWLINE || exprTok.Kind == tokenizer.SEMICOLON {
-						exprEnd = exprTok.BytePos()
 						break
 					}
 					exprEnd = exprTok.ByteEnd()

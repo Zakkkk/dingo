@@ -9,10 +9,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/generator"
-	"github.com/MadAppGang/dingo/pkg/goparser/parser"
+	"github.com/MadAppGang/dingo/pkg/parser"
 	"github.com/MadAppGang/dingo/pkg/plugin"
-	// Preprocessor removed - using AST-based approach now
-	// "github.com/MadAppGang/dingo/pkg/preprocessor"
 )
 
 // simpleLogger implements plugin.Logger

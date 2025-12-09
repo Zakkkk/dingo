@@ -43,6 +43,16 @@ jobs:
     - name: Build dingo-lsp
       run: go build -v -o dingo-lsp ./cmd/dingo-lsp
 
+    - name: Transpile examples
+      run: |
+        for dingo_file in $(find examples -name "*.dingo"); do
+          echo "Transpiling $dingo_file"
+          ./dingo build "$dingo_file"
+        done
+
+    - name: Build examples
+      run: go build ./examples/...
+
     - name: Run unit tests
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts)
 

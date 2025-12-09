@@ -2,11 +2,77 @@
 
 All notable changes to the Dingo compiler will be documented in this file.
 
-## [Unreleased]
+## [0.4.0] - 2025-12-09
 
 ### Breaking Changes
 
 - Removed `type_annotations` feature (`param: Type` syntax). Use Go-native `param Type` syntax instead.
+
+### Features
+
+#### Guard Let Statement
+- New `guard let` syntax for early returns with pattern matching
+- Semantic type inference using go/types integration
+- Supports Result/Option unwrapping with automatic error propagation
+
+#### Ternary Operator
+- Context-aware ternary operator (`cond ? then : else`)
+- Multi-line expression support
+- Pure AST-based implementation
+
+#### Tuples
+- Go generics-based tuple types (`Tuple2[A, B]`, `Tuple3[A, B, C]`, etc.)
+- Two-pass AST-based pipeline for reliable detection
+- Destructuring assignment support
+
+#### Enhanced Error Propagation
+- Bare statement error propagation (`foo()?` as standalone statement)
+- `MustErr()` detection for error expressions
+- Context and lambda transforms for error wrapping
+- Result auto-import and implicit wrapping
+
+#### Pattern Matching Improvements
+- Match expression exhaustiveness checking
+- Grouped case clause support for guarded patterns
+- Interface-based enum pattern (type-switch generation)
+
+#### Safe Navigation
+- Null-state inference for `?.` operator
+- Integration with ternary operator
+
+### Architecture
+
+- **Complete AST-based pipeline**: All code generation now uses proper AST transformations
+- **Multi-pass lambda inference**: Cascading type resolution for complex lambda expressions
+- **go/types integration**: Type inference using Go's native type checker
+- **Two-pass tuple detection**: Reliable tuple vs generic function disambiguation
+
+### CI/CD
+
+- **Example verification**: CI now transpiles and builds all example files
+- **golangci-lint v2**: Migrated to golangci-lint v2.6 with proper configuration
+- **Enhanced CI**: Added diff visualization and performance tracking scripts
+- **Automated issue triage**: GitHub Actions integration for issue management
+
+### Bug Fixes
+
+- Fixed lambda block parsing and expression lambda return types
+- Fixed tuple detection for generic function calls
+- Fixed staticcheck lint errors (SA4004, SA4010, SA4017)
+- Fixed redundant newlines in fmt.Println calls
+- Fixed golden-tools regenerate script import
+- Updated test expectations for interface-based enum pattern
+- Fixed test file naming conflicts in examples
+
+### Documentation
+
+- Updated enum documentation for interface-based sum types
+- Added comprehensive feature showcase examples
+- Streamlined CLAUDE.md from 1246 to 114 lines
+
+---
+
+## [Unreleased]
 
 ### 🏗️ P0 AST Migration - LetDecl (2025-11-27)
 

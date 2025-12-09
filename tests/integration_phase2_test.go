@@ -85,8 +85,10 @@ enum Status {
 }
 
 func main() {
-	s := StatusActive()
-	if s.IsActive() {
+	s := NewStatusActive()
+	// Use type switch to check variant (interface-based enum pattern)
+	switch s.(type) {
+	case StatusActive:
 		println("Status is active")
 	}
 }
@@ -126,8 +128,8 @@ func main() {
 		if !strings.Contains(goCode, "StatusPending") {
 			t.Error("Generated code missing StatusPending struct")
 		}
-		if !strings.Contains(goCode, "IsActive()") {
-			t.Error("Generated code missing IsActive() method")
+		if !strings.Contains(goCode, "NewStatusActive()") {
+			t.Error("Generated code missing NewStatusActive() constructor")
 		}
 
 		t.Log("✓ Integration test passed: Enum generation working correctly")

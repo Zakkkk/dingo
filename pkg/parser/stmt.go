@@ -301,18 +301,13 @@ func (p *StmtParser) parseBlockStmt() *ast.BlockStmt {
 
 	stmts := []ast.Stmt{}
 
-	// Parse statements until we hit '}'
-	// This is simplified - would need proper token support
-	for !p.curTokenIs(tokenizer.EOF) {
+	// Parse single statement (simplified - full implementation would parse until '}')
+	if !p.curTokenIs(tokenizer.EOF) {
 		stmt := p.parseStmt()
 		if stmt != nil {
 			stmts = append(stmts, stmt)
 		}
-
 		p.nextToken()
-
-		// Break on closing brace (would need lexer support)
-		break
 	}
 
 	rbrace := p.curToken.Pos
