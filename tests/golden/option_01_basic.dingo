@@ -1,21 +1,19 @@
+// Test: Basic Option[T] usage with generic types
+// Feature: Option type via dgo package
+// Complexity: basic
 package main
 
-enum Option {
-	Some(string),
-	None,
-}
-
-func findUser(id int) Option {
+func findUser(id int) Option[string] {
 	if id > 0 {
-		return OptionSome("User" + string(rune(id)))
+		return Some("User" + string(rune(id)))
 	}
-	return OptionNone()
+	return None[string]()
 }
 
 func main() {
 	result := findUser(42)
 	if result.IsSome() {
-		println("Found:", *result.some)
+		println("Found:", result.MustSome())
 	} else {
 		println("Not found")
 	}

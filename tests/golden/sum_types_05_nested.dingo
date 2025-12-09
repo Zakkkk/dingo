@@ -1,10 +1,9 @@
+// Test: Nested sum types (interface-based enum)
+// Feature: Sum types with nested enum variants
+// Complexity: advanced
 package main
 
 import "errors"
-
-// Test: Nested sum types
-// Feature: Sum types with nested enum variants
-// Complexity: advanced
 
 enum Result {
 	Ok(Value),
@@ -19,20 +18,21 @@ enum Value {
 
 func parseInt(s string) Result {
 	if s == "" {
-		return ResultErr(errors.New("empty string"))
+		return NewResultErr(errors.New("empty string"))
 	}
 	if s == "null" {
-		return ResultOk(Value_None())
+		return NewResultOk(NewValueNone())
 	}
-	return ResultOk(Value_String(s))
+	return NewResultOk(NewValueString(s))
 }
 
 func main() {
-	result := parseInt("hello")
-	if result.IsOk() {
-		value := *result.ok
-		if value.IsString() {
-			println("String:", *value.string_0)
+	let result = parseInt("hello")
+	switch r := result.(type) {
+	case ResultOk:
+		switch v := r.Value.(type) {
+		case ValueString:
+			println("String:", v.Value)
 		}
 	}
 }

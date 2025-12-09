@@ -1,4 +1,14 @@
 // Test that expression lambdas generate valid Go signatures
+//
+// === Design Decision: Lambda Syntax ===
+//
+// Dingo supports two lambda styles that compile to Go function literals:
+//   Rust-style:  |x| x + 1        → func(x any) any { return x + 1 }
+//   Typed:       |x: int| x + 1   → func(x int) int { return x + 1 }
+//   With return: |x: int| -> int { return x * 2 }
+//
+// Type annotations help when the compiler can't infer types from context.
+//
 package main
 
 import "fmt"

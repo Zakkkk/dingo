@@ -1,0 +1,277 @@
+// Dingo CLI Framework Example - Todo List Manager
+// Demonstrates idiomatic Dingo patterns for CLI applications:
+// - Enum-backed subcommands with pattern matching dispatch
+// - The ? operator for clean error propagation
+// - let bindings for immutable-by-default variables
+// - Match expressions with pattern destructuring
+// - Zero runtime overhead - transpiles to pure Go
+//
+// Run: dingo run examples/15_cli_framework/todo_cli.dingo -- help
+
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// =============================================================================
+// VALIDATION HELPERS
+// Return Result types to enable guard let unwrapping
+// =============================================================================
+
+func validateDescription(s string) Result[string, error] {
+	if len(s) < 2 {
+		return Err[string, error](errors.New("task description too short"))
+	}
+	return Ok[string, error](s)
+}
+
+func requireArgs(args []string, message string) Result[string, error] {
+	if len(args) == 0 {
+		return Err[string, error](errors.New(message))
+	}
+	return Ok[string, error](args[0])
+}
+
+// =============================================================================
+// COMMAND DEFINITIONS
+// Sum types make subcommands exhaustive - compiler enforces all cases handled
+// =============================================================================
+
+enum Command {
+	Add { description: string }
+	List
+	Done { id: int }
+	Remove { id: int }
+	Help
+}
+
+// =============================================================================
+// DOMAIN TYPES
+// =============================================================================
+
+type Task struct {
+	ID          int
+	Description string
+	Completed   bool
+}
+
+// In-memory storage - demo only, doesn't persist between runs
+// A real app would use file/database storage
+var tasks = []Task{}
+var nextID = 1
+
+// =============================================================================
+// ARGUMENT PARSING
+// Returns (Command, error) for clean ? operator usage
+// =============================================================================
+
+func parseArgs(args []string) (Command, error) {
+	if len(args) == 0 {
+		return Command.Help(), nil
+	}
+
+	let cmd = args[0]
+	let rest = args[1:]
+
+	// Route to subcommand parsers
+	if cmd == "add" {
+		return parseAddCommand(rest)
+	}
+	if cmd == "list" || cmd == "ls" {
+		return Command.List(), nil
+	}
+	if cmd == "done" || cmd == "complete" {
+		return parseDoneCommand(rest)
+	}
+	if cmd == "remove" || cmd == "rm" {
+		return parseRemoveCommand(rest)
+	}
+	if cmd == "help" || cmd == "--help" || cmd == "-h" {
+		return Command.Help(), nil
+	}
+
+	return nil, fmt.Errorf("unknown command: %s\nRun 'todo help' for usage", cmd)
+}
+
+func parseAddCommand(args []string) (Command, error) {
+	if len(args) == 0 {
+		return nil, errors.New("add requires a task description\nUsage: todo add <description>")
+	}
+
+	// guard let unwraps Result - returns early on Err
+	guard let description = validateDescription(strings.Join(args, " ")) else |err| {
+		return nil, err
+	}
+
+	return Command.Add(description), nil
+}
+
+func parseDoneCommand(args []string) (Command, error) {
+	if len(args) == 0 {
+		return nil, errors.New("done requires a task ID\nUsage: todo done <id>")
+	}
+
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid task ID: %s", args[0])
+	}
+	return Command.Done(id), nil
+}
+
+func parseRemoveCommand(args []string) (Command, error) {
+	if len(args) == 0 {
+		return nil, errors.New("remove requires a task ID\nUsage: todo remove <id>")
+	}
+
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid task ID: %s", args[0])
+	}
+	return Command.Remove(id), nil
+}
+
+// =============================================================================
+// COMMAND DISPATCH
+// Pattern matching ensures ALL commands are handled - no forgotten cases
+// =============================================================================
+
+func dispatch(cmd Command) error {
+	// Match with pattern destructuring - extracts values directly
+	return match cmd {
+		Add(description) => handleAdd(description),
+		List => handleList(),
+		Done(id) => handleDone(id),
+		Remove(id) => handleRemove(id),
+		Help => handleHelp(),
+	}
+}
+
+// =============================================================================
+// COMMAND HANDLERS
+// =============================================================================
+
+func handleAdd(description string) error {
+	let task = Task{
+		ID:          nextID,
+		Description: description,
+		Completed:   false,
+	}
+
+	tasks = append(tasks, task)
+	nextID++
+
+	fmt.Printf("Added task #%d: %s\n", task.ID, task.Description)
+	return nil
+}
+
+func handleList() error {
+	if len(tasks) == 0 {
+		fmt.Println("No tasks yet. Add one with: todo add <description>")
+		return nil
+	}
+
+	fmt.Printf("Tasks (%d total):\n", len(tasks))
+	for _, task := range tasks {
+		let status = " "
+		if task.Completed {
+			status = "x"
+		}
+		fmt.Printf("  [%s] #%d %s\n", status, task.ID, task.Description)
+	}
+
+	return nil
+}
+
+func handleDone(id int) error {
+	let idx = findTaskIndex(id)
+	if idx < 0 {
+		return fmt.Errorf("task #%d not found", id)
+	}
+
+	if tasks[idx].Completed {
+		fmt.Printf("Task #%d already completed\n", id)
+	} else {
+		tasks[idx].Completed = true
+		fmt.Printf("Completed task #%d: %s\n", id, tasks[idx].Description)
+	}
+	return nil
+}
+
+func handleRemove(id int) error {
+	let idx = findTaskIndex(id)
+	if idx < 0 {
+		return fmt.Errorf("task #%d not found", id)
+	}
+
+	let desc = tasks[idx].Description
+	tasks = removeAt(tasks, idx)
+	fmt.Printf("Removed task #%d: %s\n", id, desc)
+	return nil
+}
+
+func handleHelp() error {
+	fmt.Println(`todo - A simple task manager
+
+Usage: todo <command> [arguments]
+
+Commands:
+  add <description>    Add a new task
+  list, ls             List all tasks
+  done <id>            Mark a task as complete
+  remove, rm <id>      Remove a task
+  help                 Show this help
+
+Examples:
+  todo add "Buy groceries"
+  todo list
+  todo done 1
+  todo remove 2`)
+
+	return nil
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+func findTaskIndex(id int) int {
+	for i, task := range tasks {
+		if task.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func removeAt(items []Task, idx int) []Task {
+	var result []Task
+	for i, item := range items {
+		if i != idx {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// =============================================================================
+// MAIN ENTRY POINT
+// =============================================================================
+
+func main() {
+	cmd, err := parseArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	err = dispatch(cmd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}

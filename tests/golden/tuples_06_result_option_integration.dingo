@@ -1,36 +1,35 @@
-package main
-
 // Test: Tuples with Result and Option types
 // Feature: Integration with Result[T,E] and Option[T]
 // Complexity: intermediate
+package main
 
 // Tuple of Options
 func findUser(id int) (Option[string], Option[int]) {
 	if id > 0 {
 		return Some("User"), Some(id)
 	}
-	return Option_string_None(), Option_int_None()
+	return None[string](), None[int]()
 }
 
 // Tuple of Results
 func getIntResult() Result[int, string] {
-	return Ok(42)
+	return Ok[int, string](42)
 }
 
 func getStringResult() Result[string, string] {
-	return Ok("hello")
+	return Ok[string, string]("hello")
 }
 
 // Tuple with mixed Option types
 func getOptions() (Option[int], Option[string], Option[bool]) {
-	return Some(10), Option_string_None(), Some(true)
+	return Some(10), None[string](), Some(true)
 }
 
 func main() {
 	// Tuple of Options - destructure and check separately
 	let (nameOpt, idOpt) = findUser(1)
 	if nameOpt.IsSome() && idOpt.IsSome() {
-		println("User:", nameOpt.Unwrap(), idOpt.Unwrap())
+		println("User:", nameOpt.MustSome(), idOpt.MustSome())
 	} else {
 		println("Not found")
 	}
@@ -42,7 +41,7 @@ func main() {
 	let (res1, res2) = results
 
 	if res1.IsOk() && res2.IsOk() {
-		println("Both ok:", res1.Unwrap(), res2.Unwrap())
+		println("Both ok:", res1.MustOk(), res2.MustOk())
 	} else {
 		println("At least one failed")
 	}

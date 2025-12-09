@@ -17,14 +17,14 @@ func (o UserOption) IsSome() bool {
 	return !o.none
 }
 
-func (o UserOption) Unwrap() *User {
+func (o UserOption) MustSome() *User {
 	if o.none {
 		panic("unwrap on None value")
 	}
 	return o.value
 }
 
-func (o UserOption) UnwrapOr(defaultVal *User) *User {
+func (o UserOption) SomeOr(defaultVal *User) *User {
 	if o.none {
 		return defaultVal
 	}

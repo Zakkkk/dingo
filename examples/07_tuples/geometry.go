@@ -1,5 +1,15 @@
 // Real-world example: Geometry calculations with tuples
 // Tuples are perfect for grouping related values without creating a struct
+//
+// === Design Decision: Tuples via Runtime Package ===
+//
+// Dingo tuples use Go generics via the runtime/tuples package:
+//
+//	(A, B)       → tuples.T2[A, B]
+//	(A, B, C)    → tuples.T3[A, B, C]
+//	(1, "hello") → tuples.New2(1, "hello")
+//
+// Tuple types support up to 10 elements with positional access via .V0, .V1, etc.
 package main
 
 import (
@@ -124,22 +134,32 @@ func main() {
 
 	// Calculate bounding box
 	bbox := CalculateBoundingBox(points)
-	_ = /* ERROR: nested tuple destructure not yet supported */
-		fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
+	// Note: nested tuple destructuring ((a, b), (c, d)) not yet supported
+	// Using two-step destructuring instead
+	tmp9 := bbox
+	minPt := tmp9.First
+	maxPt := tmp9.Second
+	tmp10 := minPt
+	minX := tmp10.First
+	minY := tmp10.Second
+	tmp11 := maxPt
+	maxX := tmp11.First
+	maxY := tmp11.Second
+	fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
 
 	// Transform all points (scale by 2)
 	scaled := TransformPoints(points, func(p Point2D) Point2D {
-		tmp9 := p
-		x := tmp9.First
-		y := tmp9.Second
+		tmp12 := p
+		x := tmp12.First
+		y := tmp12.Second
 		return tuples.Tuple2[float64, float64]{First: x * 2, Second: y * 2}
 	})
 
 	fmt.Println("\n=== Scaled Points (2x) ===")
 	for i, p := range scaled {
-		tmp10 := p
-		x := tmp10.First
-		y := tmp10.Second
+		tmp13 := p
+		x := tmp13.First
+		y := tmp13.Second
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 }

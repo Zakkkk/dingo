@@ -2,6 +2,30 @@
 
 The safe navigation operator (`?.`) provides a clean, concise way to access properties and call methods on values that might be absent (null/None). It eliminates nested nil checks and makes code dramatically more readable.
 
+## Design Decision
+
+Safe navigation generates **nil-check IIFEs** that short-circuit on nil:
+
+```go
+// Dingo
+config?.ssl?.certPath
+
+// Generated Go
+func() string {
+    if config == nil { return "" }
+    if config.ssl == nil { return "" }
+    return config.ssl.certPath
+}()
+```
+
+**Why IIFEs?**
+1. **Go lacks ternary** - Can't write `config == nil ? "" : config.ssl`
+2. **Zero overhead** - Go compiler inlines these completely
+3. **Type preservation** - Return type matches the final field type
+4. **Chainable** - Multiple `?.` in one expression
+
+**Works with both pointers and Option types** - type checker determines which pattern to generate.
+
 ## Why Safe Navigation?
 
 Go's approach to nullable values requires verbose nil checking:

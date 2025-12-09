@@ -1,5 +1,32 @@
 // Real-world example: Database repository with Result types
 // Result[T, E] makes success/failure states explicit and type-safe
+//
+// === Design Decision: Generic Types via dgo Package ===
+//
+// Dingo uses Go 1.18+ generics for Option and Result types via the dgo runtime:
+//
+//   Result[T, E] → dgo.Result[T, E]  (single generic struct)
+//   Ok(value)    → dgo.Ok[T, E](value)
+//   Err(err)     → dgo.Err[T, E](err)
+//
+// Why generics instead of code generation?
+//
+// 1. No code bloat - One generic type serves all uses, vs generating
+//    ResultUserDBError, ResultBoolError, etc. for each combination.
+//
+// 2. Smaller binaries - Generic types are instantiated by Go compiler
+//    at build time, with better dead code elimination.
+//
+// 3. Better IDE support - gopls understands dgo.Result[T, E] directly,
+//    no need for generated type definitions.
+//
+// 4. Cleaner output - Generated .go files are minimal and readable.
+//
+// Trade-offs:
+// - Go generics require explicit type parameters on constructors in some
+//   contexts: dgo.Ok[User, DBError](user) vs Rust's Ok(user)
+// - The dgo package becomes a runtime dependency (but it's tiny)
+//
 package main
 
 import (

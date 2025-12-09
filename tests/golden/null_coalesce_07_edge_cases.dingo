@@ -1,47 +1,36 @@
-package main
-
 // Test: Null coalescing edge cases and special scenarios
 // Feature: ?? operator edge cases
 // Complexity: advanced
-
-enum StringOption {
-	Some(string),
-	None,
-}
-
-enum BoolOption {
-	Some(bool),
-	None,
-}
+package main
 
 func main() {
 	// Test 1: Empty string as fallback
-	let name: StringOption = StringOptionSome("")
+	let name: Option[string] = Some("")
 	let display = name ?? "Default"  // Should return ""
 
 	// Test 2: Zero value as fallback
-	let zero: BoolOption = BoolOptionSome(false)
+	let zero: Option[bool] = Some(false)
 	let result = zero ?? true  // Should return false
 
 	// Test 3: Nested null coalesce (separate into two steps to avoid parser complexity)
-	let opt1: StringOption = StringOptionNone()
-	let opt2: StringOption = StringOptionSome("Found")
+	let opt1: Option[string] = None[string]()
+	let opt2: Option[string] = Some("Found")
 	let intermediate = opt1 ?? opt2
 	let combined = intermediate ?? "Fallback"
 
 	// Test 4: ?? in boolean context
-	let flag: BoolOption = BoolOptionNone()
+	let flag: Option[bool] = None[bool]()
 	let enabled = flag ?? false
 
 	// Test 5: Multiple ?? in same expression (different vars)
-	let first: StringOption = StringOptionNone()
-	let second: StringOption = StringOptionNone()
+	let first: Option[string] = None[string]()
+	let second: Option[string] = None[string]()
 	let a = first ?? "A"
 	let b = second ?? "B"
 	let concat = a + b
 
 	// Test 6: ?? with method chain (separate ?. and ??)
-	let text: StringOption = StringOptionSome("hello")
+	let text: Option[string] = Some("hello")
 	let upperOpt = text?.toUpper()
 	let upper = upperOpt ?? "DEFAULT"
 
@@ -53,9 +42,9 @@ func main() {
 	println("Upper:", upper)
 }
 
-func (s StringOption) toUpper() StringOption {
+func (s Option[string]) toUpper() Option[string] {
 	if s.IsNone() {
-		return StringOptionNone()
+		return None[string]()
 	}
 	// Simplified uppercase
 	return s

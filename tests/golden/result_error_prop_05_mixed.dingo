@@ -1,3 +1,6 @@
+// Test: Mixing all error wrapping patterns
+// Feature: ? operator with multiple patterns
+// Complexity: advanced
 package main
 
 import (
@@ -15,7 +18,7 @@ func (e AppError) Error() string {
 	return e.Code + ": " + e.Message
 }
 
-func (AppError) NewDBError(err: error) AppError {
+func (AppError) NewDBError(err error) AppError {
 	return AppError{Code: "DB_ERROR", Message: err.Error()}
 }
 
@@ -37,7 +40,7 @@ func ProcessData(db *sql.DB, reader io.Reader) Result[string, AppError] {
 	let buf = make([]byte, 100)
 	let n = reader.Read(buf)? WrapIOError(err)
 
-	return ResultStringAppErrorOk("success")
+	return Ok[string, AppError]("success")
 }
 
 func main() {
@@ -45,6 +48,6 @@ func main() {
 	let reader: io.Reader = nil
 	let result = ProcessData(db, reader)
 	if result.IsErr() {
-		println("Error:", result.err.Error())
+		println("Error:", result.MustErr().Error())
 	}
 }

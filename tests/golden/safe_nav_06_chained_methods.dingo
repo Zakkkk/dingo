@@ -1,23 +1,7 @@
-package main
-
 // Test: Chained method calls with safe navigation operator
 // Feature: Safe Navigation (?.) - Chained Methods
 // Complexity: intermediate
-
-enum UserOption {
-	Some(User),
-	None,
-}
-
-enum StringOption {
-	Some(string),
-	None,
-}
-
-enum ProfileOption {
-	Some(Profile),
-	None,
-}
+package main
 
 type User struct {
 	name string
@@ -27,48 +11,48 @@ type Profile struct {
 	bio string
 }
 
-func (u User) getName() StringOption {
+func (u User) getName() Option[string] {
 	if u.name != "" {
-		return StringOptionSome(u.name)
+		return Some(u.name)
 	}
-	return StringOptionNone()
+	return None[string]()
 }
 
-func (s StringOption) toUpper() StringOption {
+func (s Option[string]) toUpper() Option[string] {
 	if s.IsNone() {
-		return StringOptionNone()
+		return None[string]()
 	}
-	str := s.Unwrap()
+	let str = s.MustSome()
 	// Simplified uppercase conversion
-	return StringOptionSome(str)
+	return Some(str)
 }
 
-func (u User) getProfile() ProfileOption {
-	return ProfileOptionSome(Profile{bio: "Engineer"})
+func (u User) getProfile() Option[Profile] {
+	return Some(Profile{bio: "Engineer"})
 }
 
-func (p Profile) getBio() StringOption {
+func (p Profile) getBio() Option[string] {
 	if p.bio != "" {
-		return StringOptionSome(p.bio)
+		return Some(p.bio)
 	}
-	return StringOptionNone()
+	return None[string]()
 }
 
-func getUser(id int) UserOption {
+func getUser(id int) Option[User] {
 	if id > 0 {
-		return UserOptionSome(User{name: "Alice"})
+		return Some(User{name: "Alice"})
 	}
-	return UserOptionNone()
+	return None[User]()
 }
 
 func main() {
-	user := getUser(1)
+	let user = getUser(1)
 
 	// Chained methods on same type: user?.getName()?.toUpper()
-	upperName := user?.getName()?.toUpper()
+	let upperName = user?.getName()?.toUpper()
 	println(upperName)
 
 	// Chained methods across types: user?.getProfile()?.getBio()
-	bio := user?.getProfile()?.getBio()
+	let bio = user?.getProfile()?.getBio()
 	println(bio)
 }

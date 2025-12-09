@@ -1,6 +1,18 @@
 // Functional Programming with Dingo
 // Demonstrates all dgo functional utilities with lambda syntax
 //
+// === Design Decision: dgo Functional Utilities ===
+//
+// The dgo package provides generic functional utilities:
+//   dgo.Map(items, |x| ...)     - Transform each element
+//   dgo.Filter(items, |x| ...)  - Keep matching elements
+//   dgo.Reduce(items, init, |a,x| ...) - Fold to single value
+//   dgo.Find(items, |x| ...)    - Returns Option[T]
+//   dgo.GroupBy(items, |x| ...) - Group by key
+//
+// Combined with lambda syntax (|x| or (x) =>), this enables
+// expressive functional pipelines while generating valid Go.
+//
 // KNOWN BUGS (see ai-docs/bugs/):
 // 1. block_lambda_parse_error.md - Block lambdas (params) => { ... } fail to parse
 // 2. lambda_return_type_inference.md - Void lambdas get wrong return type

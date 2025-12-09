@@ -145,11 +145,26 @@ func (t *ResultWrapperTransformer) createResultWrapper(expr ast.Expr, wrapper Wr
 	}
 }
 
-// createOptionWrapper creates dgo.Some[T](value) or dgo.None[T]().
+// createOptionWrapper creates dgo.Some(value) or dgo.None[T]().
+// Type argument requirements differ:
+//   - Some(value T): Go infers T from value, so no type argument needed
+//   - None[T](): No argument to infer from, so T must be explicit
 func (t *ResultWrapperTransformer) createOptionWrapper(expr ast.Expr, wrapper WrapperType, returnInfo *ReturnTypeInfo) ast.Expr {
 	constructorName := string(wrapper) // "Some" or "None"
 
-	wrapperCall := &ast.CallExpr{
+	if wrapper == WrapperSome {
+		// Some doesn't need type argument - Go infers T from value
+		return &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   ast.NewIdent("dgo"),
+				Sel: ast.NewIdent(constructorName),
+			},
+			Args: []ast.Expr{expr},
+		}
+	}
+
+	// None needs [T] - no argument to infer from
+	return &ast.CallExpr{
 		Fun: &ast.IndexExpr{
 			X: &ast.SelectorExpr{
 				X:   ast.NewIdent("dgo"),
@@ -157,16 +172,8 @@ func (t *ResultWrapperTransformer) createOptionWrapper(expr ast.Expr, wrapper Wr
 			},
 			Index: cloneExpr(returnInfo.TAstExpr),
 		},
+		Args: []ast.Expr{}, // Empty args
 	}
-
-	// None takes no arguments, Some takes the value
-	if wrapper == WrapperNone {
-		wrapperCall.Args = []ast.Expr{} // Empty args
-	} else {
-		wrapperCall.Args = []ast.Expr{expr}
-	}
-
-	return wrapperCall
 }
 
 // cloneExpr creates a shallow copy of an AST expression for reuse.

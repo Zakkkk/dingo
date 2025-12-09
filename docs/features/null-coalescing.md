@@ -2,6 +2,31 @@
 
 The null coalescing operator (`??`) provides a concise way to supply default values when working with nullable types. It's the perfect companion to safe navigation (`?.`), completing Dingo's null safety toolkit.
 
+## Design Decision
+
+Null coalescing generates **nil-check IIFEs** with fallback values:
+
+```go
+// Dingo
+config.timeout ?? 30
+
+// Generated Go (for pointer)
+func() int {
+    if config.timeout != nil {
+        return *config.timeout
+    }
+    return 30
+}()
+```
+
+**Key behaviors:**
+1. **Auto-dereference** - `*ptr ?? default` returns value, not pointer
+2. **Lazy evaluation** - Right side only evaluated if left is nil
+3. **Chainable** - `a ?? b ?? c ?? default` checks left-to-right
+4. **Type-safe** - Both sides must have compatible types
+
+**Works with both pointers and Option types** - generates appropriate nil/IsNone check.
+
 ## Why Null Coalescing?
 
 Go requires verbose fallback logic for nullable values:

@@ -67,8 +67,8 @@ func (g *BaseGenerator) Write(s string) {
 }
 
 // WriteByte writes a single byte to the output buffer.
-func (g *BaseGenerator) WriteByte(b byte) {
-	g.Buf.WriteByte(b)
+func (g *BaseGenerator) WriteByte(b byte) error {
+	return g.Buf.WriteByte(b)
 }
 
 // Result returns the final CodeGenResult with generated code and mappings.

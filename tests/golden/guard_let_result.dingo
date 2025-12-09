@@ -1,3 +1,6 @@
+// Test: Guard Let with Result type (interface-based enum)
+// Feature: Guard let unwrapping custom Result enum
+// Complexity: intermediate
 package main
 
 import (
@@ -12,16 +15,16 @@ enum Result {
 
 func FindUser(id int) Result {
 	if id > 0 {
-		return ResultOk(fmt.Sprintf("User%d", id))
+		return NewResultOk(fmt.Sprintf("User%d", id))
 	}
-	return ResultErr(errors.New("user not found"))
+	return NewResultErr(errors.New("user not found"))
 }
 
 func FindOrder(userID int) Result {
 	if userID == 1 {
-		return ResultOk("Order123")
+		return NewResultOk("Order123")
 	}
-	return ResultErr(errors.New("order not found"))
+	return NewResultErr(errors.New("order not found"))
 }
 
 // Basic guard let with Result
@@ -36,7 +39,7 @@ func GetUserOrder(userID int) Result {
 		return err
 	}
 
-	return ResultOk(fmt.Sprintf("%s has %s", user, order))
+	return NewResultOk(fmt.Sprintf("%s has %s", user, order))
 }
 
 // Multiple guard lets in sequence
@@ -50,33 +53,36 @@ func ProcessUserOrders(userID int) Result {
 	}
 
 	fmt.Printf("Processing: %s, %s\n", user, order)
-	return ResultOk("success")
+	return NewResultOk("success")
 }
 
 // Custom error handling in else block
 func GetUserWithLogging(userID int) Result {
 	guard let user = FindUser(userID) else |err| {
 		fmt.Printf("Failed to find user %d: %v\n", userID, err)
-		return ResultErr(fmt.Errorf("user lookup failed: %w", err))
+		return NewResultErr(fmt.Errorf("user lookup failed: %w", err))
 	}
 
 	fmt.Printf("Found user: %s\n", user)
-	return ResultOk(user)
+	return NewResultOk(user)
 }
 
 func main() {
-	result := GetUserOrder(1)
-	if result.IsOk() {
-		fmt.Println(*result.ok)
+	let result = GetUserOrder(1)
+	switch v := result.(type) {
+	case ResultOk:
+		fmt.Println(v.Value)
 	}
 
-	result2 := ProcessUserOrders(1)
-	if result2.IsOk() {
-		fmt.Println(*result2.ok)
+	let result2 = ProcessUserOrders(1)
+	switch v := result2.(type) {
+	case ResultOk:
+		fmt.Println(v.Value)
 	}
 
-	result3 := GetUserWithLogging(0)
-	if result3.IsErr() {
-		fmt.Println("Error:", *result3.err)
+	let result3 = GetUserWithLogging(0)
+	switch v := result3.(type) {
+	case ResultErr:
+		fmt.Println("Error:", v.Value)
 	}
 }

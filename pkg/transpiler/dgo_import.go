@@ -102,19 +102,63 @@ var dgoTypes = map[string]bool{
 // Transforms:
 //   - Result[T, E] → dgo.Result[T, E]
 //   - Option[T] → dgo.Option[T]
-//   - Some[T](v) → dgo.Some[T](v)
+//   - Some[T](v) → dgo.Some(v)  (type arg stripped - Go infers T from v)
 //   - Some(v) → dgo.Some(v)
-//   - None[T]() → dgo.None[T]()
-//   - Ok[T, E](v) → dgo.Ok[T, E](v)
-//   - Err[T](e) → dgo.Err[T](e)
+//   - None[T]() → dgo.None[T]()  (type arg kept - no value to infer from)
+//   - Ok[T, E](v) → dgo.Ok[T, E](v)  (both args needed)
+//   - Err[T](e) → dgo.Err[T](e)  (T needed, E inferred)
 //   - Skips already qualified references (dgo.Result stays as-is)
 func QualifyDingoTypes(file *ast.File) {
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch node := n.(type) {
+		case *ast.CallExpr:
+			// Handle calls with generic type parameters: Some[T](v), None[T](), Err[T](e)
+			if indexExpr, ok := node.Fun.(*ast.IndexExpr); ok {
+				if ident, ok := indexExpr.X.(*ast.Ident); ok {
+					if dgoConstructors[ident.Name] {
+						// Some[T](v) → dgo.Some(v) - strip type arg, Go infers T from v
+						if ident.Name == "Some" && len(node.Args) > 0 {
+							node.Fun = &ast.SelectorExpr{
+								X:   ast.NewIdent("dgo"),
+								Sel: ast.NewIdent(ident.Name),
+							}
+							return true
+						}
+						// None[T](), Err[T](e) → dgo.None[T](), dgo.Err[T](e) - keep type arg
+						indexExpr.X = &ast.SelectorExpr{
+							X:   ast.NewIdent("dgo"),
+							Sel: ast.NewIdent(ident.Name),
+						}
+					}
+				}
+			}
+			// Handle calls with multiple generic type parameters: Ok[T, E](v)
+			if indexListExpr, ok := node.Fun.(*ast.IndexListExpr); ok {
+				if ident, ok := indexListExpr.X.(*ast.Ident); ok {
+					if dgoConstructors[ident.Name] {
+						// Ok[T, E](v), Err[T, E](e) → keep type args
+						indexListExpr.X = &ast.SelectorExpr{
+							X:   ast.NewIdent("dgo"),
+							Sel: ast.NewIdent(ident.Name),
+						}
+					}
+				}
+			}
+			// Non-generic constructor calls: Some(v), Ok(v), Err(e)
+			if ident, ok := node.Fun.(*ast.Ident); ok {
+				if dgoConstructors[ident.Name] {
+					// Replace with dgo.Name
+					node.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("dgo"),
+						Sel: ast.NewIdent(ident.Name),
+					}
+				}
+			}
 		case *ast.IndexExpr:
-			// Generic with single type parameter: Option[T], Some[T], None[T], Err[T]
+			// Generic types with single type parameter: Option[T]
+			// Only process if NOT a CallExpr parent (we handle calls above)
 			if ident, ok := node.X.(*ast.Ident); ok {
-				if dgoTypes[ident.Name] || dgoConstructors[ident.Name] {
+				if dgoTypes[ident.Name] {
 					// Replace with dgo.Name
 					node.X = &ast.SelectorExpr{
 						X:   ast.NewIdent("dgo"),
@@ -123,22 +167,11 @@ func QualifyDingoTypes(file *ast.File) {
 				}
 			}
 		case *ast.IndexListExpr:
-			// Generic with multiple type parameters: Result[T, E], Ok[T, E]
+			// Generic types with multiple type parameters: Result[T, E]
 			if ident, ok := node.X.(*ast.Ident); ok {
-				if dgoTypes[ident.Name] || dgoConstructors[ident.Name] {
+				if dgoTypes[ident.Name] {
 					// Replace with dgo.Name
 					node.X = &ast.SelectorExpr{
-						X:   ast.NewIdent("dgo"),
-						Sel: ast.NewIdent(ident.Name),
-					}
-				}
-			}
-		case *ast.CallExpr:
-			// Non-generic constructor calls: Some(v), Ok(v), Err(e)
-			if ident, ok := node.Fun.(*ast.Ident); ok {
-				if dgoConstructors[ident.Name] {
-					// Replace with dgo.Name
-					node.Fun = &ast.SelectorExpr{
 						X:   ast.NewIdent("dgo"),
 						Sel: ast.NewIdent(ident.Name),
 					}

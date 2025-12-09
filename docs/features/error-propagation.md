@@ -2,6 +2,24 @@
 
 Error propagation is a language feature that simplifies error handling by automatically propagating errors up the call stack, similar to Rust's `?` operator, Swift's `try`, or Kotlin's exception handling.
 
+## Design Decision
+
+Dingo preserves Go's `(T, error)` convention instead of replacing it with `Result[T, E]` types:
+
+```
+expr?               → if err != nil { return ..., err }
+expr? "context"     → if err != nil { return ..., errors.New("context") }
+expr? |e| f(e)      → if err != nil { return ..., f(err) }
+```
+
+**Why preserve Go conventions?**
+1. **Go interop** - Works with all Go stdlib and third-party packages
+2. **Familiar idiom** - Go developers know `(T, error)` instantly
+3. **Zero overhead** - No wrapper types, direct error propagation
+4. **Tooling** - gopls, linters, etc. all understand `error`
+
+**Trade-off**: Less type safety than `Result[T, E]` (error types not in signature).
+
 ## Overview
 
 In Go, error handling follows this pattern:

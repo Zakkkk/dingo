@@ -1,21 +1,31 @@
 // Test that expression lambdas generate valid Go signatures
+//
+// === Design Decision: Lambda Syntax ===
+//
+// Dingo supports two lambda styles that compile to Go function literals:
+//
+//	Rust-style:  |x| x + 1        → func(x any) any { return x + 1 }
+//	Typed:       |x: int| x + 1   → func(x int) int { return x + 1 }
+//	With return: |x: int| -> int { return x * 2 }
+//
+// Type annotations help when the compiler can't infer types from context.
 package main
 
 import "fmt"
 
 func main() {
 	// Expression lambdas with explicit types - should compile
-	add = func(x int, y int) { return x + y }
+	add := func(x int, y int) any { return x + y }
 	result := add(5, 3)
 	fmt.Println("5 + 3 =", result)
 
 	// Lambda that uses interface{} operations - should compile
-	identity = func(x __TYPE_INFERENCE_NEEDED) { return x }
+	identity := func(x any) any { return x }
 	val := identity(42)
 	fmt.Println("identity(42) =", val)
 
 	// Lambda with explicit return type and block body
-	multiply = func(x int) int { return x * 2 }
+	multiply := func(x int) int { return x * 2 }
 	result2 := multiply(10)
 	fmt.Println("10 * 2 =", result2)
 }

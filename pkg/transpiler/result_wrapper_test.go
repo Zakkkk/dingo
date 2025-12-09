@@ -122,7 +122,8 @@ func fetch() Result[string, error] {
 	}
 }
 
-// TestOptionWrapper_SimpleValue tests wrapping a non-nil value with dgo.Some[T].
+// TestOptionWrapper_SimpleValue tests wrapping a non-nil value with dgo.Some.
+// Go infers T from the value argument, so no type argument is needed.
 func TestOptionWrapper_SimpleValue(t *testing.T) {
 	source := `package main
 
@@ -131,7 +132,7 @@ func find() Option[string] {
 }
 `
 
-	expected := `dgo.Some[string]("found")`
+	expected := `dgo.Some("found")`
 
 	result := transformAndExtractReturn(t, source)
 	if !strings.Contains(result, expected) {

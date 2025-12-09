@@ -3,6 +3,19 @@
 // Pattern 1: expr?              - propagate error as-is
 // Pattern 2: expr ? "message"   - wrap with string context
 // Pattern 3: expr ? |e| f(e)    - transform with explicit lambda binding
+//
+// === Design Decision: Generic Types via dgo Package ===
+//
+// Dingo uses Go 1.18+ generics for Result types via the dgo runtime:
+//
+//	Result[T, E] → dgo.Result[T, E]  (single generic struct)
+//	Ok(value)    → dgo.Ok[T, E](value)
+//	Err(err)     → dgo.Err[T, E](err)
+//
+// Why generics instead of code generation?
+// 1. No code bloat - one generic type serves all uses
+// 2. Better IDE support - gopls understands dgo.Result[T, E] directly
+// 3. Cleaner output - generated .go files are minimal
 package main
 
 import (

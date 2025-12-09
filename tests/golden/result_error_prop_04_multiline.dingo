@@ -1,3 +1,6 @@
+// Test: Multiple error propagations in sequence
+// Feature: ? operator with multiple error wrappings
+// Complexity: intermediate
 package main
 
 import "database/sql"
@@ -22,13 +25,13 @@ func QueryOrders(db *sql.DB) Result[[]string, ServiceError] {
 	let data = db.Query("SELECT * FROM data")? ServiceError{Code: "QUERY_ERROR", Message: err.Error(), Context: "data query"}
 	defer data.Close()
 
-	return ResultSliceStringServiceErrorOk([]string{"order1"})
+	return Ok[[]string, ServiceError]([]string{"order1"})
 }
 
 func main() {
 	let db: *sql.DB = nil
 	let result = QueryOrders(db)
 	if result.IsErr() {
-		println("Error:", result.err.Error())
+		println("Error:", result.MustErr().Error())
 	}
 }

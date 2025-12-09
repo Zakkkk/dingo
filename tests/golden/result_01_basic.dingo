@@ -1,22 +1,21 @@
+// Test: Basic Result[T, E] usage with generic types
+// Feature: Result type via dgo package
+// Complexity: basic
 package main
 
 import "errors"
 
-enum Result {
-	Ok(float64),
-	Err(error),
-}
-
-func divide(a float64, b float64) Result {
+func divide(a float64, b float64) Result[float64, error] {
 	if b == 0.0 {
-		return ResultErr(errors.New("division by zero"))
+		return Err[float64, error](errors.New("division by zero"))
 	}
-	return ResultOk(a / b)
+	return Ok[float64, error](a / b)
 }
 
 func main() {
 	let result = divide(10.0, 2.0)
 	if result.IsOk() {
-		let v = *result.ok
+		let v = result.MustOk()
+		println("Result:", v)
 	}
 }

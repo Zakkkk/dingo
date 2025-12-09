@@ -1,116 +1,110 @@
 // Real-world example: API response types as sum types
 // Sum types model "one of several possible shapes" - perfect for APIs
+//
+// === Design Decision: Enum to Interface Pattern ===
+//
+// Dingo enums are transformed to Go interface patterns:
+//
+//	enum APIResponse { Success{...}, Error{...} }
+//	→  type APIResponse interface { isAPIResponse() }
+//
+// Each variant becomes a struct implementing the interface, enabling
+// exhaustive pattern matching via Go's type switch.
 package main
 
 import "fmt"
 
 // APIResponse models all possible responses from our payment API
 // Each variant has different data - impossible to confuse them
+type APIResponse interface{ isAPIResponse() }
 
-type APIResponseTag uint8
-
-const (
-	APIResponseTagSuccess APIResponseTag = iota
-	APIResponseTagValidationError
-	APIResponseTagAuthError
-	APIResponseTagRateLimited
-	APIResponseTagServerError
-)
-
-type APIResponse struct {
-	tag                     APIResponseTag
-	autherror_code          *int
-	autherror_reason        *string
-	ratelimited_retryAfter  *int
-	servererror_requestID   *string
-	success_amount          *float64
-	success_transactionID   *string
-	validationerror_field   *string
-	validationerror_message *string
+type APIResponseSuccess struct {
+	transactionID string
+	amount        float64
 }
 
-func APIResponseSuccess(transactionID string, amount float64) APIResponse {
-	return APIResponse{tag: APIResponseTagSuccess, success_transactionID: &transactionID, success_amount: &amount}
+func (APIResponseSuccess) isAPIResponse() {}
+func NewAPIResponseSuccess(transactionID string, amount float64) APIResponse {
+	return APIResponseSuccess{transactionID: transactionID, amount: amount}
 }
-func APIResponseValidationError(field string, message string) APIResponse {
-	return APIResponse{tag: APIResponseTagValidationError, validationerror_field: &field, validationerror_message: &message}
+
+type APIResponseValidationError struct {
+	field   string
+	message string
 }
-func APIResponseAuthError(code int, reason string) APIResponse {
-	return APIResponse{tag: APIResponseTagAuthError, autherror_code: &code, autherror_reason: &reason}
+
+func (APIResponseValidationError) isAPIResponse() {}
+func NewAPIResponseValidationError(field string, message string) APIResponse {
+	return APIResponseValidationError{field: field, message: message}
 }
-func APIResponseRateLimited(retryAfter int) APIResponse {
-	return APIResponse{tag: APIResponseTagRateLimited, ratelimited_retryAfter: &retryAfter}
+
+type APIResponseAuthError struct {
+	code   int
+	reason string
 }
-func APIResponseServerError(requestID string) APIResponse {
-	return APIResponse{tag: APIResponseTagServerError, servererror_requestID: &requestID}
+
+func (APIResponseAuthError) isAPIResponse() {}
+func NewAPIResponseAuthError(code int, reason string) APIResponse {
+	return APIResponseAuthError{code: code, reason: reason}
 }
-func (e APIResponse) IsSuccess() bool {
-	return e.tag == APIResponseTagSuccess
+
+type APIResponseRateLimited struct{ retryAfter int }
+
+func (APIResponseRateLimited) isAPIResponse() {}
+func NewAPIResponseRateLimited(retryAfter int) APIResponse {
+	return APIResponseRateLimited{retryAfter: retryAfter}
 }
-func (e APIResponse) IsValidationError() bool {
-	return e.tag == APIResponseTagValidationError
-}
-func (e APIResponse) IsAuthError() bool {
-	return e.tag == APIResponseTagAuthError
-}
-func (e APIResponse) IsRateLimited() bool {
-	return e.tag == APIResponseTagRateLimited
-}
-func (e APIResponse) IsServerError() bool {
-	return e.tag == APIResponseTagServerError
+
+type APIResponseServerError struct{ requestID string }
+
+func (APIResponseServerError) isAPIResponse() {}
+func NewAPIResponseServerError(requestID string) APIResponse {
+	return APIResponseServerError{requestID: requestID}
 }
 
 // PaymentStatus tracks the state of a payment
+type PaymentStatus interface{ isPaymentStatus() }
 
-type PaymentStatusTag uint8
+type PaymentStatusPending struct{}
 
-const (
-	PaymentStatusTagPending PaymentStatusTag = iota
-	PaymentStatusTagProcessing
-	PaymentStatusTagCompleted
-	PaymentStatusTagFailed
-	PaymentStatusTagRefunded
-)
+func (PaymentStatusPending) isPaymentStatus() {}
+func NewPaymentStatusPending() PaymentStatus  { return PaymentStatusPending{} }
 
-type PaymentStatus struct {
-	tag                     PaymentStatusTag
-	completed_completedAt   *int64
-	completed_transactionID *string
-	failed_canRetry         *bool
-	failed_reason           *string
-	processing_processorID  *string
-	refunded_amount         *float64
-	refunded_refundID       *string
+type PaymentStatusProcessing struct{ processorID string }
+
+func (PaymentStatusProcessing) isPaymentStatus() {}
+func NewPaymentStatusProcessing(processorID string) PaymentStatus {
+	return PaymentStatusProcessing{processorID: processorID}
 }
-func PaymentStatusPending() PaymentStatus {
-	return PaymentStatus{tag: PaymentStatusTagPending}
+
+type PaymentStatusCompleted struct {
+	transactionID string
+	completedAt   int64
 }
-func PaymentStatusProcessing(processorID string) PaymentStatus {
-	return PaymentStatus{tag: PaymentStatusTagProcessing, processing_processorID: &processorID}
+
+func (PaymentStatusCompleted) isPaymentStatus() {}
+func NewPaymentStatusCompleted(transactionID string, completedAt int64) PaymentStatus {
+	return PaymentStatusCompleted{transactionID: transactionID, completedAt: completedAt}
 }
-func PaymentStatusCompleted(transactionID string, completedAt int64) PaymentStatus {
-	return PaymentStatus{tag: PaymentStatusTagCompleted, completed_transactionID: &transactionID, completed_completedAt: &completedAt}
+
+type PaymentStatusFailed struct {
+	reason   string
+	canRetry bool
 }
-func PaymentStatusFailed(reason string, canRetry bool) PaymentStatus {
-	return PaymentStatus{tag: PaymentStatusTagFailed, failed_reason: &reason, failed_canRetry: &canRetry}
+
+func (PaymentStatusFailed) isPaymentStatus() {}
+func NewPaymentStatusFailed(reason string, canRetry bool) PaymentStatus {
+	return PaymentStatusFailed{reason: reason, canRetry: canRetry}
 }
-func PaymentStatusRefunded(refundID string, amount float64) PaymentStatus {
-	return PaymentStatus{tag: PaymentStatusTagRefunded, refunded_refundID: &refundID, refunded_amount: &amount}
+
+type PaymentStatusRefunded struct {
+	refundID string
+	amount   float64
 }
-func (e PaymentStatus) IsPending() bool {
-	return e.tag == PaymentStatusTagPending
-}
-func (e PaymentStatus) IsProcessing() bool {
-	return e.tag == PaymentStatusTagProcessing
-}
-func (e PaymentStatus) IsCompleted() bool {
-	return e.tag == PaymentStatusTagCompleted
-}
-func (e PaymentStatus) IsFailed() bool {
-	return e.tag == PaymentStatusTagFailed
-}
-func (e PaymentStatus) IsRefunded() bool {
-	return e.tag == PaymentStatusTagRefunded
+
+func (PaymentStatusRefunded) isPaymentStatus() {}
+func NewPaymentStatusRefunded(refundID string, amount float64) PaymentStatus {
+	return PaymentStatusRefunded{refundID: refundID, amount: amount}
 }
 
 // HandleAPIResponse processes the response appropriately
@@ -162,6 +156,7 @@ func GetStatusMessage(status PaymentStatus) string {
 	}
 	return "Unknown status"
 }
+
 func main() {
 	// Simulate API responses - use constructor functions (Go-idiomatic)
 	responses := []APIResponse{

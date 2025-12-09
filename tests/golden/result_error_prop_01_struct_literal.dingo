@@ -1,3 +1,6 @@
+// Test: Error propagation with struct literal wrapping
+// Feature: ? operator with custom error struct
+// Complexity: intermediate
 package main
 
 import "database/sql"
@@ -16,13 +19,13 @@ func (e ServiceError) Error() string {
 func FindOrders(db *sql.DB) Result[[]string, ServiceError] {
 	let rows = db.Query("SELECT * FROM orders")? ServiceError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()
-	return ResultSliceStringServiceErrorOk([]string{"order1", "order2"})
+	return Ok[[]string, ServiceError]([]string{"order1", "order2"})
 }
 
 func main() {
 	let db: *sql.DB = nil
 	let result = FindOrders(db)
 	if result.IsErr() {
-		println("Error:", result.err.Error())
+		println("Error:", result.MustErr().Error())
 	}
 }

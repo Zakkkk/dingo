@@ -1,27 +1,26 @@
-package main
-
 // Test: Guard Let with Option type
 // Feature: Basic Option unwrapping without pipe binding
 // Complexity: basic
+package main
 
 func findSetting(key string) Option[string] {
 	if key == "theme" {
 		return Some("dark")
 	}
-	return Option_string_None()
+	return None[string]()
 }
 
 func getAge(name string) Option[int] {
 	if name == "Alice" {
 		return Some(30)
 	}
-	return Option_int_None()
+	return None[int]()
 }
 
 func loadTheme() Option[string] {
 	// Basic guard let with Option type (no pipe binding)
 	guard let theme = findSetting("theme") else {
-		return Option_string_None()
+		return None[string]()
 	}
 
 	return Some("Applied theme: " + theme)
@@ -30,11 +29,11 @@ func loadTheme() Option[string] {
 func getUserInfo(name string) Option[string] {
 	// Multiple guard lets with Option types
 	guard let setting = findSetting("theme") else {
-		return Option_string_None()
+		return None[string]()
 	}
 
 	guard let age = getAge(name) else {
-		return Option_string_None()
+		return None[string]()
 	}
 
 	// Convert int to string (simplified)
@@ -45,13 +44,13 @@ func getUserInfo(name string) Option[string] {
 func main() {
 	let result1 = loadTheme()
 	if result1.IsSome() {
-		println("Theme:", result1.Unwrap())
+		println("Theme:", result1.MustSome())
 	} else {
 		println("No theme found")
 	}
 
 	let result2 = getUserInfo("Alice")
 	if result2.IsSome() {
-		println("Info:", result2.Unwrap())
+		println("Info:", result2.MustSome())
 	}
 }

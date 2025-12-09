@@ -1,5 +1,15 @@
 // Real-world example: Geometry calculations with tuples
 // Tuples are perfect for grouping related values without creating a struct
+//
+// === Design Decision: Tuples via Runtime Package ===
+//
+// Dingo tuples use Go generics via the runtime/tuples package:
+//   (A, B)       → tuples.T2[A, B]
+//   (A, B, C)    → tuples.T3[A, B, C]
+//   (1, "hello") → tuples.New2(1, "hello")
+//
+// Tuple types support up to 10 elements with positional access via .V0, .V1, etc.
+//
 package main
 
 import (
@@ -105,7 +115,11 @@ func main() {
 
 	// Calculate bounding box
 	bbox := CalculateBoundingBox(points)
-	let ((minX, minY), (maxX, maxY)) = bbox
+	// Note: nested tuple destructuring ((a, b), (c, d)) not yet supported
+	// Using two-step destructuring instead
+	let (minPt, maxPt) = bbox
+	let (minX, minY) = minPt
+	let (maxX, maxY) = maxPt
 	fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
 
 	// Transform all points (scale by 2)

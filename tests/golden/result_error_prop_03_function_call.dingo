@@ -1,3 +1,6 @@
+// Test: Error propagation with function call pattern
+// Feature: ? operator with WrapFunc(err) wrapping
+// Complexity: intermediate
 package main
 
 import "database/sql"
@@ -21,13 +24,13 @@ func WrapDBError(err error) ServiceError {
 func FindProducts(db *sql.DB) Result[[]string, ServiceError] {
 	let rows = db.Query("SELECT * FROM products")? WrapDBError(err)
 	defer rows.Close()
-	return ResultSliceStringServiceErrorOk([]string{"product1", "product2"})
+	return Ok[[]string, ServiceError]([]string{"product1", "product2"})
 }
 
 func main() {
 	let db: *sql.DB = nil
 	let result = FindProducts(db)
 	if result.IsErr() {
-		println("Error:", result.err.Error())
+		println("Error:", result.MustErr().Error())
 	}
 }

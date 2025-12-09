@@ -1,5 +1,31 @@
 // Real-world example: User settings where values may or may not be set
 // Option[T] eliminates nil pointer panics by making absence explicit
+//
+// === Design Decision: Generic Types via dgo Package ===
+//
+// Dingo uses Go 1.18+ generics for Option types via the dgo runtime:
+//
+//   Option[T]  → dgo.Option[T]   (single generic struct)
+//   Some(val)  → dgo.Some(val)   (Go infers T from val)
+//   None[T]()  → dgo.None[T]()   (T must be explicit)
+//
+// Why generics instead of code generation?
+//
+// 1. No code bloat - One generic type serves all uses, vs generating
+//    OptionString, OptionInt, OptionUser for each type.
+//
+// 2. Smaller binaries - Generic types are instantiated by Go compiler
+//    at build time, with better dead code elimination.
+//
+// 3. Better IDE support - gopls understands dgo.Option[T] directly,
+//    providing accurate autocomplete and type checking.
+//
+// 4. Cleaner output - Generated .go files are minimal and readable.
+//
+// Trade-offs:
+// - None requires explicit type: None[string]() vs Rust's None
+// - The dgo package becomes a runtime dependency (but it's tiny)
+//
 package main
 
 import "fmt"
@@ -62,7 +88,7 @@ func FindUserByLanguage(users []User, lang string) Option[User] {
 			return Some[User](user)
 		}
 	}
-	return None[User]()
+	return None
 }
 
 func main() {

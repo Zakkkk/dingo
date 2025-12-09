@@ -1,5 +1,15 @@
 // Real-world example: API response types as sum types
 // Sum types model "one of several possible shapes" - perfect for APIs
+//
+// === Design Decision: Enum to Interface Pattern ===
+//
+// Dingo enums are transformed to Go interface patterns:
+//   enum APIResponse { Success{...}, Error{...} }
+//   →  type APIResponse interface { isAPIResponse() }
+//
+// Each variant becomes a struct implementing the interface, enabling
+// exhaustive pattern matching via Go's type switch.
+//
 package main
 
 import "fmt"

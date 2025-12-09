@@ -2,6 +2,7 @@ package ast
 
 import (
 	"fmt"
+	"go/scanner"
 	"go/token"
 )
 
@@ -409,30 +410,30 @@ func (p *EnumParser) isAlphaNum(b byte) bool {
 }
 
 // FindEnumDeclarations scans source and returns positions of all enum declarations.
-// This is used to locate enums before parsing them.
+// Uses Go's scanner to properly handle comments and string literals.
+// This ensures "enum" inside comments or strings is not misidentified.
 func FindEnumDeclarations(src []byte) []int {
 	var positions []int
-	i := 0
-	for i < len(src)-4 {
-		if string(src[i:i+4]) == "enum" {
-			// Check it's a keyword, not part of identifier
-			if i > 0 && isAlphaNumByte(src[i-1]) {
-				i++
-				continue
-			}
-			if i+4 < len(src) && isAlphaNumByte(src[i+4]) {
-				i++
-				continue
-			}
-			positions = append(positions, i)
-			i += 4
-		} else {
-			i++
+
+	fset := token.NewFileSet()
+	file := fset.AddFile("", -1, len(src))
+
+	var s scanner.Scanner
+	s.Init(file, src, nil, scanner.ScanComments)
+
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// Only consider IDENT tokens with literal "enum"
+		// The scanner automatically skips comments and handles strings
+		if tok == token.IDENT && lit == "enum" {
+			offset := file.Offset(pos)
+			positions = append(positions, offset)
 		}
 	}
-	return positions
-}
 
-func isAlphaNumByte(b byte) bool {
-	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+	return positions
 }

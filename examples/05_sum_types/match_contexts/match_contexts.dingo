@@ -1,3 +1,21 @@
+// Match Expression Contexts
+// Demonstrates match expressions in different code contexts
+//
+// === Design Decision: Context-Aware Match Generation ===
+//
+// Match expressions generate different Go code based on context:
+//
+//   Assignment: x := match s { ... }
+//               → var x T; switch v := s.(type) { case ...: x = ... }
+//
+//   Return:     return match s { ... }
+//               → switch v := s.(type) { case ...: return ... }
+//
+//   Argument:   fmt.Println(match s { ... })
+//               → func() T { switch ... }() (IIFE)
+//
+// This enables match to work anywhere an expression is expected.
+//
 package main
 
 import "fmt"

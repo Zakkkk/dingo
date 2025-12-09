@@ -2,6 +2,34 @@
 
 Pattern matching allows you to match values against patterns and execute code based on which pattern matches. It's type-safe, exhaustive, and eliminates an entire class of bugs.
 
+## Design Decision: Type Switch Generation
+
+Dingo match expressions compile to Go's **type switch** pattern:
+
+```go
+// Dingo
+match status {
+    Pending => "waiting",
+    Active => "running",
+    Done => "finished",
+}
+
+// Generated Go
+switch v := status.(type) {
+case StatusPending:
+    return "waiting"
+case StatusActive:
+    return "running"
+case StatusDone:
+    return "finished"
+}
+```
+
+**Context-aware generation** produces different Go code:
+- **Return context**: `switch { case ...: return ... }`
+- **Assignment context**: `var x T; switch { case ...: x = ... }`
+- **Argument context**: `func() T { switch ... }()` (IIFE)
+
 ## Why Pattern Matching?
 
 Go's `switch` is good, but limited:
@@ -394,6 +422,8 @@ match order {
 
 ## Generated Go Code
 
+Dingo uses Go's **type switch** for pattern matching on enums:
+
 Input:
 ```go
 match status {
@@ -403,45 +433,50 @@ match status {
 }
 ```
 
-Generated:
+Generated (type switch pattern):
 ```go
 func() string {
-    if status.IsActive() {
+    switch status.(type) {
+    case StatusActive:
         return "running"
-    }
-    if status.IsInactive() {
+    case StatusInactive:
         return "stopped"
-    }
-    if status.IsPending() {
+    case StatusPending:
         return "waiting"
+    default:
+        panic("non-exhaustive match")
     }
-    panic("non-exhaustive match")
 }()
 ```
 
 **With destructuring:**
 
 ```go
-match response {
-    Success(code) => code,
-    Error(msg) => 0
+match shape {
+    Circle { radius } => fmt.Sprintf("r=%.2f", radius),
+    Rectangle { width, height } => fmt.Sprintf("%v x %v", width, height),
+    Point => "point"
 }
 ```
 
 Becomes:
 
 ```go
-func() int {
-    if response.IsSuccess() {
-        code := *response.success
-        return code
+func() string {
+    switch v := shape.(type) {
+    case ShapeCircle:
+        return fmt.Sprintf("r=%.2f", v.radius)
+    case ShapeRectangle:
+        return fmt.Sprintf("%v x %v", v.width, v.height)
+    case ShapePoint:
+        return "point"
+    default:
+        panic("non-exhaustive match")
     }
-    if response.IsError() {
-        return 0
-    }
-    panic("non-exhaustive match")
 }()
 ```
+
+**Key insight**: The type switch binds `v` to the matched variant, giving direct access to its fields.
 
 ## Best Practices
 

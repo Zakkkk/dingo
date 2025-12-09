@@ -1,5 +1,14 @@
 // Real-world example: Data processing pipeline with lambdas
 // Concise lambda syntax makes functional transformations readable
+//
+// === Design Decision: Lambda Syntax ===
+//
+// Dingo supports two lambda styles that compile to Go function literals:
+//
+//	Rust-style:       |x| x + 1      → func(x any) any { return x + 1 }
+//	TypeScript-style: (x) => x + 1   → func(x any) any { return x + 1 }
+//
+// Types are inferred from context when passed to generic functions.
 package main
 
 import (
@@ -20,15 +29,15 @@ type User struct {
 func ProcessUsers(users []User) {
 	// Filter active premium users over 18
 	// TypeScript-style: (params) => expr
-	eligible = Filter(users, func(u __TYPE_INFERENCE_NEEDED) { return u.Active && u.Premium && u.Age >= 18 })
+	eligible := Filter(users, func(u User) bool { return u.Active && u.Premium && u.Age >= 18 })
 
 	// Transform to display format
 	// Rust-style: |params| expr
-	names = Map(eligible, func(u __TYPE_INFERENCE_NEEDED) { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
+	names := Map(eligible, func(u User) string { return fmt.Sprintf("%s <%s>", u.Name, u.Email) })
 
 	// Multi-line lambda for complex logic
 	// TypeScript-style with block
-	summary = Reduce(eligible, "", func(acc __TYPE_INFERENCE_NEEDED, u __TYPE_INFERENCE_NEEDED) {
+	summary := Reduce(eligible, "", func(acc string, u User) string {
 		if acc == "" {
 			return u.Name
 		}
@@ -52,6 +61,7 @@ func Filter[T any](items []T, predicate func(T) bool) []T {
 	}
 	return result
 }
+
 func Map[T, R any](items []T, transform func(T) R) []R {
 	result := make([]R, len(items))
 	for i, item := range items {
@@ -59,6 +69,7 @@ func Map[T, R any](items []T, transform func(T) R) []R {
 	}
 	return result
 }
+
 func Reduce[T, R any](items []T, initial R, reducer func(R, T) R) R {
 	result := initial
 	for _, item := range items {
@@ -83,6 +94,7 @@ func SortUsers(users []User, compare func(User, User) bool) []User {
 	}
 	return sorted
 }
+
 func main() {
 	users := []User{
 		{ID: 1, Name: "Alice", Email: "alice@example.com", Age: 30, Active: true, Premium: true},
@@ -95,7 +107,7 @@ func main() {
 	ProcessUsers(users)
 
 	// Sort by age (ascending) using lambda
-	byAge = SortUsers(users, func(a __TYPE_INFERENCE_NEEDED, b __TYPE_INFERENCE_NEEDED) { return a.Age < b.Age })
+	byAge := SortUsers(users, func(a User, b User) bool { return a.Age < b.Age })
 
 	fmt.Println("\nUsers by age:")
 	for _, u := range byAge {
@@ -103,9 +115,7 @@ func main() {
 	}
 
 	// Sort by name using lambda
-	byName = SortUsers(users, func(a __TYPE_INFERENCE_NEEDED, b __TYPE_INFERENCE_NEEDED) {
-		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-	})
+	byName := SortUsers(users, func(a User, b User) bool { return strings.ToLower(a.Name) < strings.ToLower(b.Name) })
 
 	fmt.Println("\nUsers by name:")
 	for _, u := range byName {

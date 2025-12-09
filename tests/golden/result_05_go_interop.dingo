@@ -1,3 +1,6 @@
+// Test: Result[T, E] interoperating with Go (T, error) functions
+// Feature: Result type + Go interop patterns
+// Complexity: intermediate
 package main
 
 import (
@@ -5,30 +8,21 @@ import (
 	"strconv"
 )
 
-// Test: Result type interoperating with Go (T, error) functions
-// Feature: Result type + Go interop
-// Complexity: intermediate
-
-enum Result {
-	Ok(int),
-	Err(error),
-}
-
-func convertToInt(s string) Result {
+func convertToInt(s string) Result[int, error] {
 	// Calling Go stdlib function that returns (int, error)
 	val, err := strconv.Atoi(s)
 	if err != nil {
-		return ResultErr(err)
+		return Err[int, error](err)
 	}
-	return ResultOk(val)
+	return Ok[int, error](val)
 }
 
 func doubleIfValid(s string) (int, error) {
-	result := convertToInt(s)
+	let result = convertToInt(s)
 	if result.IsErr() {
-		return 0, *result.err
+		return 0, result.MustErr()
 	}
-	return *result.ok * 2, nil
+	return result.MustOk() * 2, nil
 }
 
 func main() {

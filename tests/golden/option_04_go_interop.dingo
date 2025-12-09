@@ -1,33 +1,24 @@
+// Test: Option[T] interoperating with Go map lookups
+// Feature: Option type + Go interop patterns
+// Complexity: intermediate
 package main
 
-// Test: Option type interoperating with Go nil pointers
-// Feature: Option type + Go interop
-// Complexity: intermediate
-
-enum Option {
-	Some(string),
-	None,
-}
-
-func findInMap(m map[string]string, key string) Option {
+func findInMap(m map[string]string, key string) Option[string] {
 	val, exists := m[key]
 	if exists {
-		return OptionSome(val)
+		return Some(val)
 	}
-	return OptionNone()
+	return None[string]()
 }
 
-func getOrDefault(opt Option, defaultVal string) string {
-	if opt.IsSome() {
-		return *opt.some
-	}
-	return defaultVal
+func getOrDefault(opt Option[string], defaultVal string) string {
+	return opt.SomeOr(defaultVal)
 }
 
 func main() {
 	data := map[string]string{"name": "Alice"}
-	name := findInMap(data, "name")
-	age := findInMap(data, "age")
+	let name = findInMap(data, "name")
+	let age = findInMap(data, "age")
 
 	println("Name:", getOrDefault(name, "Unknown"))
 	println("Age:", getOrDefault(age, "N/A"))

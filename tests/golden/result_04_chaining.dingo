@@ -1,39 +1,33 @@
+// Test: Result[T, E] with method chaining
+// Feature: Result type with Map and AndThen
+// Complexity: advanced
 package main
 
 import "errors"
 
-// Test: Result type with method chaining
-// Feature: Result type with map and and_then
-// Complexity: advanced
-
-enum Result {
-	Ok(int),
-	Err(error),
-}
-
-func parse(s string) Result {
+func parse(s string) Result[int, error] {
 	if s == "" {
-		return ResultErr(errors.New("empty string"))
+		return Err[int, error](errors.New("empty string"))
 	}
-	return ResultOk(len(s))
+	return Ok[int, error](len(s))
 }
 
-func validate(n int) Result {
+func validate(n int) Result[int, error] {
 	if n < 5 {
-		return ResultErr(errors.New("too short"))
+		return Err[int, error](errors.New("too short"))
 	}
-	return ResultOk(n)
+	return Ok[int, error](n)
 }
 
-func processInput(input string) Result {
+func processInput(input string) Result[int, error] {
 	return parse(input).
-		AndThen(x => validate(x)).
-		Map(x => x * 2)
+		AndThen(|x| validate(x)).
+		Map(|x| x * 2)
 }
 
 func main() {
-	result := processInput("hello world")
+	let result = processInput("hello world")
 	if result.IsOk() {
-		println("Result:", *result.ok)
+		println("Result:", result.MustOk())
 	}
 }

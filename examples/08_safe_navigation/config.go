@@ -1,5 +1,15 @@
 // Real-world example: Safely navigating nested configuration
 // Safe navigation (?.) prevents nil pointer panics in deep object access
+//
+// === Design Decision: Safe Navigation Operator ===
+//
+// The ?. operator short-circuits nil pointer chains:
+//
+//	config?.ssl?.certPath
+//	→ if config == nil || config.ssl == nil { return "" }
+//	   return config.ssl.certPath
+//
+// This prevents runtime panics from nil dereferences.
 package main
 
 import "fmt"

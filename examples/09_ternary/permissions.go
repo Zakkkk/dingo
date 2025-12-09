@@ -4,10 +4,20 @@
 //
 //	condition ? valueIfTrue : valueIfFalse
 //
-// Context-aware code generation produces human-readable Go:
-//   - Return context: if cond { return a }; return b
-//   - Assignment context: var x T; if cond { x = a } else { x = b }
-//   - Nested ternary: chained if/else statements
+// === Design Decision: Context-Aware Ternary Generation ===
+//
+// Go lacks a ternary operator, so Dingo generates context-specific code:
+//
+//	Return context:     condition ? a : b
+//	                    → if condition { return a }; return b
+//
+//	Assignment context: x := condition ? a : b
+//	                    → var x T; if condition { x = a } else { x = b }
+//
+//	Nested ternary:     a ? b : c ? d : e
+//	                    → if a { x = b } else if c { x = d } else { x = e }
+//
+// This produces idiomatic Go that gofmt preserves.
 package main
 
 import "fmt"

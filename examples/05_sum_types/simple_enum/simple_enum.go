@@ -1,5 +1,12 @@
 // Simple Sum Types Example
-// Demonstrates interface-based sum types with type switch pattern
+// Demonstrates interface-based sum types with Go's idiomatic type switch
+//
+// === Design Decision: Enum to Interface Pattern ===
+//
+// Dingo enums compile to Go interface + struct patterns.
+// Each variant becomes a struct implementing the interface.
+// Variants with data have their data as struct fields.
+// This enables Go's type switch for exhaustive pattern matching.
 package main
 
 import "fmt"

@@ -1,3 +1,6 @@
+// Test: Guard Let inline single-line syntax
+// Feature: Guard let with enum types (interface-based)
+// Complexity: intermediate
 package main
 
 import (
@@ -17,22 +20,22 @@ enum Option {
 
 func GetValue(id int) Result {
 	if id > 0 {
-		return ResultOk(id * 10)
+		return NewResultOk(id * 10)
 	}
-	return ResultErr(errors.New("invalid id"))
+	return NewResultErr(errors.New("invalid id"))
 }
 
 func GetName(id int) Option {
 	if id > 0 {
-		return OptionSome(fmt.Sprintf("Item%d", id))
+		return NewOptionSome(fmt.Sprintf("Item%d", id))
 	}
-	return OptionNone()
+	return NewOptionNone()
 }
 
 // Single-line guard let with Result
 func ProcessValue(id int) Result {
 	guard let val = GetValue(id) else |err| { return err }
-	return ResultOk(val + 100)
+	return NewResultOk(val + 100)
 }
 
 // Single-line guard let with Option
@@ -53,23 +56,25 @@ func ChainedGuards(id1 int, id2 int, id3 int) Result {
 	guard let v1 = GetValue(id1) else |err| { return err }
 	guard let v2 = GetValue(id2) else |err| { return err }
 	guard let v3 = GetValue(id3) else |err| { return err }
-	return ResultOk(v1 + v2 + v3)
+	return NewResultOk(v1 + v2 + v3)
 }
 
 func main() {
-	result1 := ProcessValue(5)
-	if result1.IsOk() {
-		fmt.Println("Value:", *result1.ok)
+	let result1 = ProcessValue(5)
+	switch v := result1.(type) {
+	case ResultOk:
+		fmt.Println("Value:", v.Value)
 	}
 
-	result2 := ProcessName(10)
+	let result2 = ProcessName(10)
 	fmt.Println(result2)
 
-	result3 := ProcessBoth(3)
+	let result3 = ProcessBoth(3)
 	fmt.Println(result3)
 
-	result4 := ChainedGuards(1, 2, 3)
-	if result4.IsOk() {
-		fmt.Println("Sum:", *result4.ok)
+	let result4 = ChainedGuards(1, 2, 3)
+	switch v := result4.(type) {
+	case ResultOk:
+		fmt.Println("Sum:", v.Value)
 	}
 }

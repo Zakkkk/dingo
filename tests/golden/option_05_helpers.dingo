@@ -1,8 +1,7 @@
-package main
-
 // Test: Option[T] helper methods
-// Feature: UnwrapOrElse, Map, AndThen, Filter
+// Feature: SomeOrElse, Map, AndThen, Filter
 // Complexity: advanced
+package main
 
 import "fmt"
 
@@ -20,18 +19,16 @@ func getPort() Option[int] {
 
 // getVerboseFlag returns an optional verbose flag
 func getVerboseFlag() Option[bool] {
-	return OptionBoolNone()
+	return None[bool]()
 }
 
 // parseConfig builds a Config from optional values
 func parseConfig() Config {
-	// UnwrapOrElse: Use default value from function if None
-	port := getPort().UnwrapOrElse(func() int {
-		return 3000
-	})
+	// SomeOrElse: Use default value from function if None
+	let port = getPort().SomeOrElse(|| 3000)
 
-	// UnwrapOr: Use default value directly
-	verbose := getVerboseFlag().UnwrapOr(false)
+	// SomeOr: Use default value directly
+	let verbose = getVerboseFlag().SomeOr(false)
 
 	return Config{Port: port, Verbose: verbose}
 }
@@ -39,25 +36,21 @@ func parseConfig() Config {
 // processPort demonstrates Map transformation
 func processPort(opt Option[int]) Option[int] {
 	// Map: Transform Some value, propagate None
-	return opt.Map(func(port int) interface{} {
-		return port * 2
-	})
+	return opt.Map(|port| port * 2)
 }
 
 // validatePort demonstrates Filter
 func validatePort(opt Option[int]) Option[int] {
 	// Filter: Keep Some values that pass predicate
-	return opt.Filter(func(port int) bool {
-		return port > 1024 && port < 65535
-	})
+	return opt.Filter(|port| port > 1024 && port < 65535)
 }
 
 // getValidPort demonstrates AndThen chaining
 func getValidPort(id int) Option[int] {
-	return getPort().AndThen(func(port int) Option[int] {
+	return getPort().AndThen(|port| {
 		// Chain operation: validate and adjust
 		if port < 1024 {
-			return OptionIntNone()
+			return None[int]()
 		}
 		return Some(port + id)
 	})
@@ -65,17 +58,17 @@ func getValidPort(id int) Option[int] {
 
 // Complex chaining example
 func processConfig(useDefault bool) Option[int] {
-	port := getPort()
+	let port = getPort()
 
 	// Chain multiple operations
-	result := port.
-		Map(func(p int) interface{} { return p + 1000 }).
-		Filter(func(p int) bool { return p < 10000 }).
-		AndThen(func(p int) Option[int] {
-			if p%2 == 0 {
+	let result = port.
+		Map(|p| p + 1000).
+		Filter(|p| p < 10000).
+		AndThen(|p| {
+			if p % 2 == 0 {
 				return Some(p / 2)
 			}
-			return OptionIntNone()
+			return None[int]()
 		})
 
 	if result.IsNone() && useDefault {
@@ -86,37 +79,37 @@ func processConfig(useDefault bool) Option[int] {
 }
 
 func main() {
-	// Test UnwrapOrElse
-	cfg := parseConfig()
+	// Test SomeOrElse
+	let cfg = parseConfig()
 	fmt.Printf("Config: Port=%d, Verbose=%v\n", cfg.Port, cfg.Verbose)
 
 	// Test Map
-	doubled := processPort(getPort())
+	let doubled = processPort(getPort())
 	if doubled.IsSome() {
-		fmt.Printf("Doubled port: %d\n", *doubled.some)
+		fmt.Printf("Doubled port: %d\n", doubled.MustSome())
 	}
 
 	// Test Filter
-	validated := validatePort(Some(8080))
+	let validated = validatePort(Some(8080))
 	if validated.IsSome() {
-		fmt.Printf("Valid port: %d\n", *validated.some)
+		fmt.Printf("Valid port: %d\n", validated.MustSome())
 	}
 
-	invalidPort := validatePort(Some(100))
+	let invalidPort = validatePort(Some(100))
 	if invalidPort.IsNone() {
 		fmt.Println("Invalid port filtered out")
 	}
 
 	// Test AndThen
-	adjustedPort := getValidPort(10)
+	let adjustedPort = getValidPort(10)
 	if adjustedPort.IsSome() {
-		fmt.Printf("Adjusted port: %d\n", *adjustedPort.some)
+		fmt.Printf("Adjusted port: %d\n", adjustedPort.MustSome())
 	}
 
 	// Test complex chaining
-	final := processConfig(true)
+	let final = processConfig(true)
 	if final.IsSome() {
-		fmt.Printf("Final port: %d\n", *final.some)
+		fmt.Printf("Final port: %d\n", final.MustSome())
 	} else {
 		fmt.Println("No final port")
 	}

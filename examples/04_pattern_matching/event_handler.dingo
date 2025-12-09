@@ -1,5 +1,12 @@
 // Real-world example: Event handler with pattern matching
 // Pattern matching makes complex conditionals readable and exhaustive
+//
+// === Design Decision: Enum to Interface Pattern ===
+//
+// Dingo enums compile to Go interface + struct patterns.
+// Each enum variant becomes a struct implementing the interface.
+// This enables exhaustive pattern matching with Go type switches.
+//
 package main
 
 import (

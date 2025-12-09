@@ -2,6 +2,33 @@
 
 The `Option[T]` type provides null safety by explicitly representing values that may or may not exist. It's Dingo's solution to Go's nil pointer problems.
 
+## Design Decision: Generic Types via dgo Package
+
+Dingo uses Go 1.18+ generics for Option types via the `dgo` runtime package:
+
+```
+Option[T]  → dgo.Option[T]   (single generic struct)
+Some(val)  → dgo.Some(val)  (Go infers T from argument)
+None[T]()  → dgo.None[T]()
+```
+
+**Why generics instead of code generation?**
+
+1. **No code bloat** - One generic type serves all uses, vs generating
+   `OptionString`, `OptionInt`, `OptionUser` for each type.
+
+2. **Smaller binaries** - Generic types are instantiated by Go compiler
+   at build time, with better dead code elimination.
+
+3. **Better IDE support** - gopls understands `dgo.Option[T]` directly,
+   providing accurate autocomplete and type checking.
+
+4. **Cleaner output** - Generated `.go` files are minimal and readable.
+
+**Trade-offs:**
+- `None` requires explicit type: `None[string]()` vs Rust's `None`
+- The dgo package becomes a runtime dependency (but it's tiny)
+
 ## Why Option Types?
 
 Go's approach to nullable values uses pointers and nil:
@@ -29,16 +56,11 @@ println(user.Name)
 
 ```go
 // Dingo
-enum Option {
-    Some(User),
-    None,
-}
-
-func findUser(id: int) Option {
+func findUser(id int) Option[User] {
     if id > 0 {
-        return Option_Some(User{ID: id})
+        return Some(User{ID: id})
     }
-    return Option_None()
+    return None[User]()
 }
 
 // Compiler forces you to handle None case!
@@ -46,150 +68,218 @@ func findUser(id: int) Option {
 
 ## Basic Usage
 
-### Defining Option Types
+### Writing Functions with Option Types
 
 ```go
 package main
 
-enum Option {
-    Some(string),
-    None,
+type UserSettings struct {
+    Theme       Option[string]
+    FontSize    Option[int]
+    Language    Option[string]
+    NotifyEmail Option[bool]
+}
+
+func FindUserByLanguage(users []User, lang string) Option[User] {
+    for _, user := range users {
+        if user.Settings.Language.IsSome() && user.Settings.Language.MustSome() == lang {
+            return Some[User](user)
+        }
+    }
+    return None[User]()
 }
 ```
 
-### Creating Option Values
+### Using Constructors
 
 ```go
-// Value present
-let found = Option_Some("User123")
+// Value present - type inferred from argument
+let found = Some("User123")
+let number = Some(42)
 
-// Value absent
-let notFound = Option_None()
+// Value absent - explicit type required
+let notFound = None[string]()
+let noNumber = None[int]()
+
+// With explicit types when needed
+let user = Some[User](User{ID: 1, Name: "Alice"})
 ```
 
 ### Checking Option State
 
 ```go
 if option.IsSome() {
-    let value = *option.some
+    let value = option.MustSome()  // Go-style: panics if None
     println("Found:", value)
 } else {
     println("Not found")
 }
+
+// Or use default values
+let value = option.SomeOr("default")
+let computed = option.SomeOrElse(func() string { return computeDefault() })
 ```
 
-## Real-World Examples
+### Available Methods
 
-### Database Lookup
+The `dgo.Option[T]` type provides these methods:
+
+```go
+// Check state
+option.IsSome() bool    // true if contains value
+option.IsNone() bool    // true if empty
+
+// Access values (Go-style naming, recommended)
+option.MustSome() T     // Returns value, panics if None
+option.SomeOr(def T) T  // Returns value or default
+option.SomeOrElse(fn func() T) T  // Computes default lazily
+
+// Access values (Rust-style aliases, deprecated)
+option.Unwrap() T       // Alias for MustSome()
+option.UnwrapOr(def T) T // Alias for SomeOr()
+option.UnwrapOrElse(fn func() T) T // Alias for SomeOrElse()
+
+// Transformations
+option.Map(fn func(T) T) Option[T]       // Transform value if present
+option.Filter(fn func(T) bool) Option[T] // Keep value only if predicate passes
+option.AndThen(fn func(T) Option[T]) Option[T]  // Chain operations (flatMap)
+option.OrElse(fn func() Option[T]) Option[T]    // Alternative if None
+
+// Combining
+option.And(other Option[T]) Option[T]  // Returns other if this is Some
+option.Or(other Option[T]) Option[T]   // Returns other if this is None
+
+// Panic with custom message
+option.Expect("must have value") T  // Returns value or panics with message
+
+// Take/Replace
+option.Take() (T, Option[T])  // Returns value and new None
+option.Replace(value T) (Option[T], T)  // Replaces value, returns old
+
+// Convert to Result
+option.OkOr(err error) Result[T, error]  // Convert to Result
+option.OkOrElse(fn func() error) Result[T, error]  // Convert with computed error
+```
+
+### Combining Options
+
+```go
+// Zip two options together
+combined := dgo.Zip(optionA, optionB)  // Option[struct{First A; Second B}]
+if combined.IsSome() {
+    pair := combined.MustSome()
+    // use pair.First and pair.Second
+}
+```
+
+## Real-World Example
+
+### User Settings
 
 ```go
 package main
 
-import "database/sql"
+import "fmt"
 
-enum UserOption {
-    Some(User),
-    None,
+type UserSettings struct {
+    Theme       Option[string]
+    FontSize    Option[int]
+    Language    Option[string]
+    NotifyEmail Option[bool]
 }
 
-func findUserByEmail(email: string) UserOption {
-    let row = db.QueryRow("SELECT id, name FROM users WHERE email = ?", email)
+type User struct {
+    ID       int
+    Name     string
+    Settings UserSettings
+}
 
-    var user User
-    err := row.Scan(&user.ID, &user.Name)
+// GetTheme returns the user's theme or system default
+func GetTheme(user User) string {
+    return user.Settings.Theme.SomeOr("system")
+}
 
-    if err == sql.ErrNoRows {
-        return UserOption_None()
+// GetFontSize applies validation and returns CSS value
+func GetFontSize(user User) string {
+    if user.Settings.FontSize.IsSome() {
+        size := user.Settings.FontSize.MustSome()
+        if size < 10 {
+            return "10px"
+        }
+        if size > 32 {
+            return "32px"
+        }
+        return fmt.Sprintf("%dpx", size)
     }
-
-    if err != nil {
-        // Could also return None for errors, or use Result type
-        return UserOption_None()
-    }
-
-    return UserOption_Some(user)
+    return "16px"
 }
 
 func main() {
-    let result = findUserByEmail("alice@example.com")
-
-    if result.IsSome() {
-        let user = *result.some
-        println("Found user:", user.Name)
-    } else {
-        println("User not found")
+    alice := User{
+        ID:   1,
+        Name: "Alice",
+        Settings: UserSettings{
+            Theme:    Some("dark"),
+            FontSize: Some(18),
+            Language: None[string](),  // Will use system language
+        },
     }
+
+    bob := User{
+        ID:       2,
+        Name:     "Bob",
+        Settings: UserSettings{
+            Theme:    None[string](),
+            FontSize: None[int](),
+            Language: Some("es"),
+        },
+    }
+
+    fmt.Printf("Alice's theme: %s\n", GetTheme(alice))  // "dark"
+    fmt.Printf("Bob's theme: %s\n", GetTheme(bob))      // "system"
 }
 ```
 
-### Configuration Values
+## Generated Go Code
+
+When you write Dingo code using `Option[T]`:
 
 ```go
-enum ConfigOption {
-    Some(string),
-    None,
-}
-
-func getConfigValue(key: string) ConfigOption {
-    value, exists := configMap[key]
-    if !exists {
-        return ConfigOption_None()
+// Dingo source
+func FindUser(id int) Option[User] {
+    if id <= 0 {
+        return None[User]()
     }
-    return ConfigOption_Some(value)
-}
-
-func main() {
-    let apiKey = getConfigValue("API_KEY")
-
-    if apiKey.IsSome() {
-        println("Using API key:", *apiKey.some)
-    } else {
-        println("No API key configured")
-    }
+    return Some(User{ID: id})
 }
 ```
 
-### Search Results
+Dingo generates:
 
 ```go
-enum SearchResult {
-    Some(Product),
-    None,
-}
+// Generated Go code
+import "github.com/MadAppGang/dingo/pkg/dgo"
 
-func searchProduct(query: string) SearchResult {
-    products := database.Search(query)
-
-    if len(products) == 0 {
-        return SearchResult_None()
+func FindUser(id int) dgo.Option[User] {
+    if id <= 0 {
+        return dgo.None[User]()
     }
-
-    return SearchResult_Some(products[0])
-}
-
-func displayResult(query: string) {
-    let result = searchProduct(query)
-
-    if result.IsSome() {
-        let product = *result.some
-        println("Found:", product.Name, "-", product.Price)
-    } else {
-        println("No products found for:", query)
-    }
+    return dgo.Some(User{ID: id})
 }
 ```
+
+**Key points:**
+- Uses Go 1.18+ generics
+- Single `dgo.Option[T]` type for all types
+- Automatic import of dgo package
+- Clean, readable output
 
 ## Pattern Matching
 
-Option types work perfectly with pattern matching:
+Option types work with pattern matching:
 
 ```go
-enum Option {
-    Some(int),
-    None,
-}
-
-func describe(opt: Option) string {
+func describe(opt Option[int]) string {
     match opt {
         Some(value) => "Found: " + string(value),
         None => "Nothing here"
@@ -199,54 +289,27 @@ func describe(opt: Option) string {
 
 See [pattern-matching.md](./pattern-matching.md) for advanced patterns.
 
-## Generated Go Code
+## Safe Navigation with Option Types
 
-When you define an Option enum:
-
-```go
-enum Option {
-    Some(string),
-    None,
-}
-```
-
-Dingo generates:
+The safe navigation operator (`?.`) works with Option types:
 
 ```go
-type OptionTag uint8
-
-const (
-    OptionTagSome OptionTag = iota
-    OptionTagNone
-)
-
-type Option struct {
-    tag    OptionTag
-    some   *string
-}
-
-func OptionSome(some string) Option {
-    return Option{tag: OptionTagSome, some: &some}
-}
-
-func OptionNone() Option {
-    return Option{tag: OptionTagNone}
-}
-
-func (o Option) IsSome() bool {
-    return o.tag == OptionTagSome
-}
-
-func (o Option) IsNone() bool {
-    return o.tag == OptionTagNone
-}
+// Instead of verbose unwrapping
+let city = user?.address?.city?.name ?? "Unknown"
 ```
 
-**Features:**
-- Type-safe tagged union
-- Clean, idiomatic Go
-- Zero allocation for None
-- Compile-time exhaustiveness
+See [safe-navigation.md](./safe-navigation.md) for details.
+
+## Null Coalescing
+
+The null coalescing operator (`??`) provides elegant default values:
+
+```go
+let port = config?.port ?? 8080
+let name = user?.name ?? user?.email ?? "Anonymous"
+```
+
+See [null-coalescing.md](./null-coalescing.md) for details.
 
 ## Go Interoperability
 
@@ -259,21 +322,21 @@ func getUserPtr(id int) *User {
 }
 
 // Wrap in Option
-func getUserSafe(id: int) UserOption {
+func getUserSafe(id int) Option[User] {
     let ptr = getUserPtr(id)
     if ptr == nil {
-        return UserOption_None()
+        return None[User]()
     }
-    return UserOption_Some(*ptr)
+    return Some(*ptr)
 }
 ```
 
 ### From Option to Go Pointers
 
 ```go
-func convertToPtr(opt: UserOption) *User {
+func convertToPtr(opt Option[User]) *User {
     if opt.IsSome() {
-        user := *opt.some
+        user := opt.MustSome()
         return &user
     }
     return nil
@@ -285,11 +348,26 @@ func convertToPtr(opt: UserOption) *User {
 ```go
 import "database/sql"
 
-func convertNullString(ns: sql.NullString) StringOption {
+func convertNullString(ns sql.NullString) Option[string] {
     if ns.Valid {
-        return StringOption_Some(ns.String)
+        return Some(ns.String)
     }
-    return StringOption_None()
+    return None[string]()
+}
+```
+
+### Calling Dingo from Go
+
+Since Option uses `dgo.Option[T]`, Go code can use it directly:
+
+```go
+// In Go code
+import "github.com/MadAppGang/dingo/pkg/dgo"
+
+opt := FindUser(42)
+if opt.IsSome() {
+    user := opt.MustSome()
+    fmt.Println("Found:", user.Name)
 }
 ```
 
@@ -299,37 +377,29 @@ func convertNullString(ns: sql.NullString) StringOption {
 
 ```go
 // Good: Config value may not exist
-func getConfig(key: string) StringOption
+func getConfig(key string) Option[string]
 
 // Bad: ID should never be optional
-func getUserID(user: User) IntOption  // Just return int!
+func getUserID(user User) Option[int]  // Just return int!
 ```
 
 ### 2. Provide Default Values
 
 ```go
 func getPort() int {
-    let portOpt = getConfigValue("PORT")
-
-    if portOpt.IsSome() {
-        return parsePort(*portOpt.some)
-    }
-
-    return 8080  // sensible default
+    return getConfigValue("PORT").SomeOr(8080)
 }
 ```
 
 ### 3. Document None Cases
 
 ```go
-// findUserByEmail searches for a user by email address.
-// Returns UserOption_Some if user exists.
-// Returns UserOption_None if:
+// FindUserByEmail searches for a user by email address.
+// Returns Some(User) if user exists.
+// Returns None if:
 //   - Email not found in database
 //   - Database connection error (consider using Result instead)
-func findUserByEmail(email: string) UserOption {
-    // ...
-}
+func FindUserByEmail(email string) Option[User]
 ```
 
 ### 4. Consider Result for Errors
@@ -338,251 +408,49 @@ If the "nothing" case represents an error, use Result instead:
 
 ```go
 // Bad: Option doesn't distinguish errors from "not found"
-func fetchUser(id: int) UserOption
+func fetchUser(id int) Option[User]
 
 // Good: Result shows WHY it failed
-enum UserResult {
-    Ok(User),
-    NotFound,
-    DatabaseError(error),
-}
-
-func fetchUser(id: int) UserResult
+func fetchUser(id int) Result[User, DBError]
 ```
 
 ## Common Patterns
 
-### Map Lookup with Validation
-
-```go
-enum ValidatedValue {
-    Some(string),
-    None,
-}
-
-func getValidatedEnv(key: string) ValidatedValue {
-    value, exists := os.LookupEnv(key)
-
-    if !exists || value == "" {
-        return ValidatedValue_None()
-    }
-
-    return ValidatedValue_Some(value)
-}
-```
-
 ### First Element
 
 ```go
-func first(items: []string) StringOption {
+func first(items []string) Option[string] {
     if len(items) == 0 {
-        return StringOption_None()
+        return None[string]()
     }
-    return StringOption_Some(items[0])
+    return Some(items[0])
 }
 ```
 
 ### Find in Slice
 
 ```go
-enum FoundUser {
-    Some(User),
-    None,
-}
-
-func findByName(users: []User, name: string) FoundUser {
+func findByName(users []User, name string) Option[User] {
     for _, user := range users {
         if user.Name == name {
-            return FoundUser_Some(user)
+            return Some(user)
         }
     }
-    return FoundUser_None()
+    return None[User]()
 }
 ```
 
-### Chained Lookups
+### Map Lookup with Validation
 
 ```go
-func getNestedValue(data: map[string]interface{}, keys: []string) Option {
-    current := data
-
-    for _, key := range keys {
-        value, exists := current[key]
-        if !exists {
-            return Option_None()
-        }
-
-        nextMap, ok := value.(map[string]interface{})
-        if !ok {
-            return Option_None()
-        }
-
-        current = nextMap
+func getValidatedEnv(key string) Option[string] {
+    value, exists := os.LookupEnv(key)
+    if !exists || value == "" {
+        return None[string]()
     }
-
-    return Option_Some(current)
+    return Some(value)
 }
 ```
-
-## Safe Navigation with Option Types
-
-The safe navigation operator (`?.`) makes working with Option types dramatically cleaner:
-
-```go
-// Instead of verbose unwrapping:
-func getCityName(user: UserOption) string {
-    if !user.IsSome() {
-        return "Unknown"
-    }
-    u := *user.some
-    if u.Address == nil {
-        return "Unknown"
-    }
-    if u.Address.City == nil {
-        return "Unknown"
-    }
-    return *u.Address.City
-}
-
-// Use safe navigation:
-let city = user?.address?.city?.name ?? "Unknown"
-```
-
-### Property Access
-
-```go
-enum UserOption {
-    Some(User),
-    None,
-}
-
-type User struct {
-    name    string
-    email   string
-    profile *Profile
-}
-
-// Access properties safely
-let name = user?.name     // Returns Option[string]
-let email = user?.email   // Returns Option[string]
-
-// Chain through nested structures
-let bio = user?.profile?.bio
-```
-
-### Method Calls
-
-```go
-type User struct {
-    id int
-}
-
-func (u User) getName() string {
-    return fmt.Sprintf("User-%d", u.id)
-}
-
-func (u User) getEmail(domain: string) string {
-    return fmt.Sprintf("user%d@%s", u.id, domain)
-}
-
-// Call methods safely
-let name = user?.getName()                    // Returns Option[string]
-let email = user?.getEmail("example.com")    // Returns Option[string]
-
-// Chain method calls
-let formatted = user?.getName()?.toUpper()
-```
-
-### Combining with Null Coalescing
-
-Safe navigation works perfectly with the `??` operator:
-
-```go
-// Provide defaults for missing values
-let displayName = user?.name ?? "Guest"
-let city = user?.address?.city ?? "Unknown"
-
-// Multiple fallbacks
-let theme = user?.settings?.theme ?? config?.defaultTheme ?? "light"
-
-// Method results with defaults
-let email = user?.getEmail("example.com") ?? "noreply@example.com"
-```
-
-**See [safe-navigation.md](./safe-navigation.md) for complete documentation.**
-
-## Null Coalescing
-
-The null coalescing operator (`??`) provides elegant default values for Option types:
-
-```go
-enum IntOption {
-    Some(int),
-    None,
-}
-
-let value: IntOption = IntOption_None()
-let result = value ?? 42  // result is 42 (unwrapped)
-```
-
-### Basic Usage
-
-```go
-// Simple default
-let port = config?.port ?? 8080
-
-// Chained fallbacks
-let timeout = user?.timeout ?? project?.timeout ?? 30
-
-// With transformations
-let displayName = user?.name ?? user?.email ?? "Anonymous"
-```
-
-### Type Handling
-
-```go
-// Option[T] → T (automatically unwrapped)
-let opt: StringOption = StringOption_Some("hello")
-let str: string = opt ?? "default"  // str is "hello"
-
-// None case
-let opt: StringOption = StringOption_None()
-let str: string = opt ?? "default"  // str is "default"
-```
-
-### Real-World Example
-
-```go
-package main
-
-enum UserOption {
-    Some(User),
-    None,
-}
-
-type User struct {
-    name  string
-    email string
-}
-
-func greetUser(user: UserOption) {
-    // Elegant default handling
-    let name = user?.name ?? user?.email ?? "Guest"
-    println("Hello,", name)
-}
-
-func main() {
-    // With user
-    let user = UserOption_Some(User{name: "Alice", email: "alice@example.com"})
-    greetUser(user)  // Hello, Alice
-
-    // Without user
-    let noUser = UserOption_None()
-    greetUser(noUser)  // Hello, Guest
-}
-```
-
-**See [null-coalescing.md](./null-coalescing.md) for complete documentation.**
 
 ## Migration from Go
 
@@ -607,24 +475,22 @@ if user != nil {
 ### After (Dingo)
 
 ```go
-enum UserOption {
-    Some(User),
-    None,
-}
-
-func findUser(id: int) UserOption {
+func findUser(id int) Option[User] {
     if id <= 0 {
-        return UserOption_None()
+        return None[User]()
     }
-    return UserOption_Some(User{ID: id, Name: "Alice"})
+    return Some(User{ID: id, Name: "Alice"})
 }
 
 let user = findUser(42)
 if user.IsSome() {
-    println("User:", (*user.some).Name)
+    println("User:", user.MustSome().Name)
 } else {
     println("Not found")
 }
+
+// Or more concisely
+println("User:", user.SomeOr(User{Name: "Guest"}).Name)
 ```
 
 **Benefits:**
@@ -638,67 +504,39 @@ if user.IsSome() {
 ### 1. Accessing None Values
 
 ```go
-let opt = Option_None()
+let opt = None[string]()
 
 // BAD: Will panic!
-let value = *opt.some
+let value = opt.MustSome()
 
 // GOOD: Always check first
 if opt.IsSome() {
-    let value = *opt.some
+    let value = opt.MustSome()
 }
+
+// BETTER: Use default values
+let value = opt.SomeOr("default")
 ```
 
-### 2. Nested Options
+### 2. None Requires Type Parameter
 
 ```go
-// Avoid this if possible
-enum OptionOption {
-    Some(Option),
-    None,
-}
-
-// Better: Use Result or custom type
-enum Nested {
-    Found(User),
-    Empty,
-    Error(string),
-}
-```
-
-## Limitations
-
-### Current Limitations
-
-1. **No safe navigation operator (`?.`)**: Coming soon
-2. **No null coalescing (`??`)**: Coming soon
-3. **Manual unwrapping**: Must explicitly check IsSome()
-4. **No map/flatMap helpers**: Planned
-
-### Workarounds
-
-**For default values:**
-
-```go
-func getOrDefault(opt: StringOption, defaultVal: string) string {
-    if opt.IsSome() {
-        return *opt.some
-    }
-    return defaultVal
-}
-
-let value = getOrDefault(configOpt, "default")
+// Go can't infer T from nothing, so type is required
+return None[string]()  // Correct
+return None()          // Won't compile
 ```
 
 ## See Also
 
 - [Result Type](./result-type.md) - For error handling
+- [Safe Navigation](./safe-navigation.md) - The `?.` operator
+- [Null Coalescing](./null-coalescing.md) - The `??` operator
 - [Pattern Matching](./pattern-matching.md) - Match on Option types
 - [Sum Types](./sum-types.md) - General enum documentation
-- [Error Propagation](./error-propagation.md) - The `?` operator
 
 ## Resources
 
 - [Rust Option documentation](https://doc.rust-lang.org/std/option/) - Inspiration
+- [dgo package source](../../pkg/dgo/option.go) - Runtime implementation
+- [Examples](../../examples/03_option/) - Working Option examples
 - [Billion-dollar mistake](https://www.infoq.com/presentations/Null-References-The-Billion-Dollar-Mistake-Tony-Hoare/) - Tony Hoare's apology for inventing null
-- [Examples](../../tests/golden/) - Working Option examples in test suite

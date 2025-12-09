@@ -2,6 +2,17 @@
 //
 // Guard let shines when chaining multiple fallible operations.
 // It keeps the "happy path" linear instead of nested if-else pyramids.
+//
+// === Design Decision: Generic Types via dgo Package ===
+//
+// Result[T, E] and Option[T] use Go 1.18+ generics from dgo runtime:
+//
+//	Result[T, E] → dgo.Result[T, E]
+//	Ok(value)    → dgo.Ok[T, E](value)
+//	Err(err)     → dgo.Err[T, E](err)
+//	Option[T]    → dgo.Option[T]
+//	Some(value)  → dgo.Some(value)    (Go infers T)
+//	None         → dgo.None[T]()
 package main
 
 import (

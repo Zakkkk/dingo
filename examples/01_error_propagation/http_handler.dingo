@@ -4,6 +4,16 @@
 //   2. Context: expr ? "message"   - wrap with fmt.Errorf
 //   3. Lambda:  expr ? |e| f(e)    - custom transform (Rust style)
 //   4. Lambda:  expr ? e => f(e)   - custom transform (TypeScript style)
+//
+// === Design Decision: Go's (T, error) Pattern ===
+//
+// For error propagation with Go functions, Dingo preserves Go's (T, error)
+// pattern and adds the ? operator for concise error handling. This works
+// seamlessly with all Go standard library functions.
+//
+// For explicit Result types, see examples/02_result which uses
+// dgo.Result[T, E] via Go 1.18+ generics.
+//
 package main
 
 import (

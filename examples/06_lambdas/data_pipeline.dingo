@@ -1,5 +1,14 @@
 // Real-world example: Data processing pipeline with lambdas
 // Concise lambda syntax makes functional transformations readable
+//
+// === Design Decision: Lambda Syntax ===
+//
+// Dingo supports two lambda styles that compile to Go function literals:
+//   Rust-style:       |x| x + 1      → func(x any) any { return x + 1 }
+//   TypeScript-style: (x) => x + 1   → func(x any) any { return x + 1 }
+//
+// Types are inferred from context when passed to generic functions.
+//
 package main
 
 import (

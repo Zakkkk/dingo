@@ -1,15 +1,14 @@
 // Dingo Feature Showcase - ALL 12 features
 // This file demonstrates every Dingo feature.
 //
-// FIXED BUGS (session 20251209-020328):
-//   - Bug 1: Lambda type inference now uses `any` fallback for standalone lambdas
-//     (use type annotations when needed, or pass to typed functions for inference)
-//   - Bug 2: Ternary with `let` now properly declares variables
-//   - Bug 3: Tuple destructuring correctly handles Go multiple returns
-//   - Bug 4: Block lambda parsing fixed (was misidentified as tuple)
+// === Design Decisions Summary ===
+//
+// Generic Types: Result[T,E] and Option[T] use dgo package generics
+// Enums: Compile to Go interface + struct patterns
+// Lambdas: |x| expr and (x) => expr compile to func literals
 //
 // To build: dingo build showcase.dingo
-// To test:  go build showcase.go (should compile cleanly now!)
+// To test:  go build showcase.go
 package main
 
 import (
@@ -65,7 +64,7 @@ func findUser(name string) dgo.Option[User] {
 	if name == "" {
 		return dgo.None[User]()
 	}
-	return dgo.Some[User](User{ID: 1, Name: name})
+	return dgo.Some(User{ID: 1, Name: name})
 }
 
 // === 3. ERROR PROPAGATION ===

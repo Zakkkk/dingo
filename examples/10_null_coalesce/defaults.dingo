@@ -1,5 +1,15 @@
 // Real-world example: Configuration defaults with null coalescing
 // The ?? operator provides fallback values for nil pointers and zero values
+//
+// === Design Decision: Null Coalescing Operator ===
+//
+// The ?? operator provides fallback values:
+//   config.timeout ?? 30
+//   → if config.timeout != nil { return *config.timeout }
+//      return 30
+//
+// Works with pointers, Option types, and zero values.
+//
 package main
 
 import (

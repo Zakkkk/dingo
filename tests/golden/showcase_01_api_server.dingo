@@ -119,26 +119,26 @@ func registerUser(db *sql.DB, req RegisterRequest) Result[User, error] {
 	if emailResult.IsErr() {
 		return Err("email validation failed")
 	}
-	let email = emailResult.Unwrap()
+	let email = emailResult.MustOk()
 
 	let passwordResult = validatePassword(req.Password)
 	if passwordResult.IsErr() {
 		return Err("password validation failed")
 	}
-	let password = passwordResult.Unwrap()
+	let password = passwordResult.MustOk()
 
 	let usernameResult = validateUsername(req.Username)
 	if usernameResult.IsErr() {
 		return Err("username validation failed")
 	}
-	let username = usernameResult.Unwrap()
+	let username = usernameResult.MustOk()
 
 	// Check if user exists - guard clause
 	let existsResult = checkUserExists(db, email)
 	if existsResult.IsErr() {
 		return Err("failed to check user existence")
 	}
-	if existsResult.Unwrap() {
+	if existsResult.MustOk() {
 		return Err("user already exists")
 	}
 
@@ -150,13 +150,13 @@ func registerUser(db *sql.DB, req RegisterRequest) Result[User, error] {
 	if hashedPasswordResult.IsErr() {
 		return Err("password hashing failed")
 	}
-	let hashedPassword = hashedPasswordResult.Unwrap()
+	let hashedPassword = hashedPasswordResult.MustOk()
 
 	let idResult = saveUser(db, username, email, hashedPassword, UserStatus_Pending, userProfile)
 	if idResult.IsErr() {
 		return Err("failed to save user")
 	}
-	let id = idResult.Unwrap()
+	let id = idResult.MustOk()
 
 	// Return created user with type-safe enum status
 	return Ok(User{
@@ -193,11 +193,11 @@ func handleRegister(db *sql.DB) http.HandlerFunc {
 		// Process registration
 		let result = registerUser(db, req)
 		if result.IsOk() {
-			let user = result.Unwrap()
+			let user = result.MustOk()
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(user)
 		} else {
-			let err1 = result.UnwrapErr()
+			let err1 = result.MustErr()
 			http.Error(w, err1.Error(), http.StatusBadRequest)
 		}
 	}

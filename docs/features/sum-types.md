@@ -2,6 +2,36 @@
 
 Sum types, also called tagged unions or algebraic data types, allow you to define a type that can be one of several variants. They're the foundation of type-safe state machines, error handling, and domain modeling in Dingo.
 
+## Design Decision: Interface Pattern
+
+Dingo enums compile to Go's **interface + struct pattern**:
+
+```go
+// Dingo
+enum Status { Pending, Active, Done }
+
+// Generated Go
+type Status interface { isStatus() }
+type StatusPending struct{}
+func (StatusPending) isStatus() {}
+type StatusActive struct{}
+func (StatusActive) isStatus() {}
+type StatusDone struct{}
+func (StatusDone) isStatus() {}
+```
+
+**Why interfaces instead of tagged structs?**
+1. **Type safety** - Go's type switch enforces exhaustiveness
+2. **Zero overhead** - No tag field storage
+3. **Idiomatic** - Go developers recognize the pattern
+4. **gopls support** - Full IDE completion and type info
+
+Variants with data become structs with fields:
+```go
+enum Shape { Circle { radius: float64 } }
+→ type ShapeCircle struct { radius float64 }
+```
+
 ## Why Sum Types?
 
 Go's approach to representing "one of several types" typically uses interfaces or separate types:
@@ -313,6 +343,8 @@ if shape.IsCircle() {
 
 ## Generated Go Code
 
+Dingo uses the **interface + struct pattern** for enums:
+
 Input:
 ```go
 enum Status {
@@ -324,82 +356,71 @@ enum Status {
 
 Generated:
 ```go
-type StatusTag uint8
+// Interface defines the sum type
+type Status interface { isStatus() }
 
-const (
-    StatusTagPending StatusTag = iota
-    StatusTagActive
-    StatusTagComplete
-)
+// Each variant is a struct implementing the interface
+type StatusPending struct{}
+func (StatusPending) isStatus() {}
 
-type Status struct {
-    tag StatusTag
-}
+type StatusActive struct{}
+func (StatusActive) isStatus() {}
 
-func StatusPending() Status {
-    return Status{tag: StatusTagPending}
-}
+type StatusComplete struct{}
+func (StatusComplete) isStatus() {}
 
-func StatusActive() Status {
-    return Status{tag: StatusTagActive}
-}
-
-func StatusComplete() Status {
-    return Status{tag: StatusTagComplete}
-}
-
-func (e Status) IsPending() bool {
-    return e.tag == StatusTagPending
-}
-
-func (e Status) IsActive() bool {
-    return e.tag == StatusTagActive
-}
-
-func (e Status) IsComplete() bool {
-    return e.tag == StatusTagComplete
-}
+// Constructor functions
+func NewStatusPending() Status { return StatusPending{} }
+func NewStatusActive() Status { return StatusActive{} }
+func NewStatusComplete() Status { return StatusComplete{} }
 ```
 
 **With data:**
 
 ```go
-enum Result {
-    Ok(int),
-    Err(string),
+enum Shape {
+    Point,
+    Circle { radius: float64 },
+    Rectangle { width: float64, height: float64 },
 }
 ```
 
 Becomes:
 
 ```go
-type ResultTag uint8
+// Interface
+type Shape interface { isShape() }
 
-const (
-    ResultTagOk ResultTag = iota
-    ResultTagErr
-)
+// Variants with data are structs with fields
+type ShapePoint struct{}
+func (ShapePoint) isShape() {}
 
-type Result struct {
-    tag  ResultTag
-    ok0  *int
-    err0 *string
+type ShapeCircle struct {
+    radius float64
 }
+func (ShapeCircle) isShape() {}
 
-func ResultOk(ok0 int) Result {
-    return Result{tag: ResultTagOk, ok0: &ok0}
+type ShapeRectangle struct {
+    width  float64
+    height float64
 }
+func (ShapeRectangle) isShape() {}
 
-func ResultErr(err0 string) Result {
-    return Result{tag: ResultTagErr, err0: &err0}
-}
+// Constructors
+func NewShapePoint() Shape { return ShapePoint{} }
+func NewShapeCircle(radius float64) Shape { return ShapeCircle{radius: radius} }
+func NewShapeRectangle(width, height float64) Shape { return ShapeRectangle{width: width, height: height} }
+```
 
-func (r Result) IsOk() bool {
-    return r.tag == ResultTagOk
-}
-
-func (r Result) IsErr() bool {
-    return r.tag == ResultTagErr
+**Pattern matching** uses Go's type switch:
+```go
+switch v := shape.(type) {
+case ShapePoint:
+    fmt.Println("Point")
+case ShapeCircle:
+    fmt.Printf("Circle with radius %.2f\n", v.radius)
+case ShapeRectangle:
+    fmt.Printf("Rectangle %.2f x %.2f\n", v.width, v.height)
 }
 ```
 

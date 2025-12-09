@@ -1,36 +1,30 @@
+// Test: Option[T] with method chaining (Map, AndThen)
+// Feature: Option type with functional method chaining
+// Complexity: advanced
 package main
 
-// Test: Option type with chaining (map, and_then)
-// Feature: Option type with method chaining
-// Complexity: advanced
-
-enum Option {
-	Some(int),
-	None,
-}
-
-func getValue(id int) Option {
+func getValue(id int) Option[int] {
 	if id > 0 {
-		return OptionSome(id)
+		return Some(id)
 	}
-	return OptionNone()
+	return None[int]()
 }
 
-func processValue(opt Option) Option {
+func processValue(opt Option[int]) Option[int] {
 	return opt.
-		Map(x => x * 2).
-		AndThen(x => {
+		Map(|x| x * 2).
+		AndThen(|x| {
 			if x > 10 {
-				return OptionSome(x)
+				return Some(x)
 			}
-			return OptionNone()
+			return None[int]()
 		})
 }
 
 func main() {
-	result := processValue(getValue(10))
+	let result = processValue(getValue(10))
 	if result.IsSome() {
-		println("Result:", *result.some)
+		println("Result:", result.MustSome())
 	} else {
 		println("None")
 	}
