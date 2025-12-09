@@ -2,6 +2,40 @@
 
 All notable changes to the Dingo compiler will be documented in this file.
 
+## [0.4.1] - 2025-12-10
+
+### CLI Restructure (Go Compiler Parity)
+
+Dingo CLI now mirrors Go's compiler structure:
+
+| Command | Description | Go Equivalent |
+|---------|-------------|---------------|
+| `dingo build` | Transpile + compile to binary | `go build` |
+| `dingo run` | Transpile + run immediately | `go run` |
+| `dingo go` | Transpile to .go files only | N/A (new) |
+
+**New Features:**
+- **Go flag passthrough**: All Go build/run flags work (`-o`, `-race`, `-ldflags`, etc.)
+- **Package mode**: `dingo build ./cmd/myapp` compiles entire directories
+- **`--verbose` flag**: Shows the underlying go build/run command
+- **`--no-mascot` flag**: Disables animated mascot (useful for CI/scripts)
+- **Automatic silent mode for `run`**: `dingo run` disables mascot so running programs have full CLI access
+
+### Performance
+
+- **7-14x faster transpile**: Switched type checker from source-based to gc-based importer
+  - Before: ~1.15s per file
+  - After: ~80-150ms per file
+  - Bottleneck was `go/types` re-parsing source files on every import
+
+### Documentation
+
+- Updated all documentation with new CLI commands
+- Added comprehensive CLI reference in docs/configuration.md
+- Updated getting-started.md with new command examples
+
+---
+
 ## [0.4.0] - 2025-12-09
 
 ### Breaking Changes

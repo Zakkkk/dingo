@@ -68,11 +68,43 @@ examples/           # Example .dingo files
 | enum | 10 | `enum Name { Variant }` |
 | match | 20 | `match expr { Pat => val }` |
 | error_prop | 40 | `expr?` |
+| tuples | 50 | `let (a, b) = func()` |
 | safe_nav | 60 | `x?.y` |
 | null_coalesce | 70 | `a ?? b` |
 | lambdas | 80 | `\|x\| expr` or `x => expr` |
 | generics | 110 | Uses Go's native `[T]` syntax directly |
 | let_binding | 120 | `let x =` → `x :=` |
+
+## Option/Result API (dgo package)
+
+**Option[T]** methods:
+- `.IsSome()` / `.IsNone()` - check state
+- `.MustSome()` - extract value (panics if None)
+- `.SomeOr(defaultVal)` - extract with default
+- `.SomeOrElse(func() T)` - extract with lazy default
+
+**Result[T, E]** methods:
+- `.IsOk()` / `.IsErr()` - check state
+- `.MustOk()` - extract value (panics if Err)
+- `.MustErr()` - extract error (panics if Ok)
+- `.OkOr(defaultVal)` - extract with default
+
+**Constructors:**
+- `Some(val)`, `None[T]()` - for Option
+- `Ok[T, E](val)`, `Err[T, E](err)` - for Result
+
+## Two Enum Patterns
+
+1. **Generic types (dgo package):** `Option[T]`, `Result[T, E]`
+   - Methods: `.IsSome()`, `.MustSome()`, `.IsOk()`, `.MustOk()`
+   - Constructors: `Some(x)`, `None[T]()`, `Ok[T,E](x)`, `Err[T,E](e)`
+
+2. **Interface-based enums:** `enum Option { Some(T), None }`
+   - Generates Go interfaces + struct variants
+   - Constructors: `NewOptionSome(x)`, `NewOptionNone()`
+   - Use type switches: `switch v := opt.(type) { case OptionSome: ... }`
+
+**Don't mix these patterns** - they have different APIs.
 
 ## Code Generation Standards
 
@@ -104,6 +136,24 @@ Variable naming:
 - Golden tests: `tests/golden/` - see `GOLDEN_TEST_GUIDELINES.md`
 - Run: `go test ./...`
 
+## CLI Commands
+
+Dingo CLI mirrors Go's compiler structure:
+
+| Command | Description | Go Equivalent |
+|---------|-------------|---------------|
+| `dingo build` | Transpile + compile to binary | `go build` |
+| `dingo run` | Transpile + run immediately | `go run` |
+| `dingo go` | Transpile to .go files only | N/A |
+
+All `go build/run` flags are passed through (e.g., `-o`, `-race`, `-ldflags`).
+
+**Dingo-specific flags:**
+- `--verbose` - Show the go build/run command
+- `--no-mascot` - Disable mascot animation (silent output)
+
+Note: `dingo run` always runs in silent mode (no mascot) to give the running program full CLI access.
+
 ## Running Dingo in Claude Code
 
 Always use `--no-mascot` flag when running dingo build in Claude Code terminal:
@@ -112,10 +162,15 @@ Always use `--no-mascot` flag when running dingo build in Claude Code terminal:
 ```
 This disables animation which doesn't render properly in Claude Code.
 
+For `dingo run`, the mascot is automatically disabled (no flag needed):
+```bash
+./dingo run examples/03_option/user_settings.dingo
+```
+
 ## References
 
 - Research: `ai-docs/claude-research.md`, `ai-docs/gemini_research.md`
 - Architecture: `ai-docs/dingo-vs-borgo.md`
 
 ---
-**Last Updated**: 2025-12-09
+**Last Updated**: 2025-12-10

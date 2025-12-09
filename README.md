@@ -17,7 +17,7 @@
 
 **At a Glance**
 
-Sum Types: Working | Pattern Matching: Working | Error Propagation: Working | Functional Utils: Working | **Playground for Go's Future** | v1.0 Target: Late 2025
+Sum Types: Working | Pattern Matching: Working | Error Propagation: Working | Tuples: Working | Safe Navigation: Working | **Playground for Go's Future** | v1.0 Target: Q1 2026
 
 </div>
 
@@ -75,9 +75,9 @@ Want pattern matching? Enable it. Want sum types? Already working. Think you can
 
 ## Quick Start
 
-**Note:** Dingo is in active development. **Phase V Complete** - Infrastructure ready for v1.0 with comprehensive documentation, workspace builds, CI/CD enhancements, and 3/4 external model approval.
+**Note:** Dingo is in active development. **Phase 10 Complete** - Full LSP integration with gopls proxy, auto-rebuild on save, and comprehensive IDE support.
 
-**Latest (2025-11-22)**: ✅ **LSP Integration Complete** - Post-AST source maps (100% accurate position mapping) + auto-rebuild on save. Edit → Save → IDE features work instantly! Hover, go-to-definition, and automatic transpilation fully functional. See [`CHANGELOG.md`](CHANGELOG.md) for details.
+**Latest (2025-12-09)**: ✅ **Tuples & Documentation Update** - Tuple type support (Phase 8) complete with destructuring, multi-return functions, and Option/Result integration. Golden tests updated to use current API patterns (`.MustSome()`, `.MustOk()` methods). See [`CHANGELOG.md`](CHANGELOG.md) for details.
 
 ### Installation
 
@@ -111,11 +111,14 @@ func main() {
 Build and run:
 
 ```bash
-# Transpile to Go
+# Transpile to Go and compile to binary (like go build)
 dingo build hello.dingo
 
-# Or compile and run in one step
+# Transpile and run immediately (like go run)
 dingo run hello.dingo
+
+# Transpile to Go only (generates .go files without compiling)
+dingo go hello.dingo
 ```
 
 ### Try Working Features Now
@@ -197,7 +200,7 @@ See [examples/](#) and [docs/features/](docs/features/) for more working code.
 - **`Option<T>`** makes nil checks compile-time safe
 - **`enum` keyword** with full sum type support
 - **Pattern matching** with exhaustiveness checking
-- **`?.` and `??`** for safe navigation (coming soon)
+- **`?.` and `??`** for safe navigation and null coalescing
 - **Zero overhead** - transpiles to clean Go
 
 </td>
@@ -772,11 +775,12 @@ This is what Dingo does. It takes your Go code and makes it *readable*.
 | **Pattern Matching** | ✅ Working | Exhaustive match expressions with destructuring |
 | **Error Propagation** | ✅ Working | The `?` operator for clean error handling |
 | **Functional Utilities** | ✅ Working | `map`, `filter`, `reduce` with zero overhead |
-| **Result & Option** | ✅ Infrastructure Ready | Type-safe error and null handling (integration pending) |
-| **Safe Navigation** | ✅ Complete (Phase 7) | `?.` operator for properties and methods |
-| **Null Coalescing** | ✅ Complete (Phase 7) | `??` operator for default values |
-| **Lambda Syntax** | ✅ Complete (Phase 6) | TypeScript arrows and Rust pipes (configurable) |
-| **Language Server** | ✅ Working (Phase 10) | Full IDE support via gopls proxy with source maps |
+| **Result & Option** | ✅ Working | Type-safe error and null handling |
+| **Safe Navigation** | ✅ Complete | `?.` operator for properties and methods |
+| **Null Coalescing** | ✅ Complete | `??` operator for default values |
+| **Lambda Syntax** | ✅ Complete | TypeScript arrows and Rust pipes (configurable) |
+| **Tuples** | ✅ Complete | Destructuring, multi-return functions |
+| **Language Server** | ✅ Complete | Full IDE support via gopls proxy with source maps |
 
 </div>
 
@@ -1541,10 +1545,11 @@ dingo/
   - Full IDE support via precise source maps
 
 - **CLI Tooling**
-  - `dingo build` - Transpile files
-  - `dingo run` - Compile and execute
+  - `dingo build` - Transpile + compile to binary (like go build)
+  - `dingo run` - Transpile + run immediately (like go run)
+  - `dingo go` - Transpile to Go files only
   - `dingo version` - Version info
-  - Beautiful terminal UI (lipgloss)
+  - Beautiful terminal UI with animated mascot (lipgloss)
 
 - **Plugin Architecture**
   - Modular transformation system
@@ -1650,8 +1655,9 @@ dingo/
 | **Phase V** | ✅ Complete | Infrastructure & Developer Experience | **3/4 external approval** |
 | **Phase 6** | ✅ Complete | Lambda Functions (TypeScript/Rust styles) | 105/105 tests, 9/9 golden tests |
 | **Phase 7** | ✅ Complete | Null Safety Operators (`?.`, `??`) | 37/37 tests passing |
+| **Phase 8** | ✅ Complete | Tuples (destructuring, multi-return) | 12/12 golden tests |
 
-**Current Capabilities:** Result<T,E>, Option<T>, sum types (enum), pattern matching (Rust/Swift syntax), error propagation (?), functional utilities (map/filter/reduce), **lambda functions (TypeScript/Rust styles)**, **safe navigation (?.)**, **null coalescing (??)**, exhaustiveness checking, workspace builds, source maps (98.7% accuracy)
+**Current Capabilities:** Result<T,E>, Option<T>, sum types (enum), pattern matching (Rust/Swift syntax), error propagation (?), functional utilities (map/filter/reduce), **lambda functions (TypeScript/Rust styles)**, **safe navigation (?.)**, **null coalescing (??)**, **tuples with destructuring**, exhaustiveness checking, workspace builds, source maps (98.7% accuracy)
 
 #### 🚧 Planned for v1.0 (Q1 2026)
 
@@ -1659,9 +1665,9 @@ dingo/
 |-------|----------|----------|----------|--------|
 | **Phase 6** | P1 | Lambda Functions (2 syntax styles) | 2-3 weeks | ✅ Complete |
 | **Phase 7** | P1 | Null Safety Operators (`?.`, `??`) | 2 weeks | ✅ Complete |
-| **Phase 8** | P2 | Tuples (single-level, single-line) | 1-2 weeks | ✅ Complete (Scope Reduction)* |
-| **Phase 9** | P2 | Ternary Operator (`? :`) | 2-3 days | ✅ Complete (Implemented in Phase 6) |
-| **Phase 10** | P0 | Language Server (gopls proxy) | 8-10 weeks | ✅ Complete (2025-11-20) |
+| **Phase 8** | P2 | Tuples (destructuring, multi-return) | 1-2 weeks | ✅ Complete |
+| **Phase 9** | P2 | Ternary Operator (`? :`) | 2-3 days | ✅ Complete |
+| **Phase 10** | P0 | Language Server (gopls proxy) | 8-10 weeks | ✅ Complete |
 | **Phase 11** | P0 | IDE Integration (VS Code, Neovim) | 4-6 weeks | ✅ Complete (VSCode) |
 
 **v1.0 Goals:** Production-ready transpiler with full IDE support, comprehensive documentation, and battle-tested core features
@@ -1722,8 +1728,11 @@ echo 'package main
 enum Result { Ok, Error }
 func main() { println("Dingo works!") }' > hello.dingo
 
-# 3. Run it
+# 3. Run it (transpiles + runs)
 ./dingo run hello.dingo
+
+# Or build a binary
+./dingo build hello.dingo
 ```
 
 [View Examples](examples/) • [Read Features](features/INDEX.md) • [Check Roadmap](#roadmap-the-realistic-version) • [Star on GitHub](https://github.com/MadAppGang/dingo)
@@ -1807,6 +1816,6 @@ And maybe, just maybe, making your codebase a little bit nicer to work with.
 
 [Website](https://dingolang.com) • [GitHub](https://github.com/MadAppGang/dingo) • [Issues](https://github.com/MadAppGang/dingo/issues) • [Changelog](CHANGELOG.md) • [Features](features/INDEX.md)
 
-**Not ready for production** • Star to follow progress • v1.0 target: Late 2025
+**Not ready for production** • Star to follow progress • v1.0 target: Q1 2026
 
 </div>

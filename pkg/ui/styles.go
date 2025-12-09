@@ -426,8 +426,9 @@ func PrintDingoHelp(version string) {
 	// Commands
 	fmt.Println(section.Render("Available Commands:"))
 	commands := []struct{ name, desc string }{
-		{"build", "Transpile Dingo source files to Go"},
-		{"run", "Compile and run a Dingo program"},
+		{"build", "Compile Dingo sources to binary (like go build)"},
+		{"run", "Compile and run Dingo program (like go run)"},
+		{"go", "Transpile Dingo to Go only (no compilation)"},
 		{"version", "Print the version number of Dingo"},
 		{"help", "Help about any command"},
 	}

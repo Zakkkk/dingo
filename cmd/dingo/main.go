@@ -4,7 +4,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ import (
 )
 
 var (
-	version = "0.4.0"
+	version = "0.4.1"
 )
 
 func main() {
@@ -51,8 +50,9 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 		},
 	})
 
-	rootCmd.AddCommand(buildCmd())
-	rootCmd.AddCommand(runCmd())
+	rootCmd.AddCommand(goBuildCmd())  // dingo build - transpile + go build
+	rootCmd.AddCommand(goRunCmd())    // dingo run - transpile + go run
+	rootCmd.AddCommand(goCmd())       // dingo go - transpile only
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(mascotCmd())
 
@@ -66,7 +66,8 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 var simulateSlow bool
 var noMascot bool
 
-func buildCmd() *cobra.Command {
+// goCmd is the "dingo go" command - transpile only (.dingo → .go)
+func goCmd() *cobra.Command {
 	var (
 		output string
 		outdir string
@@ -74,9 +75,14 @@ func buildCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "build [file.dingo | ./...]",
-		Short: "Transpile Dingo source files to Go",
-		Long: `Build command transpiles Dingo source files (.dingo) to Go source files (.go).
+		Use:   "go [file.dingo | ./...]",
+		Short: "Transpile Dingo source files to Go (no compilation)",
+		Long: `The 'go' command transpiles Dingo source files (.dingo) to Go source files (.go).
+
+This is useful for:
+- Inspecting generated Go code
+- Using with external Go tooling
+- IDE integration
 
 The transpiler:
 1. Parses Dingo source code into AST
@@ -84,12 +90,12 @@ The transpiler:
 3. Generates idiomatic Go code
 
 Examples:
-  dingo build hello.dingo              # Generates hello.go in same directory
-  dingo build -o output.go main.dingo  # Custom output file
-  dingo build ./...                    # Build all .dingo files in workspace`,
+  dingo go hello.dingo              # Generates hello.go in same directory
+  dingo go -o output.go main.dingo  # Custom output file
+  dingo go ./...                    # Transpile all .dingo files in workspace`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBuild(args, output, outdir, watch)
+			return runTranspile(args, output, outdir, watch)
 		},
 	}
 
@@ -102,39 +108,7 @@ Examples:
 	return cmd
 }
 
-func runCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "run [file.dingo] [-- args...]",
-		Short: "Compile and run a Dingo program",
-		Long: `Run compiles a Dingo source file and executes it immediately.
-
-This is equivalent to:
-  dingo build file.dingo
-  go run file.go
-
-The generated .go file is created and then executed. You can pass arguments
-to your program after -- (double dash).
-
-Examples:
-  dingo run hello.dingo
-  dingo run main.dingo -- arg1 arg2 arg3
-  dingo run server.dingo -- --port 8080`,
-		Args: cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			inputFile := args[0]
-			programArgs := []string{}
-
-			// If there are args after --, pass them to the program
-			if len(args) > 1 {
-				programArgs = args[1:]
-			}
-
-			return runDingoFile(inputFile, programArgs)
-		},
-	}
-
-	return cmd
-}
+// goRunCmd is defined in compile.go - it's like goBuildCmd but invokes go run
 
 func versionCmd() *cobra.Command {
 	return &cobra.Command{
@@ -146,7 +120,7 @@ func versionCmd() *cobra.Command {
 	}
 }
 
-func runBuild(files []string, output, outdir string, watch bool) error {
+func runTranspile(files []string, output, outdir string, watch bool) error {
 	// Validate mutually exclusive flags
 	if output != "" && outdir != "" {
 		return fmt.Errorf("--output and --outdir are mutually exclusive")
@@ -498,85 +472,6 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%.2fs", d.Seconds())
 	}
-}
-
-func runDingoFile(inputPath string, programArgs []string) error {
-	// Create beautiful output
-	buildUI := ui.NewBuildOutput()
-
-	// Print minimal header for run mode
-	buildUI.PrintHeader(version)
-	fmt.Println()
-
-	// Determine output path
-	outputPath := ""
-	if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
-		outputPath = inputPath[:len(inputPath)-6] + ".go"
-	} else {
-		outputPath = inputPath + ".go"
-	}
-
-	// Step 1: Build (transpile)
-	buildStart := time.Now()
-
-	// Read source
-	src, err := os.ReadFile(inputPath)
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Failed to read %s: %v", inputPath, err))
-		return err
-	}
-
-	// Transpile using pure AST pipeline
-	goCode, err := transpiler.PureASTTranspile(src, inputPath)
-	if err != nil {
-		buildUI.PrintError(fmt.Sprintf("Transpilation error: %v", err))
-		return err
-	}
-
-	// Write
-	if err := os.WriteFile(outputPath, goCode, 0o644); err != nil {
-		buildUI.PrintError(fmt.Sprintf("Failed to write %s: %v", outputPath, err))
-		return err
-	}
-
-	buildDuration := time.Since(buildStart)
-
-	// Show build status
-	fmt.Printf("  Compiled %s -> %s (%s)\n",
-		filepath.Base(inputPath),
-		filepath.Base(outputPath),
-		formatDuration(buildDuration))
-	fmt.Println()
-
-	// Step 2: Run with go run
-	fmt.Println("  Running...")
-	fmt.Println()
-
-	// Prepare go run command
-	cmdArgs := []string{"run", outputPath}
-	cmdArgs = append(cmdArgs, programArgs...)
-
-	cmd := exec.Command("go", cmdArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	// Run and get exit code
-	err = cmd.Run()
-
-	fmt.Println()
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			// Program ran but exited with error
-			os.Exit(exitErr.ExitCode())
-		}
-		// Failed to run
-		buildUI.PrintError(fmt.Sprintf("Failed to run: %v", err))
-		return err
-	}
-
-	return nil
 }
 
 // expandWorkspacePatterns expands workspace patterns like ./... to actual .dingo files

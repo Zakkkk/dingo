@@ -138,11 +138,75 @@ format = "inline"
 
 ## CLI Reference
 
-### Build Command Flags
+Dingo CLI mirrors Go's compiler structure with three main commands:
+
+### Build Command (like go build)
 
 ```bash
-dingo build [flags] <files...>
+dingo build [flags] <files/packages...>
 ```
+
+Transpiles `.dingo` files and compiles to a binary.
+
+**Flags**:
+- `--verbose` - Show the go build command being executed
+- `--no-mascot` - Disable animated mascot (for CI/scripts)
+- `-o <path>` - Output binary path
+- All Go build flags are passed through (`-race`, `-ldflags`, etc.)
+
+**Examples**:
+
+```bash
+# Build single file
+dingo build main.dingo
+
+# Build with output name
+dingo build -o myapp main.dingo
+
+# Build package
+dingo build ./cmd/myapp
+
+# With race detector
+dingo build -race main.dingo
+
+# With linker flags
+dingo build -ldflags="-s -w" main.dingo
+
+# Verbose mode (shows go build command)
+dingo build --verbose main.dingo
+```
+
+### Run Command (like go run)
+
+```bash
+dingo run [flags] <files/packages...> [-- program args]
+```
+
+Transpiles and runs immediately. Program output goes directly to stdout (no mascot animation).
+
+**Examples**:
+
+```bash
+# Run single file
+dingo run main.dingo
+
+# Run package
+dingo run ./cmd/myapp
+
+# Pass arguments to program
+dingo run main.dingo -- --port 8080 --debug
+
+# With race detector
+dingo run -race main.dingo
+```
+
+### Go Command (transpile only)
+
+```bash
+dingo go [flags] <files...>
+```
+
+Transpiles `.dingo` files to `.go` files without compilation. This is the original behavior.
 
 **Flags**:
 - `--syntax <style>` - Error propagation syntax (question|bang|try)
@@ -153,17 +217,20 @@ dingo build [flags] <files...>
 **Examples**:
 
 ```bash
-# Use default configuration
-dingo build main.dingo
+# Transpile single file
+dingo go main.dingo
+
+# Transpile multiple files
+dingo go file1.dingo file2.dingo
 
 # Override syntax
-dingo build --syntax=try main.dingo
+dingo go --syntax=try main.dingo
 
 # Disable source maps
-dingo build --no-sourcemaps main.dingo
+dingo go --no-sourcemaps main.dingo
 
 # Custom output with separate source maps
-dingo build -o build/main.go --sourcemap-format=separate main.dingo
+dingo go -o build/main.go --sourcemap-format=separate main.dingo
 ```
 
 ## Validation

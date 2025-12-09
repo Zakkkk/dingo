@@ -65,24 +65,28 @@ func main() {
 ### Step 2: Build and Run
 
 ```bash
-# Transpile to Go
+# Transpile to Go and compile to binary (like go build)
 dingo build hello.dingo
+
+# This creates hello (binary) and hello.go
+
+# Run with dingo (transpiles + runs)
+dingo run hello.dingo
+
+# Or just transpile to Go files (no compilation)
+dingo go hello.dingo
 
 # This creates hello.go - inspect it!
 cat hello.go
-
-# Run with Go
-go run hello.go
-
-# Or use dingo run for a single command
-dingo run hello.dingo
 ```
 
 **What just happened?**
-- Dingo transpiled your `.dingo` file to clean Go code
+- `dingo build` transpiled your `.dingo` file and compiled it to a binary
+- `dingo run` would transpile and run immediately (like `go run`)
+- `dingo go` just transpiles to `.go` files (no compilation)
 - The `let` keyword became `var` in Go
 - The type annotation `:` syntax was converted to Go's format
-- You can now run it like any Go program!
+- All Go flags work: `dingo build -o myapp -race main.dingo`
 
 ## Basic Features Walkthrough
 
@@ -232,24 +236,47 @@ See [docs/features/pattern-matching.md](./features/pattern-matching.md) for adva
 
 ## Building and Running Code
 
-### Transpile a Single File
+### Build a Binary (like go build)
 
 ```bash
 dingo build main.dingo
-# Creates main.go
+# Transpiles to main.go and compiles to binary
+
+dingo build -o myapp main.dingo
+# Specify output binary name
+
+dingo build -race main.dingo
+# Enable race detector (Go flag passthrough)
 ```
 
-### Transpile and Run
+### Run Immediately (like go run)
 
 ```bash
 dingo run main.dingo
-# Transpiles to main.go, then runs it
+# Transpiles and runs in one step
+
+dingo run main.dingo -- --port 8080
+# Pass arguments to your program after --
 ```
 
-### Transpile Multiple Files
+### Transpile to Go Only
 
 ```bash
-dingo build file1.dingo file2.dingo file3.dingo
+dingo go main.dingo
+# Creates main.go without compiling
+
+dingo go file1.dingo file2.dingo file3.dingo
+# Transpile multiple files
+```
+
+### Build/Run Package Mode
+
+```bash
+dingo build ./cmd/myapp
+# Build all .dingo files in directory
+
+dingo run ./cmd/myapp
+# Run package
 ```
 
 ### Check Version
@@ -257,6 +284,16 @@ dingo build file1.dingo file2.dingo file3.dingo
 ```bash
 dingo version
 ```
+
+### Useful Flags
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Show the underlying go command |
+| `--no-mascot` | Disable animated mascot (for CI/scripts) |
+| `-o <path>` | Output binary path (build only) |
+| `-race` | Enable race detector (Go flag) |
+| Any Go flag | Passed through to `go build`/`go run` |
 
 ## IDE Setup
 
@@ -316,10 +353,14 @@ myproject/
 └── handlers.dingo  # More Dingo code
 ```
 
-Just transpile the `.dingo` files and build with Go:
+Just use dingo build which handles everything:
 
 ```bash
-dingo build *.dingo
+# Build the entire project (transpiles .dingo files first)
+dingo build ./myproject
+
+# Or transpile separately then use go build
+dingo go *.dingo
 go build .
 ```
 
