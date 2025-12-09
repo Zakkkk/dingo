@@ -1,7 +1,0 @@
-package main
-
-enum Shape {
-	Point,
-	Circle { radius: float64 },
-	Rectangle { width: float64, height: float64 },
-}

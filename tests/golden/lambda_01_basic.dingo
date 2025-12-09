@@ -1,8 +1,0 @@
-package main
-
-func main() {
-	// Rust-style lambda syntax with explicit types
-	let add = |a: int, b: int| -> int { a + b }
-	let double = |x: int| -> int { x * 2 }
-	let greet = |name: string| -> string { "Hello, " + name }
-}

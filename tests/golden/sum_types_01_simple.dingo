@@ -1,7 +1,0 @@
-package main
-
-enum Status {
-	Pending,
-	Active,
-	Complete,
-}

@@ -1,8 +1,0 @@
-package main
-
-import "os"
-
-func readWithMessage(path string) ([]byte, error) {
-	let data = ReadFile(path)? "failed to read \"important\" file"
-	return data, nil
-}
