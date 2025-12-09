@@ -6,6 +6,7 @@ import (
 	goparser "go/parser"
 	"go/printer"
 	"go/token"
+	"sort"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
@@ -40,6 +41,16 @@ func PureASTTranspile(source []byte, filename string) ([]byte, error) {
 // PureASTTranspileWithOptions transpiles with optional type inference.
 // Set inferTypes to false to disable type inference (faster but uses interface{}).
 func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool) ([]byte, error) {
+	result, err := PureASTTranspileWithMappings(source, filename, inferTypes)
+	if err != nil {
+		return nil, err
+	}
+	return result.GoCode, nil
+}
+
+// PureASTTranspileWithMappings transpiles and returns source mappings for LSP integration.
+// This is the full-featured version that returns all transformation metadata.
+func PureASTTranspileWithMappings(source []byte, filename string, inferTypes bool) (TranspileResult, error) {
 	// Extract enum registry from ORIGINAL source (before transformation)
 	// This is used by match expressions to prefix variant names correctly
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
@@ -47,14 +58,14 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	// Step 1: Transform Dingo syntax to Go using token-based transformations
 	transformedSource, tokenMappings, err := dingoast.TransformSource(source)
 	if err != nil {
-		return nil, fmt.Errorf("transform error: %w", err)
+		return TranspileResult{}, fmt.Errorf("transform error: %w", err)
 	}
 
 	// Step 2a: Transform tuple type aliases (must run before Go parser)
 	// Pattern: type Point = (int, int) → type Point = __tupleType2__(int, int)
 	transformedSource, typeAliasMappings, err := transformTupleTypeAliases(transformedSource)
 	if err != nil {
-		return nil, fmt.Errorf("tuple type alias error: %w", err)
+		return TranspileResult{}, fmt.Errorf("tuple type alias error: %w", err)
 	}
 
 	// Step 2a2: Transform tuple literals (must run before Go parser)
@@ -68,7 +79,7 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		var tupleLitMappings []dingoast.SourceMapping
 		transformedSource, tupleLitMappings, err = transformTupleLiterals(transformedSource)
 		if err != nil {
-			return nil, fmt.Errorf("tuple literal error (pass %d): %w", pass, err)
+			return TranspileResult{}, fmt.Errorf("tuple literal error (pass %d): %w", pass, err)
 		}
 		typeAliasMappings = append(typeAliasMappings, tupleLitMappings...)
 		// If no changes were made, we're done
@@ -80,43 +91,46 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	// Step 2b: Transform tuples - Pass 1 (syntax to markers)
 	transformedSource, tupleMappings, err := transformTuplePass1(transformedSource)
 	if err != nil {
-		return nil, fmt.Errorf("tuple pass 1 error: %w", err)
+		return TranspileResult{}, fmt.Errorf("tuple pass 1 error: %w", err)
 	}
 	tupleMappings = append(tupleMappings, typeAliasMappings...)
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
 	transformedSource, stmtMappings, err := transformErrorPropStatements(transformedSource)
 	if err != nil {
-		return nil, fmt.Errorf("statement transform error: %w", err)
+		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
 
 	// Step 2.5: Transform guard let statements (MUST run after error propagation, before expressions)
 	transformedSource, guardLetMappings, err := transformGuardLetStatements(transformedSource)
 	if err != nil {
-		return nil, fmt.Errorf("guard let transform error: %w", err)
+		return TranspileResult{}, fmt.Errorf("guard let transform error: %w", err)
 	}
 
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry)
 	if err != nil {
-		return nil, fmt.Errorf("AST transform error: %w", err)
+		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
 
+	// Combine all mappings from the transformation pipeline
+	allMappings := make([]dingoast.SourceMapping, 0,
+		len(tokenMappings)+len(tupleMappings)+len(stmtMappings)+len(guardLetMappings)+len(astMappings))
+	allMappings = append(allMappings, tokenMappings...)
+	allMappings = append(allMappings, tupleMappings...)
+	allMappings = append(allMappings, stmtMappings...)
+	allMappings = append(allMappings, guardLetMappings...)
+	allMappings = append(allMappings, astMappings...)
 
-	// TODO: Store mappings for LSP integration
-	// Combine token mappings, tuple mappings, statement mappings, guard let mappings, and AST mappings
-	_ = tokenMappings
-	_ = tupleMappings
-	_ = stmtMappings
-	_ = guardLetMappings
-	_ = astMappings
+	// Deduplicate and sort mappings by GoStart for efficient lookup
+	allMappings = deduplicateAndSortMappings(allMappings)
 
 	// Step 3: Parse the transformed Go source with standard go/parser
 	fset := token.NewFileSet()
 	goFile, err := goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 	if err != nil {
-		return nil, fmt.Errorf("parse error: %w", err)
+		return TranspileResult{}, fmt.Errorf("parse error: %w", err)
 	}
 
 	// Step 3.1: Type-check the Go AST (needed for tuple Pass 2)
@@ -133,7 +147,7 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 			// Re-parse with updated source
 			goFile, err = goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 			if err != nil {
-				return nil, fmt.Errorf("parse error after tuple pass 2: %w", err)
+				return TranspileResult{}, fmt.Errorf("parse error after tuple pass 2: %w", err)
 			}
 			// Re-create type checker for subsequent steps
 			typeChecker, typeErr = typechecker.New(fset, goFile, pkgName)
@@ -145,7 +159,7 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 	// This must run BEFORE QualifyDingoTypes so we can access the original type names
 	noneTransformer := NewNoneInferenceTransformer(fset, goFile)
 	if err := noneTransformer.Transform(); err != nil {
-		return nil, fmt.Errorf("none inference: %w", err)
+		return TranspileResult{}, fmt.Errorf("none inference: %w", err)
 	}
 
 	// Step 3.6: Inject dgo import if Result/Option types are detected
@@ -212,8 +226,52 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		Tabwidth: 4,
 	}
 	if err := cfg.Fprint(&buf, fset, goFile); err != nil {
-		return nil, fmt.Errorf("print error: %w", err)
+		return TranspileResult{}, fmt.Errorf("print error: %w", err)
 	}
 
-	return buf.Bytes(), nil
+	// Return complete transpilation result with mappings
+	return TranspileResult{
+		GoCode:      buf.Bytes(),
+		Mappings:    allMappings,
+		DingoSource: source,
+		GoAST:       goFile,
+		Metadata: &TranspileMetadata{
+			OriginalFile: filename,
+		},
+	}, nil
+}
+
+// deduplicateAndSortMappings removes duplicate mappings and sorts by GoStart.
+// Duplicates are identified by having identical DingoStart, DingoEnd, GoStart, and GoEnd.
+// When duplicates exist, the first one encountered (by Kind) is kept.
+func deduplicateAndSortMappings(mappings []dingoast.SourceMapping) []dingoast.SourceMapping {
+	if len(mappings) == 0 {
+		return mappings
+	}
+
+	// Sort by GoStart first (primary key for lookups)
+	sort.Slice(mappings, func(i, j int) bool {
+		return mappings[i].GoStart < mappings[j].GoStart
+	})
+
+	// Deduplicate by checking if adjacent mappings have identical positions
+	deduped := make([]dingoast.SourceMapping, 0, len(mappings))
+	deduped = append(deduped, mappings[0])
+
+	for i := 1; i < len(mappings); i++ {
+		curr := mappings[i]
+		prev := deduped[len(deduped)-1]
+
+		// Skip if positions are identical (duplicate mapping)
+		if curr.DingoStart == prev.DingoStart &&
+			curr.DingoEnd == prev.DingoEnd &&
+			curr.GoStart == prev.GoStart &&
+			curr.GoEnd == prev.GoEnd {
+			continue
+		}
+
+		deduped = append(deduped, curr)
+	}
+
+	return deduped
 }

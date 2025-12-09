@@ -12,6 +12,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
@@ -221,9 +222,9 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		Duration: time.Since(readStart),
 	})
 
-	// Step 2: Transpile using pure AST pipeline
+	// Step 2: Transpile using pure AST pipeline with mappings
 	transpileStart := time.Now()
-	goSource, err := transpiler.PureASTTranspile(src, inputPath)
+	transpileResult, err := transpiler.PureASTTranspileWithMappings(src, inputPath, true)
 	if err != nil {
 		buildUI.PrintStep(ui.Step{
 			Name:     "Transpile",
@@ -232,6 +233,7 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		})
 		return fmt.Errorf("transpilation error: %w", err)
 	}
+	goSource := transpileResult.GoCode
 
 	buildUI.PrintStep(ui.Step{
 		Name:     "Transpile",
@@ -239,8 +241,10 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		Duration: time.Since(transpileStart),
 	})
 
-	// Step 3: Write .go file
+	// Step 3: Write output files
 	writeStart := time.Now()
+
+	// Write .go file
 	if err := os.WriteFile(outputPath, goSource, 0o644); err != nil {
 		buildUI.PrintStep(ui.Step{
 			Name:     "Write",
@@ -250,12 +254,28 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
-	buildUI.PrintStep(ui.Step{
-		Name:     "Write",
-		Status:   ui.StepSuccess,
-		Duration: time.Since(writeStart),
-		Message:  fmt.Sprintf("%d bytes written", len(goSource)),
-	})
+	// Write .dmap file next to .dingo source
+	dmapPath := strings.TrimSuffix(inputPath, ".dingo") + ".dmap"
+	// Get actual mappings from transpiler
+	mappings := transpileResult.Mappings
+	writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
+
+	if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+		// .dmap write failure is non-fatal - warn but don't fail build
+		buildUI.PrintStep(ui.Step{
+			Name:     "Write",
+			Status:   ui.StepSuccess,
+			Duration: time.Since(writeStart),
+			Message:  fmt.Sprintf("%d bytes written (source map warning: %v)", len(goSource), dmapErr),
+		})
+	} else {
+		buildUI.PrintStep(ui.Step{
+			Name:     "Write",
+			Status:   ui.StepSuccess,
+			Duration: time.Since(writeStart),
+			Message:  fmt.Sprintf("%d bytes written", len(goSource)),
+		})
+	}
 
 	return nil
 }
@@ -305,12 +325,14 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 
 	// Step 2: Transpile (with spinner - this is the long one)
 	var goSource []byte
+	var transpileResult transpiler.TranspileResult
 	var transpileDuration time.Duration
 	buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", fileName)
 	err = runWithSpinner("Transpile", func() error {
 		start := time.Now()
 		var err error
-		goSource, err = transpiler.PureASTTranspile(src, inputPath)
+		transpileResult, err = transpiler.PureASTTranspileWithMappings(src, inputPath, true)
+		goSource = transpileResult.GoCode
 		// Simulate slow build if --slow flag is set
 		if simulateSlow {
 			time.Sleep(3 * time.Second)
@@ -325,13 +347,32 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 		successStyle.Render("✓"),
 		timeStyle.Render("("+formatDuration(transpileDuration)+")"))
 
-	// Step 3: Write output (with spinner)
+	// Step 3: Write output files (with spinner)
 	var writeDuration time.Duration
 	err = runWithSpinner("Write", func() error {
 		start := time.Now()
+
+		// Write .go file
 		err := os.WriteFile(outputPath, goSource, 0o644)
+		if err != nil {
+			return err
+		}
+
+		// Write .dmap file next to .dingo source
+		// Path: foo.dingo -> foo.dmap (NOT foo.go.dmap)
+		dmapPath := strings.TrimSuffix(inputPath, ".dingo") + ".dmap"
+		writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
+
+		mappings := transpileResult.Mappings
+
+		if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+			// .dmap write failure is non-fatal - warn but don't fail build
+			// This ensures build still works even if source mapping fails
+			fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+		}
+
 		writeDuration = time.Since(start)
-		return err
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write output: %w", err)

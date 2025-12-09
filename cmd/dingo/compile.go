@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
@@ -374,7 +375,7 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 		}
 
 		// Step 2: Transpile using existing pipeline (with spinner - this is the long one!)
-		var goSource []byte
+		var result transpiler.TranspileResult
 		var transpileDuration time.Duration
 		var transpileErr error
 
@@ -383,19 +384,24 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 			transpileErr = runWithSpinnerCompile("Transpile", func() error {
 				start := time.Now()
 				var err error
-				goSource, err = transpiler.PureASTTranspile(src, dingoFile)
+				result, err = transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
 				transpileDuration = time.Since(start)
 				return err
 			})
 		} else {
 			start := time.Now()
-			goSource, transpileErr = transpiler.PureASTTranspile(src, dingoFile)
+			result, transpileErr = transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
 			transpileDuration = time.Since(start)
 		}
 
 		if transpileErr != nil {
 			return nil, fmt.Errorf("transpilation error in %s: %w", dingoFile, transpileErr)
 		}
+
+		// Extract Go code and mappings from transpilation result
+		goSource := result.GoCode
+		mappings := result.Mappings
+
 		if buildUI != nil {
 			fmt.Printf("  %s Transpile   Done %s\n",
 				successStyle.Render("✓"),
@@ -409,20 +415,48 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 			}
 		}
 
-		// Step 3: Write .go file (with spinner if UI enabled)
+		// Step 3: Write output files (with spinner if UI enabled)
 		var writeDuration time.Duration
 		var writeErr error
 
 		if buildUI != nil {
 			writeErr = runWithSpinnerCompile("Write", func() error {
 				start := time.Now()
+
+				// Write .go file
 				err := os.WriteFile(goFile, goSource, 0644)
+				if err != nil {
+					return err
+				}
+
+				// Write .dmap file next to .dingo source with actual mappings
+				dmapPath := strings.TrimSuffix(dingoFile, ".dingo") + ".dmap"
+				writer := dmap.NewWriter(src, goSource)
+
+				if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+					// .dmap write failure is non-fatal - warn but don't fail build
+					fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+				}
+
 				writeDuration = time.Since(start)
-				return err
+				return nil
 			})
 		} else {
 			start := time.Now()
+
+			// Write .go file
 			writeErr = os.WriteFile(goFile, goSource, 0644)
+			if writeErr == nil {
+				// Write .dmap file next to .dingo source with actual mappings
+				dmapPath := strings.TrimSuffix(dingoFile, ".dingo") + ".dmap"
+				writer := dmap.NewWriter(src, goSource)
+
+				if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+					// .dmap write failure is non-fatal - warn but don't fail build
+					fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+				}
+			}
+
 			writeDuration = time.Since(start)
 		}
 

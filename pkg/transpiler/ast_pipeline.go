@@ -6,6 +6,8 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
+
+	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 )
 
 // TranspileResult holds the result of AST-based transpilation
@@ -21,6 +23,12 @@ type TranspileResult struct {
 
 	// Metadata contains transformation metadata for source maps
 	Metadata *TranspileMetadata
+
+	// Mappings contains source mappings from Dingo to Go (for .dmap generation)
+	Mappings []dingoast.SourceMapping
+
+	// DingoSource is the original Dingo source (for line index in .dmap)
+	DingoSource []byte
 }
 
 // TranspileMetadata contains metadata about the transpilation

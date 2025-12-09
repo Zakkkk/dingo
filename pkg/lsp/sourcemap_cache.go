@@ -1,66 +1,26 @@
 package lsp
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
+
+	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
-
-// MaxSupportedSourceMapVersion is the highest source map version this LSP can handle
-const MaxSupportedSourceMapVersion = 1
-
-// SourceMap represents a simple source map structure
-// This is a minimal implementation for LSP position translation
-type SourceMap struct {
-	Version  int              `json:"version"`
-	Mappings []PositionMapping `json:"mappings"`
-}
-
-// PositionMapping represents a single position mapping
-type PositionMapping struct {
-	DingoLine   int `json:"dingoLine"`
-	DingoColumn int `json:"dingoColumn"`
-	GoLine      int `json:"goLine"`
-	GoColumn    int `json:"goColumn"`
-}
-
-// MapToGenerated maps from Dingo source position to Go generated position
-func (sm *SourceMap) MapToGenerated(dingoLine, dingoCol int) (int, int) {
-	// Find closest mapping for the Dingo position
-	for _, m := range sm.Mappings {
-		if m.DingoLine == dingoLine {
-			return m.GoLine, m.GoColumn
-		}
-	}
-	// No mapping found - return identity mapping
-	return dingoLine, dingoCol
-}
-
-// MapToOriginal maps from Go generated position to Dingo source position
-func (sm *SourceMap) MapToOriginal(goLine, goCol int) (int, int) {
-	// Find closest mapping for the Go position
-	for _, m := range sm.Mappings {
-		if m.GoLine == goLine {
-			return m.DingoLine, m.DingoColumn
-		}
-	}
-	// No mapping found - return identity mapping
-	return goLine, goCol
-}
 
 // SourceMapGetter is an interface for retrieving source maps
 type SourceMapGetter interface {
-	Get(goFilePath string) (*SourceMap, error)
+	Get(goFilePath string) (*dmap.Reader, error)
 	Invalidate(goFilePath string)
 	InvalidateAll()
 	Size() int
 }
 
-// SourceMapCache provides in-memory caching of source maps with version validation
+// SourceMapCache provides in-memory caching of binary .dmap source maps
 type SourceMapCache struct {
 	mu      sync.RWMutex
-	maps    map[string]*SourceMap // mapPath -> SourceMap
+	maps    map[string]*dmap.Reader // dingoPath -> dmap.Reader
 	logger  Logger
 	maxSize int
 }
@@ -68,103 +28,59 @@ type SourceMapCache struct {
 // NewSourceMapCache creates a new source map cache
 func NewSourceMapCache(logger Logger) (*SourceMapCache, error) {
 	return &SourceMapCache{
-		maps:    make(map[string]*SourceMap),
+		maps:    make(map[string]*dmap.Reader),
 		logger:  logger,
 		maxSize: 100, // LRU limit (future: implement eviction)
 	}, nil
 }
 
-// Get retrieves a source map from cache or loads it from disk
-func (c *SourceMapCache) Get(goFilePath string) (*SourceMap, error) {
-	mapPath := goFilePath + ".map"
+// Get retrieves a source map from cache or loads it from disk.
+// Path translation: goFilePath (.go) → dingoPath (.dingo) → dmapPath (.dmap)
+func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
+	// Translate: foo.go -> foo.dingo -> foo.dmap
+	dingoPath := strings.TrimSuffix(goFilePath, ".go") + ".dingo"
+	dmapPath := strings.TrimSuffix(dingoPath, ".dingo") + ".dmap"
 
-	// CRITICAL FIX C5: Safe double-check locking pattern
-	// Try read lock first (optimistic)
-	c.mu.RLock()
-	if sm, ok := c.maps[mapPath]; ok {
-		c.mu.RUnlock()
-		c.logger.Debugf("Source map cache hit: %s", mapPath)
-		return sm, nil
-	}
-	c.mu.RUnlock()
-
-	// Cache miss, load from disk (write lock)
+	// CRITICAL FIX C3: Simplified locking (correctness over optimization)
+	// Hold write lock during entire operation to avoid memory model issues
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// CRITICAL: Re-check under write lock (safe - blocks all readers)
-	// This prevents race where another goroutine loaded it between RUnlock and Lock
-	if sm, ok := c.maps[mapPath]; ok {
-		return sm, nil
+	// Check cache under write lock
+	if reader, ok := c.maps[dingoPath]; ok {
+		c.logger.Debugf("Source map cache hit: %s", dmapPath)
+		return reader, nil
 	}
 
-	// Load source map
-	data, err := os.ReadFile(mapPath)
+	// Load binary .dmap file (still holding lock)
+	reader, err := dmap.Open(dmapPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("source map not found: %s (transpile .dingo file first: dingo build)", mapPath)
+			return nil, fmt.Errorf("source map not found: %s (transpile .dingo file first: dingo build)", dmapPath)
 		}
-		return nil, fmt.Errorf("failed to read source map %s: %w", mapPath, err)
+		return nil, fmt.Errorf("failed to read source map %s: %w", dmapPath, err)
 	}
 
-	// Parse JSON
-	sm, err := c.parseSourceMap(data)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source map %s: %w", mapPath, err)
-	}
+	// Store with consistent key (dingoPath)
+	c.maps[dingoPath] = reader
+	c.logger.Infof("Source map loaded: %s (%d entries)", dmapPath, reader.EntryCount())
 
-	// Validate version
-	if err := c.validateVersion(sm, mapPath); err != nil {
-		return nil, err
-	}
-
-	// Store with consistent key
-	c.maps[mapPath] = sm
-	c.logger.Infof("Source map loaded: %s (version %d, %d mappings)", mapPath, sm.Version, len(sm.Mappings))
-
-	return sm, nil
-}
-
-func (c *SourceMapCache) parseSourceMap(data []byte) (*SourceMap, error) {
-	var sm SourceMap
-	if err := json.Unmarshal(data, &sm); err != nil {
-		return nil, fmt.Errorf("JSON parse error: %w", err)
-	}
-	return &sm, nil
-}
-
-func (c *SourceMapCache) validateVersion(sm *SourceMap, mapPath string) error {
-	// Default to version 1 if not specified (legacy files from Phase 3)
-	if sm.Version == 0 {
-		sm.Version = 1
-		c.logger.Debugf("Source map %s missing version field, assuming version 1", mapPath)
-	}
-
-	if sm.Version > MaxSupportedSourceMapVersion {
-		return fmt.Errorf(
-			"unsupported source map version %d (max: %d). "+
-				"Update dingo-lsp to latest version or downgrade dingo transpiler. "+
-				"File: %s",
-			sm.Version,
-			MaxSupportedSourceMapVersion,
-			mapPath,
-		)
-	}
-
-	return nil
+	return reader, nil
 }
 
 // Invalidate removes a source map from cache (called after file changes)
 func (c *SourceMapCache) Invalidate(goFilePath string) {
-	mapPath := goFilePath + ".map"
+	dingoPath := strings.TrimSuffix(goFilePath, ".go") + ".dingo"
+	dmapPath := strings.TrimSuffix(dingoPath, ".dingo") + ".dmap"
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// CRITICAL FIX C3: Use mapPath as key (consistent with Get())
-	if _, ok := c.maps[mapPath]; ok {
-		delete(c.maps, mapPath)
-		c.logger.Debugf("Source map invalidated: %s", mapPath)
+	// CRITICAL FIX C3: Use dingoPath as key (consistent with Get())
+	if reader, ok := c.maps[dingoPath]; ok {
+		reader.Close() // Release resources (currently no-op, but future-proofs for mmap)
+		delete(c.maps, dingoPath)
+		c.logger.Debugf("Source map invalidated: %s", dmapPath)
 	}
 }
 
@@ -174,7 +90,13 @@ func (c *SourceMapCache) InvalidateAll() {
 	defer c.mu.Unlock()
 
 	count := len(c.maps)
-	c.maps = make(map[string]*SourceMap)
+
+	// Close all readers
+	for _, reader := range c.maps {
+		reader.Close()
+	}
+
+	c.maps = make(map[string]*dmap.Reader)
 	c.logger.Infof("All source maps invalidated (%d entries cleared)", count)
 }
 

@@ -40,7 +40,7 @@ func (t *Translator) TranslatePosition(
 	log.Printf("[LSP Translator] TranslatePosition START: direction=%s, uri=%s, line=%d, col=%d",
 		dirName, uri.Filename(), pos.Line, pos.Character)
 
-	// Convert LSP position (0-based) to source map position (1-based)
+	// Convert LSP position (0-based) to 1-based line:column
 	line := int(pos.Line) + 1
 	col := int(pos.Character) + 1
 
@@ -52,8 +52,8 @@ func (t *Translator) TranslatePosition(
 		goPath = uri.Filename()
 	}
 
-	// Load source map
-	sm, err := t.cache.Get(goPath)
+	// Load source map reader
+	reader, err := t.cache.Get(goPath)
 	if err != nil {
 		// CRITICAL FIX C6: Still translate URI even with 1:1 positions
 		// Bug was: returning .dingo URI to gopls when source map missing
@@ -69,17 +69,85 @@ func (t *Translator) TranslatePosition(
 		return uri, pos, nil
 	}
 
-	// Translate position
+	// Translate position using binary .dmap reader
 	var newLine, newCol int
 	var newURI protocol.DocumentURI
 
 	if dir == DingoToGo {
-		log.Printf("[LSP Translator] BEFORE MapToGenerated: line=%d, col=%d", line, col)
-		newLine, newCol = sm.MapToGenerated(line, col)
-		log.Printf("[LSP Translator] AFTER MapToGenerated: newLine=%d, newCol=%d", newLine, newCol)
+		// Convert Dingo line:col → byte offset
+		dingoByteOffset := reader.DingoLineToByteOffset(line)
+		if dingoByteOffset < 0 {
+			// Line out of range - return identity mapping
+			log.Printf("[LSP Translator] Dingo line %d out of range, using identity mapping", line)
+			newLine, newCol = line, col
+		} else {
+			// Add column offset (col is 1-based, so subtract 1)
+			dingoByteOffset += (col - 1)
+
+			// Look up mapping: Dingo byte offset → Go byte range
+			goStart, goEnd, kind := reader.FindByDingoPos(dingoByteOffset)
+
+			// If no mapping found (identity), goStart == dingoByteOffset
+			if kind == "" {
+				// Identity mapping - translate coordinates directly
+				log.Printf("[LSP Translator] No mapping for Dingo position, using identity")
+				newLine, newCol = line, col
+			} else {
+				// Proportional mapping within the range
+				// For now, map to start of Go range (simple approach)
+				// Future: could do proportional offset like dmap lookup.go would
+				log.Printf("[LSP Translator] Mapped Dingo byte %d to Go byte range [%d, %d), kind=%s",
+					dingoByteOffset, goStart, goEnd, kind)
+
+				// Convert Go byte offset → line:column
+				newLine = reader.GoByteToLine(goStart)
+				lineStartOffset := reader.GoLineToByteOffset(newLine)
+				if lineStartOffset >= 0 {
+					newCol = goStart - lineStartOffset + 1 // +1 for 1-based
+				} else {
+					newCol = 1
+				}
+			}
+		}
+
+		log.Printf("[LSP Translator] AFTER DingoToGo: newLine=%d, newCol=%d", newLine, newCol)
 		newURI = lspuri.File(goPath)
 	} else {
-		newLine, newCol = sm.MapToOriginal(line, col)
+		// Go → Dingo translation
+		// Convert Go line:col → byte offset
+		goByteOffset := reader.GoLineToByteOffset(line)
+		if goByteOffset < 0 {
+			// Line out of range - return identity mapping
+			log.Printf("[LSP Translator] Go line %d out of range, using identity mapping", line)
+			newLine, newCol = line, col
+		} else {
+			// Add column offset (col is 1-based, so subtract 1)
+			goByteOffset += (col - 1)
+
+			// Look up mapping: Go byte offset → Dingo byte range
+			dingoStart, dingoEnd, kind := reader.FindByGoPos(goByteOffset)
+
+			// If no mapping found (identity), dingoStart == goByteOffset
+			if kind == "" {
+				// Identity mapping - translate coordinates directly
+				log.Printf("[LSP Translator] No mapping for Go position, using identity")
+				newLine, newCol = line, col
+			} else {
+				// Proportional mapping within the range
+				log.Printf("[LSP Translator] Mapped Go byte %d to Dingo byte range [%d, %d), kind=%s",
+					goByteOffset, dingoStart, dingoEnd, kind)
+
+				// Convert Dingo byte offset → line:column
+				newLine = reader.DingoByteToLine(dingoStart)
+				lineStartOffset := reader.DingoLineToByteOffset(newLine)
+				if lineStartOffset >= 0 {
+					newCol = dingoStart - lineStartOffset + 1 // +1 for 1-based
+				} else {
+					newCol = 1
+				}
+			}
+		}
+
 		dingoPath := goToDingoPath(goPath)
 		newURI = lspuri.File(dingoPath)
 	}
