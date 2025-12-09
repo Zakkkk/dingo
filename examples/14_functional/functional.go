@@ -39,7 +39,7 @@ type Order struct {
 // ============================================================================
 
 func demonstrateCoreFunctions() {
-	fmt.Println("=== Core Functions ===")
+	fmt.Println("=== Core Functions ===\n")
 
 	numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
@@ -82,7 +82,7 @@ func demonstrateCoreFunctions() {
 // ============================================================================
 
 func demonstrateIndexAware() {
-	fmt.Println("\n=== Index-Aware Functions ===")
+	fmt.Println("\n=== Index-Aware Functions ===\n")
 
 	words := []string{"apple", "banana", "cherry", "date"}
 
@@ -109,7 +109,7 @@ func demonstrateIndexAware() {
 // ============================================================================
 
 func demonstrateSearch() {
-	fmt.Println("\n=== Search & Predicate Functions ===")
+	fmt.Println("\n=== Search & Predicate Functions ===\n")
 
 	products := []Product{
 		{1, "Laptop", 999.99, "Electronics", true},
@@ -164,7 +164,7 @@ func demonstrateSearch() {
 // ============================================================================
 
 func demonstrateAdvanced() {
-	fmt.Println("\n=== Advanced Functions ===")
+	fmt.Println("\n=== Advanced Functions ===\n")
 
 	orders := []Order{
 		{1, "Alice", []string{"Laptop", "Mouse"}, 1029.98},
@@ -216,7 +216,7 @@ func demonstrateAdvanced() {
 // ============================================================================
 
 func demonstrateSliceManipulation() {
-	fmt.Println("\n=== Slice Manipulation ===")
+	fmt.Println("\n=== Slice Manipulation ===\n")
 
 	numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
@@ -255,7 +255,7 @@ func demonstrateSliceManipulation() {
 // ============================================================================
 
 func demonstrateChaining() {
-	fmt.Println("\n=== Chaining Operations ===")
+	fmt.Println("\n=== Chaining Operations ===\n")
 
 	products := []Product{
 		{1, "Laptop", 999.99, "Electronics", true},
@@ -301,7 +301,7 @@ func demonstrateChaining() {
 // ============================================================================
 
 func demonstrateRealWorld() {
-	fmt.Println("\n=== Real-World: Order Processing ===")
+	fmt.Println("\n=== Real-World: Order Processing ===\n")
 
 	orders := []Order{
 		{1, "Alice", []string{"Laptop", "Mouse"}, 1029.98},

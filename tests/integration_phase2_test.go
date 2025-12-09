@@ -76,7 +76,6 @@ func main() {
 	// Test case 2: Enum type generation
 	t.Run("enum_type_generation", func(t *testing.T) {
 		dingoFile := filepath.Join(tmpDir, "test_enum.dingo")
-		// Using Go-idiomatic pattern: NewStatus*() constructors + type switch
 		dingoCode := `package main
 
 enum Status {
@@ -86,9 +85,8 @@ enum Status {
 }
 
 func main() {
-	s := NewStatusActive()
-	switch s.(type) {
-	case StatusActive:
+	s := StatusActive()
+	if s.IsActive() {
 		println("Status is active")
 	}
 }
@@ -128,8 +126,8 @@ func main() {
 		if !strings.Contains(goCode, "StatusPending") {
 			t.Error("Generated code missing StatusPending struct")
 		}
-		if !strings.Contains(goCode, "NewStatusActive") {
-			t.Error("Generated code missing NewStatusActive() constructor")
+		if !strings.Contains(goCode, "IsActive()") {
+			t.Error("Generated code missing IsActive() method")
 		}
 
 		t.Log("✓ Integration test passed: Enum generation working correctly")

@@ -6,10 +6,6 @@ import (
 	"github.com/MadAppGang/dingo/pkg/feature"
 )
 
-// TestEnumConstructorsPlugin_Transform tests enum constructor generation
-// Note: We don't generate Is*() methods - users should use Go's native type switch:
-//   switch s.(type) { case StatusPending: ... }
-// This is more Go-idiomatic than helper methods.
 func TestEnumConstructorsPlugin_Transform(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -32,21 +28,35 @@ func main() {
 }`,
 			expected: `package main
 
-type Status interface { isStatus() }
+type Status interface { isStatus(); IsPending() bool; IsActive() bool; IsDone() bool }
 
-type StatusPending struct {}
+type StatusPending struct{}
 func (StatusPending) isStatus() {}
 func NewStatusPending() Status { return StatusPending{} }
 
-type StatusActive struct {}
+type StatusActive struct{}
 func (StatusActive) isStatus() {}
 func NewStatusActive() Status { return StatusActive{} }
 
-type StatusDone struct {}
+type StatusDone struct{}
 func (StatusDone) isStatus() {}
 func NewStatusDone() Status { return StatusDone{} }
 
+func IsPending(s Status) bool { _, ok := s.(StatusPending); return ok }
+func IsActive(s Status) bool { _, ok := s.(StatusActive); return ok }
+func IsDone(s Status) bool { _, ok := s.(StatusDone); return ok }
 
+func (s StatusPending) IsPending() bool { return true }
+func (s StatusPending) IsActive() bool { return false }
+func (s StatusPending) IsDone() bool { return false }
+
+func (s StatusActive) IsPending() bool { return false }
+func (s StatusActive) IsActive() bool { return true }
+func (s StatusActive) IsDone() bool { return false }
+
+func (s StatusDone) IsPending() bool { return false }
+func (s StatusDone) IsActive() bool { return false }
+func (s StatusDone) IsDone() bool { return true }
 
 func main() {
 	status := NewStatusPending()
@@ -67,19 +77,26 @@ func test() Result<int, error> {
 }`,
 			expected: `package main
 
-type Result[T, E any] interface { isResult() }
+type Result[T, E any] interface { isResult(); IsOk() bool; IsErr() bool }
 
-type ResultOk[T, E any] struct {Value T}
-func (ResultOk[T, E any]) isResult() {}
-func NewResultOk[T, E any](value T) Result[T, E any] { return ResultOk[T, E any]{Value: value} }
+type ResultOk[T, E any] struct{value0 T}
+func (ResultOk[T, E]) isResult() {}
+func NewResultOk[T, E any](value0 T) Result[T, E] { return ResultOk[T, E]{value0} }
 
-type ResultErr[T, E any] struct {Value E}
-func (ResultErr[T, E any]) isResult() {}
-func NewResultErr[T, E any](value E) Result[T, E any] { return ResultErr[T, E any]{Value: value} }
+type ResultErr[T, E any] struct{value0 E}
+func (ResultErr[T, E]) isResult() {}
+func NewResultErr[T, E any](value0 E) Result[T, E] { return ResultErr[T, E]{value0} }
 
+func IsOk[T, E any](r Result[T, E]) bool { _, ok := r.(ResultOk[T, E]); return ok }
+func IsErr[T, E any](r Result[T, E]) bool { _, ok := r.(ResultErr[T, E]); return ok }
 
+func (r ResultOk[T, E]) IsOk() bool { return true }
+func (r ResultOk[T, E]) IsErr() bool { return false }
 
-func test() Result<int, error> {
+func (r ResultErr[T, E]) IsOk() bool { return false }
+func (r ResultErr[T, E]) IsErr() bool { return true }
+
+func test() Result[int, error] {
 	return NewResultOk(42)
 }`,
 		},

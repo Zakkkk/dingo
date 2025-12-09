@@ -179,7 +179,7 @@ func processUserProfile(userId int) dgo.Result[string, string] {
 }
 
 func main() {
-	fmt.Println("=== Guard Let Demo ===")
+	fmt.Println("=== Guard Let Demo ===\n")
 
 	// Test with valid user
 	fmt.Println("User 1 (Alice with settings):")
