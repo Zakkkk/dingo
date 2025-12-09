@@ -306,6 +306,7 @@ func (ra *ReturnAnalyzer) isAlreadyWrapped(expr ast.Expr) bool {
 // Detects:
 //   - Error variable names: err, error, userErr, etc.
 //   - Error constructor calls: fmt.Errorf, errors.New, errors.Wrap, etc.
+//   - Result.MustErr() calls: result.MustErr(), r.MustErr()
 //   - Address-of error expressions: &myError
 func (ra *ReturnAnalyzer) isErrorExpression(expr ast.Expr) bool {
 	switch e := expr.(type) {
@@ -325,12 +326,15 @@ func (ra *ReturnAnalyzer) isErrorExpression(expr ast.Expr) bool {
 			}
 		}
 	case *ast.CallExpr:
-		// Check for error constructor functions
+		// Check for error constructor functions and Result.MustErr() calls
 		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
 			funcName := sel.Sel.Name
 			// Common error constructors: fmt.Errorf, errors.New, errors.Wrap, etc.
 			switch funcName {
 			case "Errorf", "New", "Wrap", "Wrapf", "WithMessage", "WithStack":
+				return true
+			// Result.MustErr() returns the error type
+			case "MustErr", "UnwrapErr":
 				return true
 			}
 		}
