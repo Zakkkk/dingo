@@ -9,10 +9,8 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/generator"
-	"github.com/MadAppGang/dingo/pkg/goparser/parser"
+	"github.com/MadAppGang/dingo/pkg/parser"
 	"github.com/MadAppGang/dingo/pkg/plugin"
-	// Preprocessor removed - using AST-based approach now
-	// "github.com/MadAppGang/dingo/pkg/preprocessor"
 )
 
 // simpleLogger implements plugin.Logger
@@ -51,11 +49,7 @@ func runRegenerate(args []string) error {
 		}
 	}
 
-	// TODO: Preprocessor removed - AST-based approach now
-	// For now, parse directly without preprocessing
-	// In future, parser will handle Dingo syntax natively
-
-	// Parse Dingo source directly
+	// Parse Dingo source directly using the Dingo parser
 	file, err := parser.ParseFile(fset, dingoFile, dingoSrc, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("parse failed: %w", err)
