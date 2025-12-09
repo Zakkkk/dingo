@@ -12,14 +12,14 @@ enum Status {
 
 func getStatusMessage(s Status) string {
 	return match s {
-		Status_Pending => "Waiting to start",
-		Status_Active => "Currently running",
-		Status_Complete => "Finished",
+		Pending => "Waiting to start",
+		Active => "Currently running",
+		Complete => "Finished",
 	}
 }
 
 func main() {
-	status := Status_Active()
-	msg := getStatusMessage(status)
+	let status = Status.Active()
+	let msg = getStatusMessage(status)
 	println(msg)
 }
