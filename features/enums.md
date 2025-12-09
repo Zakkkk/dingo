@@ -63,13 +63,16 @@ enum Status {
     Rejected
 }
 
-// Usage
-let status = Status.Pending
+// Usage - constructor functions (Go-idiomatic)
+let status = NewStatusPending()
+
+// Or direct struct literal
+let status = StatusPending{}
 
 match status {
-    Pending => "waiting",
-    Approved => "done",
-    Rejected => "cancelled"
+    StatusPending => "waiting",
+    StatusApproved => "done",
+    StatusRejected => "cancelled"
     // Compiler enforces all cases
 }
 ```
@@ -123,6 +126,28 @@ impl Status {
 
 ## Transpilation Strategy
 
+### Design Decision: Interface-Based Sum Types
+
+Dingo uses **interface-based sum types** instead of tagged structs because:
+
+1. **True sum types** - Only one variant's data exists at a time
+2. **Type-safe** - Must type-assert to access fields (compiler enforces)
+3. **Memory efficient** - Only active variant allocated
+4. **Go-idiomatic** - How go/ast, protobuf, and stdlib implement unions
+
+**Why NOT tagged struct?**
+```go
+// ❌ Tagged struct (product type) - NOT USED
+type Status struct {
+    tag         StatusTag
+    pendingData *PendingData  // nil when not Pending - but still accessible!
+    activeData  *ActiveData   // nil when not Active
+}
+// Problem: Nothing stops Go code from accessing wrong variant's fields
+```
+
+### Actual Transpilation
+
 ```dingo
 // Dingo source
 enum Status {
@@ -133,37 +158,35 @@ enum Status {
 ```
 
 ```go
-// Transpiled Go (CamelCase naming - Go idiomatic)
-type Status int
-
-const (
-    StatusPending Status = iota  // CamelCase: StatusPending (not Status_Pending)
-    StatusApproved
-    StatusRejected
-)
-
-var __StatusAll = []Status{
-    StatusPending,
-    StatusApproved,
-    StatusRejected,
+// Transpiled Go - Interface-based pattern (true sum type)
+type Status interface {
+    isStatus() // unexported marker = sealed interface
 }
 
-func (s Status) String() string {
-    switch s {
-    case StatusPending:
-        return "Pending"
-    case StatusApproved:
-        return "Approved"
-    case StatusRejected:
-        return "Rejected"
-    default:
-        return fmt.Sprintf("Status(%d)", s)
-    }
-}
+type StatusPending struct{}
+func (StatusPending) isStatus() {}
+func NewStatusPending() Status { return StatusPending{} }
 
-// Validation function (used in tests/asserts)
-func (s Status) isValid() bool {
-    return s >= StatusPending && s <= StatusRejected
+type StatusApproved struct{}
+func (StatusApproved) isStatus() {}
+func NewStatusApproved() Status { return StatusApproved{} }
+
+type StatusRejected struct{}
+func (StatusRejected) isStatus() {}
+func NewStatusRejected() Status { return StatusRejected{} }
+```
+
+### Pattern Matching → Type Switch
+
+```go
+// Dingo match compiles to Go's idiomatic type switch
+switch v := status.(type) {
+case StatusPending:
+    return "waiting"
+case StatusApproved:
+    return "done"
+case StatusRejected:
+    return "cancelled"
 }
 ```
 
@@ -234,7 +257,8 @@ enum Status {
 let s: Status = 999  // Compile error
 
 // ✅ Only valid constructors
-let s = Status.Pending  // OK
+let s = NewStatusPending()  // OK
+let s = StatusPending{}     // Also OK
 ```
 
 ### Exhaustiveness
@@ -242,17 +266,17 @@ let s = Status.Pending  // OK
 ```dingo
 // ❌ Compile error - missing case
 match status {
-    Pending => "waiting",
-    Approved => "done"
-    // ERROR: Rejected not handled
+    StatusPending => "waiting",
+    StatusApproved => "done"
+    // ERROR: StatusRejected not handled
 }
 ```
 
 ### String Conversion
 
 ```dingo
-let status = Status.Pending
-println(status)  // Prints: "Pending"
+let status = NewStatusPending()
+println(status)  // Prints: "StatusPending" (or implement String() method)
 ```
 
 ### Iteration

@@ -3,8 +3,8 @@
 package main
 
 import (
-	"github.com/MadAppGang/dingo/runtime/tuples"
 	"fmt"
+	"github.com/MadAppGang/dingo/runtime/tuples"
 	"math"
 )
 

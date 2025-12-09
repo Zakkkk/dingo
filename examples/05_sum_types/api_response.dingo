@@ -2,11 +2,7 @@
 // Sum types model "one of several possible shapes" - perfect for APIs
 package main
 
-import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-)
+import "fmt"
 
 // APIResponse models all possible responses from our payment API
 // Each variant has different data - impossible to confuse them
@@ -28,64 +24,61 @@ enum PaymentStatus {
 }
 
 // HandleAPIResponse processes the response appropriately
-// Each variant requires different handling - compiler ensures we handle all
+// Uses type switch - idiomatic Go pattern for sum types
 func HandleAPIResponse(resp APIResponse) (bool, string) {
-	match resp {
-		Success { transactionID, amount } =>
-			return true, fmt.Sprintf("Payment of $%.2f succeeded: %s", amount, transactionID),
-
-		ValidationError { field, message } =>
-			return false, fmt.Sprintf("Invalid %s: %s", field, message),
-
-		AuthError { code, reason } =>
-			return false, fmt.Sprintf("Auth failed (%d): %s", code, reason),
-
-		RateLimited { retryAfter } =>
-			return false, fmt.Sprintf("Rate limited - retry in %d seconds", retryAfter),
-
-		ServerError { requestID } =>
-			return false, fmt.Sprintf("Server error - reference: %s", requestID),
+	switch v := resp.(type) {
+	case APIResponseSuccess:
+		return true, fmt.Sprintf("Payment of $%.2f succeeded: %s", v.amount, v.transactionID)
+	case APIResponseValidationError:
+		return false, fmt.Sprintf("Invalid %s: %s", v.field, v.message)
+	case APIResponseAuthError:
+		return false, fmt.Sprintf("Auth failed (%d): %s", v.code, v.reason)
+	case APIResponseRateLimited:
+		return false, fmt.Sprintf("Rate limited - retry in %d seconds", v.retryAfter)
+	case APIResponseServerError:
+		return false, fmt.Sprintf("Server error - reference: %s", v.requestID)
 	}
+	return false, "unknown response"
 }
 
 // CanRetryPayment checks if we should retry a failed payment
 func CanRetryPayment(status PaymentStatus) bool {
-	match status {
-		Failed { canRetry, .. } => return canRetry,
-		Pending => return true,  // Not started yet
-		_ => return false,       // Other states can't retry
+	switch v := status.(type) {
+	case PaymentStatusFailed:
+		return v.canRetry
+	case PaymentStatusPending:
+		return true // Not started yet
+	default:
+		return false // Other states can't retry
 	}
 }
 
 // GetStatusMessage generates user-friendly status message
 func GetStatusMessage(status PaymentStatus) string {
-	match status {
-		Pending =>
-			"Your payment is pending",
-
-		Processing { processorID } =>
-			fmt.Sprintf("Processing with %s", processorID),
-
-		Completed { transactionID, .. } =>
-			fmt.Sprintf("Payment complete: %s", transactionID),
-
-		Failed { reason, canRetry } if canRetry =>
-			fmt.Sprintf("Payment failed: %s (you can retry)", reason),
-
-		Failed { reason, .. } =>
-			fmt.Sprintf("Payment failed: %s", reason),
-
-		Refunded { amount, .. } =>
-			fmt.Sprintf("$%.2f has been refunded", amount),
+	switch v := status.(type) {
+	case PaymentStatusPending:
+		return "Your payment is pending"
+	case PaymentStatusProcessing:
+		return fmt.Sprintf("Processing with %s", v.processorID)
+	case PaymentStatusCompleted:
+		return fmt.Sprintf("Payment complete: %s", v.transactionID)
+	case PaymentStatusFailed:
+		if v.canRetry {
+			return fmt.Sprintf("Payment failed: %s (you can retry)", v.reason)
+		}
+		return fmt.Sprintf("Payment failed: %s", v.reason)
+	case PaymentStatusRefunded:
+		return fmt.Sprintf("$%.2f has been refunded", v.amount)
 	}
+	return "Unknown status"
 }
 
 func main() {
-	// Simulate API responses
+	// Simulate API responses - use constructor functions (Go-idiomatic)
 	responses := []APIResponse{
-		APIResponse.Success{transactionID: "TXN-123", amount: 99.99},
-		APIResponse.ValidationError{field: "card_number", message: "invalid format"},
-		APIResponse.RateLimited{retryAfter: 30},
+		NewAPIResponseSuccess("TXN-123", 99.99),
+		NewAPIResponseValidationError("card_number", "invalid format"),
+		NewAPIResponseRateLimited(30),
 	}
 
 	fmt.Println("=== API Responses ===")
@@ -98,12 +91,12 @@ func main() {
 		fmt.Printf("[%s] %s\n", status, msg)
 	}
 
-	// Simulate payment statuses
+	// Simulate payment statuses - use constructor functions
 	statuses := []PaymentStatus{
-		PaymentStatus.Pending{},
-		PaymentStatus.Processing{processorID: "STRIPE"},
-		PaymentStatus.Failed{reason: "card declined", canRetry: true},
-		PaymentStatus.Completed{transactionID: "TXN-456", completedAt: 1699900000},
+		NewPaymentStatusPending(),
+		NewPaymentStatusProcessing("STRIPE"),
+		NewPaymentStatusFailed("card declined", true),
+		NewPaymentStatusCompleted("TXN-456", 1699900000),
 	}
 
 	fmt.Println("\n=== Payment Statuses ===")

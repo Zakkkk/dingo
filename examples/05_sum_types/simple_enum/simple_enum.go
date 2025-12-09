@@ -47,8 +47,8 @@ func NewShapeRectangle(width float64, height float64) Shape {
 
 // describeStatus shows pattern matching on simple enum
 func describeStatus(s Status) string {
-	val := s
-	switch val.(type) {
+	val1 := s
+	switch val1.(type) {
 	case StatusPending:
 		return "Waiting to start"
 	case StatusActive:
@@ -61,8 +61,8 @@ func describeStatus(s Status) string {
 
 // describeShape shows pattern matching with data extraction
 func describeShape(s Shape) string {
-	val1 := s
-	switch val1.(type) {
+	val := s
+	switch val.(type) {
 	case ShapePoint:
 		return "A point (no dimensions)"
 	case ShapeCircle:

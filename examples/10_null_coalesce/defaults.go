@@ -92,8 +92,6 @@ func GetDatabaseURL(env *EnvConfig) string {
 func GetRegion(env *EnvConfig) string {
 	// Use len(env?.Region) > 0 to check if region is set and non-empty
 	// Null-state inference: env?.Region in true branch becomes *env.Region (no IIFE)
-	// aws := os.Getenv("AWS_REGION")
-	// def := os.Getenv("REGION")
 	var tmp int
 	if env != nil && env.Region != nil {
 		tmp = len(*env.Region)

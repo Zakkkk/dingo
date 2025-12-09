@@ -45,13 +45,13 @@ func TransferFunds(db *sql.DB, fromID int, toID int, amount float64) dgo.Result[
 	// Find source user - check for errors
 	fromResult := FindUserByID(db, fromID)
 	if fromResult.IsErr() {
-		return dgo.Err[bool](fromResult.MustErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
+		return dgo.Ok[bool, DBError](fromResult.MustErr()) // Implicit wrapping → ResultBoolDBErrorErr(...)
 	}
 
 	// Find destination user
 	toResult := FindUserByID(db, toID)
 	if toResult.IsErr() {
-		return dgo.Err[bool](toResult.MustErr())
+		return dgo.Ok[bool, DBError](toResult.MustErr())
 	}
 
 	// In real code: begin transaction, update balances, commit

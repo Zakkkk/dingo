@@ -23,8 +23,8 @@ func NewStatusDone() Status  { return StatusDone{} }
 // Test 1: Assignment Context
 func testAssignment(status Status) {
 	var x string
-	val := status
-	switch val.(type) {
+	val5 := status
+	switch val5.(type) {
 	case StatusPending:
 		x = "waiting"
 	case StatusActive:
@@ -37,8 +37,8 @@ func testAssignment(status Status) {
 
 // Test 2: Return Context
 func testReturn(status Status) string {
-	val1 := status
-	switch val1.(type) {
+	val4 := status
+	switch val4.(type) {
 	case StatusPending:
 		return "waiting"
 	case StatusActive:
@@ -52,8 +52,8 @@ func testReturn(status Status) string {
 // Test 3: Argument Context
 func testArgument(status Status) {
 	var result string
-	val2 := status
-	switch val2.(type) {
+	val3 := status
+	switch val3.(type) {
 	case StatusPending:
 		result = "waiting"
 	case StatusActive:
@@ -68,8 +68,8 @@ func testArgument(status Status) {
 func testMultiple(status Status) string {
 	// Assignment context
 	var msg string
-	val3 := status
-	switch val3.(type) {
+	val2 := status
+	switch val2.(type) {
 	case StatusPending:
 		msg = "Job is pending"
 	case StatusActive:
@@ -80,8 +80,8 @@ func testMultiple(status Status) string {
 
 	// Argument context
 	var result string
-	val4 := status
-	switch val4.(type) {
+	val1 := status
+	switch val1.(type) {
 	case StatusPending:
 		result = "PENDING"
 	case StatusActive:
@@ -95,8 +95,8 @@ func testMultiple(status Status) string {
 	fmt.Println("Message:", msg)
 
 	// Return context
-	val5 := status
-	switch val5.(type) {
+	val := status
+	switch val.(type) {
 	case StatusPending:
 		return "waiting for resources"
 	case StatusActive:
