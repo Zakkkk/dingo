@@ -257,7 +257,10 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 		// Look for LPAREN that could start a tuple literal
 		if t.Kind == tokenizer.LPAREN {
 			// Skip if this is a function call (preceded by IDENT or RPAREN)
-			if prevToken.Kind == tokenizer.IDENT || prevToken.Kind == tokenizer.RPAREN {
+			// Also skip if preceded by FUNC keyword (function literal parameters)
+			// Also skip if preceded by RBRACKET (generic function parameters: func F[T any](...))
+			if prevToken.Kind == tokenizer.IDENT || prevToken.Kind == tokenizer.RPAREN ||
+				prevToken.Kind == tokenizer.FUNC || prevToken.Kind == tokenizer.RBRACKET {
 				prevPrevToken = prevToken
 				prevToken = t
 				continue
@@ -284,6 +287,7 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 			hasCommaAtDepth1 := false
 			var elements []string
 			elemStart := int(t.End) - 1
+			var rparenEnd int // Track the end position of the closing paren
 
 			for depth > 0 {
 				inner := tok.NextToken()
@@ -297,16 +301,11 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 				case tokenizer.RPAREN:
 					depth--
 					if depth == 0 {
+						rparenEnd = int(inner.End) - 1
 						// Collect final element
 						if hasCommaAtDepth1 {
 							elemStr := string(src[elemStart : int(inner.Pos)-1])
 							elements = append(elements, trimTypeWhitespace(elemStr))
-
-							locs = append(locs, tupleLiteralLoc{
-								start:    startPos,
-								end:      int(inner.End) - 1,
-								elements: elements,
-							})
 						}
 					}
 				case tokenizer.COMMA:
@@ -318,6 +317,31 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 						hasCommaAtDepth1 = true
 					}
 				}
+			}
+
+			// After collecting elements, check if this is actually a lambda parameter list
+			// by looking ahead for => (TypeScript-style lambda)
+			if hasCommaAtDepth1 && len(elements) >= 2 {
+				// Peek at the next token to see if it's => (lambda indicator)
+				nextTok := tok.NextToken()
+				if nextTok.Kind == tokenizer.ARROW {
+					// This is a lambda parameter list (acc, u) => ..., not a tuple
+					// Don't add to locs, continue processing
+					prevPrevToken = prevToken
+					prevToken = nextTok
+					continue
+				}
+				// Not a lambda, it's a tuple literal - add to locs
+				locs = append(locs, tupleLiteralLoc{
+					start:    startPos,
+					end:      rparenEnd,
+					elements: elements,
+				})
+				// Restore position since we consumed nextTok
+				// Note: We can't easily restore, so we update prevToken
+				prevPrevToken = prevToken
+				prevToken = nextTok
+				continue
 			}
 		}
 
