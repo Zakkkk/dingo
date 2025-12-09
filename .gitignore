@@ -1,7 +1,7 @@
 # Build artifacts
-dingo
-todo_cli
-07_tuples
+/dingo
+/todo_cli
+/07_tuples
 *_bin
 *.test
 *.out
