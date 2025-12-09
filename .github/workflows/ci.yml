@@ -56,7 +56,7 @@ jobs:
         go build $(go list ./examples/... | grep -v /07_tuples)
 
     - name: Run unit tests
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts)
+      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts | grep -v /07_tuples)
 
     - name: Run golden tests
       run: go test -v ./tests -run TestGoldenFiles
