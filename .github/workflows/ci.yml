@@ -45,9 +45,7 @@ jobs:
 
     - name: Transpile examples
       run: |
-        # Note: 07_tuples is excluded because it requires full tuple support
-        # which is being refactored. The .go files are pre-committed.
-        for dingo_file in $(find examples -name "*.dingo" | grep -v "07_tuples"); do
+        for dingo_file in $(find examples -name "*.dingo"); do
           echo "Transpiling $dingo_file"
           ./dingo build "$dingo_file"
         done

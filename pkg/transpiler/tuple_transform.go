@@ -256,18 +256,20 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 		case ast.TupleKindLiteral:
 			// Generate code for tuple literal using AST node
 			genResult = gen.GenerateLiteral(node.literal)
-			replaceStart = int(node.literal.Lparen)
-			replaceEnd = int(node.literal.Rparen) + 1
+			// NOTE: token.Pos is 1-based, subtract 1 for 0-based array indexing
+			replaceStart = int(node.literal.Lparen) - 1
+			replaceEnd = int(node.literal.Rparen) // +1-1=0 (includes closing paren)
 
 		case ast.TupleKindDestructure:
 			// Generate code for tuple destructuring using AST node
 			genResult = gen.GenerateDestructure(node.destructure)
-			replaceStart = int(node.destructure.LetPos)
+			// NOTE: token.Pos is 1-based, subtract 1 for 0-based array indexing
+			replaceStart = int(node.destructure.LetPos) - 1
 			// Guard against nil Value (malformed input like "let (x, y) =")
 			if node.destructure.Value == nil {
 				continue // Skip malformed destructure
 			}
-			replaceEnd = int(node.destructure.Value.End())
+			replaceEnd = int(node.destructure.Value.End()) - 1
 
 			// Make it a valid Go statement: _ = marker
 			// The destructure codegen produces the marker, we just need to prefix it
