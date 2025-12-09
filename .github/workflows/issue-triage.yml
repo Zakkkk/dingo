@@ -3,6 +3,8 @@ name: Issue Triage
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -17,6 +19,8 @@ permissions:
 jobs:
   triage:
     runs-on: ubuntu-latest
+    # Skip if comment is from the bot itself (dingo-reviewer app)
+    if: github.event_name != 'issue_comment' || github.event.comment.user.login != 'dingo-reviewer[bot]'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,18 +42,27 @@ jobs:
           app_id: ${{ secrets.DINGO_BOT_APP_ID }}
           private_key: ${{ secrets.DINGO_BOT_PRIVATE_KEY }}
 
+      - name: Determine trigger type
+        id: trigger
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "type=comment" >> $GITHUB_OUTPUT
+            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.issue.number }}" ]; then
+            echo "type=new_issue" >> $GITHUB_OUTPUT
+            echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "type=manual" >> $GITHUB_OUTPUT
+            echo "issue_number=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Get issue details
         id: issue
         env:
           GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
         run: |
           mkdir -p .triage
-          # Support both automatic trigger and manual dispatch
-          if [ -n "${{ github.event.issue.number }}" ]; then
-            ISSUE_NUM="${{ github.event.issue.number }}"
-          else
-            ISSUE_NUM="${{ inputs.issue_number }}"
-          fi
+          ISSUE_NUM="${{ steps.trigger.outputs.issue_number }}"
           echo "number=$ISSUE_NUM" >> $GITHUB_OUTPUT
 
           # Fetch issue details
@@ -57,7 +70,15 @@ jobs:
           echo "title=$(jq -r '.title' .triage/issue_data.json)" >> $GITHUB_OUTPUT
           echo "author=$(jq -r '.user.login' .triage/issue_data.json)" >> $GITHUB_OUTPUT
 
+          # Fetch all comments
+          gh api repos/${{ github.repository }}/issues/$ISSUE_NUM/comments > .triage/comments.json
+
+          # Check if bot has participated in this conversation
+          BOT_PARTICIPATED=$(jq '[.[] | select(.user.login == "dingo-reviewer[bot]")] | length > 0' .triage/comments.json)
+          echo "bot_participated=$BOT_PARTICIPATED" >> $GITHUB_OUTPUT
+
       - name: Write issue to file
+        if: steps.trigger.outputs.type == 'new_issue' || steps.trigger.outputs.type == 'manual'
         run: |
           BODY=$(jq -r '.body // "No description provided"' .triage/issue_data.json)
           cat > .triage/issue.md << ISSUE_EOF
@@ -71,15 +92,56 @@ jobs:
           $BODY
           ISSUE_EOF
 
-      - name: Triage issue with Claude Code
+      - name: Write conversation to file
+        if: steps.trigger.outputs.type == 'comment'
+        run: |
+          # Build full conversation markdown
+          ISSUE_BODY=$(jq -r '.body // "No description provided"' .triage/issue_data.json)
+          ISSUE_AUTHOR=$(jq -r '.user.login' .triage/issue_data.json)
+
+          cat > .triage/conversation.md << 'CONV_HEADER'
+          # Issue Conversation
+
+          CONV_HEADER
+
+          echo "## Original Issue" >> .triage/conversation.md
+          echo "**Author:** @$ISSUE_AUTHOR" >> .triage/conversation.md
+          echo "**Title:** ${{ steps.issue.outputs.title }}" >> .triage/conversation.md
+          echo "" >> .triage/conversation.md
+          echo "$ISSUE_BODY" >> .triage/conversation.md
+          echo "" >> .triage/conversation.md
+          echo "---" >> .triage/conversation.md
+          echo "" >> .triage/conversation.md
+          echo "## Comments" >> .triage/conversation.md
+          echo "" >> .triage/conversation.md
+
+          # Add each comment
+          jq -r '.[] | "### @\(.user.login)\n\(.body)\n\n---\n"' .triage/comments.json >> .triage/conversation.md
+
+          echo "" >> .triage/conversation.md
+          echo "## Latest Comment (trigger)" >> .triage/conversation.md
+          echo "**From:** @${{ github.event.comment.user.login }}" >> .triage/conversation.md
+          echo "" >> .triage/conversation.md
+
+      - name: Skip comment if bot not in conversation
+        id: should_process
+        if: steps.trigger.outputs.type == 'comment'
+        run: |
+          if [ "${{ steps.issue.outputs.bot_participated }}" = "false" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Bot has not participated in this conversation, skipping..."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Bot previously commented, will analyze for reply..."
+          fi
+
+      - name: Triage new issue with Claude Code
         id: triage
+        if: steps.trigger.outputs.type == 'new_issue' || steps.trigger.outputs.type == 'manual'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # Run Claude Code in print mode with Opus 4.5
-          # --model opus = Claude Opus 4.5 (latest)
-          # -p = print mode (non-interactive, for CI)
-          # --dangerously-skip-permissions = skip permission prompts in CI
           claude --model opus -p --dangerously-skip-permissions \
             --system-prompt "$(cat .github/prompts/issue-triage-system.md)" \
             "Triage the GitHub issue in .triage/issue.md. Read it, explore the codebase for context, then write your triage result to .triage/result.json"
@@ -110,6 +172,38 @@ jobs:
           echo "Related files:"
           echo "$CLEAN_JSON" | jq -r '.related_files[]?' || true
 
+      - name: Reply to comment with Claude Code
+        id: reply
+        if: steps.trigger.outputs.type == 'comment' && steps.should_process.outputs.skip != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Run Claude Code to analyze conversation and decide if reply needed
+          claude --model opus -p --dangerously-skip-permissions \
+            --system-prompt "$(cat .github/prompts/issue-comment-system.md)" \
+            "Analyze the conversation in .triage/conversation.md. Decide if you should reply. Write result to .triage/result.json"
+
+          echo "Claude Code completed"
+
+          if [ -f .triage/result.json ]; then
+            CLEAN_JSON=$(cat .triage/result.json)
+          else
+            echo "Error: result.json not created"
+            exit 1
+          fi
+
+          # Extract fields
+          SHOULD_REPLY=$(echo "$CLEAN_JSON" | jq -r '.should_reply // false')
+          echo "should_reply=$SHOULD_REPLY" >> $GITHUB_OUTPUT
+
+          RESPONSE_TEXT=$(echo "$CLEAN_JSON" | jq -r '.response // empty')
+          echo "response<<EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE_TEXT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          REASON=$(echo "$CLEAN_JSON" | jq -r '.reason // empty')
+          echo "Reason: $REASON"
+
       - name: Add labels
         if: steps.triage.outputs.labels != ''
         env:
@@ -130,18 +224,22 @@ jobs:
         run: |
           gh issue edit ${{ steps.issue.outputs.number }} --add-assignee jackrudenko || true
 
-      - name: Post response comment
+      - name: Post triage response
         if: steps.triage.outputs.response != ''
         env:
           GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
           RESPONSE_TEXT: ${{ steps.triage.outputs.response }}
         run: |
-          # Write response to file to avoid shell escaping issues
           echo "$RESPONSE_TEXT" > .triage/comment.md
-          echo "" >> .triage/comment.md
-          echo "---" >> .triage/comment.md
-          echo '<sub>🤖 Auto-triaged by <a href="https://github.com/anthropics/claude-code">Claude Code</a> (Opus 4.5)</sub>' >> .triage/comment.md
+          gh issue comment ${{ steps.issue.outputs.number }} --body-file .triage/comment.md
 
+      - name: Post comment reply
+        if: steps.reply.outputs.should_reply == 'true' && steps.reply.outputs.response != ''
+        env:
+          GH_TOKEN: ${{ steps.dingo-bot.outputs.token }}
+          RESPONSE_TEXT: ${{ steps.reply.outputs.response }}
+        run: |
+          echo "$RESPONSE_TEXT" > .triage/comment.md
           gh issue comment ${{ steps.issue.outputs.number }} --body-file .triage/comment.md
 
       - name: Convert to discussion (if needed)
