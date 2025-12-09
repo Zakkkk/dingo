@@ -94,7 +94,7 @@ The PatternMatchPlugin's `transformMatchExpression` function:
 
 **Input** (pattern_match_01_simple.dingo):
 ```go
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0

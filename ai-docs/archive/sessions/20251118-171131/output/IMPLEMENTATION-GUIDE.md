@@ -50,7 +50,7 @@ Standard format across all markers:
 
 Examples:
 ```go
-/* DINGO:MATCH:START expr=getUserById(id) type=Result<User,Error> exhaustive=true */
+/* DINGO:MATCH:START expr=getUserById(id) type=Result[User,Error] exhaustive=true */
 /* DINGO:MATCH:ARM pattern=Ok(user) binding=user type=User */
 /* DINGO:BINDING var=user type=User scope=case_1 */
 /* DINGO:SCOPE:START id=case_1 parent=match_1 */
@@ -74,7 +74,7 @@ Examples:
 #### Example Markers in Context
 
 ```go
-/* DINGO:MATCH:START expr=result type=Result<User,DbError> exhaustive=true */
+/* DINGO:MATCH:START expr=result type=Result[User,DbError] exhaustive=true */
 switch __match_0 := result.(type) {
 /* DINGO:MATCH:ARM pattern=Ok(user) binding=user type=User */
 case ResultOk:
@@ -219,7 +219,7 @@ func validateExhaustiveness(ctx *MatchContext, typeInfo *types.Info) error {
     // Get the type of the match expression
     exprType := typeInfo.TypeOf(ctx.Expression)
 
-    // For Result<T,E> or Option<T>, check all variants covered
+    // For Result[T,E] or Option[T], check all variants covered
     if named, ok := exprType.(*types.Named); ok {
         variants := extractVariants(named)
         covered := make(map[string]bool)
@@ -254,7 +254,7 @@ match getUserById(id) {
 ### Stage 1: Preprocessor Output
 
 ```go
-/* DINGO:MATCH:START expr=getUserById(id) type=Result<User,Error> */
+/* DINGO:MATCH:START expr=getUserById(id) type=Result[User,Error] */
 switch __discriminant_0 := getUserById(id).(type) {
     /* DINGO:MATCH:ARM pattern=Ok(user) binding=user */
     case ResultOk:
@@ -680,12 +680,12 @@ func (v *ExhaustivenessValidator) Validate(match *MatchContext) error {
         return fmt.Errorf("cannot determine type for exhaustiveness check")
     }
 
-    // For Result<T,E> type
+    // For Result[T,E] type
     if isResultType(exprType) {
         return v.validateResultExhaustiveness(match, exprType)
     }
 
-    // For Option<T> type
+    // For Option[T] type
     if isOptionType(exprType) {
         return v.validateOptionExhaustiveness(match, exprType)
     }
@@ -816,7 +816,7 @@ func trackScopes(file *ast.File, info *types.Info) map[ast.Node]*types.Scope {
 func resolveGenericParams(typ types.Type, markers []Marker) map[string]types.Type {
     params := make(map[string]types.Type)
 
-    // For Result<T,E> or Option<T>
+    // For Result[T,E] or Option[T]
     if named, ok := typ.(*types.Named); ok {
         if typeParams := named.TypeParams(); typeParams != nil {
             for i := 0; i < typeParams.Len(); i++ {
@@ -870,7 +870,7 @@ func TestMarkerEmission(t *testing.T) {
 
 ```dingo
 // tests/golden/pattern_match_01_result.dingo
-fn processUser(id: u32) -> Result<User, Error> {
+fn processUser(id: u32) -> Result[User, Error] {
     match getUserById(id) {
         Ok(user) => {
             println("Processing user: {}", user.name)

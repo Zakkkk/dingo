@@ -11,7 +11,7 @@ import (
 type LetDecl struct {
 	LetPos    token.Pos // Position of "let" keyword
 	Names     []string  // Variable names (supports multiple: let a, b = ...)
-	TypeAnnot string    // Type annotation as string (e.g., ": int", ": Option<string>")
+	TypeAnnot string    // Type annotation as string (e.g., ": int", ": Option[string]")
 	// Empty string means type inference
 	// IMPORTANT: Include the colon during parsing! ToGo() will remove it
 	Value   string // Value expression as string (unparsed)

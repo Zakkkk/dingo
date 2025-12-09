@@ -176,7 +176,7 @@ No blockers identified for v1.0 release.
 
 **Migration Guide**
 - Addresses common pain points
-- Example: Converting error tuples to Result<T,E>
+- Example: Converting error tuples to Result[T,E]
 - Practical and actionable ✅
 
 **Examples (library/, app/, hybrid/)**

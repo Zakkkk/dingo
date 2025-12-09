@@ -62,7 +62,7 @@ match getUserById(id) {
 
 #### Stage 1 Output (Preprocessed Go with Markers)
 ```go
-/* @dingo:match:start expr="getUserById(id)" type="Result<User,Error>" */
+/* @dingo:match:start expr="getUserById(id)" type="Result[User,Error]" */
 switch __dingo_match_0 := getUserById(id).(type) {
     /* @dingo:match:arm pattern="Ok(user)" bind="user:User" */
     case ResultOk:

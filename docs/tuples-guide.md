@@ -120,7 +120,7 @@ func divide(a int, b int) (int, int) {
 }
 
 // With generics
-func parse(s string) Result<(int, int), string> {
+func parse(s string) Result[(int, int), string] {
     // Returns tuple wrapped in Result
     return Ok((10, 20))
 }
@@ -202,7 +202,7 @@ let lightRed = lighten(red, 50)
 // Store configuration as tuple
 let config = ("localhost", 8080, true)
 
-func connect(config (string, int, bool)) Result<Connection, string> {
+func connect(config (string, int, bool)) Result[Connection, string] {
     let (host, port, useTLS) = config
     // Connection logic...
 }
@@ -366,7 +366,7 @@ let (_, _, err) = complexOperation()
 
 **Pattern 1: Tuple inside Result**
 ```dingo
-func parseCoords(s string) Result<(int, int), string> {
+func parseCoords(s string) Result[(int, int), string] {
     if s == "" {
         return Err("empty input")
     }
@@ -381,7 +381,7 @@ match parseCoords("10,20") {
 
 **Pattern 2: Tuple of Results**
 ```dingo
-func batchFetch(urls []string) (Result<Data, Error>, Result<Data, Error>) {
+func batchFetch(urls []string) (Result[Data, Error], Result[Data, Error]) {
     let r1 = fetch(urls[0])
     let r2 = fetch(urls[1])
     return (r1, r2)
@@ -393,7 +393,7 @@ let (result1, result2) = batchFetch(urls)
 ### With Option Types
 
 ```dingo
-func findPair(items []int) Option<(int, int)> {
+func findPair(items []int) Option[(int, int)] {
     if len(items) < 2 {
         return None
     }
@@ -514,7 +514,7 @@ let result: (int, string) = compute()
 **Problem: Nested generics**
 ```dingo
 // Be explicit with nested types
-let data: (Result<int, string>, Option<bool>) = getData()
+let data: (Result[int, string], Option[bool]) = getData()
 ```
 
 ---

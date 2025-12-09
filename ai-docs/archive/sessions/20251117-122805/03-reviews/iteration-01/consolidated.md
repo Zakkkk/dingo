@@ -108,7 +108,7 @@ Err() transformation uses literal string "T" for the success type parameter when
 
 **Example:**
 ```dingo
-fn getUser() -> Result<User, error> {
+fn getUser() -> Result[User, error] {
     if !valid {
         return Err(errors.New("invalid"))  // → Result_T_error (WRONG!)
     }
@@ -142,7 +142,7 @@ func (p *ResultTypePlugin) inferSuccessTypeFromContext(errCall *ast.CallExpr, fi
     })
 
     if enclosingFunc != nil && enclosingFunc.Type.Results != nil {
-        // Parse Result<T, E> from return type
+        // Parse Result[T, E] from return type
         if resultType := extractResultType(enclosingFunc.Type.Results); resultType != "" {
             return resultType
         }
@@ -369,7 +369,7 @@ git checkout <commit> -- pkg/plugin/builtin/error_propagation.go
 // error_propagation_test.go
 func TestErrorPropagationPlugin_BasicTransform(t *testing.T) {
     input := `
-    fn getUser() -> Result<User, error> {
+    fn getUser() -> Result[User, error] {
         let id = getId()?  // Should transform
         return Ok(loadUser(id))
     }
@@ -406,7 +406,7 @@ Option.None transformation is completely commented out with "TODO: Implement typ
 
 **Example:**
 ```dingo
-fn getNothing() -> Option<int> {
+fn getNothing() -> Option[int] {
     return None  // NOT TRANSFORMED - won't compile!
 }
 ```
@@ -714,7 +714,7 @@ func TestErrorPropagationPlugin_IntegrationWithResult(t *testing.T) {
 Either implement or remove:
 ```go
 // Option A: Document clearly
-// AutoWrapGoErrors enables automatic wrapping of (T, error) to Result<T, error>
+// AutoWrapGoErrors enables automatic wrapping of (T, error) to Result[T, error]
 // NOTE: Not yet implemented - planned for Phase 5
 AutoWrapGoErrors bool `toml:"auto_wrap_go_errors"`
 

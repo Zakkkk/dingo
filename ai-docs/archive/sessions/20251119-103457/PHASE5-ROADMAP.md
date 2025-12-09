@@ -230,7 +230,7 @@ All four models agree that **Dingo's language core is remarkably mature** (Phase
 - **Complexity**: Medium
 - **Approach**:
   - `dingo convert --to-dingo <file.go>`
-  - Convert `(T, error)` → `Result<T,E>`
+  - Convert `(T, error)` → `Result[T,E]`
   - Add type annotations (`:` syntax)
   - Add `?` operators for error propagation
   - Conservative conversion (user reviews changes)

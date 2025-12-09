@@ -118,7 +118,7 @@ pkg/lsp:
 - ✅ Packaged as .vsix (dingo-0.2.0.vsix)
 
 **Supported Dingo Features**:
-- Result<T,E> and Option<T> types
+- Result[T,E] and Option[T] types
 - Error propagation (?)
 - Pattern matching (match expressions)
 - Enums/sum types

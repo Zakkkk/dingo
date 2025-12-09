@@ -1,4 +1,4 @@
-# Architectural Plan: Parser Fix & Result<T,E> Integration
+# Architectural Plan: Parser Fix & Result[T,E] Integration
 
 ## Executive Summary
 
@@ -158,7 +158,7 @@ type Config struct {
 
 ---
 
-### Phase 2: Complete Result<T,E> Integration (END-TO-END - 6-8 hours)
+### Phase 2: Complete Result[T,E] Integration (END-TO-END - 6-8 hours)
 
 **Goal**: Activate Result type plugin and enable end-to-end workflow.
 
@@ -585,7 +585,7 @@ func divide(a, b int) Result {
 - Task 1.2: Add Preprocessor Configuration (1 hour)
 - Task 1.3: Test Enum Preprocessor (1-2 hours)
 
-### Phase 2: Complete Result<T,E> Integration (6-8 hours)
+### Phase 2: Complete Result[T,E] Integration (6-8 hours)
 - Task 2.1: Implement Plugin Pipeline (3-4 hours)
 - Task 2.2: Update Result Type Plugin Integration (1 hour)
 - Task 2.3: Update Generator to Use Pipeline (1 hour)
@@ -619,7 +619,7 @@ func divide(a, b int) Result {
 
 ### Alternative 2: Runtime Library for Result Type
 
-**Approach**: Ship `dingo/runtime` package with generic `Result<T,E>`.
+**Approach**: Ship `dingo/runtime` package with generic `Result[T,E]`.
 
 **Pros**:
 - Simpler code generation (just use library types)
@@ -668,7 +668,7 @@ func divide(a, b int) Result {
 
 ### Generic Enum Support
 
-**Syntax**: `enum Option<T> { Some(T), None }`
+**Syntax**: `enum Option[T] { Some(T), None }`
 
 **Benefits**:
 - Reusable enum definitions

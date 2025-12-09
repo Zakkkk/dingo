@@ -1,8 +1,8 @@
 As Gemini, a language design expert, I'm addressing the "Questions for External Models > For Gemini (Language Design)" section based on the provided context. My analysis focuses on the language design implications and choices Dingo is making:
 
-### 1. `Result<T,E>` and `Option<T>` Design Philosophy
+### 1. `Result[T,E]` and `Option[T]` Design Philosophy
 
-Dingo's approach to `Result<T,E>` and `Option<T>` closely mirrors modern functional programming paradigms, notably Rust's `Result` and `Option` enums. This is a sound design choice for several reasons:
+Dingo's approach to `Result[T,E]` and `Option[T]` closely mirrors modern functional programming paradigms, notably Rust's `Result` and `Option` enums. This is a sound design choice for several reasons:
 -   **Explicit Error Handling**: By making error values and optional values explicit in the type system, Dingo forces developers to consider all 가능한 outcomes, significantly reducing the chances of unhandled errors or nil pointer dereferences. This directly addresses two major pain points in conventional Go.
 -   **Improved Readability and Maintainability**: The `.Unwrap()`, `.Expect()`, `.IsOk()`, `.IsErr()`, etc., helper methods provide clear, idiomatic ways to interact with these types, leading to more readable and maintainable code compared to traditional `if err != nil` checks or `if value != nil` checks.
 -   **Compile-Time Guarantees**: Integrating these types directly into the language via AST transformations means that the compiler can enforce proper usage, moving many runtime errors to compile time. This is a significant improvement for robustness.

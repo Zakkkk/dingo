@@ -474,7 +474,7 @@ func (o Option_User) Unwrap() User {
 type User struct{}`,
 			typeName:   "Option_User",
 			shouldPass: true,
-			description: "Should detect valid Option<T> type",
+			description: "Should detect valid Option[T] type",
 		},
 		{
 			name: "Result type with ResultTag should fail",
@@ -492,7 +492,7 @@ type User struct{}
 type Error struct{}`,
 			typeName:   "Result_User_Error",
 			shouldPass: false,
-			description: "Should NOT detect Result<T,E> as Option<T>",
+			description: "Should NOT detect Result[T,E] as Option[T]",
 		},
 		{
 			name: "Struct with tag but no Unwrap",

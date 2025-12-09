@@ -580,8 +580,8 @@ Improves Go idiomaticity and developer experience.
 - [ ] Pattern match tests verify correct tag/field names
 
 ### Consistency
-- [ ] Result<T,E> naming unchanged (already CamelCase)
-- [ ] Option<T> naming unchanged (already CamelCase)
+- [ ] Result[T,E] naming unchanged (already CamelCase)
+- [ ] Option[T] naming unchanged (already CamelCase)
 - [ ] Custom enums now match Result/Option style
 - [ ] No naming inconsistencies across enum types
 

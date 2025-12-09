@@ -177,7 +177,7 @@ package services
 
 import "myproject/pkg/models"  // Depends on models package
 
-func Authenticate(user: models.User) Result<string, error> {
+func Authenticate(user: models.User) Result[string, error] {
     // ...
 }
 ```

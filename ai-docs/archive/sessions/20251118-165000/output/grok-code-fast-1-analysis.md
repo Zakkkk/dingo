@@ -16,7 +16,7 @@ The current two-stage architecture (regex preprocessor + go/parser + plugin pipe
 
 The existing two-stage pipeline is performing well:
 - **97.8% golden test pass rate** (261/267 passing)
-- Successfully implements Result<T,E>, Option<T>, enums
+- Successfully implements Result[T,E], Option[T], enums
 - Plugin pipeline already provides extensibility
 - Clean separation of concerns between stages
 

@@ -98,7 +98,7 @@ The top features overwhelmingly addressствен Go's core error handling verbo
 ## Implications for Language Design
 
 The research validates Dingo's approach:
-- **Priority Features**: `try`, `check/handle`, `Result<T, E>` match developer demands exactly
+- **Priority Features**: `try`, `check/handle`, `Result[T, E]` match developer demands exactly
 - ** Platon ImplementationStrategy**: Focus on syntactic sugar transpiring to idiomatic Go
 - **Market Validation**: Addresses real developer pain points documented in official repository
 

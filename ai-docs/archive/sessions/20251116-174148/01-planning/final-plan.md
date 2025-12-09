@@ -1072,14 +1072,14 @@ func TestFullPipeline(t *testing.T) {
 
 ### Phase 2: Result Type Integration
 
-Enhance error propagation to work with `Result<T, E>` types:
+Enhance error propagation to work with `Result[T, E]` types:
 
 ```dingo
-func fetchUser(id: string) -> Result<User, Error> {
+func fetchUser(id: string) -> Result[User, Error] {
     // ...
 }
 
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let user = fetchUser(id)?  // Unwraps Result
     return Ok(user)
 }

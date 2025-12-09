@@ -1,4 +1,4 @@
-# User Request: Fix Parser for Dingo Syntax & Complete Result<T,E> Integration
+# User Request: Fix Parser for Dingo Syntax & Complete Result[T,E] Integration
 
 **Context:**
 - Previous session (20251118-012907) cleaned up test suite
@@ -15,13 +15,13 @@
    - Blocks all golden tests from parsing
    - Example failing test: `error_prop_01_simple.dingo:3:21`
 
-2. **Result<T,E> not end-to-end integrated**
+2. **Result[T,E] not end-to-end integrated**
    - Fix A2 (Constructor AST Mutation) ✅ Complete (commit 7675185)
    - Fix A3 (Type Inference) ✅ Complete (commit 7675185)
    - Missing: Parser integration, end-to-end testing
 
 **User Request:**
-"yep lets Fix Parser for Dingo Syntax and Complete Result<T,E> Integration"
+"yep lets Fix Parser for Dingo Syntax and Complete Result[T,E] Integration"
 
 **Goals:**
 
@@ -31,7 +31,7 @@
 3. Unblock ALL golden tests
 4. Estimated: 2-4 hours
 
-### Phase 2: Complete Result<T,E> Integration
+### Phase 2: Complete Result[T,E] Integration
 1. Ensure parser handles Ok()/Err() calls
 2. Verify Result type declarations are generated
 3. End-to-end test: .dingo file → .go file → go run

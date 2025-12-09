@@ -2,7 +2,7 @@
 package main
 
 // Function returning Option
-func findUserByEmail(email string) -> Option<User> {
+func findUserByEmail(email string) -> Option[User] {
     if email == "" {
         return None
     }
@@ -35,7 +35,7 @@ func displayUser(email string) {
 }
 
 // Chaining with error propagation
-func getVerifiedUser(email string) -> Result<User, error> {
+func getVerifiedUser(email string) -> Result[User, error] {
     let user = findUserByEmail(email)?
 
     if !user.verified {

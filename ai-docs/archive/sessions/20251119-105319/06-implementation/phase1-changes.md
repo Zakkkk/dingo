@@ -145,8 +145,8 @@ Generator.Generate()
     ↓
 Pipeline.Transform()
     ↓ Phase 1: Discovery
-ResultTypePlugin.Process() - detects Result<T,E> usage
-OptionTypePlugin.Process() - detects Option<T> usage
+ResultTypePlugin.Process() - detects Result[T,E] usage
+OptionTypePlugin.Process() - detects Option[T] usage
     ↓ Phase 2: Transform
 ResultTypePlugin.Transform() - replaces Ok()/Err() calls
 OptionTypePlugin.Transform() - replaces Some() calls

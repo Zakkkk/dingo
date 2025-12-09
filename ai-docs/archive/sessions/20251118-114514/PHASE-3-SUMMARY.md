@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Phase 3 successfully implemented two critical fixes (A4 and A5) and completed the Result<T,E> and Option<T> type systems with full functional programming APIs. The implementation exceeded all quantitative targets and introduced zero breaking changes.
+Phase 3 successfully implemented two critical fixes (A4 and A5) and completed the Result[T,E] and Option[T] type systems with full functional programming APIs. The implementation exceeded all quantitative targets and introduced zero breaking changes.
 
 **Key Achievements:**
 - ✅ Fix A5: go/types integration achieving >90% type inference accuracy
@@ -111,7 +111,7 @@ Result{
 - `pkg/errors/errors_test.go` (200+ lines, NEW)
 - `pkg/plugin/context.go` (updates for error integration)
 
-### 4. Result<T,E> Helper Methods (8 Advanced Methods)
+### 4. Result[T,E] Helper Methods (8 Advanced Methods)
 
 **Problem**: Result type had only basic methods (IsOk, Unwrap, etc.), lacking functional programming utilities.
 
@@ -119,13 +119,13 @@ Result{
 
 **Methods Implemented:**
 1. `UnwrapOrElse(fn func(E) T) T` - Compute fallback from error
-2. `Map(fn func(T) U) Result<U,E>` - Transform Ok value
-3. `MapErr(fn func(E) F) Result<T,F>` - Transform Err value
-4. `Filter(fn func(T) bool, E) Result<T,E>` - Conditional Ok→Err
-5. `AndThen(fn func(T) Result<U,E>) Result<U,E>` - Monadic bind (flatMap)
-6. `OrElse(fn func(E) Result<T,F>) Result<T,F>` - Error recovery
-7. `And(Result<U,E>) Result<U,E>` - Sequential combination
-8. `Or(Result<T,E>) Result<T,E>` - Fallback combination
+2. `Map(fn func(T) U) Result[U,E]` - Transform Ok value
+3. `MapErr(fn func(E) F) Result[T,F]` - Transform Err value
+4. `Filter(fn func(T) bool, E) Result[T,E]` - Conditional Ok→Err
+5. `AndThen(fn func(T) Result[U,E]) Result[U,E]` - Monadic bind (flatMap)
+6. `OrElse(fn func(E) Result[T,F]) Result[T,F]` - Error recovery
+7. `And(Result[U,E]) Result[U,E]` - Sequential combination
+8. `Or(Result[T,E]) Result[T,E]` - Fallback combination
 
 **Total Result Methods**: 13 (5 basic + 8 advanced)
 
@@ -139,7 +139,7 @@ Result{
 - `pkg/plugin/builtin/result_type.go` (650 lines added)
 - `tests/golden/result_06_helpers.dingo` (83 lines, NEW)
 
-### 5. Option<T> Type Complete Implementation
+### 5. Option[T] Type Complete Implementation
 
 **Problem**: Option type lacked advanced helper methods and literal support.
 
@@ -384,7 +384,7 @@ $ /tmp/dingo version
 **Completeness**: ✅ ACHIEVED
 - All Fix A4 requirements met
 - All Fix A5 requirements met
-- Option<T> has feature parity with Result<T,E>
+- Option[T] has feature parity with Result[T,E]
 - Foundation ready for Phase 4 (pattern matching)
 - No major unknown bugs
 
@@ -601,7 +601,7 @@ $ /tmp/dingo version
 **Key Achievements**:
 1. ✅ Implemented Fix A5 (go/types type inference) with 95% accuracy
 2. ✅ Implemented Fix A4 (IIFE literal wrapping) with 100% success rate
-3. ✅ Implemented Option<T> with type-context-aware None constant
+3. ✅ Implemented Option[T] with type-context-aware None constant
 4. ✅ Implemented complete helper method suite (16 methods total)
 5. ✅ Added 120+ new tests with 97.8% pass rate
 6. ✅ Zero regressions from Phase 2.16

@@ -16,7 +16,7 @@ All features follow Dingo's established plugin architecture, reuse existing AST 
 
 ### 1.1 Overview
 
-The null safety operator provides safe navigation through potentially nil values, returning `Option<T>` instead of panicking.
+The null safety operator provides safe navigation through potentially nil values, returning `Option[T]` instead of panicking.
 
 ### 1.2 Syntax Design
 
@@ -128,7 +128,7 @@ func (p *SafeNavigationPlugin) Name() string {
 }
 
 func (p *SafeNavigationPlugin) Dependencies() []string {
-    return []string{"option_type"}  // Depends on Option<T>
+    return []string{"option_type"}  // Depends on Option[T]
 }
 
 func (p *SafeNavigationPlugin) Transform(ctx *plugin.Context, node ast.Node) (ast.Node, error) {
@@ -141,7 +141,7 @@ func (p *SafeNavigationPlugin) Transform(ctx *plugin.Context, node ast.Node) (as
 
 ### 1.7 Integration with Existing Features
 
-- **With Option Type:** Returns `Option<T>` naturally
+- **With Option Type:** Returns `Option[T]` naturally
 - **With Null Coalescing:** `user?.name ?? "Unknown"` works seamlessly
 - **With Pattern Matching:** Can match on returned Option
 - **With Error Propagation:** `user?.fetchData()? "failed"` chains both operators
@@ -152,7 +152,7 @@ func (p *SafeNavigationPlugin) Transform(ctx *plugin.Context, node ast.Node) (as
 
 ### 2.1 Overview
 
-Provides default values for `Option<T>` or nullable values. Syntactic sugar for `UnwrapOr()`.
+Provides default values for `Option[T]` or nullable values. Syntactic sugar for `UnwrapOr()`.
 
 ### 2.2 Syntax Design
 
@@ -259,7 +259,7 @@ func (p *NullCoalescingPlugin) Dependencies() []string {
 
 func (p *NullCoalescingPlugin) Transform(ctx *plugin.Context, node ast.Node) (ast.Node, error) {
     // 1. Identify NullCoalescingExpr
-    // 2. Check if left side is Option<T>
+    // 2. Check if left side is Option[T]
     // 3. Generate UnwrapOr call or if/else check
     // 4. Handle chaining (right-associative)
 }
@@ -268,18 +268,18 @@ func (p *NullCoalescingPlugin) Transform(ctx *plugin.Context, node ast.Node) (as
 ### 2.7 Type Checking
 
 **Key Rules:**
-1. Left operand must be `Option<T>` or pointer type
+1. Left operand must be `Option[T]` or pointer type
 2. Right operand must have compatible type with `T`
 3. Result type is `T` (unwrapped)
 
 **Examples:**
 ```dingo
 // Valid
-let name: string = optionalName ?? "default"  // Option<string> ?? string -> string
-let user: User = optionalUser ?? User{}       // Option<User> ?? User -> User
+let name: string = optionalName ?? "default"  // Option[string] ?? string -> string
+let user: User = optionalUser ?? User{}       // Option[User] ?? User -> User
 
 // Invalid
-let x = someOption ?? 42  // ERROR if someOption is Option<string>
+let x = someOption ?? 42  // ERROR if someOption is Option[string]
 ```
 
 ---
@@ -795,8 +795,8 @@ let user = fetchUser(id)? ?? User.guest()
 **Dependency Graph:**
 ```
 option_type (base)
-    ├── safe_navigation (depends on Option<T>)
-    ├── null_coalescing (depends on Option<T>)
+    ├── safe_navigation (depends on Option[T])
+    ├── null_coalescing (depends on Option[T])
     └── result_type (parallel to Option)
         └── error_propagation (depends on Result)
 
@@ -850,7 +850,7 @@ This ensures that when `safe_navigation` transforms `user?.name` to `Option_Some
    - [ ] Parser support for chaining
    - [ ] Implement `SafeNavigationPlugin`
    - [ ] Optimize nested conditions
-   - [ ] Integration with Option<T>
+   - [ ] Integration with Option[T]
    - [ ] Write tests (basic, chained, with methods)
    - **Estimate:** 3-4 days
 
@@ -911,7 +911,7 @@ func TestNullCoalescing_Chained(t *testing.T) {
 }
 
 func TestNullCoalescing_WithOption(t *testing.T) {
-    // Test: Option<T> ?? default
+    // Test: Option[T] ?? default
 }
 
 func TestNullCoalescing_TypeMismatch(t *testing.T) {
@@ -1017,10 +1017,10 @@ let z = a?.b?.c ?? d?.e?.f ?? g
 
 ### 8.3 Safe Navigation Return Type
 
-**Gap:** Should `?.` return `Option<T>` always, or only when chaining?
+**Gap:** Should `?.` return `Option[T]` always, or only when chaining?
 
 **Options:**
-1. **Always Option:** `user?.name` returns `Option<string>`
+1. **Always Option:** `user?.name` returns `Option[string]`
    - Consistent, composable
    - More unwrapping needed
 

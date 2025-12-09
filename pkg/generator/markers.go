@@ -9,8 +9,8 @@ import (
 
 // Plugin IDs for marker generation:
 // 1 = error_propagation (? operator)
-// 2 = result_type (Result<T, E>)
-// 3 = option_type (Option<T>)
+// 2 = result_type (Result[T, E])
+// 3 = option_type (Option[T])
 // 4 = pattern_matching (match expressions)
 // 5 = sum_types (enum)
 

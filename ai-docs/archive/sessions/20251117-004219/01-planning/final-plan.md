@@ -5,7 +5,7 @@
 This document presents the final architectural design incorporating user preferences for maximum configurability. All four features support behavioral switches via a new configuration system:
 
 1. **Null Safety Operator (`?.`)** - Smart unwrapping based on context
-2. **Null Coalescing Operator (`??`)** - Works with both Option<T> and Go pointers (*T)
+2. **Null Coalescing Operator (`??`)** - Works with both Option[T] and Go pointers (*T)
 3. **Ternary Operator (`? :`)** - Configurable precedence modes
 4. **Lambda Functions** - Switchable syntax styles (Rust/Arrow/Both)
 
@@ -170,7 +170,7 @@ type Context struct {
 **Setting:** `safe_navigation_unwrap`
 
 **Modes:**
-1. `"always_option"` - Always returns Option<T>
+1. `"always_option"` - Always returns Option[T]
 2. `"smart"` (default) - Unwraps when context expects T
 
 ### 1.2 Smart Unwrapping Logic
@@ -200,7 +200,7 @@ func (p *SafeNavigationPlugin) transformSmart(ctx *plugin.Context, safeNav *ding
     // Determine expected type from context
     expectedType := ctx.TypeInfo.TypeOf(safeNav)
 
-    // If parent expects Option<T>, return Option
+    // If parent expects Option[T], return Option
     if isOptionType(expectedType) {
         return p.transformAlwaysOption(ctx, safeNav)
     }
@@ -223,7 +223,7 @@ func (p *SafeNavigationPlugin) transformUnwrapped(ctx *plugin.Context, safeNav *
 
 **Mode: `always_option`**
 ```dingo
-let city = user?.address?.city  // Type: Option<*City>
+let city = user?.address?.city  // Type: Option[*City]
 ```
 
 ```go
@@ -251,8 +251,8 @@ if user != nil {
 ```
 
 ```dingo
-// Context expects Option<string> (keep wrapped)
-let nameOpt: Option<string> = user?.name
+// Context expects Option[string] (keep wrapped)
+let nameOpt: Option[string] = user?.name
 ```
 
 ```go
@@ -283,8 +283,8 @@ type SafeNavigationExpr struct {
 **Setting:** `null_coalescing_pointers`
 
 **Modes:**
-- `true` (default) - Works with both Option<T> and *T
-- `false` - Works only with Option<T>
+- `true` (default) - Works with both Option[T] and *T
+- `false` - Works only with Option[T]
 
 ### 2.2 Type Checking Logic
 
@@ -298,7 +298,7 @@ func (p *NullCoalescingPlugin) Transform(ctx *plugin.Context, node ast.Node) (as
 
     leftType := ctx.TypeInfo.TypeOf(nc.X)
 
-    // Check if left is Option<T>
+    // Check if left is Option[T]
     if isOptionType(leftType) {
         return p.transformOption(ctx, nc)
     }
@@ -308,7 +308,7 @@ func (p *NullCoalescingPlugin) Transform(ctx *plugin.Context, node ast.Node) (as
         return p.transformPointer(ctx, nc)
     }
 
-    return nil, fmt.Errorf("?? requires Option<T> or *T (if enabled), got %v", leftType)
+    return nil, fmt.Errorf("?? requires Option[T] or *T (if enabled), got %v", leftType)
 }
 
 func (p *NullCoalescingPlugin) transformPointer(ctx *plugin.Context, nc *dingoast.NullCoalescingExpr) (ast.Node, error) {
@@ -328,7 +328,7 @@ func (p *NullCoalescingPlugin) transformPointer(ctx *plugin.Context, nc *dingoas
 
 ### 2.3 Examples
 
-**With Option<T>:**
+**With Option[T]:**
 ```dingo
 let name: string = optionalName ?? "default"
 ```
@@ -720,7 +720,7 @@ let arrowStyle = users.map(u => u.name)
 | Safe Nav | `always_option` | Forces Option return, requires ?? to unwrap |
 | Safe Nav | `smart` | Auto-unwraps, integrates with ternary/comparison |
 | Null Coalesce | `pointers=true` | Works with both Option and *T |
-| Null Coalesce | `pointers=false` | Option<T> only, stricter |
+| Null Coalesce | `pointers=false` | Option[T] only, stricter |
 | Precedence | `standard` | Allows complex expressions |
 | Precedence | `explicit` | Requires (), clearer |
 | Lambda | `rust` | Only pipes |
@@ -778,7 +778,7 @@ let arrowStyle = users.map(u => u.name)
 - [ ] Add lexer token for `??`
 - [ ] Update parser grammar
 - [ ] Implement `NullCoalescingPlugin` with config modes
-- [ ] Support both Option<T> and *T based on config
+- [ ] Support both Option[T] and *T based on config
 - [ ] Write tests (both types, mixed chaining)
 - **Estimate:** 2-3 days
 
@@ -800,7 +800,7 @@ let arrowStyle = users.map(u => u.name)
 - [ ] Implement `SafeNavigationPlugin` with unwrap modes
 - [ ] Context-based type inference for smart mode
 - [ ] Optimize nested conditions
-- [ ] Integration with Option<T>
+- [ ] Integration with Option[T]
 - [ ] Write tests (always_option vs smart modes)
 - **Estimate:** 3-4 days
 
@@ -952,7 +952,7 @@ let x = (a ?? b) ? c : d  ✓
 ### language.safe_navigation_unwrap
 Controls how `?.` handles return types.
 
-- `"always_option"`: Always returns Option<T>
+- `"always_option"`: Always returns Option[T]
 - `"smart"`: Unwraps based on context (default)
 
 [... continue for all settings ...]
@@ -1042,7 +1042,7 @@ This final plan incorporates all user preferences:
    - Preset configurations for common scenarios
 
 2. **Null Coalescing (`??`)**
-   - Works with both `Option<T>` and Go pointers `*T`
+   - Works with both `Option[T]` and Go pointers `*T`
    - Configurable via `null_coalescing_pointers` setting
 
 3. **Safe Navigation (`?.`)**

@@ -52,7 +52,7 @@ enum Shape {
     Rectangle { width: float64, height: float64 },
 }
 
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
@@ -158,7 +158,7 @@ default:
 **Test Files:**
 - `sum_types_01_simple_enum.dingo` - Basic enum with unit variants
 - `sum_types_02_struct_variant.dingo` - Shape enum with struct variants
-- `sum_types_03_generic_enum.dingo` - Result<T, E> generic enum
+- `sum_types_03_generic_enum.dingo` - Result[T, E] generic enum
 - `sum_types_04_multiple_enums.dingo` - Multiple enums in one file
 
 **Blocker:** Generated declarations need position information for `go/types` checker

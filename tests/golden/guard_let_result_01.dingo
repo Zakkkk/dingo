@@ -4,21 +4,21 @@ package main
 // Feature: Basic Result unwrapping with pipe binding
 // Complexity: basic
 
-func findUser(id int) Result<string, string> {
+func findUser(id int) Result[string, string] {
 	if id > 0 {
 		return Ok("User123")
 	}
 	return Err("user not found")
 }
 
-func readConfig(path string) Result<string, error> {
+func readConfig(path string) Result[string, error] {
 	if path == "" {
 		return Err(error("empty path"))
 	}
 	return Ok("config data")
 }
 
-func processUser(id int) Result<string, string> {
+func processUser(id int) Result[string, string] {
 	// Basic guard let with Result type and pipe binding
 	guard let user = findUser(id) else |err| {
 		return Err(err)
@@ -27,7 +27,7 @@ func processUser(id int) Result<string, string> {
 	return Ok("Processed: " + user)
 }
 
-func loadAndProcess(id int, configPath string) Result<string, error> {
+func loadAndProcess(id int, configPath string) Result[string, error] {
 	// Multiple guard lets with Result types
 	guard let config = readConfig(configPath) else |e| {
 		return Err(e)

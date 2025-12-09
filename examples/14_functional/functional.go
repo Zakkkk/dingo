@@ -45,31 +45,31 @@ func demonstrateCoreFunctions() {
 
 	// Map: Transform each element
 	// Rust-style lambda: |params| expr
-	doubled := dgo.Map(numbers, func(x int) int { return x * 2 })
+	doubled = dgo.Map(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x * 2 })
 	fmt.Println("Doubled:", doubled)
 
 	// Map with type conversion
 	// TypeScript-style lambda: (params) => expr
-	asStrings := dgo.Map(numbers, func(n int) string { return fmt.Sprintf("#%d", n) })
+	asStrings = dgo.Map(numbers, func(n __TYPE_INFERENCE_NEEDED) { return fmt.Sprintf("#%d", n) })
 	fmt.Println("As strings:", asStrings)
 
 	// Filter: Keep elements matching predicate
-	evens := dgo.Filter(numbers, func(x int) bool { return x%2 == 0 })
+	evens = dgo.Filter(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x%2 == 0 })
 	fmt.Println("Evens:", evens)
 
 	// Filter with complex condition
-	inRange := dgo.Filter(numbers, func(x int) bool { return x >= 3 && x <= 7 })
+	inRange = dgo.Filter(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x >= 3 && x <= 7 })
 	fmt.Println("In range [3,7]:", inRange)
 
 	// Reduce: Fold into single value
-	sum := dgo.Reduce(numbers, 0, func(acc int, x int) int { return acc + x })
+	sum = dgo.Reduce(numbers, 0, func(acc __TYPE_INFERENCE_NEEDED, x __TYPE_INFERENCE_NEEDED) { return acc + x })
 	fmt.Println("Sum:", sum)
 
 	// Reduce: Product
-	product := dgo.Reduce(numbers, 1, func(acc int, x int) int { return acc * x })
+	product = dgo.Reduce(numbers, 1, func(acc __TYPE_INFERENCE_NEEDED, x __TYPE_INFERENCE_NEEDED) { return acc * x })
 	fmt.Println("Product:", product)
 
-	// ForEach: Using regular Go func (lambda void return bug workaround)
+	// ForEach Using regular Go func (lambda void return bug workaround)
 	fmt.Print("ForEach output: ")
 	for _, s := range []string{"a", "b", "c"} {
 		fmt.Print(s, " ")
@@ -87,14 +87,14 @@ func demonstrateIndexAware() {
 	words := []string{"apple", "banana", "cherry", "date"}
 
 	// MapWithIndex: Transform with access to index
-	indexed := dgo.MapWithIndex(words, func(i int, w string) string { return fmt.Sprintf("%d. %s", i+1, w) })
+	indexed = dgo.MapWithIndex(words, func(i __TYPE_INFERENCE_NEEDED, w __TYPE_INFERENCE_NEEDED) { return fmt.Sprintf("%d. %s", i+1, w) })
 	fmt.Println("Indexed list:")
 	for _, s := range indexed {
 		fmt.Println("  ", s)
 	}
 
 	// FilterWithIndex: Filter by index
-	everyOther := dgo.FilterWithIndex(words, func(i int, w string) bool { return i%2 == 0 })
+	everyOther = dgo.FilterWithIndex(words, func(i __TYPE_INFERENCE_NEEDED, w __TYPE_INFERENCE_NEEDED) { return i%2 == 0 })
 	fmt.Println("Every other:", everyOther)
 
 	// ForEachWithIndex: Using regular Go for loop (lambda void return bug workaround)
@@ -121,7 +121,7 @@ func demonstrateSearch() {
 
 	// Find: First matching element (returns Option)
 	// Using method-based API (match Option bug workaround)
-	found := dgo.Find(products, func(p Product) bool { return p.Price > 500 })
+	found = dgo.Find(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Price > 500 })
 	if found.IsSome() {
 		p := found.Unwrap()
 		fmt.Printf("Found expensive item: %s ($%.2f)\n", p.Name, p.Price)
@@ -130,7 +130,7 @@ func demonstrateSearch() {
 	}
 
 	// FindIndex: Index of first match
-	idx := dgo.FindIndex(products, func(p Product) bool { return p.Category == "Furniture" })
+	idx = dgo.FindIndex(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Category == "Furniture" })
 	if idx.IsSome() {
 		fmt.Printf("First furniture at index: %d\n", idx.Unwrap())
 	} else {
@@ -138,15 +138,15 @@ func demonstrateSearch() {
 	}
 
 	// Any: Check if any element matches
-	hasOutOfStock := dgo.Any(products, func(p Product) bool { return !p.InStock })
+	hasOutOfStock = dgo.Any(products, func(p __TYPE_INFERENCE_NEEDED) { return !p.InStock })
 	fmt.Printf("Has out of stock items: %v\n", hasOutOfStock)
 
 	// All: Check if all elements match
-	allInStock := dgo.All(products, func(p Product) bool { return p.InStock })
+	allInStock = dgo.All(products, func(p __TYPE_INFERENCE_NEEDED) { return p.InStock })
 	fmt.Printf("All items in stock: %v\n", allInStock)
 
 	// NoneMatch: Check if no elements match
-	noExpensive := dgo.NoneMatch(products, func(p Product) bool { return p.Price > 2000 })
+	noExpensive = dgo.NoneMatch(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Price > 2000 })
 	fmt.Printf("No items over $2000: %v\n", noExpensive)
 
 	// Contains: Check for value (comparable types)
@@ -155,7 +155,7 @@ func demonstrateSearch() {
 	fmt.Printf("Contains 30: %v\n", has30)
 
 	// Count: Count matching elements
-	electronicsCount := dgo.Count(products, func(p Product) bool { return p.Category == "Electronics" })
+	electronicsCount = dgo.Count(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Category == "Electronics" })
 	fmt.Printf("Electronics count: %d\n", electronicsCount)
 }
 
@@ -174,7 +174,7 @@ func demonstrateAdvanced() {
 
 	// FlatMap: Map then flatten
 	// Using explicit func due to type inference bug (lambda_generic_return_type.md)
-	allItems := dgo.FlatMap(orders, func(o Order) []string { return o.Items })
+	allItems = dgo.FlatMap(orders, func(o Order) []string { return o.Items })
 	fmt.Println("All ordered items:", allItems)
 
 	// Flatten: Flatten nested slices
@@ -184,7 +184,7 @@ func demonstrateAdvanced() {
 
 	// Partition: Split into two groups
 	numbers := []int{1, 2, 3, 4, 5, 6, 7, 8}
-	evens, odds := dgo.Partition(numbers, func(x int) bool { return x%2 == 0 })
+	evens, odds = dgo.Partition(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x%2 == 0 })
 	fmt.Printf("Evens: %v, Odds: %v\n", evens, odds)
 
 	// GroupBy: Group by key
@@ -194,10 +194,10 @@ func demonstrateAdvanced() {
 		{3, "Desk", 299.99, "Furniture", true},
 		{4, "Chair", 199.99, "Furniture", true},
 	}
-	byCategory := dgo.GroupBy(products, func(p Product) string { return p.Category })
+	byCategory = dgo.GroupBy(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Category })
 	fmt.Println("Products by category:")
 	for cat, prods := range byCategory {
-		names := dgo.Map(prods, func(p Product) string { return p.Name })
+		names = dgo.Map(prods, func(p __TYPE_INFERENCE_NEEDED) { return p.Name })
 		fmt.Printf("  %s: %v\n", cat, names)
 	}
 
@@ -229,11 +229,11 @@ func demonstrateSliceManipulation() {
 	fmt.Println("After first 3:", after3)
 
 	// TakeWhile: Take while condition holds
-	smallNums := dgo.TakeWhile(numbers, func(x int) bool { return x < 5 })
+	smallNums = dgo.TakeWhile(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x < 5 })
 	fmt.Println("Take while < 5:", smallNums)
 
 	// DropWhile: Drop while condition holds
-	fromFive := dgo.DropWhile(numbers, func(x int) bool { return x < 5 })
+	fromFive = dgo.DropWhile(numbers, func(x __TYPE_INFERENCE_NEEDED) { return x < 5 })
 	fmt.Println("Drop while < 5:", fromFive)
 
 	// Chunk: Split into chunks
@@ -269,17 +269,17 @@ func demonstrateChaining() {
 	// Chain: Filter -> Map -> Reduce
 	// Get total value of in-stock electronics
 	// Using explicit func for Reduce due to type inference bug
-	inStockElectronics := dgo.Filter(products, func(p Product) bool { return p.InStock && p.Category == "Electronics" })
-	prices := dgo.Map(inStockElectronics, func(p Product) float64 { return p.Price })
-	totalValue := dgo.Reduce(prices, 0.0, func(acc, price float64) float64 { return acc + price })
+	inStockElectronics = dgo.Filter(products, func(p __TYPE_INFERENCE_NEEDED) { return p.InStock && p.Category == "Electronics" })
+	prices = dgo.Map(inStockElectronics, func(p Product) float64 { return p.Price })
+	totalValue = dgo.Reduce(prices, 0.0, func(acc, price float64) float64 { return acc + price })
 	fmt.Printf("Total in-stock electronics value: $%.2f\n", totalValue)
 
 	// Chain: Filter -> Map -> Take
 	// Get first 2 expensive item names
 	expensiveNames := dgo.Take(
 		dgo.Map(
-			dgo.Filter(products, func(p Product) bool { return p.Price > 100 }),
-			func(p Product) string { return strings.ToUpper(p.Name) },
+			dgo.Filter(products, func(p __TYPE_INFERENCE_NEEDED) { return p.Price > 100 }),
+			func(p __TYPE_INFERENCE_NEEDED) { return strings.ToUpper(p.Name) },
 		),
 		2,
 	)
@@ -287,8 +287,8 @@ func demonstrateChaining() {
 
 	// Complex pipeline: Transform products for display
 	display := dgo.Map(
-		dgo.Filter(products, func(p Product) bool { return p.InStock }),
-		func(p Product) string { return fmt.Sprintf("%s ($%.2f)", p.Name, p.Price) },
+		dgo.Filter(products, func(p __TYPE_INFERENCE_NEEDED) { return p.InStock }),
+		func(p __TYPE_INFERENCE_NEEDED) { return fmt.Sprintf("%s ($%.2f)", p.Name, p.Price) },
 	)
 	fmt.Println("In-stock products:")
 	for _, s := range display {
@@ -312,23 +312,23 @@ func demonstrateRealWorld() {
 	}
 
 	// Group orders by customer
-	byCustomer := dgo.GroupBy(orders, func(o Order) string { return o.Customer })
+	byCustomer = dgo.GroupBy(orders, func(o __TYPE_INFERENCE_NEEDED) { return o.Customer })
 
 	// Calculate total spent per customer
 	fmt.Println("Customer totals:")
 	for customer, customerOrders := range byCustomer {
-		total := dgo.Reduce(customerOrders, 0.0, func(acc float64, o Order) float64 { return acc + o.Total })
+		total = dgo.Reduce(customerOrders, 0.0, func(acc __TYPE_INFERENCE_NEEDED, o __TYPE_INFERENCE_NEEDED) { return acc + o.Total })
 		orderCount := len(customerOrders)
 		fmt.Printf("  %s: $%.2f (%d orders)\n", customer, total, orderCount)
 	}
 
 	// Find high-value orders
-	highValue := dgo.Filter(orders, func(o Order) bool { return o.Total > 100 })
+	highValue = dgo.Filter(orders, func(o __TYPE_INFERENCE_NEEDED) { return o.Total > 100 })
 	fmt.Printf("\nHigh-value orders (>$100): %d\n", len(highValue))
 
 	// Get all unique items ordered
 	// Using explicit func due to type inference bug
-	allItems := dgo.Unique(dgo.FlatMap(orders, func(o Order) []string { return o.Items }))
+	allItems = dgo.Unique(dgo.FlatMap(orders, func(o Order) []string { return o.Items }))
 	fmt.Println("All unique items ordered:", allItems)
 
 	// Count orders by customer

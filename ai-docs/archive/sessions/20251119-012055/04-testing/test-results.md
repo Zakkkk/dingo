@@ -36,8 +36,8 @@
 #### TestFindFunctionReturnType
 ```
 ✅ simple_int_return - Function return type inferred correctly
-✅ option_type_return - Option<T> return detected
-✅ result_type_return - Result<T,E> return detected
+✅ option_type_return - Option[T] return detected
+✅ result_type_return - Result[T,E] return detected
 ✅ lambda_return - Anonymous function support
 ✅ no_return_type - Edge case handled gracefully
 ```
@@ -64,8 +64,8 @@
 #### TestFindVarDeclType
 ```
 ✅ regular_call - Function call argument type detection
-✅ option_type_param - Option<T> parameter
-✅ result_type_param - Result<T,E> parameter
+✅ option_type_param - Option[T] parameter
+✅ result_type_param - Result[T,E] parameter
 ✅ multiple_params - Multi-parameter functions
 ```
 **Result**: 4/4 passing

@@ -5,7 +5,7 @@
 ### Test Files (11 total)
 
 #### 1. swift_match_01_basic (3 files)
-**Purpose**: Basic Swift pattern matching syntax with Result<T,E> and Option<T>
+**Purpose**: Basic Swift pattern matching syntax with Result[T,E] and Option[T]
 
 **Files**:
 - `tests/golden/swift_match_01_basic.dingo` (~40 lines)
@@ -16,8 +16,8 @@
 - Swift `switch/case` syntax vs Rust `match`
 - `.Variant` prefix (Swift-specific)
 - `(let binding)` syntax
-- Result<T,E> patterns: `.Ok(let value)`, `.Err(let e)`
-- Option<T> patterns: `.Some(let s)`, `.None`
+- Result[T,E] patterns: `.Ok(let value)`, `.Err(let e)`
+- Option[T] patterns: `.Some(let s)`, `.None`
 - Match in expression context
 
 **Example**:
@@ -75,7 +75,7 @@ case .None:
 - Braced bodies: `case .Some(let x): { let doubled = x * 2; return doubled }`
 - Mixed body styles in same switch
 - Deep nesting (triple-nested switches)
-- Result<Result<Option<T>, E>, E> patterns
+- Result[Result<Option[T], E], E> patterns
 
 **Example**:
 ```dingo

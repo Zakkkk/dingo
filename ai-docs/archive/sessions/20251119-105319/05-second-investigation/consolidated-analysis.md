@@ -190,7 +190,7 @@ for _, plugin := range plugins {
 
 3. **Test with simple file**:
 ```dingo
-fn test(r: Result<int, string>) -> int {
+fn test(r: Result[int, string]) -> int {
     match r {
         Ok(x) => x,
         Err(_) => 0
@@ -411,7 +411,7 @@ grep "type Result_int_string" tests/golden/pattern_match_01_simple.go
 
 ### Test 1: Minimal Result Type
 ```dingo
-fn test1(r: Result<int, string>) -> int {
+fn test1(r: Result[int, string]) -> int {
     match r {
         Ok(x) => x,
         Err(_) => 0
@@ -446,7 +446,7 @@ go build test1.go  # Should compile!
 
 ### Test 2: Minimal Option Type
 ```dingo
-fn test2(o: Option<int>) -> int {
+fn test2(o: Option[int]) -> int {
     match o {
         Some(x) => x,
         None => 0

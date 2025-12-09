@@ -1,4 +1,4 @@
-# Task 3a: Result<T,E> Helper Methods Implementation
+# Task 3a: Result[T,E] Helper Methods Implementation
 
 ## Files Modified
 
@@ -10,33 +10,33 @@
   - Returns Ok value if present
   - Calls function with Err value to compute fallback
   - Includes nil checks and panic on invalid state
-- **Lines 1039-1168**: Implemented `Map(fn func(T) U) Result<U, E>` method
+- **Lines 1039-1168**: Implemented `Map(fn func(T) U) Result[U, E]` method
   - Transforms Ok value using provided function
   - Propagates Err unchanged
   - Returns interface{} for generic U type (no generics support yet)
   - Uses struct literal for result construction
-- **Lines 1170-1299**: Implemented `MapErr(fn func(E) F) Result<T, F>` method
+- **Lines 1170-1299**: Implemented `MapErr(fn func(E) F) Result[T, F]` method
   - Transforms Err value using provided function
   - Propagates Ok unchanged
   - Returns interface{} for generic F type
-- **Lines 1301-1375**: Updated `Filter(predicate func(T) bool, err error) Result<T, E>` method
+- **Lines 1301-1375**: Updated `Filter(predicate func(T) bool, err error) Result[T, E]` method
   - Now takes error parameter for filtering failure
   - Returns Ok if predicate passes
   - Returns Err (provided error) if predicate fails
   - Returns Err unchanged if already Err
-- **Lines 1377-1473**: Implemented `AndThen(fn func(T) Result<U, E>) Result<U, E>` method
+- **Lines 1377-1473**: Implemented `AndThen(fn func(T) Result[U, E]) Result[U, E]` method
   - Monadic bind operation (flatMap)
   - Calls function if Ok, returns result
   - Propagates Err unchanged
   - Returns interface{} for chaining
-- **Lines 1475-1571**: Implemented `OrElse(fn func(E) Result<T, F>) Result<T, F>` method
+- **Lines 1475-1571**: Implemented `OrElse(fn func(E) Result[T, F]) Result[T, F]` method
   - Error recovery operation
   - Calls function if Err, returns result
   - Propagates Ok unchanged
   - Returns interface{} for flexibility
-- **Lines 1573-1575**: `And(other Result<U, E>) Result<U, E>` method (already working)
+- **Lines 1573-1575**: `And(other Result[U, E]) Result[U, E]` method (already working)
   - Returns other if Ok, returns self if Err
-- **Lines 1577-1579**: `Or(other Result<T, E>) Result<T, E>` method (already working)
+- **Lines 1577-1579**: `Or(other Result[T, E]) Result[T, E]` method (already working)
   - Returns self if Ok, returns other if Err
 
 **Total Lines Modified**: ~650 lines (method implementations)
@@ -65,7 +65,7 @@
 Since Dingo doesn't have full generics support yet, we use `interface{}` for generic type parameters (U, F) in transformation methods:
 
 ```go
-// Map signature: func(T) U → Result<U, E>
+// Map signature: func(T) U → Result[U, E]
 // Implementation: func(T) interface{} → interface{} (as struct)
 Map(fn func(T) interface{}) interface{}
 ```
@@ -120,7 +120,7 @@ if r.tag == ResultTag_Ok && r.ok_0 != nil {
 Filter method takes explicit error parameter instead of generating generic error:
 
 ```go
-Filter(predicate func(T) bool, filterErr error) Result<T, E>
+Filter(predicate func(T) bool, filterErr error) Result[T, E]
 ```
 
 **Why**:
@@ -171,13 +171,13 @@ Filter(predicate func(T) bool, filterErr error) Result<T, E>
 | UnwrapOr | `(T) T` | Extract Ok or return default | ✅ Working (Phase 2.16) |
 | UnwrapErr | `() E` | Extract Err value, panic if Ok | ✅ Working (Phase 2.16) |
 | **UnwrapOrElse** | `(func(E) T) T` | **Extract Ok or compute from Err** | ✅ **Task 3a** |
-| **Map** | `(func(T) U) Result<U,E>` | **Transform Ok value** | ✅ **Task 3a** |
-| **MapErr** | `(func(E) F) Result<T,F>` | **Transform Err value** | ✅ **Task 3a** |
-| **Filter** | `(func(T) bool, E) Result<T,E>` | **Conditional Ok→Err** | ✅ **Task 3a** |
-| **AndThen** | `(func(T) Result<U,E>) Result<U,E>` | **Monadic bind (flatMap)** | ✅ **Task 3a** |
-| **OrElse** | `(func(E) Result<T,F>) Result<T,F>` | **Error recovery** | ✅ **Task 3a** |
-| **And** | `(Result<U,E>) Result<U,E>` | **Sequential combination** | ✅ **Task 3a** |
-| **Or** | `(Result<T,E>) Result<T,E>` | **Fallback combination** | ✅ **Task 3a** |
+| **Map** | `(func(T) U) Result[U,E]` | **Transform Ok value** | ✅ **Task 3a** |
+| **MapErr** | `(func(E) F) Result[T,F]` | **Transform Err value** | ✅ **Task 3a** |
+| **Filter** | `(func(T) bool, E) Result[T,E]` | **Conditional Ok→Err** | ✅ **Task 3a** |
+| **AndThen** | `(func(T) Result[U,E]) Result[U,E]` | **Monadic bind (flatMap)** | ✅ **Task 3a** |
+| **OrElse** | `(func(E) Result[T,F]) Result[T,F]` | **Error recovery** | ✅ **Task 3a** |
+| **And** | `(Result[U,E]) Result[U,E]` | **Sequential combination** | ✅ **Task 3a** |
+| **Or** | `(Result[T,E]) Result[T,E]` | **Fallback combination** | ✅ **Task 3a** |
 
 **Total**: 13 methods (5 basic + 8 advanced)
 
@@ -200,7 +200,7 @@ Filter(predicate func(T) bool, filterErr error) Result<T, E>
 **Future Enhancements** (Phase 4+):
 - Add UnwrapOrDefault() for zero-value fallback
 - Add Inspect() for side-effect debugging
-- Add Transpose() for Result<Option<T>> conversion
+- Add Transpose() for Result[Option[T]] conversion
 - Consider generic type parameter support
 - Add doc comments to generated methods
 

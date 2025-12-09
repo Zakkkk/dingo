@@ -15,7 +15,7 @@ Dingo currently uses:
 
 ### Rust (Primary Inspiration)
 ```rust
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
@@ -37,9 +37,9 @@ enum CompassPoint {
 
 ### Kotlin
 ```kotlin
-sealed class Result<T, E> {
-    data class Success<T>(val value: T) : Result<T, Nothing>()
-    data class Failure<E>(val error: E) : Result<Nothing, E>()
+sealed class Result[T, E] {
+    data class Success<T>(val value: T) : Result[T, Nothing]()
+    data class Failure<E>(val error: E) : Result[Nothing, E]()
 }
 ```
 - Uses PascalCase for sealed class variants

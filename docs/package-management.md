@@ -58,7 +58,7 @@ Create your library using `.dingo` files:
 package mylib
 
 // SafeDivide returns Ok(result) or Err(error)
-func SafeDivide(a: int, b: int) -> Result<float64, error> {
+func SafeDivide(a: int, b: int) -> Result[float64, error] {
     if b == 0 {
         return Err(errors.New("division by zero"))
     }
@@ -224,7 +224,7 @@ func main() {
     // Use Dingo library types naturally
     result := httputils.Fetch("https://api.example.com")
 
-    // Result<T,E> is just a normal Go struct
+    // Result[T,E] is just a normal Go struct
     if result.IsOk() {
         fmt.Println("Response:", result.Unwrap())
     } else {
@@ -254,7 +254,7 @@ package main
 
 import "database/sql" // Standard Go library
 
-func getUser(id: int) -> Option<User> {
+func getUser(id: int) -> Option[User] {
     var user User
     err := db.QueryRow("SELECT * FROM users WHERE id = ?", id).Scan(&user)
 
@@ -280,7 +280,7 @@ package main
 
 import "github.com/someauthor/dingo-http-utils"
 
-func fetchData(url: string) -> Result<Data, error> {
+func fetchData(url: string) -> Result[Data, error] {
     // Both app and library use Dingo syntax
     response := httputils.Fetch(url)?
     data := parseData(response)?

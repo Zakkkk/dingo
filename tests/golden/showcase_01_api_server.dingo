@@ -47,21 +47,21 @@ type ProfileInput struct {
 // Validation functions return Result types - explicit success/failure
 // These will be called with the ? operator for automatic error propagation
 
-func validateEmail(email string) Result<string, error> {
+func validateEmail(email string) Result[string, error] {
 	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
 		return Err("invalid email format")
 	}
 	return Ok(email)
 }
 
-func validatePassword(password string) Result<string, error> {
+func validatePassword(password string) Result[string, error] {
 	if len(password) < 8 {
 		return Err("password must be at least 8 characters")
 	}
 	return Ok(password)
 }
 
-func validateUsername(username string) Result<string, error> {
+func validateUsername(username string) Result[string, error] {
 	if len(username) < 3 {
 		return Err("username must be at least 3 characters")
 	}
@@ -72,7 +72,7 @@ func validateUsername(username string) Result<string, error> {
 }
 
 // Database operations using Result types
-func checkUserExists(db *sql.DB, email string) Result<bool, error> {
+func checkUserExists(db *sql.DB, email string) Result[bool, error] {
 	let exists bool
 	let err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = ?)").Scan(&exists)
 	if err != nil {
@@ -81,7 +81,7 @@ func checkUserExists(db *sql.DB, email string) Result<bool, error> {
 	return Ok(exists)
 }
 
-func hashPassword(password string) Result<string, error> {
+func hashPassword(password string) Result[string, error] {
 	// Simplified for example - real code would use bcrypt
 	if password == "" {
 		return Err("cannot hash empty password")
@@ -89,7 +89,7 @@ func hashPassword(password string) Result<string, error> {
 	return Ok("hashed_" + password)
 }
 
-func saveUser(db *sql.DB, username string, email string, hashedPwd string, status UserStatus, profile *UserProfile) Result<int64, error> {
+func saveUser(db *sql.DB, username string, email string, hashedPwd string, status UserStatus, profile *UserProfile) Result[int64, error] {
 	// Safe navigation for optional profile fields with defaults
 	let bio = profile?.Bio ?? ""
 	let website = profile?.Website ?? ""
@@ -113,7 +113,7 @@ func saveUser(db *sql.DB, username string, email string, hashedPwd string, statu
 // Main business logic - showcases error propagation and safe navigation
 // Demonstrates manual error handling (? operator support coming in future phase)
 // NEW (Phase 7): Safe navigation (?.) and null coalescing (??) for optional fields
-func registerUser(db *sql.DB, req RegisterRequest) Result<User, error> {
+func registerUser(db *sql.DB, req RegisterRequest) Result[User, error] {
 	// All validations with manual error checks
 	let emailResult = validateEmail(req.Email)
 	if emailResult.IsErr() {

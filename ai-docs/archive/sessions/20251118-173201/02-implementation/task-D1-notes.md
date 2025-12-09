@@ -22,7 +22,7 @@ Each test demonstrates unique aspects of guard behavior:
 - **Purpose**: Swift-style syntax and nested pattern interaction
 - **Why**: Swift developers will look for 'where' keyword support
 - **Key Learning**: Both keywords work identically, guards work with nested patterns
-- **Real-world scenario**: Processing nested Result<Option<T>> data structures
+- **Real-world scenario**: Processing nested Result[Option[T]] data structures
 - **Design choice**: FizzBuzz example shows guard precedence clearly
 
 **Test 07 (Complex Guards):**
@@ -43,12 +43,12 @@ Each test demonstrates unique aspects of guard behavior:
 
 ### Enum Types Used
 
-**Result<T,E> (Tests 05, 06):**
+**Result[T,E] (Tests 05, 06):**
 - Most common pattern in Go (T, error) mappings
 - Guards naturally apply to Ok/Err distinction
 - Users familiar with Result from Rust will understand immediately
 
-**Option<T> (Test 06):**
+**Option[T] (Test 06):**
 - Demonstrates guards on nullable types
 - Shows Some/None pattern guards
 - Nested with Result shows real-world complexity
@@ -340,7 +340,7 @@ Value_Small(_) where true => "small"
 
 ### 3. Complex Nested Guards
 
-**Test 06 shows nested Result<Option<T>> with guards:**
+**Test 06 shows nested Result[Option[T]] with guards:**
 ```dingo
 Result_Ok(Option_Some(val)) where val > 0 => ...
 ```

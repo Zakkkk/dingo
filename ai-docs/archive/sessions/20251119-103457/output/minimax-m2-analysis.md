@@ -97,7 +97,7 @@ Dingo's tooling is **significantly more mature than expected**, with several pro
 - **Current State:** 0%
 - **Approach:**
   - `dingo convert --to-dingo` - Converts Go error patterns to Dingo
-  - Converts `(T, error)` → `Result<T,E>`
+  - Converts `(T, error)` → `Result[T,E]`
   - Adds type annotations: `var x: Type` → `x: Type`
   - Adds `?` operators where appropriate
 - **Rationale:** Lower adoption barrier by automating migration

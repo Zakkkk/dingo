@@ -429,7 +429,7 @@ r.Unwrap()  // ❌ PANIC: nil pointer dereference
 **Severity**: Medium (type safety)
 
 **Problem**:
-Advanced methods return `interface{}` instead of proper `Result<T, U>` types, losing type safety.
+Advanced methods return `interface{}` instead of proper `Result[T, U]` types, losing type safety.
 
 **Fix** (2-3 hours):
 ```go

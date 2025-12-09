@@ -138,8 +138,8 @@ TestMultiValueReturnWithErrorProp()
 - Plugin architecture with dependency resolution
 
 ### 🔨 Infrastructure Ready
-- `Result<T, E>` type infrastructure (not integrated)
-- `Option<T>` type infrastructure (not integrated)
+- `Result[T, E]` type infrastructure (not integrated)
+- `Option[T]` type infrastructure (not integrated)
 - Type inference service
 - Import injection pipeline (has bugs above)
 
@@ -191,8 +191,8 @@ TestMultiValueReturnWithErrorProp()
 **Timeline:** 1-2 weeks
 
 Proceed with Result/Option integration while accepting current bugs:
-- Result<T, E> constructor integration
-- Option<T> constructor integration
+- Result[T, E] constructor integration
+- Option[T] constructor integration
 - Pattern matching integration
 - Go interop (auto-wrapping)
 
@@ -235,14 +235,14 @@ Fix only CRITICAL issues (C1, C2), defer IMPORTANT:
 Once critical bugs are resolved, Phase 3 goals:
 
 ### Phase 3.1: Result/Option Integration (2 weeks)
-- Integrate Result<T, E> constructors with type inference
-- Integrate Option<T> constructors with type inference
+- Integrate Result[T, E] constructors with type inference
+- Integrate Option[T] constructors with type inference
 - Pattern matching support for Result/Option
 - Golden tests for all scenarios
 
 ### Phase 3.2: Go Interop (1 week)
-- Auto-wrap Go functions returning (T, error) → Result<T, E>
-- Auto-wrap Go functions returning *T → Option<T>
+- Auto-wrap Go functions returning (T, error) → Result[T, E]
+- Auto-wrap Go functions returning *T → Option[T]
 - Configurable wrapping modes
 
 ### Phase 3.3: Lambda Syntax (2 weeks)

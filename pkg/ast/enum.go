@@ -7,7 +7,7 @@ import (
 
 // EnumDecl represents a Dingo enum/sum type declaration
 // Examples:
-//   - enum Result<T, E> { Ok(T), Err(E) }
+//   - enum Result[T, E] { Ok(T), Err(E) }
 //   - enum Color { Red, Green, Blue, RGB { r: int, g: int, b: int } }
 type EnumDecl struct {
 	Enum       token.Pos        // Position of 'enum' keyword
@@ -45,7 +45,7 @@ func (t *TypeParamList) String() string {
 	for i, p := range t.Params {
 		names[i] = p.Name
 	}
-	return "<" + strings.Join(names, ", ") + ">"
+	return "[" + strings.Join(names, ", ") + "]"
 }
 
 // EnumVariant represents one variant of an enum
@@ -139,11 +139,11 @@ func (f *EnumField) String() string {
 }
 
 // TypeExpr represents a type expression
-// Examples: int, string, T, Option<T>, []int
+// Examples: int, string, T, Option[T], []int
 type TypeExpr struct {
 	StartPos token.Pos
 	EndPos   token.Pos
-	Text     string // Type as string (e.g., "int", "T", "Option<T>")
+	Text     string // Type as string (e.g., "int", "T", "Option[T]")
 }
 
 func (t *TypeExpr) Pos() token.Pos { return t.StartPos }

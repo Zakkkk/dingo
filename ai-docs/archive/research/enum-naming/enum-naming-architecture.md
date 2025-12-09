@@ -47,8 +47,8 @@ All modern languages prefer clean, unprefixed variant names.
 ## Go Community Preferences
 
 Go proposal #19412 (Sum Types) shows community preference for simple variant naming:
-- Examples use `Ok`, `Err` for Result<T,E>
-- Examples use `Some`, `None` for Option<T>
+- Examples use `Ok`, `Err` for Result[T,E]
+- Examples use `Some`, `None` for Option[T]
 
 Go standard library analysis shows predominance of unprefixed constants:
 - Time: `Sunday`, `Monday`, `Asia`, `January`

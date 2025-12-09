@@ -99,7 +99,7 @@ The `dingo.toml.example` file includes:
 # Valid values: "opt-in", "auto", "disabled"
 # - "opt-in": Requires explicit Result.FromGo() wrapper (safe, recommended)
 #   Example: let user = Result.FromGo(fetchUser(id))
-# - "auto": Automatically wraps (T, error) → Result<T, E>
+# - "auto": Automatically wraps (T, error) → Result[T, E]
 #   Example: let user = fetchUser(id)  // Auto-wrapped to Result
 # - "disabled": No Go interop, pure Dingo types only
 # Default: "opt-in"

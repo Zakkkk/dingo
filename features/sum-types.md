@@ -78,12 +78,12 @@ enum HttpResponse {
 }
 
 // Generic sum types
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
 
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None
 }
@@ -380,17 +380,17 @@ impl Shape {
 
 ```dingo
 // Result and Option are generic sum types
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
 
 // Instantiation
-let success: Result<User, DbError> = NewResultOk(user)
-let failure: Result<User, DbError> = NewResultErr(DbError.notFound())
+let success: Result[User, DbError] = NewResultOk(user)
+let failure: Result[User, DbError] = NewResultErr(DbError.notFound())
 
 // Nested generics
-let nested: Option<Result<User, Error>> = NewOptionSome(NewResultOk(user))
+let nested: Option[Result[User, Error]] = NewOptionSome(NewResultOk(user))
 ```
 
 ---
@@ -443,7 +443,7 @@ match status {
 
 ```dingo
 // API contract is clear from type
-func fetchUser(id: string) -> Result<User, FetchError>
+func fetchUser(id: string) -> Result[User, FetchError]
 
 // Compared to Go
 func fetchUser(id string) (*User, error)  // What errors? Can user be nil?

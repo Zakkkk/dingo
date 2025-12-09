@@ -91,7 +91,7 @@ $ go test ./pkg/plugin/builtin -v -run "TestInferType|TestTypeToString|TestGetRe
 **Verification**:
 ```go
 // Fix #1 prevents reverse-parsing for complex types
-// Test: Result<map[string]int, error> should work correctly
+// Test: Result[map[string]int, error] should work correctly
 resultType := "Result_map_string_int_error"
 okType, errType, ok := service.GetResultTypeParams(resultType)
 // Expected: Works if cached, fails if not (no reverse parsing)

@@ -18,7 +18,7 @@ go_interop = "opt-in"  # Options: "opt-in", "auto", "disabled"
 
 **Modes:**
 - `"opt-in"` (default) - Requires explicit `Result.FromGo()` or `Option.FromPtr()` wrapping
-- `"auto"` - Automatically wraps `(T, error)` → `Result<T, E>` and `*T` → `Option<T>`
+- `"auto"` - Automatically wraps `(T, error)` → `Result[T, E]` and `*T` → `Option[T]`
 - `"disabled"` - No Go interop, pure Dingo types only
 
 ## Question 2: None Type Inference
@@ -27,7 +27,7 @@ go_interop = "opt-in"  # Options: "opt-in", "auto", "disabled"
 When `None` appears without clear type context, the compiler should fail with a helpful error message:
 ```
 Error: Cannot infer type for None
-Help: Add explicit type annotation: let x: Option<YourType> = None
+Help: Add explicit type annotation: let x: Option[YourType] = None
 ```
 
 This forces users to be explicit and preserves type safety.

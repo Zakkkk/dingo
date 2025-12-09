@@ -93,7 +93,7 @@ result.map(|x| x * 2)?                   // Generic chain, needs context
 
 ```go
 // Preprocessor output:
-/* DINGO_MATCH_START scope=result type=Result<T,E> */
+/* DINGO_MATCH_START scope=result type=Result[T,E] */
 switch __match_discriminant_0 := result.(type) {
     /* DINGO_MATCH_ARM pattern=Ok(value) binding=value */
     case ResultOk:
@@ -161,7 +161,7 @@ switch __match_discriminant_0 := result.(type) {
     {
       "line": 42,
       "variable": "result",
-      "type": "Result<User, DbError>",
+      "type": "Result[User, DbError]",
       "arms": [
         {"pattern": "Ok(user)", "bindings": ["user"]},
         {"pattern": "Err(e)", "bindings": ["e"]}

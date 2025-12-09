@@ -21,8 +21,9 @@ type tokenInfo struct {
 // Currently handles:
 // - Enums: enum Name { Variant } → Go interface pattern
 // - Type annotations: param: Type → param Type
-// - Generic syntax: Result<T,E> → Result[T,E]
 // - Let declarations: let x = → x :=
+//
+// NOTE: Generic syntax uses Go's native [T] syntax directly. No transformation needed.
 //
 // Complex features handled by AST pipeline (ast_transformer.go):
 // - Error propagation: x? → expanded error handling
@@ -65,7 +66,6 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 	// State tracking
 	parenDepth := 0
 	inParamList := false
-	genericDepth := 0
 	inLambdaParams := false // Track TypeScript-style lambda (x: Type) => ...
 
 	for i := 0; i < len(tokens)-1; i++ {
@@ -101,60 +101,9 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 			}
 		}
 
-		// Handle generic type syntax: Result<T, E> -> Result[T, E]
-		if t.tok == gotoken.LSS {
-			if i > 0 && tokens[i-1].tok == gotoken.IDENT {
-				prevLit := tokens[i-1].lit
-				isFieldAccess := i >= 2 && tokens[i-2].tok == gotoken.PERIOD
-
-				isLikelyGeneric := false
-				if !isFieldAccess && len(prevLit) > 0 {
-					knownGenerics := map[string]bool{
-						"Result": true, "Option": true,
-						"Some": true, "None": true, "Ok": true, "Err": true,
-					}
-					if knownGenerics[prevLit] {
-						isLikelyGeneric = true
-					}
-				}
-
-				if isLikelyGeneric && i+1 < len(tokens) {
-					next := tokens[i+1]
-					if next.tok == gotoken.IDENT || next.tok == gotoken.MUL || next.tok == gotoken.LBRACK {
-						result = append(result, src[lastCopied:offset]...)
-						result = append(result, '[')
-						lastCopied = offset + 1
-						genericDepth++
-
-						mappings = append(mappings, SourceMapping{
-							DingoStart: offset,
-							DingoEnd:   offset + 1,
-							GoStart:    len(result) - 1,
-							GoEnd:      len(result),
-							Kind:       "generic_open",
-						})
-						continue
-					}
-				}
-			}
-		}
-
-		// Handle generic closing: > -> ]
-		if t.tok == gotoken.GTR && genericDepth > 0 {
-			result = append(result, src[lastCopied:offset]...)
-			result = append(result, ']')
-			lastCopied = offset + 1
-			genericDepth--
-
-			mappings = append(mappings, SourceMapping{
-				DingoStart: offset,
-				DingoEnd:   offset + 1,
-				GoStart:    len(result) - 1,
-				GoEnd:      len(result),
-				Kind:       "generic_close",
-			})
-			continue
-		}
+		// NOTE: Generic syntax transformation (<T> -> [T]) has been REMOVED.
+		// Dingo now uses Go's native generic syntax [T] directly.
+		// Users should write Result[int, error], not Result[int, error].
 
 		// Handle type annotations: param: Type -> param Type
 		// Also handles lambda parameter annotations and return type annotations

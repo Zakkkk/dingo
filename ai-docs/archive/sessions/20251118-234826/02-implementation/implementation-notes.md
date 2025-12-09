@@ -118,7 +118,7 @@ The `inferMatchResultType()` function uses pattern-based heuristics:
 **Future Enhancement**: Could parse arm expressions to infer exact types:
 - `Some(x * 2)` where `x` is `int` → `Option_int`
 - `Some("hello")` → `Option_string`
-- `Ok(value)` where function returns `Result<String, Error>` → `Result_string_error`
+- `Ok(value)` where function returns `Result[String, Error]` → `Result_string_error`
 
 ### Code Generation Flow
 
@@ -150,7 +150,7 @@ The `inferMatchResultType()` function uses pattern-based heuristics:
 
 Input (Dingo):
 ```dingo
-func doubleIfPresent(opt: Option<int>) -> Option<int> {
+func doubleIfPresent(opt: Option[int]) -> Option[int] {
     let result = match opt {
         Some(x) => Some(x * 2),
         None => Option_int_None()
@@ -185,7 +185,7 @@ func doubleIfPresent(opt Option_int) Option_int {
 
 Input:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0
@@ -310,7 +310,7 @@ Block expressions are handled separately (formatBlockStatements) - not affected 
 
 **Current**: Always uses `Option_int`, `Result_int_error`
 
-**Issue**: Doesn't handle other types like `Option<String>`, `Result<bool, String>`
+**Issue**: Doesn't handle other types like `Option[String]`, `Result[bool, String]`
 
 **Impact**: May require manual correction of generated code in rare cases
 

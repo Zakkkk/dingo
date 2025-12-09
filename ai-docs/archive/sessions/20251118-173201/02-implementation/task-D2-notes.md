@@ -27,7 +27,7 @@ The 4 tests provide complete coverage of Swift pattern matching features:
 **advanced (03)**: Edge cases
 - Deep nesting (3 levels)
 - Mixed body styles
-- Complex types: Result<Result<Option<T>, E>, E>
+- Complex types: Result[Result<Option[T], E], E>
 
 **equivalence (04)**: Validation
 - Rust syntax version of test 01

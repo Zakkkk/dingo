@@ -36,7 +36,7 @@
    - Nil safety modes
 
 4. ✅ **Parser** - Full Dingo syntax support
-   - Generic types (Result<T, E>, Option<T>)
+   - Generic types (Result[T, E], Option[T])
    - Type declarations
    - Tuple returns
    - Method calls
@@ -44,8 +44,8 @@
 ### What We Need (Phase 3 Goals)
 
 **P0 Critical Features (Not Yet Integrated):**
-- ❌ Result<T, E> type constructor integration (Ok/Err)
-- ❌ Option<T> type constructor integration (Some/None)
+- ❌ Result[T, E] type constructor integration (Ok/Err)
+- ❌ Option[T] type constructor integration (Some/None)
 - ❌ Pattern matching on Result/Option
 - ❌ Helper methods (unwrap, unwrapOr, map, etc.)
 - ❌ Go interoperability with configurable wrapping modes
@@ -93,8 +93,8 @@ go_interop = "opt-in"  # Options: "opt-in", "auto", "disabled"
    - Best for existing Go codebases
 
 2. **`"auto"`** - Automatic wrapping
-   - `(T, error)` → `Result<T, E>` automatically
-   - `*T` → `Option<T>` automatically
+   - `(T, error)` → `Result[T, E]` automatically
+   - `*T` → `Option[T]` automatically
    - Convenient for greenfield Dingo projects
 
 3. **`"disabled"`** - No Go interop
@@ -367,9 +367,9 @@ const (
 **USER DECISION:** None without type context → Compilation error
 
 **None Type Inference Strategy:**
-1. Check for explicit type annotation: `let x: Option<string> = None` ✅
-2. Check for function return type: `func foo() -> Option<int> { return None }` ✅
-3. Check for assignment to typed variable: `var x Option<bool>; x = None` ✅
+1. Check for explicit type annotation: `let x: Option[string] = None` ✅
+2. Check for function return type: `func foo() -> Option[int] { return None }` ✅
+3. Check for assignment to typed variable: `var x Option[bool]; x = None` ✅
 4. **OTHERWISE:** Emit compilation error
 
 **Error Message:**
@@ -381,7 +381,7 @@ Error: Cannot infer type for None
    |             ^^^^ type cannot be determined
    |
 Help: Add explicit type annotation:
-      let x: Option<YourType> = None
+      let x: Option[YourType] = None
 ```
 
 **Success Criteria:**
@@ -478,7 +478,7 @@ let user = Option.FromPtr(findUser(id))  // findUser returns *User
 
 **Mode 2: auto**
 ```dingo
-let user = findUser(id)  // Automatically wrapped to Option<User>
+let user = findUser(id)  // Automatically wrapped to Option[User]
 ```
 
 **Mode 3: disabled**
@@ -530,7 +530,7 @@ case "disabled":
 **Implementation:**
 Make `?` operator work with Result types:
 ```dingo
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let user = fetchUser(id)?  // Propagate Err variant
     return Ok(user)
 }
@@ -564,7 +564,7 @@ func processUser(id string) Result_User_Error {
 **Implementation:**
 Make `?.` operator work with Option types:
 ```dingo
-let name = user?.name  // Returns Option<string>
+let name = user?.name  // Returns Option[string]
 ```
 
 Transform to:
@@ -913,8 +913,8 @@ go_interop = "auto"
 **Usage:**
 ```dingo
 // Automatically wrapped
-let user = fetchUser(id)  // → Result<User, error>
-let data = findData(key)  // → Option<Data>
+let user = fetchUser(id)  // → Result[User, error]
+let data = findData(key)  // → Option[Data]
 ```
 
 ### Example 3: Pure Dingo (disabled)
@@ -953,24 +953,24 @@ Error: Cannot infer type for None
    |         ^^^^ type cannot be determined
    |
 Help: Add explicit type annotation:
-      let x: Option<YourType> = None
+      let x: Option[YourType] = None
 ```
 
 ### Success Case 1: Explicit Type
 ```dingo
-let x: Option<string> = None  // ✅ OK
+let x: Option[string] = None  // ✅ OK
 ```
 
 ### Success Case 2: Function Return
 ```dingo
-func findUser(id: string) -> Option<User> {
+func findUser(id: string) -> Option[User] {
     return None  // ✅ OK - type inferred from return type
 }
 ```
 
 ### Success Case 3: Typed Assignment
 ```dingo
-var x: Option<int>
+var x: Option[int]
 x = None  // ✅ OK - type inferred from variable declaration
 ```
 

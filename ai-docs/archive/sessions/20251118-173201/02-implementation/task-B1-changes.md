@@ -106,7 +106,7 @@ type SwiftMatchProcessor struct {
 - `TestSwiftMatchProcessor_BracedBodies` - Case bodies with braces
 
 #### Type Support
-- `TestSwiftMatchProcessor_OptionType` - Option<T> patterns (Some/None)
+- `TestSwiftMatchProcessor_OptionType` - Option[T] patterns (Some/None)
 - `TestSwiftMatchProcessor_NoBindingPattern` - Patterns without bindings (None)
 
 #### Cross-Syntax Validation

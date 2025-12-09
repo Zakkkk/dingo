@@ -57,7 +57,7 @@ No blocking issues found.
 - For complex patterns, use AST node metadata (custom fields or side tables)
 - Example:
   ```go
-  // Instead of: /* DINGO_MATCH: Result<T,E>, patterns=[Ok(x) if x > 10, ...] */
+  // Instead of: /* DINGO_MATCH: Result[T,E], patterns=[Ok(x) if x > 10, ...] */
   // Use AST metadata:
   type MatchMetadata struct {
       ScrutineeType types.Type
@@ -85,7 +85,7 @@ No blocking issues found.
 **Example**:
 ```dingo
 // Instead of guessing from patterns, require annotation when ambiguous:
-match result: Result<User, Error> {  // Explicit type annotation
+match result: Result[User, Error] {  // Explicit type annotation
     Ok(user) => ...,
     Err(e) => ...
 }
@@ -209,7 +209,7 @@ func TestConfigLoadMalformed(t *testing.T) {
 
 #### 7. None Inference Error Messages (Readability)
 
-**Issue**: The error "cannot infer type for None" is clear, but the suggestion "Add explicit type annotation: let x: Option<YourType> = None" uses placeholder "YourType". Could be more helpful.
+**Issue**: The error "cannot infer type for None" is clear, but the suggestion "Add explicit type annotation: let x: Option[YourType] = None" uses placeholder "YourType". Could be more helpful.
 
 **Recommendation**: Infer candidate types from nearby context:
 ```
@@ -220,8 +220,8 @@ error: cannot infer type for None
    |             ^^^^ no type context available
    |
 help: add explicit type annotation:
-    let x: Option<int> = None      // Based on nearby Option<int> usage
-    let x: Option<string> = None   // Or based on function context
+    let x: Option[int] = None      // Based on nearby Option[int] usage
+    let x: Option[string] = None   // Or based on function context
 ```
 
 **Priority**: MINOR - Enhancement for Phase 4.2.

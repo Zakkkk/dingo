@@ -206,7 +206,7 @@ if nextCaseIdx == -1 {
 1. **Basic functionality** (4 tests) - Parsing, pass-through, interfaces
 2. **Guard support** (3 tests) - where/if keywords, complex guards
 3. **Body styles** (2 tests) - Bare statements, braced blocks
-4. **Type support** (2 tests) - Option<T>, patterns without bindings
+4. **Type support** (2 tests) - Option[T], patterns without bindings
 5. **Cross-syntax validation** (1 test) - Rust equivalence (CRITICAL)
 
 ### Key Test: RustEquivalence

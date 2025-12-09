@@ -26,7 +26,7 @@
 
 **🔍 Remaining Issues (Separate from This Fix):**
 
-**❌ `pattern_match_01_simple.dingo`**: Fails due to **unprocessed generics** (`Result<int, error>` not converted to `Result[int, error]`)
+**❌ `pattern_match_01_simple.dingo`**: Fails due to **unprocessed generics** (`Result[int, error]` not converted to `Result[int, error]`)
 
 **❌ `pattern_match_05_guards_basic.dingo`**: Complex pattern guard issues (separate from init statement bug)
 

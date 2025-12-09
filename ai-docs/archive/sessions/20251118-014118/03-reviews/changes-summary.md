@@ -1,7 +1,7 @@
 # Changes Summary for Code Review
 
 ## Overview
-Implemented comprehensive parser fix and Result<T,E> integration across 4 phases.
+Implemented comprehensive parser fix and Result[T,E] integration across 4 phases.
 
 ## Files Created (New)
 1. **pkg/preprocessor/enum.go** (345 lines) - Enum preprocessor for sum types

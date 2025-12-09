@@ -54,7 +54,7 @@ func (s Shape) IsTriangle() bool { return s.tag == ShapeTag_Triangle }
 **Rationale:** Best user experience - defined as normal enums in `dingo/std` but automatically available
 
 **Impact:**
-- `Result<T, E>` and `Option<T>` work out of the box
+- `Result[T, E]` and `Option[T]` work out of the box
 - Defined in standard library, not compiler magic
 - Can be inspected like any other enum
 

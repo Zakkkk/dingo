@@ -14,7 +14,7 @@ This plan outlines the architecture for implementing functional utilities (map, 
 **Key Decisions:**
 - Use Go generics (not code generation) for type-safe functional utilities
 - Create a new `stdlib` package for Dingo standard library utilities
-- Integrate deeply with Dingo's Result<T, E> and Option<T> types
+- Integrate deeply with Dingo's Result[T, E] and Option[T] types
 - Support method-style chaining syntax via slice wrappers
 - Generate clean, readable Go code with explicit loops (zero runtime overhead)
 
@@ -83,14 +83,14 @@ Once lambda syntax is implemented, seamlessly integrate with functional utilitie
 ```dingo
 // Map with Result types
 let users: []User = getUsers()
-let results: []Result<Profile, Error> = users.map(|u| fetchProfile(u.id))
+let results: []Result[Profile, Error] = users.map(|u| fetchProfile(u.id))
 
 // Filter with Option types
-let names: []Option<string> = users.map(|u| u.name)
+let names: []Option[string] = users.map(|u| u.name)
 let validNames: []string = names.filterSome()  // Filter out None values
 
 // Reduce with error propagation
-let total: Result<int, Error> = numbers.mapTry(|n| parseNumber(n)).sum()
+let total: Result[int, Error] = numbers.mapTry(|n| parseNumber(n)).sum()
 ```
 
 ---
@@ -349,8 +349,8 @@ functional_utilities (plugin)
     └── go/ast (standard library)
 
 pkg/stdlib
-    ├── (future) pkg/types/result.go  # Result<T, E> implementation
-    └── (future) pkg/types/option.go  # Option<T> implementation
+    ├── (future) pkg/types/result.go  # Result[T, E] implementation
+    └── (future) pkg/types/option.go  # Option[T] implementation
 ```
 
 ### Plugin Execution Order
@@ -529,7 +529,7 @@ No breaking changes needed!
 ### Phase 5: Result/Option Integration (Week 2)
 
 **Tasks:**
-1. Wait for Result<T, E> and Option<T> implementations
+1. Wait for Result[T, E] and Option[T] implementations
 2. Add Result-aware utilities (MapResult, FilterOk)
 3. Add Option-aware utilities (MapOption, FilterSome)
 4. Add golden tests for integrated scenarios
@@ -822,7 +822,7 @@ When lambda syntax is implemented:
 See `gaps.json` for structured questions.
 
 1. **Result/Option Types Status?**
-   - Are Result<T, E> and Option<T> already implemented?
+   - Are Result[T, E] and Option[T] already implemented?
    - If not, should we implement basic versions?
    - What's the API contract (methods, constructors)?
 
@@ -1077,8 +1077,8 @@ func processUsers(users []User) []string {
 ```dingo
 package main
 
-func parseNumbers(strs []string) Result<[]int, Error> {
-    return strs.mapResult(func(s string) Result<int, Error> {
+func parseNumbers(strs []string) Result[[]int, Error] {
+    return strs.mapResult(func(s string) Result[int, Error] {
         return parseInt(s)
     })
 }

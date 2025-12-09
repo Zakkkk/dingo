@@ -15,11 +15,11 @@ import (
 // NoneContextPlugin infers types for None constants from surrounding context
 //
 // This plugin implements context-aware type inference for the None constant.
-// None represents the absence of a value in Option<T>, but the type T must be
+// None represents the absence of a value in Option[T], but the type T must be
 // inferred from context.
 //
 // Valid contexts (in precedence order):
-// 1. Explicit type annotation: let x: Option<int> = None
+// 1. Explicit type annotation: let x: Option[int] = None
 // 2. Return statement: return None (from function signature)
 // 3. Function call argument: processAge(None) (from parameter type)
 // 4. Struct field: User{ age: None } (from field type)
@@ -127,7 +127,7 @@ func (p *NoneContextPlugin) Transform(node ast.Node) (ast.Node, error) {
 			if err != nil {
 				// Emit compile error for ambiguous None
 				p.ctx.ReportError(
-					fmt.Sprintf("cannot infer type for None constant: %v. Add explicit type annotation: let x: Option<T> = None", err),
+					fmt.Sprintf("cannot infer type for None constant: %v. Add explicit type annotation: let x: Option[T] = None", err),
 					ident.Pos(),
 				)
 				return true
@@ -155,7 +155,7 @@ func (p *NoneContextPlugin) isTrackedNone(ident *ast.Ident) bool {
 	return false
 }
 
-// inferNoneType infers the Option<T> type from surrounding context
+// inferNoneType infers the Option[T] type from surrounding context
 func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (string, error) {
 	if p.ctx == nil {
 		return "", fmt.Errorf("no context available")
@@ -204,7 +204,7 @@ func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (string, error) 
 			}
 
 		case *ast.ValueSpec:
-			// Context: var x Option<int> = None
+			// Context: var x Option[int] = None
 			// Explicit type annotation
 			if parentNode.Type != nil {
 				if typ := p.extractOptionType(parentNode.Type); typ != "" {
@@ -242,7 +242,7 @@ func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (string, error) 
 	// Validate that the inferred type is an Option type
 	// Support both camelCase (OptionInt) and legacy underscore (Option_int) formats
 	if !strings.HasPrefix(inferredType, "Option") {
-		return "", fmt.Errorf("expected Option<T> type, got %s", inferredType)
+		return "", fmt.Errorf("expected Option[T] type, got %s", inferredType)
 	}
 
 	return inferredType, nil
@@ -267,10 +267,10 @@ func (p *NoneContextPlugin) findReturnType(noneIdent *ast.Ident) (string, error)
 	// Get return type from function signature
 	returnType := funcDecl.Type.Results.List[0].Type
 
-	// Extract Option<T> type name
+	// Extract Option[T] type name
 	optionTypeName := p.extractOptionType(returnType)
 	if optionTypeName == "" {
-		return "", fmt.Errorf("return type is not Option<T>")
+		return "", fmt.Errorf("return type is not Option[T]")
 	}
 
 	return optionTypeName, nil
@@ -579,9 +579,9 @@ func (p *NoneContextPlugin) extractOptionType(typeExpr ast.Expr) string {
 		}
 
 	case *ast.IndexExpr:
-		// Option<T> (not yet transformed)
+		// Option[T] (not yet transformed)
 		if ident, ok := t.X.(*ast.Ident); ok && ident.Name == "Option" {
-			// Extract T from Option<T>
+			// Extract T from Option[T]
 			innerType := p.getTypeName(t.Index)
 			return "Option_" + innerType
 		}

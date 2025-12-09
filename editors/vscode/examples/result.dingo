@@ -4,7 +4,7 @@ package main
 import "errors"
 
 // Function returning Result
-func fetchUser(id string) -> Result<User, error> {
+func fetchUser(id string) -> Result[User, error] {
     if id == "" {
         return Err(errors.New("invalid ID"))
     }
@@ -19,7 +19,7 @@ func fetchUser(id string) -> Result<User, error> {
 }
 
 // Using error propagation operator
-func processUser(id string) -> Result<User, error> {
+func processUser(id string) -> Result[User, error] {
     let user = fetchUser(id)?
 
     if user.age < 18 {

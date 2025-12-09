@@ -95,7 +95,7 @@ if inAssignmentContext {
 
 **Input**:
 ```dingo
-fn map_option(opt: Option<int>) -> Option<int> {
+fn map_option(opt: Option[int]) -> Option[int] {
     let result = match opt {
         Some(x) => Some(x * 2),
         None => None,

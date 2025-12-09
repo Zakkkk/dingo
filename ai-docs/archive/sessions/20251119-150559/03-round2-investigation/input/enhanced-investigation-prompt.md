@@ -321,18 +321,18 @@ package main
 
 import "fmt"
 
-// Simple pattern matching examples for Result<T,E> and Option<T>
+// Simple pattern matching examples for Result[T,E] and Option[T]
 
-// Example 1: Pattern match on Result<T,E>
-func processResult(result: Result<int, error>) -> int {
+// Example 1: Pattern match on Result[T,E]
+func processResult(result: Result[int, error]) -> int {
 	match result {
 		Ok(value) => value * 2,
 		Err(e) => 0
 	}
 }
 
-// Example 2: Pattern match on Option<T>
-func processOption(opt: Option<string>) -> string {
+// Example 2: Pattern match on Option[T]
+func processOption(opt: Option[string]) -> string {
 	match opt {
 		Some(s) => s,
 		None => "default"
@@ -349,7 +349,7 @@ func handleStatus(status: Status) -> string {
 }
 
 // Example 4: Pattern match in assignment context
-func doubleIfPresent(opt: Option<int>) -> Option<int> {
+func doubleIfPresent(opt: Option[int]) -> Option[int] {
 	let result = match opt {
 		Some(x) => Some(x * 2),
 		None => Option_int_None()
@@ -358,7 +358,7 @@ func doubleIfPresent(opt: Option<int>) -> Option<int> {
 }
 
 // Example 5: Nested pattern matching
-func processNested(result: Result<Option<int>, error>) -> int {
+func processNested(result: Result[Option[int], error]) -> int {
 	match result {
 		Ok(inner) => {
 			match inner {
@@ -389,7 +389,7 @@ const (
 ```dingo
 package main
 
-// Test: Basic pattern matching with Result<T,E> and Option<T>
+// Test: Basic pattern matching with Result[T,E] and Option[T]
 // Feature: Match expressions without guards
 // Complexity: basic
 
@@ -466,7 +466,7 @@ Comparing FAILING vs PASSING tests:
 ### Syntax Patterns
 
 **FAILING (pattern_match_01_simple.dingo)**:
-- Uses `: Type` syntax: `result: Result<int, error>`
+- Uses `: Type` syntax: `result: Result[int, error]`
 - Uses `-> Type` return syntax: `func processResult(...) -> int`
 - Uses **unqualified** patterns: `Ok(value)`, `Some(s)`, `None`
 - Implicit return (match as expression): `match status { ... }`
@@ -481,7 +481,7 @@ Comparing FAILING vs PASSING tests:
 
 **FAILING**:
 ```dingo
-func processOption(opt: Option<string>) -> string {
+func processOption(opt: Option[string]) -> string {
 	match opt {
 		Some(s) => s,
 		None => "default"
@@ -518,7 +518,7 @@ Test these theories:
 
 **Theory A**: `: Type` syntax corrupts the match line
 - Does TypeAnnotProcessor run before RustMatchProcessor?
-- Does it transform `: Option<string>` into something that breaks match detection?
+- Does it transform `: Option[string]` into something that breaks match detection?
 
 **Theory B**: `-> Type` return syntax causes issues
 - Is the arrow `->` interfering with pattern arm arrow `=>`?
@@ -556,7 +556,7 @@ processors := []FeatureProcessor{
 ```
 
 **Key insight**: TypeAnnotProcessor runs BEFORE RustMatchProcessor!
-- This means `: Option<string>` may already be transformed
+- This means `: Option[string]` may already be transformed
 - RustMatchProcessor sees POST-TypeAnnot code, not original
 
 ---
@@ -573,10 +573,10 @@ Please provide:
 ### 2. Execution Trace
 Walk through step-by-step:
 ```
-Input: "func processOption(opt: Option<string>) -> string {\n    match opt {\n..."
+Input: "func processOption(opt: Option[string]) -> string {\n    match opt {\n..."
 
 Step 1: Line detection
-- Line 1: "func processOption(opt: Option<string>) -> string {"
+- Line 1: "func processOption(opt: Option[string]) -> string {"
 - Line 2: "    match opt {"
 - Detection: "match " found on line 2 ✓
 

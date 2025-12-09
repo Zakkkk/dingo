@@ -26,7 +26,7 @@ type ErrorContext struct {
 }
 
 // ErrorPropExpr represents the error propagation operator: expr?
-// The ? operator is a postfix operator that unwraps a Result<T,E> or (T, error) value,
+// The ? operator is a postfix operator that unwraps a Result[T,E] or (T, error) value,
 // automatically returning the error if present.
 //
 // Syntax:
@@ -38,13 +38,13 @@ type ErrorContext struct {
 //
 // Examples:
 //
-//	value := getData()?                           // Unwrap Result<Data, error>
+//	value := getData()?                           // Unwrap Result[Data, error]
 //	order := fetchOrder(id) ? "fetch failed"     // Add context message
 //	user := loadUser(id) ? |err| wrap("user", err) // Custom transform
 //
 // Type Requirements:
 //   - Operand must be one of:
-//   - Result<T, E> type
+//   - Result[T, E] type
 //   - (T, error) tuple
 //   - The ? operator extracts T and propagates E/error upward
 type ErrorPropExpr struct {
@@ -52,7 +52,7 @@ type ErrorPropExpr struct {
 	Operand  Expr      // Expression before ? (must return Result or (T, error))
 
 	// Type information (filled by type checker during semantic analysis)
-	ResultType types.Type // The success type T (what we extract from Result<T,E>)
+	ResultType types.Type // The success type T (what we extract from Result[T,E])
 	ErrorType  types.Type // The error type E (what we propagate if error)
 
 	// Error transformation options (mutually exclusive, both nil for basic ?)

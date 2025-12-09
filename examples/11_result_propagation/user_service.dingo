@@ -74,7 +74,7 @@ func GetUserWithContext(db *sql.DB, id int) (User, error) {
 // Use for custom error types or complex transformations
 // Explicit |err| binding - no magic implicit variables
 
-func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
+func FindUser(db *sql.DB, id int) Result[User, ServiceError] {
 	row := db.QueryRow("SELECT id, name, email FROM users WHERE id = ?", id)
 
 	var user User
@@ -89,7 +89,7 @@ func FindUser(db *sql.DB, id int) Result<User, ServiceError> {
 	return user
 }
 
-func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
+func FindOrdersByUser(db *sql.DB, userID int) Result[[]Order, ServiceError] {
 	// Pattern 3: Explicit |err| lambda binding
 	// Note: db.Query returns (*sql.Rows, error) - supports ?
 	rows := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)?
@@ -112,12 +112,12 @@ func FindOrdersByUser(db *sql.DB, userID int) Result<[]Order, ServiceError> {
 // === Combining patterns with guard let ===
 // guard let also uses explicit |err| binding for consistency
 
-func GetUserOrderTotal(db *sql.DB, userID int) Result<float64, ServiceError> {
+func GetUserOrderTotal(db *sql.DB, userID int) Result[float64, ServiceError] {
 	// guard let unwraps Result or returns error via explicit |err|
 	// Note: Err[float64] explicit type parameter needed for type inference
-	guard let user = FindUser(db, userID) else |err| { return Err<float64>(err) }
+	guard let user = FindUser(db, userID) else |err| { return Err[float64](err) }
 
-	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err<float64>(err) }
+	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err[float64](err) }
 
 	var total float64
 	for _, order := range orders {

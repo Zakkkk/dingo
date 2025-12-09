@@ -26,7 +26,7 @@
 
 #### Type Inference Logic (inferNoneType method)
 Context detection precedence (uses `ctx.WalkParents()`):
-1. **Explicit type annotation**: `var x: Option<int> = None` (ast.ValueSpec with Type)
+1. **Explicit type annotation**: `var x: Option[int] = None` (ast.ValueSpec with Type)
 2. **Return statement**: `return None` (from function signature)
 3. **Assignment target**: `x = None` (from variable type via go/types)
 4. **Function call**: `foo(None)` (from parameter type via go/types)
@@ -120,7 +120,7 @@ pipeline.RegisterPlugin(builtin.NewNoneContextPlugin())  // NEW
 Errors reported via `ctx.ReportError()`:
 ```
 cannot infer type for None constant: no valid type context found.
-Add explicit type annotation: let x: Option<T> = None
+Add explicit type annotation: let x: Option[T] = None
 ```
 
 ## Design Decisions

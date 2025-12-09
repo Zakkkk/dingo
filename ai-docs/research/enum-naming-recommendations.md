@@ -229,18 +229,18 @@ shape := Circle(5.0)       // ✅ Clean
 
 Dingo's standard library types should maintain consistent naming:
 
-### Result<T, E> Variants
+### Result[T, E] Variants
 ```go
-enum Result<T, E> {
-    Ok<T>,     // ✅ Consistent with Rust/Swift expectations
-    Err<E>     // ✅ Standard error terminology
+enum Result[T, E] {
+    Ok[T],     // ✅ Consistent with Rust/Swift expectations
+    Err[E]     // ✅ Standard error terminology
 }
 ```
 
-### Option<T> Variants  
+### Option[T] Variants  
 ```go
-enum Option<T> {
-    Some<T>,   // ✅ Widest language precedent
+enum Option[T] {
+    Some[T],   // ✅ Widest language precedent
     None       // ✅ Haskell/Rust/Swift standard
 }
 ```
@@ -289,7 +289,7 @@ This provides the best blend of:
 Use PascalCase for struct fields containing variant data (since they're pointer-typed), following Go exported field conventions.
 
 ### 3. Keep Standard Library Consistency
-Maintain familiar naming for `Result<T,E>` (`Ok`, `Err`) and `Option<T>` (`Some`, `None`) to align with language precedents.
+Maintain familiar naming for `Result[T,E]` (`Ok`, `Err`) and `Option[T]` (`Some`, `None`) to align with language precedents.
 
 ### 4. Migration Strategy
 1. Update preprocessor unit: Change enum generation logic

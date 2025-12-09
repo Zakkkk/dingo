@@ -65,7 +65,7 @@ func divmod(a int, b int) (int, int) {
 }
 
 // With Result types
-func parseCoord(s string) Result<(int, int), string> {
+func parseCoord(s string) Result[(int, int), string] {
     if s == "" {
         return Err("empty string")
     }
@@ -243,14 +243,14 @@ Tuples can contain or be contained in Result/Option:
 
 ```dingo
 // Tuple of Results
-func getResults() (Result<int, string>, Result<int, string>) {
+func getResults() (Result[int, string], Result[int, string]) {
     return (Ok(10), Err("fail"))
 }
 
 let (r1, r2) = getResults()
 
 // Result of tuple
-func divmod(a int, b int) Result<(int, int), string> {
+func divmod(a int, b int) Result[(int, int), string] {
     if b == 0 {
         return Err("division by zero")
     }
@@ -362,7 +362,7 @@ println("New position:", x, y)
 ### Multi-Value Parsing
 
 ```dingo
-func parseIPPort(addr string) Result<(string, int), string> {
+func parseIPPort(addr string) Result[(string, int), string] {
     // Parse logic...
     return Ok(("127.0.0.1", 8080))
 }

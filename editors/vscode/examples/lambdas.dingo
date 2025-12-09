@@ -25,7 +25,7 @@ func main() {
     let sum = numbers.reduce(0, |acc, n| acc + n)
 
     // Multi-line lambda
-    let processUser = |user: User| -> Result<User, error> {
+    let processUser = |user: User| -> Result[User, error] {
         if user.age < 18 {
             return Err(errors.New("too young"))
         }

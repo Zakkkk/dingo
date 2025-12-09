@@ -21,10 +21,10 @@ import (
 // Type Resolution Strategy:
 // 1. Discovery: Find all __INFER__ identifiers in AST
 // 2. Transform: Use go/types to resolve actual types
-// 3. Inject: Replace __INFER__ with concrete types (Option<T> or *T)
+// 3. Inject: Replace __INFER__ with concrete types (Option[T] or *T)
 //
 // Supports:
-// - Option<T> types (enum-based optionals)
+// - Option[T] types (enum-based optionals)
 // - Raw Go pointers (*T)
 // - Error reporting for non-nullable types
 type SafeNavTypePlugin struct {
@@ -55,7 +55,7 @@ type inferNode struct {
 	// The resolved type (set during Transform phase)
 	resolvedType string
 
-	// Whether this is an Option<T> or pointer type
+	// Whether this is an Option[T] or pointer type
 	isOption  bool
 	isPointer bool
 }
@@ -365,9 +365,9 @@ func (p *SafeNavTypePlugin) resolveType(expr ast.Expr, info *types.Info) (types.
 		return t.Elem(), nil
 
 	case *types.Named:
-		// Check if Option<T> type
+		// Check if Option[T] type
 		if p.isOptionType(t) {
-			// Extract inner type T from Option<T>
+			// Extract inner type T from Option[T]
 			return p.extractInnerType(t), nil
 		}
 		// Regular named type
@@ -411,7 +411,7 @@ func (p *SafeNavTypePlugin) resolveType(expr ast.Expr, info *types.Info) (types.
 	}
 }
 
-// extractInnerType extracts T from Option<T>
+// extractInnerType extracts T from Option[T]
 // Option types are represented as Option_T in the AST
 func (p *SafeNavTypePlugin) extractInnerType(named *types.Named) types.Type {
 	// Try to extract from type name (e.g., Option_int -> int)
@@ -435,8 +435,8 @@ func (p *SafeNavTypePlugin) extractInnerType(named *types.Named) types.Type {
 //
 // Example: user?.address?.city
 // - Start with user (type: User)
-// - Access address field (type: *Address or Option<Address>)
-// - Access city field (type: string or Option<string>)
+// - Access address field (type: *Address or Option[Address])
+// - Access city field (type: string or Option[string])
 // - Return final type with proper Option wrapping
 func (p *SafeNavTypePlugin) walkChain(root ast.Expr, segments []ast.Expr, info *types.Info) (types.Type, error) {
 	if info == nil {
@@ -588,7 +588,7 @@ func (p *SafeNavTypePlugin) resolveIndexType(containerType types.Type, info *typ
 	}
 }
 
-// needsOptionWrap checks if a type needs to be wrapped in Option<T>
+// needsOptionWrap checks if a type needs to be wrapped in Option[T]
 // This handles safe navigation through nullable types
 func (p *SafeNavTypePlugin) needsOptionWrap(typ types.Type) bool {
 	// Pointer types are nullable and should be wrapped
@@ -607,7 +607,7 @@ func (p *SafeNavTypePlugin) needsOptionWrap(typ types.Type) bool {
 	return false
 }
 
-// wrapInOption wraps a type in Option<T>
+// wrapInOption wraps a type in Option[T]
 func (p *SafeNavTypePlugin) wrapInOption(typ types.Type) types.Type {
 	// If already an Option type, don't wrap again
 	if named, ok := typ.(*types.Named); ok {
@@ -653,7 +653,7 @@ func (p *SafeNavTypePlugin) sanitizeTypeName(typeName string) string {
 // This implements Phase 3 from the plan (lines 293-307)
 //
 // Example: user?.name ?? "Unknown"
-// - LHS type: Option<string>
+// - LHS type: Option[string]
 // - RHS type: string
 // - Result type: string (unwrapped from Option)
 func (p *SafeNavTypePlugin) handleNullCoalesce(lhs, rhs ast.Expr, info *types.Info) (types.Type, error) {
@@ -661,7 +661,7 @@ func (p *SafeNavTypePlugin) handleNullCoalesce(lhs, rhs ast.Expr, info *types.In
 		return nil, fmt.Errorf("go/types info not available")
 	}
 
-	// Resolve LHS type (should be Option<T> or *T)
+	// Resolve LHS type (should be Option[T] or *T)
 	lhsType, err := p.resolveType(lhs, info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve LHS type: %w", err)
@@ -673,7 +673,7 @@ func (p *SafeNavTypePlugin) handleNullCoalesce(lhs, rhs ast.Expr, info *types.In
 		return nil, fmt.Errorf("failed to resolve RHS type: %w", err)
 	}
 
-	// Unwrap Option<T> from LHS if present
+	// Unwrap Option[T] from LHS if present
 	unwrapped := p.unwrapOption(lhsType)
 
 	// LHS type must match RHS type
@@ -684,14 +684,14 @@ func (p *SafeNavTypePlugin) handleNullCoalesce(lhs, rhs ast.Expr, info *types.In
 	return unwrapped, nil
 }
 
-// unwrapOption extracts T from Option<T> or *T
+// unwrapOption extracts T from Option[T] or *T
 func (p *SafeNavTypePlugin) unwrapOption(typ types.Type) types.Type {
 	// Unwrap pointer
 	if ptr, ok := typ.(*types.Pointer); ok {
 		return ptr.Elem()
 	}
 
-	// Unwrap Option<T>
+	// Unwrap Option[T]
 	if named, ok := typ.(*types.Named); ok {
 		if p.isOptionType(named) {
 			return p.extractInnerType(named)
@@ -783,7 +783,7 @@ func (p *SafeNavTypePlugin) resolveTypeFromExpr(node *inferNode, expr ast.Expr) 
 	}
 
 	// Not a nullable type - report error
-	return fmt.Errorf("safe navigation requires nullable type (Option<T> or *T), got: %s", p.typeInference.TypeToString(typ))
+	return fmt.Errorf("safe navigation requires nullable type (Option[T] or *T), got: %s", p.typeInference.TypeToString(typ))
 }
 
 // isOptionType checks if a named type is an Option type
@@ -791,7 +791,7 @@ func (p *SafeNavTypePlugin) resolveTypeFromExpr(node *inferNode, expr ast.Expr) 
 // 1. Having an unexported 'tag' field of type OptionTag (NOT ResultTag)
 // 2. Having an Unwrap() method with signature: func() T
 //
-// This is more precise than before - we now distinguish between Option<T> and Result<T,E>
+// This is more precise than before - we now distinguish between Option[T] and Result[T,E]
 // since both have 'tag' fields but with different tag types.
 func (p *SafeNavTypePlugin) isOptionType(named *types.Named) bool {
 	// Get the underlying struct type
@@ -811,7 +811,7 @@ func (p *SafeNavTypePlugin) isOptionType(named *types.Named) bool {
 					hasOptionTag = true
 					break
 				}
-				// If it's ResultTag, this is Result<T,E>, not Option<T>
+				// If it's ResultTag, this is Result[T,E], not Option[T]
 				if namedType.Obj().Name() == "ResultTag" {
 					return false
 				}
@@ -1403,7 +1403,7 @@ func (p *SafeNavTypePlugin) ClearErrors() {
 //	  Reason: Method 'method' not found on inferred type 'T'
 //
 //	  Suggestion: Add explicit type annotation:
-//	    let result: Option<ReturnType> = obj?.field?.method()
+//	    let result: Option[ReturnType] = obj?.field?.method()
 //
 //	  Or ensure 'field' has a 'method' method defined.
 func (p *SafeNavTypePlugin) reportTypeInferenceError(
@@ -1536,7 +1536,7 @@ func (p *SafeNavTypePlugin) handleTypeAssertion(
 		)
 	}
 
-	// Type assertion in safe navigation always returns Option<T>
+	// Type assertion in safe navigation always returns Option[T]
 	// because it may fail
 	return p.wrapInOption(targetType), nil
 }
@@ -1586,7 +1586,7 @@ func (p *SafeNavTypePlugin) handleFunctionValue(
 	funcType types.Type,
 	info *types.Info,
 ) (types.Type, error) {
-	// Unwrap if Option<func>
+	// Unwrap if Option[func]
 	funcType = p.unwrapOption(funcType)
 
 	// Must be a function type
@@ -1609,7 +1609,7 @@ func (p *SafeNavTypePlugin) handleChannelOp(
 	chanType types.Type,
 	info *types.Info,
 ) (types.Type, error) {
-	// Unwrap if Option<chan>
+	// Unwrap if Option[chan]
 	chanType = p.unwrapOption(chanType)
 
 	// Must be a channel type
@@ -1624,7 +1624,7 @@ func (p *SafeNavTypePlugin) handleChannelOp(
 
 // handleMultipleReturns handles functions with multiple return values
 // Example: opt?.multiReturn()
-// Returns Option<T> where T is the first return value
+// Returns Option[T] where T is the first return value
 func (p *SafeNavTypePlugin) handleMultipleReturns(
 	sig *types.Signature,
 	info *types.Info,

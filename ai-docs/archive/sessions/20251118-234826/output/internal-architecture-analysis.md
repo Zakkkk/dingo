@@ -143,12 +143,12 @@
      - Which AST gets the tag?
   3. **Package comments**: User's package doc comment vs injected code
      - Concatenation might break doc comment association
-  4. **Nested generics**: `Result<Option<T>, Error>` across two ASTs
+  4. **Nested generics**: `Result[Option[T], Error]` across two ASTs
      - Type references span AST boundaries
 
 **Option C (Comment Map)**: High robustness
 - **Edge cases to handle**:
-  1. **Injected nodes reference user nodes**: Example: `Result<T>` where `T` is user type
+  1. **Injected nodes reference user nodes**: Example: `Result[T]` where `T` is user type
      - Solution: Only remove comment associations for the injected node itself, not children
      - Go's comment map handles this naturally (comments are per-node)
   2. **User comments on injected lines**: Can't happen (user never wrote those lines)
@@ -266,7 +266,7 @@
 2. **Complex injected node structures**: Deeply nested injected nodes with user sub-nodes
    - Impact: User comments might be incorrectly removed
    - Likelihood: Low (injected types are simple structs/functions)
-   - Mitigation: Test with nested generics (`Result<Option<T>>`)
+   - Mitigation: Test with nested generics (`Result[Option[T]]`)
 
 3. **Go internals understanding**: Future developers must understand comment maps
    - Impact: Harder onboarding, slower bug fixes
@@ -317,7 +317,7 @@
 
 ### Scenario 3: Enhancing LSP with Hover Documentation
 
-**Feature**: Hover over `Result<T, E>` shows doc comment
+**Feature**: Hover over `Result[T, E]` shows doc comment
 
 **Option B**:
 - ❌ Gopls requests position in AST #2 (injected type)

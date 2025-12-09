@@ -129,7 +129,7 @@ const (
 
 #### ✅ TestGenerateTagEnum_WithGenerics
 **Purpose:** Ensure type parameters don't affect tags
-**Scenario:** `enum Result<T, E> { Ok(T), Err(E) }`
+**Scenario:** `enum Result[T, E] { Ok(T), Err(E) }`
 **Result:** PASS
 **Evidence:**
 - Tag enum is **not generic** (correct behavior)
@@ -168,7 +168,7 @@ type Shape struct {
 
 #### ✅ TestGenerateUnionStruct_Generic
 **Purpose:** Validate generic type parameter handling
-**Scenario:** `enum Option<T> { Some(T), None }`
+**Scenario:** `enum Option[T] { Some(T), None }`
 **Result:** PASS
 **Evidence:**
 - Struct has type parameters: `Option[T any]`
@@ -222,7 +222,7 @@ func Shape_Circle(radius float64) Shape {
 
 #### ✅ TestGenerateConstructor_GenericEnum
 **Purpose:** Multi-parameter generics
-**Scenario:** `enum Result<T, E> { Ok(T) }`
+**Scenario:** `enum Result[T, E] { Ok(T) }`
 **Result:** PASS
 **Evidence:**
 - Function has type parameters: `[T any, E any]`
@@ -231,7 +231,7 @@ func Shape_Circle(radius float64) Shape {
 
 #### ✅ TestGenerateConstructor_GenericEnum_SingleParam
 **Purpose:** Single-parameter generics
-**Scenario:** `enum Option<T> { Some(T) }`
+**Scenario:** `enum Option[T] { Some(T) }`
 **Result:** PASS
 **Evidence:**
 - Return type uses `IndexExpr` for single param (not `IndexListExpr`)
@@ -262,7 +262,7 @@ Initial test expected receiver name "s", but implementation uses "e". Test updat
 
 #### ✅ TestGenerateHelperMethod_GenericEnum
 **Purpose:** Generic receiver validation
-**Scenario:** `enum Option<T> { Some }`
+**Scenario:** `enum Option[T] { Some }`
 **Result:** PASS
 **Evidence:**
 - Receiver type: `Option[T]` (uses `IndexExpr`)
@@ -419,7 +419,7 @@ enum Shape {
 ```dingo
 package main
 
-enum Option<T> {
+enum Option[T] {
 	Some { value: T },
 	None,
 }

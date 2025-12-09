@@ -10,9 +10,9 @@
 ## Test Categories and Coverage
 
 ### 1. Type Declaration Tests (5 tests)
-- `TestTypeDeclaration_BasicResultIntError` - Basic Result<int> generation
-- `TestTypeDeclaration_ComplexPointerTypes` - Pointer types (Result<*User, *CustomError>)
-- `TestTypeDeclaration_ComplexSliceTypes` - Slice types (Result<[]byte, error>)
+- `TestTypeDeclaration_BasicResultIntError` - Basic Result[int] generation
+- `TestTypeDeclaration_ComplexPointerTypes` - Pointer types (Result[*User, *CustomError])
+- `TestTypeDeclaration_ComplexSliceTypes` - Slice types (Result[[]byte, error])
 - `TestTypeDeclaration_TypeNameSanitization` - Type name sanitization (8 subcases)
 - `TestTypeDeclaration_MultipleResultTypesInSameFile` - Multiple Result types coexistence
 

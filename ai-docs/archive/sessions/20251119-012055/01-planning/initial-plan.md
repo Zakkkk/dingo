@@ -936,7 +936,7 @@ func testAllContexts() {
 ### Qualitative
 
 1. **Developer Experience**: Error messages improved
-   - "Cannot infer type" → "Expected Option<T>, inferred from return type"
+   - "Cannot infer type" → "Expected Option[T], inferred from return type"
 
 2. **Code Clarity**: Generated Go more readable
    - `Result_interface_error` → `Result_User_error`

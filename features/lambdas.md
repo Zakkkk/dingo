@@ -238,7 +238,7 @@ let standalone = (x: int) => x * 2       // TypeScript style
 **Complex expressions** (inference limitations):
 ```dingo
 // Explicit types needed for return type
-let parse = |s: string| -> Result<int, Error> {
+let parse = |s: string| -> Result[int, Error] {
     if s == "" {
         return Err("empty string")
     }
@@ -246,7 +246,7 @@ let parse = |s: string| -> Result<int, Error> {
 }
 
 // TypeScript style with explicit return type
-let parse = (s: string): Result<int, Error> => {
+let parse = (s: string): Result[int, Error] => {
     if s == "" {
         return Err("empty string")
     }
@@ -336,18 +336,18 @@ let result = orders
 **Error handling pipelines:**
 ```dingo
 // Rust style
-func processData(items: []string) -> Result<[]int, Error> {
+func processData(items: []string) -> Result[[]int, Error] {
     let results = items
-        .map(|s| parseInt(s))      // []Result<int, Error>
+        .map(|s| parseInt(s))      // []Result[int, Error]
         .collect()?                 // Fail fast on first error
 
     return Ok(results)
 }
 
 // TypeScript style
-func processData(items: []string) -> Result<[]int, Error> {
+func processData(items: []string) -> Result[[]int, Error] {
     let results = items
-        .map(s => parseInt(s))      // []Result<int, Error>
+        .map(s => parseInt(s))      // []Result[int, Error]
         .collect()?                 // Fail fast on first error
 
     return Ok(results)
@@ -357,7 +357,7 @@ func processData(items: []string) -> Result<[]int, Error> {
 **Custom validation:**
 ```dingo
 // Rust style
-let validate = |input: string| -> Result<int, Error> {
+let validate = |input: string| -> Result[int, Error] {
     if len(input) == 0 {
         return Err(Error("empty input"))
     }
@@ -365,7 +365,7 @@ let validate = |input: string| -> Result<int, Error> {
 }
 
 // TypeScript style
-let validate = (input: string): Result<int, Error> => {
+let validate = (input: string): Result[int, Error] => {
     if len(input) == 0 {
         return Err(Error("empty input"))
     }
@@ -379,25 +379,25 @@ let validate = (input: string): Result<int, Error> => {
 ```dingo
 // Rust style
 let user = findUser("alice@example.com")
-let email = user.map(|u| u.email)           // Option<string>
-let domain = email.map(|e| getDomain(e))    // Option<string>
+let email = user.map(|u| u.email)           // Option[string]
+let domain = email.map(|e| getDomain(e))    // Option[string]
 
 // TypeScript style
 let user = findUser("alice@example.com")
-let email = user.map(u => u.email)           // Option<string>
-let domain = email.map(e => getDomain(e))    // Option<string>
+let email = user.map(u => u.email)           // Option[string]
+let domain = email.map(e => getDomain(e))    // Option[string]
 ```
 
 **Filtering with Option:**
 ```dingo
 // Rust style
 let validUsers = users
-    .map(|u| validateUser(u))   // []Option<User>
+    .map(|u| validateUser(u))   // []Option[User]
     .filterSome()               // []User (only Some values)
 
 // TypeScript style
 let validUsers = users
-    .map(u => validateUser(u))   // []Option<User>
+    .map(u => validateUser(u))   // []Option[User]
     .filterSome()               // []User (only Some values)
 ```
 
@@ -573,12 +573,12 @@ pairs.reduce(0, (acc, x) => acc + x)
 **Explicit types for clarity:**
 ```dingo
 // Rust style
-let parser = |input: string| -> Result<int, Error> {
+let parser = |input: string| -> Result[int, Error] {
     return parseInt(input)
 }
 
 // TypeScript style
-let parser = (input: string): Result<int, Error> => {
+let parser = (input: string): Result[int, Error] => {
     return parseInt(input)
 }
 ```

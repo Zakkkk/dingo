@@ -230,7 +230,7 @@ Overhead: 67% increase, well within acceptable range
 /*DINGO:TYPE:key=value:key2=value2*/
 
 Examples:
-/*DINGO:MATCH:START:expr=result:type=Result<User,Error>*/
+/*DINGO:MATCH:START:expr=result:type=Result[User,Error]*/
 /*DINGO:BINDING:name=user:type=User:mutable=false*/
 /*DINGO:CLOSURE:CAPTURE=x,y,z:mutable=y*/
 ```

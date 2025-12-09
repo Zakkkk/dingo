@@ -93,7 +93,7 @@ No experienced Go developer would hand-write `Value_Int`. They would write `Valu
 
 ```go
 // Enum definition (Dingo)
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }

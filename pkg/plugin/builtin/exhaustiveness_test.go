@@ -5,7 +5,7 @@ import (
 )
 
 func TestTupleExhaustivenessChecker_SimpleResultTuple(t *testing.T) {
-	// Result<T,E> has 2 variants: Ok, Err
+	// Result[T,E] has 2 variants: Ok, Err
 	// 2-element tuple: 2^2 = 4 possible patterns
 	checker := NewTupleExhaustivenessChecker(
 		2, // arity
@@ -213,7 +213,7 @@ func TestTupleExhaustivenessChecker_PartialWildcard(t *testing.T) {
 }
 
 func TestTupleExhaustivenessChecker_OptionType(t *testing.T) {
-	// Option<T> has 2 variants: Some, None
+	// Option[T] has 2 variants: Some, None
 	// Similar to Result
 	checker := NewTupleExhaustivenessChecker(
 		2,

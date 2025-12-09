@@ -58,7 +58,7 @@ case ResultTagErr:
 ```
 
 **Why this works:**
-- Result<T,E> already has tag field (Phase 3 implementation)
+- Result[T,E] already has tag field (Phase 3 implementation)
 - Tag constants already defined (ResultTagOk, ResultTagErr)
 - Simple, efficient, idiomatic Go
 
@@ -81,8 +81,8 @@ case ResultTagErr:
 - None: No value to extract
 
 **Why some need dereferencing:**
-- Result<T,E> stores ok_0 as *T (for nil safety)
-- Option<T> stores someValue as *T (for nil safety)
+- Result[T,E] stores ok_0 as *T (for nil safety)
+- Option[T] stores someValue as *T (for nil safety)
 - Error values are stored directly (already reference types)
 
 **Code generation:**
@@ -462,25 +462,25 @@ Hint: add a wildcard arm: _ => ...
 **Examples Breakdown:**
 
 **Example 1: Result - Age Validation**
-- Function: validateAge(string) → Result<int, error>
+- Function: validateAge(string) → Result[int, error]
 - Pattern: Ok(age) vs Err(e)
 - Use case: User input validation
 - Demonstrates: Error handling, data validation
 
 **Example 2: Option - User Lookup**
-- Function: findUser(int) → Option<User>
+- Function: findUser(int) → Option[User]
 - Pattern: Some(user) vs None
 - Use case: Database/map lookup
 - Demonstrates: Null safety, default values
 
 **Example 3: Nested Patterns**
-- Function: getUserAge(int) → Result<int, string>
+- Function: getUserAge(int) → Result[int, string]
 - Pattern: Option match returning Result
 - Use case: Composed error handling
 - Demonstrates: Pattern composition
 
 **Example 4: Complex Result**
-- Function: divideNumbers(int, int) → Result<float64, string>
+- Function: divideNumbers(int, int) → Result[float64, string]
 - Pattern: Ok(quotient) vs Err(errMsg)
 - Use case: Math operations
 - Demonstrates: Division by zero, error messages

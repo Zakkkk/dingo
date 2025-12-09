@@ -1,14 +1,14 @@
 // Real-world example: User settings where values may or may not be set
-// Option<T> eliminates nil pointer panics by making absence explicit
+// Option[T] eliminates nil pointer panics by making absence explicit
 package main
 
 import "fmt"
 
 type UserSettings struct {
-	Theme       Option<string>
-	FontSize    Option<int>
-	Language    Option<string>
-	NotifyEmail Option<bool>
+	Theme       Option[string]
+	FontSize    Option[int]
+	Language    Option[string]
+	NotifyEmail Option[bool]
 }
 
 type User struct {
@@ -20,7 +20,7 @@ type User struct {
 // GetTheme returns the user's theme or system default
 // No nil checks needed - Option forces explicit handling
 //
-// Alternative approaches for Option<T>:
+// Alternative approaches for Option[T]:
 //   opt.MustSome()       - Go style, panics if None (recommended)
 //   opt.Unwrap()         - Rust style alias for MustSome() (deprecated)
 //   opt.SomeOr(default)  - Returns default if None
@@ -56,7 +56,7 @@ func ShouldSendNotification(user User, notificationType string) bool {
 }
 
 // FindUserByLanguage returns first user with matching language preference
-func FindUserByLanguage(users []User, lang string) Option<User> {
+func FindUserByLanguage(users []User, lang string) Option[User] {
 	for _, user := range users {
 		if user.Settings.Language.IsSome() && user.Settings.Language.MustSome() == lang {
 			return Some[User](user)

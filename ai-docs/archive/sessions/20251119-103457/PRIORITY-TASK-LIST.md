@@ -145,7 +145,7 @@
 
 - [ ] **Go → Dingo Migration Tool** (3-4 weeks)
   - `dingo convert --to-dingo <file.go>`
-  - Convert `(T, error)` → `Result<T,E>`
+  - Convert `(T, error)` → `Result[T,E]`
   - Add type annotations (`:` syntax)
   - Add `?` operators
   - Conservative conversion (user review)

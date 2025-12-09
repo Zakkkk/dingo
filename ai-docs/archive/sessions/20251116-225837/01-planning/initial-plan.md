@@ -843,12 +843,12 @@ package main
 
 import "fmt"
 
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
 
-func divide(a: float64, b: float64) -> Result<float64, string> {
+func divide(a: float64, b: float64) -> Result[float64, string] {
     if b == 0.0 {
         return Result_Err("division by zero")
     }

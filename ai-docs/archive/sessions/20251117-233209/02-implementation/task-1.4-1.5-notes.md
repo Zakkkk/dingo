@@ -534,22 +534,22 @@ Golden Tests (Future)
 **Implementation**:
 ```go
 // Assignment context
-let x: Option<int> = None
+let x: Option[int] = None
 // Walk up AST → find *ast.AssignStmt
-// Extract type annotation → Option<int>
-// Validate None can be Option<int> ✅
+// Extract type annotation → Option[int]
+// Validate None can be Option[int] ✅
 
 // Function parameter context
-func foo(x: Option<int>) { ... }
+func foo(x: Option[int]) { ... }
 foo(None)
 // Walk up AST → find *ast.CallExpr
-// Find function signature → foo(Option<int>)
-// Match None to parameter 0 → Option<int> ✅
+// Find function signature → foo(Option[int])
+// Match None to parameter 0 → Option[int] ✅
 
 // Return context
-func bar() Option<int> { return None }
+func bar() Option[int] { return None }
 // Walk up AST → find *ast.ReturnStmt
-// Find enclosing function → bar() Option<int>
+// Find enclosing function → bar() Option[int]
 // Validate None matches return type ✅
 ```
 
@@ -631,23 +631,23 @@ func (s *TypeInferenceService) InferTypeFromContext(node ast.Node) (types.Type, 
 **Types to Support**:
 ```go
 // Maps
-Result<map[string]int, error>
+Result[map[string]int, error]
 → Result_map_string_int_error
 
 // Channels
-Result<chan int, error>
+Result[chan int, error]
 → Result_chan_int_error
 
 // Functions
-Result<func(int) string, error>
+Result[func(int) string, error]
 → Result_func_int_string_error
 
 // Interfaces
-Result<io.Reader, error>
+Result[io.Reader, error]
 → Result_io_Reader_error
 
 // Generics (Go 1.18+)
-Result<List[T], error>
+Result[List[T], error]
 → Result_List_T_error
 ```
 
@@ -736,7 +736,7 @@ From CLAUDE.md:
    - Foundation for context inference
 
 2. OptionTypePlugin (599 lines)
-   - Complete Option<T> code generation
+   - Complete Option[T] code generation
    - None type inference validation
    - Helpful error messages
    - Integration with type inference

@@ -347,8 +347,8 @@ mixed-project/
 my-lib/
 ├── src/
 │   ├── types.dingo          # Type definitions
-│   ├── result.dingo         # Result<T,E> helpers
-│   └── option.dingo         # Option<T> helpers
+│   ├── result.dingo         # Result[T,E] helpers
+│   └── option.dingo         # Option[T] helpers
 ├── gen/
 │   ├── types.go             # Generated types
 │   ├── result.go            # Generated helpers

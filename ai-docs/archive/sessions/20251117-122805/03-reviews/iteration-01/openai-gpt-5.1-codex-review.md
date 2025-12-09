@@ -54,7 +54,7 @@ Breaks every call site that mixes Ok/Err. Type mismatches prevent compilation an
 
 **Example:**
 ```dingo
-fn getUser() -> Result<User, error> {
+fn getUser() -> Result[User, error] {
     if !valid {
         return Err(errors.New("invalid"))  // → Result_T_error (wrong!)
     }

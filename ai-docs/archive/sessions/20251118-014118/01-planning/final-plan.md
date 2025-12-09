@@ -1,4 +1,4 @@
-# Final Implementation Plan: Comprehensive Parser Fix & Result<T,E> Integration
+# Final Implementation Plan: Comprehensive Parser Fix & Result[T,E] Integration
 
 ## Executive Summary
 
@@ -643,7 +643,7 @@ Run internal code-reviewer agent:
 
 **Final Success**:
 - Full workflow: Write .dingo → transpile → compile → run
-- Result<T,E> type usable in real code
+- Result[T,E] type usable in real code
 - Comprehensive test coverage
 - Clean, maintainable codebase
 

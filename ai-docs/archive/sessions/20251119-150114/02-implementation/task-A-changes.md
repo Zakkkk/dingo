@@ -31,7 +31,7 @@ Created complete library example showing transpile-on-publish pattern:
 
 **Features**:
 - SafeDivide, SafeSqrt, SafeModulo functions
-- Result<T,E> type implementation
+- Result[T,E] type implementation
 - Publishing workflow documentation
 - CI/CD integration examples
 - Consumption examples (Go and Dingo)
@@ -124,7 +124,7 @@ Created complete hybrid example showing app consuming published library:
 - ✅ FAQ with 7 questions
 
 ### Library Example
-- ✅ Result<T,E> type implementation
+- ✅ Result[T,E] type implementation
 - ✅ Safe math functions (division, sqrt, modulo)
 - ✅ Comprehensive tests
 - ✅ Publishing checklist

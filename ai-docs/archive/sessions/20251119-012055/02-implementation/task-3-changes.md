@@ -96,7 +96,7 @@ Reused Task 1's 4 context helpers without modification:
 
 ### 2. Type Parameter Extraction
 Used existing `GetResultTypeParams()` to extract T and E from Result_T_E:
-- Works with cached Result types (registered during Result<T,E> processing)
+- Works with cached Result types (registered during Result[T,E] processing)
 - Handles complex types (slices, pointers, etc.)
 - Returns nil if type not in cache (strict approach)
 
@@ -231,7 +231,7 @@ Example golden test:
 // error_prop_09_err_return_context.dingo
 package main
 
-func getNumber() Result<int> {
+func getNumber() Result[int] {
     if someCondition {
         return Err(errors.New("failed"))  // Infers Result_int_error
     }
@@ -241,7 +241,7 @@ func getNumber() Result<int> {
 
 ### Integration Testing:
 The feature works end-to-end when:
-1. Result<T,E> types are processed first (registers types)
+1. Result[T,E] types are processed first (registers types)
 2. Err() calls are processed with go/types.Info available
 3. Parent map is built for context traversal
 4. GetResultTypeParams can find cached Result types

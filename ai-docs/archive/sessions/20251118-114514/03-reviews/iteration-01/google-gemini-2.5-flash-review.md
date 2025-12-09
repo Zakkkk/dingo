@@ -3,7 +3,7 @@
 **Model**: Claude Sonnet 4.5 (Direct Mode - Gemini proxy failed)
 **Date**: 2025-11-18
 **Session**: 20251118-114514
-**Phase**: 3 - Fix A5 + Fix A4 + Option<T> + Helper Methods
+**Phase**: 3 - Fix A5 + Fix A4 + Option[T] + Helper Methods
 
 ---
 
@@ -195,8 +195,8 @@ pkg/
 ├── plugin/builtin/
 │   ├── type_inference.go      - Shared type inference service
 │   ├── addressability.go      - Shared addressability logic
-│   ├── result_type.go         - Result<T,E> plugin
-│   ├── option_type.go         - Option<T> plugin
+│   ├── result_type.go         - Result[T,E] plugin
+│   ├── option_type.go         - Option[T] plugin
 │   └── *_test.go              - Comprehensive tests
 └── errors/
     └── type_inference.go      - Error types
@@ -303,7 +303,7 @@ okType := "interface{}" // Will be refined with type inference
 **Problem**: `Err()` without context generates `Result_interface{}_error`, not the expected type.
 
 **Impact**:
-- Users must use explicit type annotations: `let result: Result<int, error> = Err(myError)`
+- Users must use explicit type annotations: `let result: Result[int, error] = Err(myError)`
 - Or use `Result_int_error_Err(myError)` constructor
 - Less ergonomic than `Ok()` (which infers from value)
 
@@ -368,11 +368,11 @@ if pkg := obj.Pkg(); pkg != nil && pkg.Path() != "" {
 **Issue**: Helper methods like `Map()` use `interface{}` for return types:
 ```go
 func (r Result_int_error) Map(fn func(int) interface{}) interface{} {
-    // Returns interface{} instead of Result<U, error>
+    // Returns interface{} instead of Result[U, error]
 }
 ```
 
-**Problem**: Loses type safety - return type should be `Result<U, error>` where `U` is the function return type.
+**Problem**: Loses type safety - return type should be `Result[U, error]` where `U` is the function return type.
 
 **Impact**:
 - Users must type-assert after `Map()`: `result.Map(fn).(Result_string_error)`
@@ -618,7 +618,7 @@ enum Color { Red, Green, Blue }
    - Improve map index addressability detection
 
 3. **Phase 5** (Generics and Advanced Features):
-   - Replace interface{} with proper Result<U, E> types
+   - Replace interface{} with proper Result[U, E] types
    - Parse complex type strings (*int, []string, etc.)
    - Full package path handling
 

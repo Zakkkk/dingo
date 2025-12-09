@@ -9,7 +9,7 @@
 
 ## Overview
 
-The `Option<T>` type represents a value that may or may not be present. It eliminates Go's pervasive nil pointer bugs by making nullability explicit in the type system.
+The `Option[T]` type represents a value that may or may not be present. It eliminates Go's pervasive nil pointer bugs by making nullability explicit in the type system.
 
 ## Motivation
 
@@ -62,7 +62,7 @@ func processUser(user *User) error {
 
 ```dingo
 // Built-in generic sum type
-enum Option<T> {
+enum Option[T] {
     Some(T)  // Value is present
     None     // Value is absent
 }
@@ -72,7 +72,7 @@ enum Option<T> {
 
 ```dingo
 // Function returning optional value
-func findUser(id: string) -> Option<User> {
+func findUser(id: string) -> Option[User] {
     let user = database.query(id)
     if user.exists() {
         return Some(user)
@@ -114,7 +114,7 @@ if findUser("123").isSome() {
 ### Go Output
 
 ```go
-// Option<T> transpiles to pointer + boolean
+// Option[T] transpiles to pointer + boolean
 type OptionUser struct {
     value *User
     isSet bool
@@ -154,7 +154,7 @@ func processUser(id string) {
 
 - **Zero allocations** for None case (just bool = false)
 - **Single allocation** for Some case (pointer to value)
-- **Inlined** for primitive types (Option<int> → *int)
+- **Inlined** for primitive types (Option[int] → *int)
 - **Compatible** with Go's nil (can convert)
 
 ---
@@ -197,7 +197,7 @@ let city = user?.address?.city?.name
 ### Rust's Option Type
 
 ```rust
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None,
 }
@@ -214,7 +214,7 @@ let user_name = find_user("123")
     .unwrap_or("Anonymous".to_string());
 
 // Combining with Result
-fn get_user(id: &str) -> Result<User, Error> {
+fn get_user(id: &str) -> Result[User, Error] {
     find_user(id).ok_or(Error::NotFound)
 }
 ```
@@ -308,13 +308,13 @@ We chose **variant-based naming** that references the actual type states:
 ### Type System
 
 ```dingo
-enum Option<T> {
+enum Option[T] {
     Some(T)
     None
 }
 
 // Compiler-generated methods
-impl Option<T> {
+impl Option[T] {
     // Check if Some
     func isSome() -> bool
 
@@ -336,16 +336,16 @@ impl Option<T> {
     func unwrapOrElse(f: fn() -> T) -> T  // Use someOrElse()
 
     // Map the Some value
-    func map<U>(f: fn(T) -> U) -> Option<U>
+    func map<U>(f: fn(T) -> U) -> Option[U]
 
     // Flat map for chaining
-    func andThen<U>(f: fn(T) -> Option<U>) -> Option<U>
+    func andThen<U>(f: fn(T) -> Option[U]) -> Option[U]
 
     // Filter based on predicate
-    func filter(f: fn(T) -> bool) -> Option<T>
+    func filter(f: fn(T) -> bool) -> Option[T]
 
     // Convert to Result
-    func okOr<E>(err: E) -> Result<T, E>
+    func okOr<E>(err: E) -> Result[T, E]
 }
 ```
 
@@ -353,7 +353,7 @@ impl Option<T> {
 
 ```dingo
 // Longhand
-let user: Option<User> = findUser(id)
+let user: Option[User] = findUser(id)
 
 // Shorthand (inspired by Swift/Kotlin)
 let user: User? = findUser(id)
@@ -365,7 +365,7 @@ let user: User? = findUser(id)
 
 ```dingo
 // Chaining with ?.
-let city = user?.address?.city?.name  // Returns Option<string>
+let city = user?.address?.city?.name  // Returns Option[string]
 
 // With nil coalescing
 let city = user?.address?.city?.name ?? "Unknown"
@@ -381,7 +381,7 @@ let email = user?.getEmail()?.lowercase()
 let goFunc = import("some/package").MaybeNil
 
 // Dingo wraps automatically
-let result: Option<User> = goFunc.call()
+let result: Option[User] = goFunc.call()
 
 // Explicit conversion
 let opt = Option.fromPtr(goPtr)
@@ -398,7 +398,7 @@ let ptr = opt.toPtr()  // Returns nil if None
 
 ```dingo
 // ❌ This won't compile
-let user: User = findUser(id)  // Error: Expected User, got Option<User>
+let user: User = findUser(id)  // Error: Expected User, got Option[User]
 
 // ✅ Must handle None case
 let user: User = match findUser(id) {
@@ -414,13 +414,13 @@ let user: User = findUser(id).unwrapOr(User.default())
 
 ```dingo
 // Clear from signature: might not find user
-func findUser(id: string) -> Option<User>
+func findUser(id: string) -> Option[User]
 
 // Clear from signature: always returns user (or panics)
 func getUser(id: string) -> User
 
 // Clear from signature: returns user or error
-func loadUser(id: string) -> Result<User, Error>
+func loadUser(id: string) -> Result[User, Error]
 ```
 
 ### Chaining
@@ -453,7 +453,7 @@ if user != nil && user.Address != nil && user.Address.City != nil {
 - ✅ **Zero runtime cost** (transpiles to pointer + bool)
 
 ### Potential Concerns
-- ❓ **More typing** (Option<User> vs *User)
+- ❓ **More typing** (Option[User] vs *User)
   - *Mitigation:* Shorthand syntax `User?` (Phase 2)
 - ❓ **Learning curve** (new concept for Go developers)
   - *Mitigation:* Familiar from Swift/Kotlin/Rust
@@ -499,7 +499,7 @@ if user != nil && user.Address != nil && user.Address.City != nil {
 ### Example 1: User Lookup
 
 ```dingo
-func findUserByEmail(email: string) -> Option<User> {
+func findUserByEmail(email: string) -> Option[User] {
     let users = database.query("SELECT * FROM users WHERE email = ?", email)
     if users.isEmpty() {
         return None
@@ -524,9 +524,9 @@ func main() {
 
 ```dingo
 struct Config {
-    port: Option<int>
-    host: Option<string>
-    timeout: Option<duration>
+    port: Option[int]
+    host: Option[string]
+    timeout: Option[duration]
 }
 
 func loadConfig() -> Config {
@@ -552,7 +552,7 @@ func main() {
 ### Example 3: Chaining Operations
 
 ```dingo
-func getUserCity(userID: string) -> Option<string> {
+func getUserCity(userID: string) -> Option[string] {
     return findUser(userID)
         .andThen(|u| u.address)     // User might not have address
         .andThen(|a| a.city)        // Address might not have city
@@ -567,7 +567,7 @@ println("User is in: ${city}")
 ### Example 4: Database Queries
 
 ```dingo
-func queryFirst<T>(sql: string, args: ...any) -> Option<T> {
+func queryFirst<T>(sql: string, args: ...any) -> Option[T] {
     let rows = db.Query(sql, args...)
     if !rows.Next() {
         return None
@@ -591,18 +591,18 @@ let user = queryFirst<User>(
 
 ```dingo
 // Convert Option to Result
-func getUser(id: string) -> Result<User, Error> {
+func getUser(id: string) -> Result[User, Error] {
     return findUser(id)
         .okOr(Error.notFound("user ${id} not found"))
 }
 
 // Convert Result to Option (discarding error)
-func tryFindUser(id: string) -> Option<User> {
-    return fetchUser(id).ok()  // Result<User, E> → Option<User>
+func tryFindUser(id: string) -> Option[User] {
+    return fetchUser(id).ok()  // Result[User, E] → Option[User]
 }
 
 // Combine both
-func loadUserSafely(id: string) -> Option<User> {
+func loadUserSafely(id: string) -> Option[User] {
     match fetchUser(id) {
         Ok(user) => Some(user),
         Err(_) => None

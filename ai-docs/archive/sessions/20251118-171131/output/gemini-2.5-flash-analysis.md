@@ -253,7 +253,7 @@ match getUserById(id) {
 ### Stage 1: Preprocessor Output
 
 ```go
-/* DINGO_MATCH_START id=1 expr=getUserById(id) type=Result<User,Error> */
+/* DINGO_MATCH_START id=1 expr=getUserById(id) type=Result[User,Error] */
 switch __match_1 := getUserById(id).(type) {
 /* DINGO_MATCH_ARM pattern=Ok(user) bindings=user type=ResultOk */
 case ResultOk:
@@ -364,7 +364,7 @@ func inferMatchType(expr ast.Expr, typeInfo *types.Info) types.Type {
     // 2. Generic parameter inference
     if named, ok := exprType.(*types.Named); ok {
         if typeParams := named.TypeParams(); typeParams != nil {
-            // Can infer Result<T,E> parameters
+            // Can infer Result[T,E] parameters
             return inferGenericParams(named, typeInfo)
         }
     }

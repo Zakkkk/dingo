@@ -22,8 +22,8 @@ Here is a summary of the key findings and recommendations:
 *   Estimated to be in the range of **40-70ms per 1000 LOC**. While potentially at the higher end of the `<50ms` target, this is acceptable given the deep semantic analysis and transformation involved. Mitigation strategies include sharing the `go/types.Info` instance and continuous benchmarking.
 
 **6. Migration Path (Phased Rollout):**
-*   **Phase 1 (Weeks 1-2): Foundation**: Implement marker utilities, basic `match` transformation for `Result<T,E>` (Ok/Err), and core `go/types` integration.
-*   **Phase 2 (Weeks 3-4): Semantic Awareness**: Enhance plugins with exhaustiveness checks, specific value handling (e.g., `Err(NotFound)`), for `Result<T,E>` and `Option<T>`.
+*   **Phase 1 (Weeks 1-2): Foundation**: Implement marker utilities, basic `match` transformation for `Result[T,E]` (Ok/Err), and core `go/types` integration.
+*   **Phase 2 (Weeks 3-4): Semantic Awareness**: Enhance plugins with exhaustiveness checks, specific value handling (e.g., `Err(NotFound)`), for `Result[T,E]` and `Option[T]`.
 *   **Phase 3 (Weeks 5-6): Advanced Features & Robustness**: Support nested matches, advanced lambdas, performance tuning, and edge case handling.
 
 **7. Risks and Mitigations:**

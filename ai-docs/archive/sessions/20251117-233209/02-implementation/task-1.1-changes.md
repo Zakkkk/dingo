@@ -8,7 +8,7 @@
 **Key Components:**
 - `ResultTypePlugin` struct - Main plugin with emission tracking
 - `Process(node ast.Node)` - AST traversal to find Result type usage
-- `handleGenericResult()` / `handleGenericResultList()` - Process `Result<T>` and `Result<T, E>` syntax
+- `handleGenericResult()` / `handleGenericResultList()` - Process `Result[T]` and `Result[T, E]` syntax
 - `emitResultDeclaration()` - Generate complete Result type structure
 - `emitResultTagEnum()` - Generate ResultTag enum (Ok, Err variants)
 - `emitConstructorFunction()` - Generate Ok/Err constructor functions
@@ -19,7 +19,7 @@
 
 **Generated Structure Example:**
 ```go
-// For Result<string, error>:
+// For Result[string, error]:
 type ResultTag uint8
 const (
     ResultTag_Ok ResultTag = iota
@@ -69,8 +69,8 @@ func (r Result_string_error) UnwrapErr() error {
 
 **Test Cases:**
 - `TestResultTypePlugin_Name` - Plugin name verification
-- `TestResultTypePlugin_BasicResultT` - Single type parameter `Result<int>`
-- `TestResultTypePlugin_ResultTwoTypes` - Two type parameters `Result<string, CustomError>`
+- `TestResultTypePlugin_BasicResultT` - Single type parameter `Result[int]`
+- `TestResultTypePlugin_ResultTwoTypes` - Two type parameters `Result[string, CustomError]`
 - `TestResultTypePlugin_SanitizeTypeName` - Type name sanitization (6 cases)
 - `TestResultTypePlugin_NoDuplicateEmission` - Duplicate detection
 - `TestResultTypePlugin_HelperMethods` - Helper method generation verification
@@ -165,8 +165,8 @@ The current `pkg/plugin/plugin.go` is minimally stubbed. Full integration requir
 
 ### Unit Tests: 10 test cases
 - ✅ Plugin name
-- ✅ Result<T> single parameter
-- ✅ Result<T, E> two parameters
+- ✅ Result[T] single parameter
+- ✅ Result[T, E] two parameters
 - ✅ Type name sanitization (6 variations)
 - ✅ Duplicate emission prevention
 - ✅ Helper methods (5 methods)

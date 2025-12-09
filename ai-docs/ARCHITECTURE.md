@@ -42,7 +42,7 @@ Dingo WILL use an **AST-based code generation** architecture:
 ┌─────────────────────────────────────────────────────────────┐
 │                     .dingo Source File                       │
 │  enum Color { Red, Green, Blue }                            │
-│  func process(x: int) Result<int, error> { ... }            │
+│  func process(x: int) Result[int, error] { ... }            │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
@@ -212,7 +212,7 @@ type Plugin interface {
 | `null_coalesce` | 70 | Character | `a ?? b` → nil checks |
 | `lambdas` | 80 | Character | `\|x\| expr` and `x => expr` |
 | `type_annotations` | 100 | Token | `param: Type` → `param Type` |
-| `generics` | 110 | Token | `Result<T,E>` → `Result[T,E]` |
+| `generics` | 110 | Token | `Result[T,E]` → `Result[T,E]` |
 | `let_binding` | 120 | Token | `let x =` → `x :=` |
 
 ### Feature Configuration (dingo.toml)
@@ -297,7 +297,7 @@ For 3rd-party plugins (v1.1+), use RPC-based loading via HashiCorp's go-plugin.
 |---------|--------------|-----------|
 | **Type Annotations** | `func(x: int)` | `func(x int)` |
 | **Let Declarations** | `let x = 42` | `x := 42` |
-| **Generic Types** | `Result<T, E>` | `Result[T, E]` |
+| **Generic Types** | `Result[T, E]` | `Result[T, E]` |
 | **Error Propagation** | `let x = expr?` | `tmp, err := expr; if err != nil { return err }; var x = tmp` |
 | **Guard Let** | `guard let x = expr else \|err\| {...}` | `x, err := expr; if err != nil {...}` |
 | **Lambdas (Rust)** | `\|x\| x + 1` | `func(x) { return x + 1 }` |
@@ -502,7 +502,7 @@ Character-level passes:
 
 ### Why Token-Level for Simple Features?
 
-Type annotations (`param: Type`) and generics (`Result<T,E>`) are simple token-to-token transformations. Using Go's scanner ensures:
+Type annotations (`param: Type`) and generics (`Result[T,E]`) are simple token-to-token transformations. Using Go's scanner ensures:
 - Correct handling of string literals
 - Proper position tracking
 - No false positives in comments
@@ -648,7 +648,7 @@ This is a deliberate architectural choice based on:
 **Borgo** adds concepts Go doesn't have (traits, algebraic types as first-class). gopls can't understand Borgo's types, so Borgo must build its own type checker.
 
 **Dingo** transforms to idiomatic Go. After transformation:
-- `Result<T,E>` becomes `Result[T,E]` (Go generic)
+- `Result[T,E]` becomes `Result[T,E]` (Go generic)
 - `enum Status {...}` becomes interface pattern
 - `x?` becomes `if err != nil { return err }`
 

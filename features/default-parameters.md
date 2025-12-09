@@ -81,7 +81,7 @@ func Connect(opts ConnectOptions) error {
 ### Basic Usage
 
 ```dingo
-func connect(host: string, port: int = 8080, timeout: duration = 30s) -> Result<Connection, Error> {
+func connect(host: string, port: int = 8080, timeout: duration = 30s) -> Result[Connection, Error] {
     // Implementation
 }
 

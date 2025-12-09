@@ -534,7 +534,7 @@ func nextState(current: State, event: Event) State {
 ### Current Limitations
 
 1. **No recursive types**: Can't define `enum Tree { Leaf, Node(Tree, Tree) }`
-2. **No type parameters**: Can't define generic `enum Result<T, E>`
+2. **No type parameters**: Can't define generic `enum Result[T, E]`
 3. **Limited pattern matching**: Requires explicit match syntax
 
 ### Workarounds

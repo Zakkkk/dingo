@@ -31,9 +31,9 @@ Root (File)
 
 #### Priority 1: Explicit Type Annotation
 ```go
-var x: Option<int> = None
+var x: Option[int] = None
 // or
-let x: Option<int> = None
+let x: Option[int] = None
 ```
 
 **Detection**: `ast.ValueSpec` with non-nil `Type` field
@@ -46,7 +46,7 @@ let x: Option<int> = None
 
 #### Priority 2: Return Statement
 ```go
-func getAge() -> Option<int> {
+func getAge() -> Option[int] {
     return None  // ← infer from function signature
 }
 ```
@@ -56,7 +56,7 @@ func getAge() -> Option<int> {
 **Inference**:
 1. Walk up to find enclosing `*ast.FuncDecl`
 2. Extract return type from `FuncDecl.Type.Results`
-3. Verify it's an Option<T> type
+3. Verify it's an Option[T] type
 
 **Implementation**:
 ```go
@@ -81,7 +81,7 @@ func findReturnType(noneIdent) {
 
 #### Priority 3: Assignment Target
 ```go
-let age: Option<int>
+let age: Option[int]
 age = None  // ← infer from LHS variable type
 ```
 
@@ -91,7 +91,7 @@ age = None  // ← infer from LHS variable type
 1. Find which RHS position None is in
 2. Get corresponding LHS identifier
 3. Use go/types to lookup variable type
-4. Verify it's Option<T>
+4. Verify it's Option[T]
 
 **Requires**: go/types `types.Info.Uses` map
 
@@ -125,7 +125,7 @@ processAge(None)  // ← infer from processAge parameter type
 1. Find which argument position None is in
 2. Use go/types to get function signature
 3. Extract parameter type at that position
-4. Verify it's Option<T>
+4. Verify it's Option[T]
 
 **Requires**: go/types `types.Info.Types` map for CallExpr.Fun
 
@@ -163,7 +163,7 @@ User{
 2. Use go/types to get struct type
 3. Lookup field by name
 4. Extract field type
-5. Verify it's Option<T>
+5. Verify it's Option[T]
 
 **Requires**: go/types `types.Info.Types` map for CompositeLit.Type
 
@@ -199,7 +199,7 @@ let x = None  // ❌ ERROR
 **Error message**:
 ```
 cannot infer type for None constant: no valid type context found.
-Add explicit type annotation: let x: Option<T> = None
+Add explicit type annotation: let x: Option[T] = None
 ```
 
 **Rationale**: Conservative approach prevents subtle bugs
@@ -209,14 +209,14 @@ Add explicit type annotation: let x: Option<T> = None
 ### Non-Option Type Context
 ```go
 func getInt() -> int {
-    return None  // ❌ ERROR: return type is not Option<T>
+    return None  // ❌ ERROR: return type is not Option[T]
 }
 ```
 
 **Error message**:
 ```
-cannot infer type for None constant: expected Option<T> type, got int.
-Add explicit type annotation: let x: Option<T> = None
+cannot infer type for None constant: expected Option[T] type, got int.
+Add explicit type annotation: let x: Option[T] = None
 ```
 
 ---
@@ -234,7 +234,7 @@ func extractOptionType(typeExpr ast.Expr) string {
         }
 
     case *ast.IndexExpr:
-        // Generic syntax: Option<int>
+        // Generic syntax: Option[int]
         if base, ok := t.X.(*ast.Ident); ok && base.Name == "Option" {
             innerType := getTypeName(t.Index)
             return "Option_" + innerType
@@ -270,7 +270,7 @@ let tag = OptionTag_None  // ← NOT a None constant, it's a tag value
 
 ### 2. Multiple Return Values
 ```go
-func multi() -> (int, Option<string>) {
+func multi() -> (int, Option[string]) {
     return 42, None  // ← infer from second return type
 }
 ```
@@ -351,7 +351,7 @@ If go/types not available:
 4. **Smart suggestions**
    ```go
    let x = None  // ERROR
-   // Suggestion: Did you mean Option<int>? (based on later usage)
+   // Suggestion: Did you mean Option[int]? (based on later usage)
    ```
 
 ---

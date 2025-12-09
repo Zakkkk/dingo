@@ -349,11 +349,11 @@ For one-off investigations outside workflows:
 **Use Case**: Single, independent task
 
 ```
-User: "Understand how Result<T,E> works"
+User: "Understand how Result[T,E] works"
 
 Orchestrator:
 1. Delegates to golang-developer with investigation task
-2. Receives summary: "Result<T,E> uses AST transformation..."
+2. Receives summary: "Result[T,E] uses AST transformation..."
 3. If summary sufficient: Done
 4. If need details: Reads file and presents to user
 ```
@@ -362,12 +362,12 @@ Orchestrator:
 ```
 // Step 1: Delegate
 Task tool → golang-developer:
-  Investigate: How Result<T,E> type is implemented
+  Investigate: How Result[T,E] type is implemented
   Output: ai-docs/analysis/result-type.md
   Return: Brief summary with file path
 
 // Step 2: Receive summary (automatic)
-Agent returns: "Result<T,E> implemented via AST..."
+Agent returns: "Result[T,E] implemented via AST..."
 
 // Step 3: Decision
 If user satisfied: Continue

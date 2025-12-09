@@ -512,14 +512,14 @@ For Dingo's current types (Result, Option), we can infer from the match subject:
 
 ```go
 // Input:
-let result = match opt {  // opt is Option<int>
+let result = match opt {  // opt is Option[int]
     Some(x) => Some(x * 2),
     None => None,
 }
 
 // We know:
-// - Matching on Option<int>
-// - Arms must return Option<int> (same type as subject)
+// - Matching on Option[int]
+// - Arms must return Option[int] (same type as subject)
 // - Therefore: var result Option_int
 ```
 

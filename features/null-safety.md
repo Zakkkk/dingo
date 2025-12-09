@@ -36,7 +36,7 @@ city := user.Address.City.Name  // PANIC if any is nil
 ### Safe Navigation (`?.`)
 
 ```dingo
-// Returns Option<T> - None if any is nil
+// Returns Option[T] - None if any is nil
 let city = user?.address?.city?.name
 
 // With unwrap

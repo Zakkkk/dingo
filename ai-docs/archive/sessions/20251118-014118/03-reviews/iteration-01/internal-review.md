@@ -261,7 +261,7 @@ func Option_Some(value T) Option {  // BUG: T undefined
 **Impact**:
 - Generic enums don't compile
 - Limits reusability (can't have Option[int], Option[string], etc.)
-- Phase 3 feature "Option<T>" will fail without this
+- Phase 3 feature "Option[T]" will fail without this
 
 **Recommendation**:
 Add generic parameter detection and transformation:
@@ -278,7 +278,7 @@ type enumDecl struct {
 
 func (e *EnumProcessor) parseEnumDeclaration(src string, idx int) (*enumDecl, error) {
     // After parsing name, check for generic parameters
-    // enum Option<T> { ... }
+    // enum Option[T] { ... }
     // OR: enum Option[T any] { ... }
 
     if src[pos] == '<' || src[pos] == '[' {
@@ -829,7 +829,7 @@ The implementation demonstrates solid software engineering with clean architectu
 2. ✋ **CRITICAL**: Type inference fallback to interface{} (type safety lost)
 
 **Should Fix in Phase 3**:
-3. 🔧 **IMPORTANT**: Generic enum support (for Option<T>)
+3. 🔧 **IMPORTANT**: Generic enum support (for Option[T])
 4. 🔧 **IMPORTANT**: Enum field name collision detection
 5. 🔧 **IMPORTANT**: Logger nil safety
 6. 🔧 **IMPORTANT**: Error reporting for failed enums

@@ -17,4 +17,4 @@ Implement functional utilities (map, filter, reduce) for the Dingo standard libr
 - Follow Dingo design principles: simplicity, readability, zero runtime overhead
 - Generate clean, idiomatic Go code
 - Ensure full Go ecosystem compatibility
-- Consider how these utilities work with Dingo's Result<T, E> and Option<T> types
+- Consider how these utilities work with Dingo's Result[T, E] and Option[T] types

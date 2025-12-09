@@ -12,7 +12,7 @@ Borgo is a **statically-typed language that transpiles to Go**, written in Rust,
 
 **Key Takeaways for Dingo:**
 1. ✅ **Proven Architecture:** Parser → Type Inference → Code Generation works
-2. ✅ **Go Interop:** Automatic wrapping of Go's `(T, error)` → `Result<T, E>` is critical
+2. ✅ **Go Interop:** Automatic wrapping of Go's `(T, error)` → `Result[T, E]` is critical
 3. ✅ **Type Inference:** Makes the language ergonomic (less type annotations)
 4. ✅ **Built-in Types:** Result/Option as language primitives (not libraries)
 5. ⚠️ **Licensing Issue:** Borgo has no license (project may be dead/archived)
@@ -105,11 +105,11 @@ Input: program.brg
 
 ## Feature Implementations
 
-### 1. Result<T, E> Type
+### 1. Result[T, E] Type
 
 **Borgo Definition:**
 ```borgo
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
@@ -147,11 +147,11 @@ func make_Result_Err[T, E](err E) Result[T, E] {
 - ✅ Separate fields for each variant (`Ok0`, `Err0`)
 - ✅ Constructor functions enforce correct construction
 
-### 2. Option<T> Type
+### 2. Option[T] Type
 
 **Borgo Definition:**
 ```borgo
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None
 }
@@ -163,7 +163,7 @@ enum Option<T> {
 
 **Borgo Code:**
 ```borgo
-fn fetchUser(id: string) -> Result<User, error> {
+fn fetchUser(id: string) -> Result[User, error] {
     let resp = http.Get(url)?
     let user = parseUser(resp)?
     Ok(user)
@@ -201,7 +201,7 @@ match wrap_mode {
         emit!("if err != nil { return nil, err }")
     }
     CallWrapMode::Unwrapped => {
-        // Result<T, E> constructors
+        // Result[T, E] constructors
         // Automatically unwrap without intermediate wrapping
     }
 }
@@ -276,13 +276,13 @@ if is_matching == 0 {
 func LookupEnv(key string) (string, bool)
 
 // Borgo sees it as:
-fn LookupEnv(key: string) -> Option<string>
+fn LookupEnv(key: string) -> Option[string]
 
 // Go function signature:
 func Stat(name string) (FileInfo, error)
 
 // Borgo sees it as:
-fn Stat(name: string) -> Result<FileInfo, error>
+fn Stat(name: string) -> Result[FileInfo, error]
 ```
 
 **Implementation (infer.rs):**
@@ -292,7 +292,7 @@ fn Stat(name: string) -> Result<FileInfo, error>
 fn add_optional_error_to_result(&mut self, ty: &Type, args: &[TypeAst])
   -> Vec<TypeAst>
 {
-    // If Result<T> (missing error type), add 'error'
+    // If Result[T] (missing error type), add 'error'
     if args.len() == 1 {
         args.push(Type::Error)
     }
@@ -493,8 +493,8 @@ type Enum struct {
 
 **3. Automatic Go Interop**
 ```
-(T, error) → Result<T, error>
-(T, bool)  → Option<T>
+(T, error) → Result[T, error]
+(T, bool)  → Option[T]
 ```
 - **Critical for ecosystem adoption**
 - Must be transparent to users
@@ -653,7 +653,7 @@ func make_Result_Err[T, E](e E) Result[T, E]
 ```go
 // Generate this code in codegen.rs equivalent
 // User writes in .dingo:
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
@@ -710,7 +710,7 @@ if function_returns_tuple_with_error(func) {
 
 // Example:
 http.Get(url) // Returns (Response, error) in Go
-// Borgo sees: Result<Response, error>
+// Borgo sees: Result[Response, error]
 ```
 
 **Dingo Implementation:**
@@ -864,7 +864,7 @@ Dingo LSP Proxy
 
 **Dingo Code (inspired by Borgo):**
 ```dingo
-func fetchUserData(id: string) -> Result<UserData, Error> {
+func fetchUserData(id: string) -> Result[UserData, Error] {
     let resp = http.Get("/api/users/" + id)?
     let user = parseUser(resp.Body)?
     let posts = fetchPosts(user.ID)?

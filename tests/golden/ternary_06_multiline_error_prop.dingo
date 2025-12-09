@@ -4,15 +4,15 @@ package main
 // Feature: Ensure error propagation (?) still works with newlines
 // Complexity: intermediate
 
-func getData() Result<string> {
+func getData() Result[string] {
 	return Ok("data")
 }
 
-func getConfig() Result<*Config> {
+func getConfig() Result[*Config] {
 	return Ok(&Config{Host: "example.com"})
 }
 
-func processData() Result<string> {
+func processData() Result[string] {
 	// Case 1: Error propagation with newline should still be error propagation
 	let data = getData()?
 	let moreData = getData()?

@@ -6,7 +6,7 @@
 
 **Dingo code:**
 ```go
-fn processResult(result: Result<int, string>) -> int {
+fn processResult(result: Result[int, string]) -> int {
     match result {
         Ok(value) => {
             println("Success:", value)
@@ -36,7 +36,7 @@ fn handleStatus(status: Status) -> string {
 ```
 
 **Why Rust-like?**
-- Consistent with `Result<T,E>` and `Option<T>` (already Rust-inspired)
+- Consistent with `Result[T,E]` and `Option[T]` (already Rust-inspired)
 - Pattern syntax directly mirrors variant construction: `Ok(x)` construct → `Ok(x) =>` pattern
 - Very readable: `match value { Pattern => expression }`
 - Users coming from TypeScript/Rust find it familiar
@@ -47,7 +47,7 @@ fn handleStatus(status: Status) -> string {
 
 **Dingo code:**
 ```go
-fn processResult(result: Result<int, string>) -> int {
+fn processResult(result: Result[int, string]) -> int {
     when (result) {
         is Ok -> {
             value := result.unwrap()
@@ -93,7 +93,7 @@ when (status) {
 
 **Dingo code:**
 ```go
-fn processResult(result: Result<int, string>) -> int {
+fn processResult(result: Result[int, string]) -> int {
     switch result {
         case .ok(let value):
             println("Success:", value)
@@ -133,7 +133,7 @@ switch status {
 
 **Dingo code:**
 ```go
-fn handleResult(result: Result<int, string>) -> int {
+fn handleResult(result: Result[int, string]) -> int {
     match result {
         Ok(x) => x * 2
         // COMPILER ERROR: non-exhaustive match, missing Err case
@@ -141,7 +141,7 @@ fn handleResult(result: Result<int, string>) -> int {
 }
 
 // Fix with explicit wildcard:
-fn handleResult(result: Result<int, string>) -> int {
+fn handleResult(result: Result[int, string]) -> int {
     match result {
         Ok(x) => x * 2
         _ => 0  // Catch-all required
@@ -173,7 +173,7 @@ func handleResult(result Result[int, string]) int {
 
 **Dingo code:**
 ```go
-fn handleResult(result: Result<int, string>) -> int {
+fn handleResult(result: Result[int, string]) -> int {
     match result {
         Ok(x) => x * 2
         // COMPILER WARNING: non-exhaustive match, missing Err case
@@ -220,7 +220,7 @@ Compiler flag: `dingo build --strict-match` (error) vs `dingo build --lenient-ma
 
 ```go
 // Example 1: Assign match result
-fn getValue(opt: Option<int>) -> int {
+fn getValue(opt: Option[int]) -> int {
     let default = match opt {
         Some(x) => x          // Returns int
         None => 0             // Returns int (same type)
@@ -238,7 +238,7 @@ fn processStatus(status: Status) -> string {
 }
 
 // Example 3: Nested expression
-fn compute(x: Option<int>, y: Option<int>) -> int {
+fn compute(x: Option[int], y: Option[int]) -> int {
     return (match x { Some(v) => v, None => 0 }) +
            (match y { Some(v) => v, None => 0 })
 }
@@ -272,7 +272,7 @@ let x = match result {
 **Match doesn't return a value:**
 
 ```go
-fn handleResult(result: Result<int, string>) {
+fn handleResult(result: Result[int, string]) {
     match result {
         Ok(x) => println("Success:", x)
         Err(e) => println("Error:", e)
@@ -346,7 +346,7 @@ match result {
 
 Based on Dingo's existing design (Rust-inspired types, functional style):
 
-1. **Syntax: Rust-like** - Most consistent with Result<T,E>/Option<T>
+1. **Syntax: Rust-like** - Most consistent with Result[T,E]/Option[T]
 2. **Exhaustiveness: Compile error (strict)** - Prevents bugs, proven safe
 3. **Match type: Expression-based** - More functional, composable, type-safe
 

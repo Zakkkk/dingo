@@ -65,7 +65,7 @@ Phase 4 introduces two major systems:
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │          Valid Go Code (with pattern markers)                │
-│  switch { /* DINGO_MATCH: Result<User,error> */            │
+│  switch { /* DINGO_MATCH: Result[User,error] */            │
 │    case __result.tag == ResultTag_Ok: /* Ok(user) */       │
 │      user := *__result.ok_0                                 │
 │      processUser(user)                                       │
@@ -109,7 +109,7 @@ Phase 4 introduces two major systems:
 │        * Return statement → function signature              │
 │        * Assignment → variable type                         │
 │        * Function call → parameter type                     │
-│      - Resolve None to Option<T>                            │
+│      - Resolve None to Option[T]                            │
 │    Phase 3 - Transform:                                      │
 │      - Replace None with Option_T{isSet: false}             │
 │                                                              │
@@ -184,8 +184,8 @@ match value {
 1. Determine scrutinee type from go/types
 2. Extract all possible variants:
    - Enum: All declared variants
-   - Result<T,E>: Ok, Err (2 variants)
-   - Option<T>: Some, None (2 variants)
+   - Result[T,E]: Ok, Err (2 variants)
+   - Option[T]: Some, None (2 variants)
 3. For each pattern arm, track covered variants
 4. Compute uncovered set = All variants - Covered variants
 5. If uncovered set is non-empty: compile error
@@ -205,7 +205,7 @@ error_prop_06_pattern_match.dingo:20:9: Pattern Match Warning: unreachable patte
 
 **Input (Dingo)**:
 ```dingo
-func handleResult(result: Result<User, Error>) -> string {
+func handleResult(result: Result[User, Error]) -> string {
     match result {
         Ok(user) => "Found: ${user.name}",
         Err(e) => "Error: ${e.message}"
@@ -393,12 +393,12 @@ let x = None  // ERROR: Cannot infer type
 
 **Goal**: Infer type from surrounding context
 ```dingo
-func getUser(): Option<User> {
-    return None  // ✅ Infers Option<User> from return type
+func getUser(): Option[User] {
+    return None  // ✅ Infers Option[User] from return type
 }
 
-let x: Option<int> = None  // ✅ Infers from variable type
-process(None)  // ✅ Infers from parameter type (if process(opt: Option<T>))
+let x: Option[int] = None  // ✅ Infers from variable type
+process(None)  // ✅ Infers from parameter type (if process(opt: Option[T]))
 ```
 
 #### Context Inference Algorithm
@@ -452,7 +452,7 @@ func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (types.Type, err
 }
 ```
 
-**Step 3: Extract Option<T> parameter**
+**Step 3: Extract Option[T] parameter**
 ```go
 func (p *NoneContextPlugin) extractOptionType(typ types.Type) (types.Type, bool) {
     // Check if type is Option_T
@@ -478,7 +478,7 @@ func (p *NoneContextPlugin) Transform(node ast.Node) (ast.Node, error) {
                 p.ctx.AddError(errors.NewTypeInferenceError(
                     fmt.Sprintf("cannot infer type for None: %v", err),
                     ident.Pos(),
-                    "Add explicit type annotation: let x: Option<YourType> = None",
+                    "Add explicit type annotation: let x: Option[YourType] = None",
                 ))
                 return true
             }
@@ -519,15 +519,15 @@ Type Inference Error: cannot infer type for expression: None
 ```
 error_prop_06_pattern_match.dingo:23:12: Type Inference Error: cannot infer type for None
   Context: None appears in return statement
-  Expected: Option<T> where T can be inferred from function signature
+  Expected: Option[T] where T can be inferred from function signature
   Found: No enclosing function or function has no return type
 
   Suggestion 1: Add return type to function:
-    func processUser() -> Option<User> {
+    func processUser() -> Option[User] {
                       ^^^^^^^^^^^^^^^^^^^
 
   Suggestion 2: Use explicit type annotation:
-    let result: Option<User> = None
+    let result: Option[User] = None
                ^^^^^^^^^^^^^^
 
   See: https://dingolang.com/docs/errors#type-inference-none
@@ -807,7 +807,7 @@ pkg/
 
 ## Integration Points with Existing Code
 
-### With Result<T,E> and Option<T>
+### With Result[T,E] and Option[T]
 
 **Pattern matching integrates seamlessly**:
 ```dingo
@@ -848,7 +848,7 @@ match status {
 
 **Pattern matching complements `?` operator**:
 ```dingo
-func process(): Result<int, Error> {
+func process(): Result[int, Error] {
     let data = readFile()?  // ? operator
 
     match parseData(data) {  // Pattern match
@@ -959,7 +959,7 @@ No conflicts - different concerns:
 
 ### Risk 1: Exhaustiveness Algorithm Complexity
 
-**Risk**: Complex type hierarchies (nested Result<Option<T>, E>) may be hard to analyze
+**Risk**: Complex type hierarchies (nested Result[Option[T], E]) may be hard to analyze
 
 **Mitigation**:
 - Start with flat types (Result, Option, Enum only)

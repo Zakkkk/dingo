@@ -142,8 +142,8 @@ Generates feature status matrix (main branch only).
 
 | Feature | Status | Test Coverage | Examples |
 |---------|--------|---------------|----------|
-| Result<T,E> | ✅ Working | N tests | ✅ Available |
-| Option<T> | ✅ Working | N tests | ✅ Available |
+| Result[T,E] | ✅ Working | N tests | ✅ Available |
+| Option[T] | ✅ Working | N tests | ✅ Available |
 | Error Propagation (?) | ✅ Working | N tests | ✅ Available |
 ```
 

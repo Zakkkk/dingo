@@ -92,7 +92,7 @@ Adopt proven patterns from TypeScript, Rust, Kotlin, Swift.
 **Adopted:**
 - `:` for type annotations (TypeScript, Rust, Kotlin, Swift)
 - `let` for variables (JavaScript, Rust, Swift)
-- `Result<T, E>` for errors (Rust)
+- `Result[T, E]` for errors (Rust)
 
 **Not Adopted:**
 - `->` for return types (not necessary)
@@ -196,7 +196,7 @@ let data: []byte
 
 ### Result Types (Planned)
 ```dingo
-func fetchUser(id: string) Result<User, Error> {
+func fetchUser(id: string) Result[User, Error] {
     let user = db.query(id)?
     return Ok(user)
 }

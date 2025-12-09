@@ -165,7 +165,7 @@ rm tests/golden/sum_types_01_simple.go
 
 **Test Cases**:
 1. **Error Propagation + Result Type**
-   - Write `.dingo` file with `?` operator and `Result<T,E>`
+   - Write `.dingo` file with `?` operator and `Result[T,E]`
    - Transpile to `.go`
    - Compile generated Go code
    - Verify successful compilation

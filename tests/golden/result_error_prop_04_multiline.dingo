@@ -14,7 +14,7 @@ func (e ServiceError) Error() string {
 }
 
 // Test multiple error propagations in sequence (not multiline literal)
-func QueryOrders(db *sql.DB) Result<[]string, ServiceError> {
+func QueryOrders(db *sql.DB) Result[[]string, ServiceError] {
 	let rows = db.Query("SELECT * FROM orders")? ServiceError{Code: "DB_ERROR", Message: err.Error(), Context: "QueryOrders"}
 	defer rows.Close()
 

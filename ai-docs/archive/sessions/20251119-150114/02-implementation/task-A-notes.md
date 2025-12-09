@@ -45,7 +45,7 @@
 
 ### 3. Result Type Implementation
 
-**Decision**: Include Result<T,E> implementation in examples rather than importing from Dingo
+**Decision**: Include Result[T,E] implementation in examples rather than importing from Dingo
 
 **Rationale**:
 - Examples are self-contained and understandable

@@ -500,18 +500,18 @@ dingo/
 Once `?` operator works with Go tuples, enhance for Result types:
 
 ```dingo
-func fetchUser(id: string) -> Result<User, Error> {
+func fetchUser(id: string) -> Result[User, Error] {
     // Implementation
 }
 
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let user = fetchUser(id)?  // Now unwraps Result type
     return Ok(user)
 }
 ```
 
 **Changes Required:**
-- Type checker recognizes Result<T, E>
+- Type checker recognizes Result[T, E]
 - Plugin handles Result unwrapping
 - Different code generation strategy
 

@@ -1,9 +1,9 @@
 # User Clarifications
 
 ## 1. Null Coalescing Operator (??) Scope
-**Decision**: With both Option<T> and Go pointers (*T)
+**Decision**: With both Option[T] and Go pointers (*T)
 
-The `??` operator should work with both Dingo's Option<T> types and native Go pointer types (*T) for better interoperability with existing Go code.
+The `??` operator should work with both Dingo's Option[T] types and native Go pointer types (*T) for better interoperability with existing Go code.
 
 ## 2. Safe Navigation Operator (?.) Return Type
 **Decision**: Smart unwrapping based on context

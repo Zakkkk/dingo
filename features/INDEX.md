@@ -180,13 +180,13 @@ enabled = true
 ### 🟡 Medium Complexity Features (2-3 weeks each)
 
 **Result Type** - 2-3 weeks
-- Define generic enum: `enum Result<T, E> { Ok(T), Err(E) }`
+- Define generic enum: `enum Result[T, E] { Ok(T), Err(E) }`
 - Transpiles to struct with tag + union
 - Requires: Pattern matching integration, methods (map, unwrap, etc.)
 - Risk: Medium - depends on sum types being solid
 
 **Option Type** - 2-3 weeks
-- Similar to Result: `enum Option<T> { Some(T), None }`
+- Similar to Result: `enum Option[T] { Some(T), None }`
 - Transpiles to `*T` with validation
 - Requires: Pattern matching, nil coalescing support
 - Risk: Medium - similar to Result
@@ -205,7 +205,7 @@ enabled = true
 
 **Null Safety (`?.`)** - 2 weeks
 - Chain nil checks: `a?.b?.c` → nested if checks
-- Returns Option<T>
+- Returns Option[T]
 - Requires: Option type, type inference
 - Risk: Medium - complex chaining edge cases
 

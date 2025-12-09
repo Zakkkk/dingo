@@ -969,7 +969,7 @@ func TestGoldenFiles(t *testing.T) {
 
 package main
 
-func fetchUser(id: string) -> Result<User, Error> {
+func fetchUser(id: string) -> Result[User, Error] {
     let data = db.query(id)?
     let user = parseUser(data)?
     return Ok(user)
@@ -1035,7 +1035,7 @@ package main
 
 import "net/http"
 
-func fetchUserData(userID: string) -> Result<UserData, Error> {
+func fetchUserData(userID: string) -> Result[UserData, Error] {
     let resp = http.Get("/api/users/" + userID)?
     let user = parseUser(resp.Body)?
     let posts = fetchPosts(user.ID)?
@@ -1070,8 +1070,8 @@ func main() {
 
 Plugins to build:
 1. Sum Types
-2. Result<T, E> type
-3. Option<T> type
+2. Result[T, E] type
+3. Option[T] type
 4. Pattern Matching
 5. Enums
 

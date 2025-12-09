@@ -1,6 +1,6 @@
 // pattern_match_03_result_option.dingo
 //
-// Pattern matching for Result<T,E> and Option<T> types
+// Pattern matching for Result[T,E] and Option[T] types
 // Demonstrates tag-based dispatch and binding extraction
 
 package main
@@ -11,7 +11,7 @@ import (
 )
 
 // Example 1: Result pattern match - user validation
-func validateAge(ageStr string) -> Result<int, error> {
+func validateAge(ageStr string) -> Result[int, error] {
 	age, err := strconv.Atoi(ageStr)
 	if err != nil {
 		return Err(err)
@@ -42,7 +42,7 @@ type User struct {
 	Age  int
 }
 
-func findUser(id int) -> Option<User> {
+func findUser(id int) -> Option[User] {
 	if id == 1 {
 		return Some(User{ID: 1, Name: "Alice", Age: 30})
 	}
@@ -63,7 +63,7 @@ func getUserName(id int) -> string {
 }
 
 // Example 3: Nested Result and Option
-func getUserAge(id int) -> Result<int, string> {
+func getUserAge(id int) -> Result[int, string] {
 	userOpt := findUser(id)
 
 	match userOpt {
@@ -80,7 +80,7 @@ func getUserAge(id int) -> Result<int, string> {
 }
 
 // Example 4: Complex Result with error handling
-func divideNumbers(a int, b int) -> Result<float64, string> {
+func divideNumbers(a int, b int) -> Result[float64, string] {
 	if b == 0 {
 		return Err("division by zero")
 	}

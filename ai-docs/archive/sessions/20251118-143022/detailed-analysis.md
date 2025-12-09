@@ -30,7 +30,7 @@
 
 **What We Gain By Staying With Current Architecture:**
 - Simplicity: Fewer moving parts, easier maintenance
-- Established success: Working transpilation for Result<T,E>, Option<T>, enums, error propagation
+- Established success: Working transpilation for Result[T,E], Option[T], enums, error propagation
 - Ecosystem leverage: Continues to use battle-tested go/parser and golang.org/x/tools
 - Incremental evolution: Can add AST plugins for new features without architectural upheaval
 

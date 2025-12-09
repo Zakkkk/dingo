@@ -32,8 +32,8 @@
 - Error suggests comma placement issue in generated switch statements
 
 **Test Content**:
-- Simple pattern matching on Result<T,E>
-- Pattern matching on Option<T>
+- Simple pattern matching on Result[T,E]
+- Pattern matching on Option[T]
 - Wildcard patterns
 - Assignment context patterns
 - Nested pattern matching

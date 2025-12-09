@@ -34,7 +34,7 @@ type Settings struct {
 }
 
 // === 4. RESULT ===
-func fetchUser(id int) Result<User, string> {
+func fetchUser(id int) Result[User, string] {
 	if id <= 0 {
 		return Err[User]("invalid id")
 	}
@@ -47,7 +47,7 @@ func fetchUser(id int) Result<User, string> {
 }
 
 // === 5. OPTION ===
-func findUser(name string) Option<User> {
+func findUser(name string) Option[User] {
 	if name == "" {
 		return None[User]()
 	}

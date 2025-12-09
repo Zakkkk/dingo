@@ -1,8 +1,8 @@
-# Task 2b: Option<T> Plugin - Design Decisions & Implementation Notes
+# Task 2b: Option[T] Plugin - Design Decisions & Implementation Notes
 
 ## Overview
 
-Task 2b is the **most complex task in Batch 2**, implementing three significant features for the Option<T> plugin:
+Task 2b is the **most complex task in Batch 2**, implementing three significant features for the Option[T] plugin:
 1. Fix A5 (Enhanced type inference)
 2. Fix A4 (Literal addressability handling)
 3. Type-context-aware None constant (user-requested complex feature)
@@ -142,7 +142,7 @@ func (p *OptionTypePlugin) desanitizeTypeName(sanitized string) string {
 - Function types: `func_int_error` → should be `func() (int, error)` (not handled)
 
 **Why Acceptable:**
-- Rare in Option<T> usage (most common: basic types, pointers, slices)
+- Rare in Option[T] usage (most common: basic types, pointers, slices)
 - User can always use explicit syntax for complex types
 - Full implementation requires complex parsing logic (deferred to Phase 4)
 
@@ -268,7 +268,7 @@ Example: var x Option_int = Option_int_None() or var x Option_int = None with ty
 
 ### Backward Compatibility
 
-**Existing Option<T> syntax still works:**
+**Existing Option[T] syntax still works:**
 - `Option_T_Some(value)` constructor
 - `Option_T_None()` constructor
 - Explicit type annotations

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The previous refactoring (commit 7675185) successfully implemented Result<T,E> constructor transformations but left test files referencing obsolete APIs. Rather than attempting to update outdated tests for a deprecated architecture, we will:
+The previous refactoring (commit 7675185) successfully implemented Result[T,E] constructor transformations but left test files referencing obsolete APIs. Rather than attempting to update outdated tests for a deprecated architecture, we will:
 
 1. **Remove obsolete test file** that tests the old architecture
 2. **Update golden tests** to use new plugin APIs
@@ -199,7 +199,7 @@ Once tests are compiling and core tests are passing:
 1. **Determine Next Phase**: Review CLAUDE.md and project status
 2. **Options:**
    - Phase 3: Result/Option integration with preprocessor
-   - Complete Option<T> type implementation
+   - Complete Option[T] type implementation
    - Implement error propagation operator (`?`)
    - Add pattern matching for Result/Option
 

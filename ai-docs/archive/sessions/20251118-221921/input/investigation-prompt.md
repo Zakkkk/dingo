@@ -6,7 +6,7 @@ Focus Areas:
 - LSP Mapping: How rust-analyzer handles macro-expanded code
 - Systems Design: Performance implications, compilation caching, dependency management
 
-Dingo Context: Dingo is a meta-language for Go that transpiles .dingo files to idiomatic .go files using a two-stage approach: Stage 1 preprocessors (text-based Dingo→valid Go) followed by Stage 2 AST processing (plugins for semantic transformations like Result/Option types). It provides Result<T,E> with ? operator, Option<T>, pattern matching, and sum types.
+Dingo Context: Dingo is a meta-language for Go that transpiles .dingo files to idiomatic .go files using a two-stage approach: Stage 1 preprocessors (text-based Dingo→valid Go) followed by Stage 2 AST processing (plugins for semantic transformations like Result/Option types). It provides Result[T,E] with ? operator, Option[T], pattern matching, and sum types.
 
 Current File Organization:
 - .dingo source files

@@ -12,7 +12,7 @@
 Bare `None` constants couldn't infer type from match expression context:
 ```dingo
 match optValue {
-    Some(x) => Some(x * 2),  // Returns Option<int>
+    Some(x) => Some(x * 2),  // Returns Option[int]
     None => None              // ❌ Cannot infer Option type
 }
 ```
@@ -27,7 +27,7 @@ Enhanced `pkg/plugin/builtin/none_context.go` with match arm type inference:
 2. **Implemented findMatchArmType()** (line 386-483)
    - Walks up AST to find containing switch statement
    - Inspects other case arms for `Some()` calls
-   - Infers Option<T> type from typed arms
+   - Infers Option[T] type from typed arms
 
 3. **Added Expression Type Inference** (line 502-562)
    - Heuristic type inference from AST expressions

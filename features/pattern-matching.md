@@ -62,7 +62,7 @@ func process(value interface{}) {
 
 ```dingo
 // Match on enum/sum type
-func handleResult(result: Result<User, Error>) -> string {
+func handleResult(result: Result[User, Error]) -> string {
     match result {
         Ok(user) => "Found user: ${user.name}",
         Err(error) => "Error: ${error.message}"
@@ -70,7 +70,7 @@ func handleResult(result: Result<User, Error>) -> string {
 }
 
 // Match with block bodies
-func process(option: Option<int>) -> int {
+func process(option: Option[int]) -> int {
     match option {
         Some(value) => {
             println("Got value: ${value}")
@@ -285,7 +285,7 @@ case .failure(let error):
 }
 
 // Enum with associated values
-enum Result<T, E> {
+enum Result[T, E] {
     case success(T)
     case failure(E)
 }
@@ -406,7 +406,7 @@ match status {
 // Dingo knows the type in each branch
 match result {
     Ok(user) => {
-        // user is type User here (not Option<User>)
+        // user is type User here (not Option[User])
         sendEmail(user.email)
     },
     Err(error) => {

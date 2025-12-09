@@ -113,7 +113,7 @@ match { _ => None }  // OK - from other match arms
 **Invalid** (error):
 ```dingo
 let x = None  // ERROR: cannot infer type for None
-// Fix: let x: Option<int> = None
+// Fix: let x: Option[int] = None
 ```
 
 **Implementation**: NoneContextPlugin walks AST parent chain, infers from return/assignment/call/field context. Errors on ambiguity.
@@ -198,7 +198,7 @@ help: add a wildcard arm: `_ => ...`
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
 │          Valid Go Code (with pattern markers)                │
-│  switch { /* DINGO_MATCH: Result<User,error> */            │
+│  switch { /* DINGO_MATCH: Result[User,error] */            │
 │    case __result.tag == ResultTag_Ok: /* Ok(user) */       │
 │      user := *__result.ok_0                                 │
 │      processUser(user)                                       │
@@ -270,7 +270,7 @@ help: add a wildcard arm: `_ => ...`
 
 **Rust-like Syntax** (default, consistent with Result/Option):
 ```dingo
-fn processResult(result: Result<int, string>) -> int {
+fn processResult(result: Result[int, string]) -> int {
     match result {
         Ok(value) => {
             println("Success:", value)
@@ -286,7 +286,7 @@ fn processResult(result: Result<int, string>) -> int {
 
 **Swift-like Syntax** (familiar to Swift/Go devs):
 ```dingo
-fn processResult(result: Result<int, string>) -> int {
+fn processResult(result: Result[int, string]) -> int {
     switch result {
         case .ok(let value):
             println("Success:", value)
@@ -370,8 +370,8 @@ scrutineeType := ctx.TypesInfo.TypeOf(scrutineeExpr)
 
 **Step 2**: Extract all possible variants
 - **Enum**: All declared variants from enum definition
-- **Result<T,E>**: `Ok`, `Err` (2 variants)
-- **Option<T>**: `Some`, `None` (2 variants)
+- **Result[T,E]**: `Ok`, `Err` (2 variants)
+- **Option[T]**: `Some`, `None` (2 variants)
 
 **Step 3**: Track covered variants per pattern arm
 ```go
@@ -456,7 +456,7 @@ func (p *PatternMatchPlugin) isExpressionMode(matchNode ast.Node) bool {
 
 **Input (Dingo)**:
 ```dingo
-fn handleResult(result: Result<User, Error>) -> string {
+fn handleResult(result: Result[User, Error]) -> string {
     match result {
         Ok(user) => "Found: ${user.name}",
         Err(e) => "Error: ${e.message}"
@@ -805,8 +805,8 @@ func (p *PatternMatchPlugin) Transform(node ast.Node) (ast.Node, error) {
 **Valid Contexts**:
 ```dingo
 // Return statement
-fn getAge() -> Option<int> {
-    return None  // ✅ Infers Option<int> from return type
+fn getAge() -> Option[int] {
+    return None  // ✅ Infers Option[int] from return type
 }
 
 // Function call
@@ -818,18 +818,18 @@ let user = User{ age: None }  // ✅ Infers from field type
 // Match arm (expression mode)
 match status {
     Active(id) => Some(id),
-    Inactive => None  // ✅ Infers Option<int> from Some(id) arm
+    Inactive => None  // ✅ Infers Option[int] from Some(id) arm
 }
 
 // Assignment to typed variable
-let x: Option<int>
+let x: Option[int]
 x = None  // ✅ Type already known
 ```
 
 **Invalid Contexts** (error):
 ```dingo
 let x = None  // ❌ ERROR: cannot infer type for None
-// Fix: let x: Option<int> = None
+// Fix: let x: Option[int] = None
 ```
 
 **Implementation**:
@@ -863,7 +863,7 @@ func (p *NoneContextPlugin) Transform(node ast.Node) (ast.Node, error) {
                 p.ctx.AddError(errors.NewTypeInferenceError(
                     fmt.Sprintf("cannot infer type for None: %v", err),
                     ident.Pos(),
-                    "Add explicit type annotation: let x: Option<YourType> = None",
+                    "Add explicit type annotation: let x: Option[YourType] = None",
                 ))
                 return true
             }
@@ -915,11 +915,11 @@ func (p *NoneContextPlugin) inferNoneType(noneIdent *ast.Ident) (types.Type, err
     })
 
     if expectedType != nil {
-        // Extract Option<T> → T
+        // Extract Option[T] → T
         if tParam, ok := p.extractOptionType(expectedType); ok {
             return expectedType, nil
         }
-        return nil, fmt.Errorf("expected Option<T>, got %v", expectedType)
+        return nil, fmt.Errorf("expected Option[T], got %v", expectedType)
     }
 
     return nil, fmt.Errorf("no valid type context found")
@@ -1006,7 +1006,7 @@ error: cannot infer type for None constant
    |             ^^^^ no type context available
    |
 help: add explicit type annotation:
-    let x: Option<YourType> = None
+    let x: Option[YourType] = None
 ```
 
 ---
@@ -1128,7 +1128,7 @@ error: non-exhaustive match
 23 | match result {
    |     ^^^^^^^^^^^^ missing Err case
    |
-   = matching on type Result<User, Error>
+   = matching on type Result[User, Error]
 help: add missing pattern arms
     Err(_) => ...,
 help: add a wildcard arm
@@ -1661,7 +1661,7 @@ debug_mode = false
 ```dingo
 // dingo.toml: syntax = "rust"
 
-fn handleResult(result: Result<int, Error>) -> int {
+fn handleResult(result: Result[int, Error]) -> int {
     match result {
         Ok(x) => x * 2,
         Err(_) => 0
@@ -1674,7 +1674,7 @@ fn handleResult(result: Result<int, Error>) -> int {
 ```dingo
 // dingo.toml: syntax = "swift"
 
-fn handleResult(result: Result<int, Error>) -> int {
+fn handleResult(result: Result[int, Error]) -> int {
     switch result {
         case .ok(let x):
             return x * 2

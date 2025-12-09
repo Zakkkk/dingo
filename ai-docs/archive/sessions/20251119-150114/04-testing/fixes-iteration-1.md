@@ -107,7 +107,7 @@ These features are **not yet implemented** in Dingo Phase 4/5. The examples need
 - ✅ Error propagation `?` in assignments/returns: `let x = foo()?`
 - ✅ Regular Go error handling: `if err != nil`
 - ✅ Switch statements (not Rust match)
-- ❌ Removed Result<T,E> generic types
+- ❌ Removed Result[T,E] generic types
 - ❌ Removed `->` return type syntax
 - ❌ Removed method receivers with `: Type`
 
@@ -173,7 +173,7 @@ $ cd examples/library-example && go build .
 1. Used `match` with `case:` syntax (invalid - should be `switch` or Rust-style `match`)
 2. Used `:=` instead of `let` for bindings
 3. Used `?` on standalone function calls (not supported - only in assignments/returns)
-4. tasks.dingo had same Result<T,E> generic issues as library-example
+4. tasks.dingo had same Result[T,E] generic issues as library-example
 
 **Changes Made:**
 
@@ -206,7 +206,7 @@ $ cd examples/library-example && go build .
 
 **tasks.dingo:**
 
-Completely rewrote to remove Result<T,E> generics and use standard `(T, error)` pattern:
+Completely rewrote to remove Result[T,E] generics and use standard `(T, error)` pattern:
 
 ```go
 // Before (NOT valid Dingo)
@@ -237,7 +237,7 @@ $ cd examples/app-example && go build .
 ### Fix 2.3: hybrid-example/calculator.dingo
 
 **Original Issues:**
-1. Tried to call methods on Result<T,E> (IsOk(), Unwrap(), etc.)
+1. Tried to call methods on Result[T,E] (IsOk(), Unwrap(), etc.)
 2. API didn't match the simplified mathutils library
 
 **Changes Made:**
@@ -295,7 +295,7 @@ $ cd examples/hybrid-example && go build .
 ❌ **Removed from examples:**
 - `->` return type syntax
 - `:` syntax for method receivers
-- Generic Result<T,E> types with methods
+- Generic Result[T,E] types with methods
 - `match` keyword (using `switch` instead)
 - Standalone `?` operator calls
 - `:=` in Dingo context (use `let` or regular Go)
@@ -397,7 +397,7 @@ $ cd examples/hybrid-example && go build .
 
 **Not Yet Implemented:**
 - ❌ `->` return type syntax
-- ❌ Generic Result<T,E>/Option<T> with methods
+- ❌ Generic Result[T,E]/Option[T] with methods
 - ❌ `:` for method receivers
 - ❌ `match` expression (Rust-style)
 - ❌ Standalone `?` operator calls
@@ -433,7 +433,7 @@ $ cd examples/hybrid-example && go build .
 
 3. **Separate future examples**
    - Create `examples/future/` directory
-   - Move Result<T,E> examples there
+   - Move Result[T,E] examples there
    - Add README: "These work in future Dingo versions"
 
 4. **Update example READMEs**

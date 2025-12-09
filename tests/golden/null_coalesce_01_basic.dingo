@@ -23,7 +23,7 @@ func main() {
 	let fallback: StringOption = StringOptionSome("Default")
 	let result = name ?? fallback
 
-	// Test 3: Option<int> ?? literal
+	// Test 3: Option[int] ?? literal
 	let count: IntOption = getCount()
 	let finalCount = count ?? 0
 

@@ -58,7 +58,7 @@ func processOrder(orderID string) (*Order, error) {
 ### Basic Usage
 
 ```dingo
-func processOrder(orderID: string) -> Result<Order, Error> {
+func processOrder(orderID: string) -> Result[Order, Error] {
     let order = fetchOrder(orderID)?      // Return Err if failed
     let validated = validateOrder(order)? // Continue if Ok
     let payment = processPayment(validated)?
@@ -89,7 +89,7 @@ Dingo provides three ways to add context to propagated errors:
 The simplest form - wraps the error with `fmt.Errorf`:
 
 ```dingo
-func processOrder(orderID: string) -> Result<Order, Error> {
+func processOrder(orderID: string) -> Result[Order, Error] {
     let order = fetchOrder(orderID) ? "fetch failed"
     let validated = validateOrder(order) ? "validation failed"
     return Ok(validated)
@@ -113,7 +113,7 @@ func processOrder(orderID string) ResultOrderError {
 For custom error transformation using Rust-style lambda syntax:
 
 ```dingo
-func loadUserData(userID: int) -> Result<UserData, AppError> {
+func loadUserData(userID: int) -> Result[UserData, AppError] {
     let user = fetchUser(userID) ? |err| AppError.wrap("user fetch", err)
     let posts = fetchPosts(user.ID) ? |e| AppError.wrap("posts fetch", e)
     return Ok(UserData{user, posts})
@@ -137,7 +137,7 @@ func loadUserData(userID int) ResultUserDataAppError {
 Same functionality with TypeScript/JavaScript arrow syntax:
 
 ```dingo
-func loadConfig(path: string) -> Result<Config, error> {
+func loadConfig(path: string) -> Result[Config, error] {
     let content = readFile(path) ? (e) => fmt.Errorf("read failed: %w", e)
     let config = parseJSON(content) ? err => fmt.Errorf("parse failed: %w", err)
     return Ok(config)
@@ -214,7 +214,7 @@ user := tmp
 
 ```dingo
 // Dingo source
-func processOrder(id: string) -> Result<Order, Error> {
+func processOrder(id: string) -> Result[Order, Error] {
     let order = fetchOrder(id)?
     let validated = validateOrder(order)?
     let paid = processPayment(validated)?
@@ -254,7 +254,7 @@ func processOrder(id string) ResultOrderError {
 ### Rust's `?` Operator
 
 ```rust
-fn process_order(id: &str) -> Result<Order, Error> {
+fn process_order(id: &str) -> Result[Order, Error] {
     let order = fetch_order(id)?;      // Propagate error
     let validated = validate(order)?;   // Early return if Err
     let paid = process_payment(validated)?;
@@ -262,7 +262,7 @@ fn process_order(id: &str) -> Result<Order, Error> {
 }
 
 // Equivalent verbose version
-fn process_order_verbose(id: &str) -> Result<Order, Error> {
+fn process_order_verbose(id: &str) -> Result[Order, Error] {
     let order = match fetch_order(id) {
         Ok(o) => o,
         Err(e) => return Err(e),
@@ -275,7 +275,7 @@ fn process_order_verbose(id: &str) -> Result<Order, Error> {
 - Most loved Rust feature (developer surveys)
 - Zero runtime cost (compile-time transformation)
 - Maintains explicit control flow (visible where errors can occur)
-- Works with `Option<T>` too (returns `None` instead of error)
+- Works with `Option[T]` too (returns `None` instead of error)
 
 **Rust's Evolution:**
 - Originally `try!()` macro (2014)
@@ -359,21 +359,21 @@ func main() {
 
 ```dingo
 // ✅ Same error type
-func process() -> Result<User, HttpError> {
-    let data = fetchData()?  // Returns Result<Data, HttpError>
+func process() -> Result[User, HttpError] {
+    let data = fetchData()?  // Returns Result[Data, HttpError]
     return Ok(transformData(data))
 }
 
 // ✅ Error type conversion (automatic if conversion exists)
-func process() -> Result<User, AppError> {
-    let data = fetchData()?  // Returns Result<Data, HttpError>
+func process() -> Result[User, AppError] {
+    let data = fetchData()?  // Returns Result[Data, HttpError]
     // HttpError auto-converts to AppError if impl exists
     return Ok(transformData(data))
 }
 
 // ❌ Incompatible error types (compile error)
-func process() -> Result<User, AppError> {
-    let data = fetchData()?  // Returns Result<Data, DatabaseError>
+func process() -> Result[User, AppError] {
+    let data = fetchData()?  // Returns Result[Data, DatabaseError]
     // Error: Cannot convert DatabaseError to AppError
 }
 ```
@@ -395,9 +395,9 @@ PrimaryExpr = Operand
 ### Type Checking
 
 ```
-1. Check that `?` is applied to Result<T, E>
-2. Check that enclosing function returns Result<_, E'> where E converts to E'
-3. Unwrap inner type: Result<T, E>? → T
+1. Check that `?` is applied to Result[T, E]
+2. Check that enclosing function returns Result[_, E'] where E converts to E'
+3. Unwrap inner type: Result[T, E]? → T
 4. Generate early return code if Result is Err
 ```
 
@@ -434,7 +434,7 @@ For each `expr?` in source:
 
 ```dingo
 // Dingo: 5 lines
-func process(id: string) -> Result<Order, Error> {
+func process(id: string) -> Result[Order, Error] {
     let order = fetchOrder(id)?
     let validated = validateOrder(order)?
     return Ok(validated)
@@ -467,7 +467,7 @@ func process(id string) (*Order, error) {
 
 ```dingo
 // Happy path is clear
-func processOrder(id: string) -> Result<Order, Error> {
+func processOrder(id: string) -> Result[Order, Error] {
     let order = fetchOrder(id)?
     let validated = validateOrder(order)?
     let paid = processPayment(validated)?
@@ -483,18 +483,18 @@ func processOrder(id: string) -> Result<Order, Error> {
 
 ```dingo
 // Compiler tracks error types
-func fetch() -> Result<User, DbError> { ... }
-func validate(u: User) -> Result<User, ValidationError> { ... }
+func fetch() -> Result[User, DbError] { ... }
+func validate(u: User) -> Result[User, ValidationError] { ... }
 
 // ❌ This won't compile (error type mismatch)
-func process() -> Result<User, DbError> {
+func process() -> Result[User, DbError] {
     let user = fetch()?
     let validated = validate(user)?  // ERROR: ValidationError != DbError
     return Ok(validated)
 }
 
 // ✅ Must handle conversion explicitly
-func process() -> Result<User, AppError> {
+func process() -> Result[User, AppError] {
     let user = fetch().mapErr(AppError.from)?
     let validated = validate(user).mapErr(AppError.from)?
     return Ok(validated)
@@ -557,7 +557,7 @@ func process() -> Result<User, AppError> {
 ### Example 1: File Processing
 
 ```dingo
-func loadConfig(path: string) -> Result<Config, IOError> {
+func loadConfig(path: string) -> Result[Config, IOError] {
     let data = os.ReadFile(path)?
     let config = json.Unmarshal(data)?
     return Ok(config)
@@ -587,7 +587,7 @@ func loadConfig(path string) ResultConfigIOError {
 ### Example 2: HTTP API
 
 ```dingo
-func fetchUserData(userID: string) -> Result<UserData, ApiError> {
+func fetchUserData(userID: string) -> Result[UserData, ApiError] {
     let resp = http.Get("/api/users/" + userID)?
     let user = parseUser(resp.Body)?
     let posts = fetchPosts(user.ID)?
@@ -600,7 +600,7 @@ func fetchUserData(userID: string) -> Result<UserData, ApiError> {
 ### Example 3: Database Transaction
 
 ```dingo
-func transferMoney(from: int, to: int, amount: decimal) -> Result<Transaction, DbError> {
+func transferMoney(from: int, to: int, amount: decimal) -> Result[Transaction, DbError] {
     let tx = db.Begin()?
     defer tx.Rollback()
 
@@ -623,7 +623,7 @@ func transferMoney(from: int, to: int, amount: decimal) -> Result<Transaction, D
 ## Success Criteria
 
 - [ ] `?` operator reduces error handling code by 60%+
-- [ ] Works with all Result<T, E> types
+- [ ] Works with all Result[T, E] types
 - [ ] Type checker catches incompatible error types
 - [ ] Transpiled code is readable and idiomatic Go
 - [ ] Zero performance overhead vs manual error handling

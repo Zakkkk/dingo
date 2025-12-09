@@ -10,13 +10,13 @@ As Grok, evaluating Dingo from a Rust/Systems perspective, here's an analysis of
 
 ### 2. Option and Result Types
 
-*   **Grok's Perspective**: `Option<T>` and `Result<T, E>` are cornerstone features in Rust for explicit error handling and nullability management. They force developers to consider the presence or absence of a value (`Option`) and the success or failure of an operation (`Result`) at the type level. This eliminates a vast class of errors (e.g., null pointer dereferences) by making them compile-time errors rather than runtime surprises.
+*   **Grok's Perspective**: `Option[T]` and `Result[T, E]` are cornerstone features in Rust for explicit error handling and nullability management. They force developers to consider the presence or absence of a value (`Option`) and the success or failure of an operation (`Result`) at the type level. This eliminates a vast class of errors (e.g., null pointer dereferences) by making them compile-time errors rather than runtime surprises.
 
-*   **Dingo's Current Implementation**: Dingo's adoption of `Option<T>` and `Result<T, E>` directly addresses major pain points in Go related to `nil` and verbose `if err != nil` checks. The `?` operator for error propagation further streamlines this, bringing a Rust-like conciseness to Go error handling.
+*   **Dingo's Current Implementation**: Dingo's adoption of `Option[T]` and `Result[T, E]` directly addresses major pain points in Go related to `nil` and verbose `if err != nil` checks. The `?` operator for error propagation further streamlines this, bringing a Rust-like conciseness to Go error handling.
 
 *   **Specific Improvements for Dingo**:
     *   **Monadic Chaining**: While Dingo states it has "complete helper methods," ensuring a strong monadic interface (e.g., `map`, `and_then`, `or_else`) for both `Option` and `Result` would further unlock their power. This allows for declarative, functional-style processing of values without nested `if` statements.
-    *   **Integration with Go Libraries**: A crucial aspect will be the seamless (and ideally automatic) conversion between `(T, error)` Go functions and `Result<T, E>` Dingo functions. The `go/types` integration is key here; accurate inference and automatic wrapping/unwrapping will make Dingo highly ergonomic for existing Go ecosystems.
+    *   **Integration with Go Libraries**: A crucial aspect will be the seamless (and ideally automatic) conversion between `(T, error)` Go functions and `Result[T, E]` Dingo functions. The `go/types` integration is key here; accurate inference and automatic wrapping/unwrapping will make Dingo highly ergonomic for existing Go ecosystems.
 
 ### 3. Source Mapping
 

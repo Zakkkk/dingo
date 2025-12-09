@@ -12,12 +12,12 @@ Dingo is a Go transpiler that adds sum types through enum keywords. We need to e
 ## Current Examples
 
 ```dingo
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T)
     Err(E)
 }
 
-enum Option<T> {
+enum Option[T] {
     Some(T)
     None
 }

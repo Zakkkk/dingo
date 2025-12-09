@@ -10,7 +10,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/plugin"
 	"golang.org/x/tools/go/ast/astutil"
 )
-// OptionTypePlugin generates Option<T> type declarations and transformations
+// OptionTypePlugin generates Option[T] type declarations and transformations
 //
 // This plugin implements the Option type as a tagged union (sum type) with two variants:
 // - Some(T): Contains a value of type T
@@ -144,7 +144,7 @@ func (p *OptionTypePlugin) Process(node ast.Node) error {
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.IndexExpr:
-			// Option<T>
+			// Option[T]
 			p.handleGenericOption(n)
 		case *ast.Ident:
 			// None singleton
@@ -173,7 +173,7 @@ func (p *OptionTypePlugin) Process(node ast.Node) error {
 	return nil
 }
 
-// handleGenericOption processes Option<T> syntax (IndexExpr for single type param)
+// handleGenericOption processes Option[T] syntax (IndexExpr for single type param)
 // Tracks nodes that need to be converted to generated OptionT types
 func (p *OptionTypePlugin) handleGenericOption(expr *ast.IndexExpr) {
 	// Check if the base type is "Option" - needs to become generated OptionT
@@ -311,7 +311,7 @@ func (p *OptionTypePlugin) handleGenericSomeConstructor(call *ast.CallExpr, inde
 // Type-Context-Aware None Constant (Phase 3 - Complex Feature)
 //
 // This method implements intelligent None constant handling that infers the target
-// Option<T> type from the surrounding context (assignment, return, function argument).
+// Option[T] type from the surrounding context (assignment, return, function argument).
 //
 // Supported contexts:
 // 1. Assignment: var x Option_int = None
@@ -1248,7 +1248,7 @@ func (p *OptionTypePlugin) emitOptionHelperMethods(optionTypeName, valueType str
 	p.pendingDecls = append(p.pendingDecls, filterMethod)
 }
 
-// inferNoneTypeFromContext attempts to infer the Option<T> type from surrounding context
+// inferNoneTypeFromContext attempts to infer the Option[T] type from surrounding context
 //
 // LIMITATION (Phase 3): Full context-based None inference requires AST parent tracking
 // and complete go/types integration, which is planned for Phase 4.
@@ -1259,7 +1259,7 @@ func (p *OptionTypePlugin) emitOptionHelperMethods(optionTypeName, valueType str
 // - WITH go/types context (Phase 4+): Will infer from assignment/return/parameter types
 //
 // Workarounds for Phase 3:
-// 1. Explicit type annotation: let x: Option<int> = None
+// 1. Explicit type annotation: let x: Option[int] = None
 // 2. Explicit constructor: OptionIntNone()
 // 3. Assignment to typed variable: var x OptionInt = None (requires go/types)
 //

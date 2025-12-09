@@ -6,35 +6,10 @@
 package builtin
 
 import (
-	"regexp"
-
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/feature"
 )
 
-// --- Helper functions ---
-
-// posToLineCol converts a byte offset to line and column numbers
-func posToLineCol(src []byte, pos int) (line, col int) {
-	line = 1
-	col = 1
-	for i := 0; i < pos && i < len(src); i++ {
-		if src[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
-	return line, col
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // --- Transform function pointers ---
 // These are set by the parser package to avoid import cycles
@@ -55,45 +30,6 @@ type TransformFuncs struct {
 // Transforms holds the registered transform functions
 var Transforms TransformFuncs
 
-// --- Detection patterns ---
-
-var (
-	patternEnum           = regexp.MustCompile(`(?m)^\s*enum\s+([A-Z][a-zA-Z0-9_]*)\s*\{`)
-	patternMatch          = regexp.MustCompile(`(?m)\bmatch\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\{`)
-	patternErrorProp      = regexp.MustCompile(`\?\s*$|[a-zA-Z_)]\?[^?.]`)
-	patternGuardLet       = regexp.MustCompile(`(?m)^\s*guard\s+let\s+`)
-	patternSafeNav        = regexp.MustCompile(`\?\.[a-zA-Z_]`)
-	patternNullCoalesce   = regexp.MustCompile(`\?\?`)
-	patternLambdaRust     = regexp.MustCompile(`\|[^|]*\|\s*[^{]`)
-	patternLambdaTS       = regexp.MustCompile(`\([^)]*\)\s*=>`)
-	patternGenerics       = regexp.MustCompile(`[A-Z][a-zA-Z0-9_]*<[A-Z]`)
-	patternLet            = regexp.MustCompile(`(?m)^\s*let\s+[a-zA-Z_]`)
-)
-
-// detectPattern is a helper that finds all matches of a pattern
-func detectPattern(src []byte, pattern *regexp.Regexp) []feature.SyntaxLocation {
-	matches := pattern.FindAllIndex(src, -1)
-	if len(matches) == 0 {
-		return nil
-	}
-
-	locations := make([]feature.SyntaxLocation, 0, len(matches))
-	for _, match := range matches {
-		line, col := posToLineCol(src, match[0])
-		end := minInt(match[1]+10, len(src))
-		snippet := string(src[match[0]:end])
-		if len(snippet) > 30 {
-			snippet = snippet[:30] + "..."
-		}
-		locations = append(locations, feature.SyntaxLocation{
-			Line:    line,
-			Column:  col,
-			Snippet: snippet,
-		})
-	}
-	return locations
-}
-
 // --- Enum Plugin ---
 
 type EnumPlugin struct{}
@@ -105,7 +41,9 @@ func (p *EnumPlugin) Priority() int              { return 10 }
 func (p *EnumPlugin) Dependencies() []string     { return nil }
 func (p *EnumPlugin) Conflicts() []string        { return nil }
 func (p *EnumPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternEnum)
+	// Detection removed: if feature is disabled, user will get a compile error anyway.
+	// Regex-based detection was removed to eliminate false positives and architectural violations.
+	return nil
 }
 func (p *EnumPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	// Call the AST-based enum transformer directly
@@ -130,7 +68,7 @@ func (p *MatchPlugin) Priority() int              { return 20 }
 func (p *MatchPlugin) Dependencies() []string     { return []string{"enum"} }
 func (p *MatchPlugin) Conflicts() []string        { return nil }
 func (p *MatchPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternMatch)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *MatchPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.Match == nil {
@@ -185,7 +123,7 @@ func (p *ErrorPropPlugin) Priority() int              { return 40 }
 func (p *ErrorPropPlugin) Dependencies() []string     { return nil }
 func (p *ErrorPropPlugin) Conflicts() []string        { return nil }
 func (p *ErrorPropPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternErrorProp)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *ErrorPropPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.ErrorProp == nil {
@@ -205,7 +143,7 @@ func (p *GuardLetPlugin) Priority() int              { return 50 }
 func (p *GuardLetPlugin) Dependencies() []string     { return []string{"error_prop"} }
 func (p *GuardLetPlugin) Conflicts() []string        { return nil }
 func (p *GuardLetPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternGuardLet)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *GuardLetPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.GuardLet == nil {
@@ -246,7 +184,7 @@ func (p *SafeNavPlugin) Priority() int              { return 60 }
 func (p *SafeNavPlugin) Dependencies() []string     { return nil }
 func (p *SafeNavPlugin) Conflicts() []string        { return nil }
 func (p *SafeNavPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternSafeNav)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *SafeNavPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.SafeNav == nil {
@@ -266,7 +204,7 @@ func (p *NullCoalescePlugin) Priority() int              { return 70 }
 func (p *NullCoalescePlugin) Dependencies() []string     { return []string{"safe_nav"} }
 func (p *NullCoalescePlugin) Conflicts() []string        { return nil }
 func (p *NullCoalescePlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternNullCoalesce)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *NullCoalescePlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.NullCoalesce == nil {
@@ -286,10 +224,7 @@ func (p *LambdasPlugin) Priority() int              { return 80 }
 func (p *LambdasPlugin) Dependencies() []string     { return nil }
 func (p *LambdasPlugin) Conflicts() []string        { return nil }
 func (p *LambdasPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	// Check both Rust and TS style
-	locs := detectPattern(src, patternLambdaRust)
-	locs = append(locs, detectPattern(src, patternLambdaTS)...)
-	return locs
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *LambdasPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	if Transforms.Lambdas == nil {
@@ -310,7 +245,7 @@ func (p *GenericsPlugin) Priority() int              { return 110 }
 func (p *GenericsPlugin) Dependencies() []string     { return nil }
 func (p *GenericsPlugin) Conflicts() []string        { return nil }
 func (p *GenericsPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternGenerics)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *GenericsPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	// Transforms handled by AST pipeline (pkg/ast.TransformSource)
@@ -327,7 +262,7 @@ func (p *LetBindingPlugin) Priority() int              { return 120 }
 func (p *LetBindingPlugin) Dependencies() []string     { return nil }
 func (p *LetBindingPlugin) Conflicts() []string        { return nil }
 func (p *LetBindingPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return detectPattern(src, patternLet)
+	return nil // Detection removed: compile errors suffice for disabled features
 }
 func (p *LetBindingPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	// Transforms handled by AST pipeline (pkg/ast.TransformSource)

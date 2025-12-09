@@ -65,7 +65,7 @@ This indicates:
 
 **Failing test example** (`pattern_match_01_simple.dingo`, lines 8-13):
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0

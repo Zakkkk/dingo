@@ -98,8 +98,8 @@ Each method call is transpiled to an IIFE, and chaining works because each IIFE 
 ### Future Enhancements
 
 **Planned for Future Phases:**
-- `find(fn)` - Find first matching element (returns Option<T>)
-- `mapResult(fn)` - Map with error handling (works with Result<T, E>)
+- `find(fn)` - Find first matching element (returns Option[T])
+- `mapResult(fn)` - Map with error handling (works with Result[T, E])
 - `filterSome(fn)` - Filter Option values (keeps Some, discards None)
 
 These require Result/Option type integration.

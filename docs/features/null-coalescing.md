@@ -312,7 +312,7 @@ let result = value ?? 42  // result is int (unwrapped)
 ```
 
 **Unwrapping:**
-- Left side: `Option<T>`
+- Left side: `Option[T]`
 - Right side: `T`
 - Result: `T` (unwrapped)
 
@@ -443,7 +443,7 @@ let result = value ?? "string"  // Error: expected int, got string
 ```
 Error: type mismatch in null coalescing
   → value ?? "string"
-    Expected: int (to match Option<int>)
+    Expected: int (to match Option[int])
     Got: string
 ```
 
@@ -663,7 +663,7 @@ match role {
 ### With Error Propagation
 
 ```go
-func processUser(id: int) -> Result<User, Error> {
+func processUser(id: int) -> Result[User, Error] {
     let user = getUser(id)?
     let theme = user?.settings?.theme ?? "light"
     return Ok(user)

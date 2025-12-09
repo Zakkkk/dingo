@@ -94,10 +94,10 @@ func (ctx *Context) BuildParentMap(file *ast.File) {
 // pkg/preprocessor/rust_match.go - Hardcoded assumptions
 func (r *RustMatchProcessor) getTagName(pattern string) string {
     switch pattern {
-    case "Ok": return "ResultTagOk"        // ✓ Correct for Result<T,E>
-    case "Err": return "ResultTagErr"       // ✓ Correct for Result<T,E>
-    case "Some": return "OptionTagSome"     // ✓ Correct for Option<T>
-    case "None": return "OptionTagNone"     // ✓ Correct for Option<T>
+    case "Ok": return "ResultTagOk"        // ✓ Correct for Result[T,E]
+    case "Err": return "ResultTagErr"       // ✓ Correct for Result[T,E]
+    case "Some": return "OptionTagSome"     // ✓ Correct for Option[T]
+    case "None": return "OptionTagNone"     // ✓ Correct for Option[T]
     default: return pattern + "Tag"         // ⚠️ May not match actual enum
     }
 }

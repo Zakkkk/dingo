@@ -73,7 +73,7 @@
 - How should nil safety be handled in generated enum code? Should accessor methods be generated automatically?
 - Are there performance implications of using regex on potentially large source files?
 - Should enum preprocessing happen at a specific phase in the pipeline (before/after other processors)?
-- What are the requirements for handling generic enum variants (`enum Option<T>`)? Current implementation appears experimental.
+- What are the requirements for handling generic enum variants (`enum Option[T]`)? Current implementation appears experimental.
 
 ## 📊 Summary
 **Overall Assessment**: **APPROVED FOR MERGE** - Core functionality works correctly, produces compilable Go code, and successfully integrates with the broader transpiler architecture. The implementation demonstrates pragmatism and gets the job done.

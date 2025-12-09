@@ -212,7 +212,7 @@ func (p *PatternMatchPlugin) inferMatchType(varName string) types.Type {
     // 3. Fallback: check if it's a known Dingo type
     if t := p.typeInfo.TypeOf(targetNode); t != nil {
         if named, ok := t.(*types.Named); ok {
-            // Check for Result<T,E> or Option<T>
+            // Check for Result[T,E] or Option[T]
             if strings.HasPrefix(named.Obj().Name(), "Result") {
                 return p.extractResultType(named)
             }

@@ -195,7 +195,7 @@
 
 11. **Go → Dingo Migration Tool** (3-4 weeks)
     - `dingo convert` command
-    - Pattern detection ((T, error) → Result<T,E>)
+    - Pattern detection ((T, error) → Result[T,E])
     - Conservative conversion
 
 ### P3: LOW PRIORITY (Post-v1.0)

@@ -58,19 +58,19 @@ switchExprPattern = regexp.MustCompile(`(?s)switch\s+([^{]+)\s*\{(.+?)\}`)
 
 ### 3. `tests/golden/swift_match_01_basic.dingo`
 **Changes:**
-- Line 8: `Result<int, error>` → `Result_int_error`
+- Line 8: `Result[int, error]` → `Result_int_error`
 - Line 8: `) -> int` → `) int`
-- Line 18: `Option<string>` → `Option_string`
+- Line 18: `Option[string]` → `Option_string`
 - Line 18: `) -> string` → `) string`
-- Line 28: `Option<int>` → `Option_int`
+- Line 28: `Option[int]` → `Option_int`
 - Line 28: `) -> int` → `) int`
 
 **Reason**: Arrow syntax (`->`) and generic syntax (`<T,E>`) are not implemented features
 
 ### 4. `tests/golden/swift_match_02_guards.dingo`
 **Changes:** (applied via sed)
-- All `Result<...>` → mangled names
-- All `Option<...>` → mangled names
+- All `Result[...]` → mangled names
+- All `Option[...]` → mangled names
 - All `) ->` → `) ` (space)
 
 ### 5. `tests/golden/swift_match_03_nested.dingo`

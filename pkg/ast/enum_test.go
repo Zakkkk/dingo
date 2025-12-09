@@ -50,7 +50,7 @@ func TestEnumDecl_String(t *testing.T) {
 					},
 				},
 			},
-			want: "enum Result<T, E> { Ok(T), Err(E) }",
+			want: "enum Result[T, E] { Ok(T), Err(E) }",
 		},
 		{
 			name: "struct variant",

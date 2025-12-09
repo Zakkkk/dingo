@@ -1,4 +1,4 @@
-# Option Type (`Option<T>`)
+# Option Type (`Option[T]`)
 
 ## Scenario
 A user settings system where each preference may or may not be configured. This is a common pattern for configuration, user preferences, and optional data.
@@ -19,12 +19,12 @@ fmt.Println(*user.Settings.Theme)
 ```
 
 ## Dingo Solution
-`Option<T>` makes absence explicit and type-safe:
+`Option[T]` makes absence explicit and type-safe:
 
 ```dingo
 type UserSettings struct {
-    Theme    Option<string>
-    FontSize Option<int>
+    Theme    Option[string]
+    FontSize Option[int]
 }
 
 // Safe: compiler ensures you handle None case
@@ -33,7 +33,7 @@ theme := user.Settings.Theme.SomeOr("system")
 
 ## Comparison
 
-| Aspect | Go pointers | Dingo `Option<T>` |
+| Aspect | Go pointers | Dingo `Option[T]` |
 |--------|-------------|-------------------|
 | Nil panic risk | High | Zero |
 | Zero vs absent | Ambiguous | Clear |

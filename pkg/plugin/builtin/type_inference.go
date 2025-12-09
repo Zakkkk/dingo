@@ -14,8 +14,8 @@ import (
 // TypeInferenceService provides type inference for Dingo builtin types
 //
 // This service recognizes and analyzes:
-// - Result<T, E> types (Result_T_E after sanitization)
-// - Option<T> types (Option_T after sanitization)
+// - Result[T, E] types (Result_T_E after sanitization)
+// - Option[T] types (Option_T after sanitization)
 // - None singleton for Option types
 //
 // Type inference strategy:
@@ -133,7 +133,7 @@ func (s *TypeInferenceService) IsOptionType(typeName string) bool {
 //	NotAResult → (nil, nil, false)
 //
 // CRITICAL FIX #1: Only uses cached values - does NOT reverse-parse from type name
-// Reverse parsing breaks for complex types like Result<map[string]int, error>
+// Reverse parsing breaks for complex types like Result[map[string]int, error]
 // because sanitization is lossy (e.g., "[" → "_", "]" → "_")
 func (s *TypeInferenceService) GetResultTypeParams(typeName string) (T, E types.Type, ok bool) {
 	if !s.IsResultType(typeName) {
@@ -378,7 +378,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) (types.Type, bool) {
 
 			switch ident.Name {
 			case "Ok":
-				// Ok(value) → Result<T, E> where T is inferred from value
+				// Ok(value) → Result[T, E] where T is inferred from value
 				if len(e.Args) == 1 {
 					if argType, ok := s.InferType(e.Args[0]); ok {
 						// Result type is Result_T_error (standard error type)
@@ -389,7 +389,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) (types.Type, bool) {
 					}
 				}
 			case "Err":
-				// Err(error) → Result<T, E> where E is inferred from error
+				// Err(error) → Result[T, E] where E is inferred from error
 				// For tuples, this is less common but we'll handle it
 				if len(e.Args) == 1 {
 					if argType, ok := s.InferType(e.Args[0]); ok {
@@ -400,7 +400,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) (types.Type, bool) {
 					}
 				}
 			case "Some":
-				// Some(value) → Option<T> where T is inferred from value
+				// Some(value) → Option[T] where T is inferred from value
 				if len(e.Args) == 1 {
 					if argType, ok := s.InferType(e.Args[0]); ok {
 						optionTypeName := s.optionTypeNameFromSome(argType)
@@ -409,7 +409,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) (types.Type, bool) {
 					}
 				}
 			case "None":
-				// None → Option<T> (T unknown without context)
+				// None → Option[T] (T unknown without context)
 				// For tuples, this will fall back to interface{} which is acceptable
 				s.logger.Debugf("InferType: None requires context for type inference")
 				return nil, false
@@ -984,7 +984,7 @@ func (s *TypeInferenceService) RegisterResultType(typeName string, okType, errTy
 		// Check if this is a different type combination with the same sanitized name
 		if existing.OkTypeString != okTypeStr || existing.ErrTypeString != errTypeStr {
 			s.logger.Error(fmt.Sprintf(
-				"Type registry collision detected: %s represents both Result<%s, %s> and Result<%s, %s>",
+				"Type registry collision detected: %s represents both Result[%s, %s] and Result[%s, %s]",
 				typeName,
 				existing.OkTypeString, existing.ErrTypeString,
 				okTypeStr, errTypeStr,
@@ -1048,7 +1048,7 @@ func (s *TypeInferenceService) RegisterOptionType(typeName string, valueType typ
 		// Check if this is a different type with the same sanitized name
 		if existing.ValueTypeString != valueTypeStr {
 			s.logger.Error(fmt.Sprintf(
-				"Type registry collision detected: %s represents both Option<%s> and Option<%s>",
+				"Type registry collision detected: %s represents both Option[%s] and Option[%s]",
 				typeName,
 				existing.ValueTypeString,
 				valueTypeStr,
@@ -1103,7 +1103,7 @@ func (s *TypeInferenceService) ValidateNoneInference(noneExpr ast.Expr) (ok bool
 
 	// Placeholder: Always fail for now (Task 1.5 will implement this)
 	return false, fmt.Sprintf(
-		"Cannot infer type for None at %s\nHelp: Add explicit type annotation: let varName: Option<YourType> = None",
+		"Cannot infer type for None at %s\nHelp: Add explicit type annotation: let varName: Option[YourType] = None",
 		s.fset.Position(noneExpr.Pos()),
 	)
 }

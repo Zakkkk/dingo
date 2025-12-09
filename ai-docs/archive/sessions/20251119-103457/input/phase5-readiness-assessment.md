@@ -10,7 +10,7 @@ You are assessing the **Dingo programming language** - a meta-language for Go (l
 
 **What Dingo Does:**
 - Transpiles `.dingo` → `.go` files (two-stage: preprocessor + go/parser)
-- Provides Result<T,E>, Option<T>, enums, pattern matching, error propagation (`?`)
+- Provides Result[T,E], Option[T], enums, pattern matching, error propagation (`?`)
 - Maintains 100% Go ecosystem compatibility
 - Needs full IDE support via language server
 

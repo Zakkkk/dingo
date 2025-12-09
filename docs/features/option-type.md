@@ -1,6 +1,6 @@
-# Option<T> Type
+# Option[T] Type
 
-The `Option<T>` type provides null safety by explicitly representing values that may or may not exist. It's Dingo's solution to Go's nil pointer problems.
+The `Option[T]` type provides null safety by explicitly representing values that may or may not exist. It's Dingo's solution to Go's nil pointer problems.
 
 ## Why Option Types?
 
@@ -463,8 +463,8 @@ type User struct {
 }
 
 // Access properties safely
-let name = user?.name     // Returns Option<string>
-let email = user?.email   // Returns Option<string>
+let name = user?.name     // Returns Option[string]
+let email = user?.email   // Returns Option[string]
 
 // Chain through nested structures
 let bio = user?.profile?.bio
@@ -486,8 +486,8 @@ func (u User) getEmail(domain: string) string {
 }
 
 // Call methods safely
-let name = user?.getName()                    // Returns Option<string>
-let email = user?.getEmail("example.com")    // Returns Option<string>
+let name = user?.getName()                    // Returns Option[string]
+let email = user?.getEmail("example.com")    // Returns Option[string]
 
 // Chain method calls
 let formatted = user?.getName()?.toUpper()
@@ -541,7 +541,7 @@ let displayName = user?.name ?? user?.email ?? "Anonymous"
 ### Type Handling
 
 ```go
-// Option<T> → T (automatically unwrapped)
+// Option[T] → T (automatically unwrapped)
 let opt: StringOption = StringOption_Some("hello")
 let str: string = opt ?? "default"  // str is "hello"
 

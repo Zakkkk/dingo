@@ -1,4 +1,4 @@
-# Phase 3 Implementation Plan: Fix A4, Fix A5, and Option<T> Type
+# Phase 3 Implementation Plan: Fix A4, Fix A5, and Option[T] Type
 
 **Date**: 2025-11-18
 **Session**: 20251118-114514
@@ -8,11 +8,11 @@
 
 ## Executive Summary
 
-Phase 3 addresses three critical areas to complete the Result<T,E>/Option<T> foundation:
+Phase 3 addresses three critical areas to complete the Result[T,E]/Option[T] foundation:
 
 1. **Fix A4**: Literal handling in constructors (`Ok(42)` generates `&42` which is invalid)
 2. **Fix A5**: Enhanced type inference using `go/types` (eliminates `interface{}` fallbacks)
-3. **Option<T>**: Complete implementation with full feature parity to Result<T,E>
+3. **Option[T]**: Complete implementation with full feature parity to Result[T,E]
 
 **Complexity**: Medium-High
 **Estimated Effort**: 1-2 days (8-16 hours)
@@ -45,7 +45,7 @@ Ok(42) → func() Result_int_error {
 **Impact**: Medium
 - Prevents Ok()/Err() constructors from working with literals
 - Affects 8 deferred tests in builtin plugin suite
-- Blocks Option<T> implementation (same issue)
+- Blocks Option[T] implementation (same issue)
 
 **Detection Strategy**:
 Need to identify non-addressable expressions:
@@ -83,7 +83,7 @@ Ok(x) where x: int
 - No integration with `go/types` package for semantic analysis
 
 **Impact**: High
-- Reduces type safety (defeats purpose of Result<T,E>)
+- Reduces type safety (defeats purpose of Result[T,E])
 - Generates incorrect Result types (Result_interface_error vs Result_int_error)
 - Prevents proper type checking and autocomplete in IDEs
 - Affects all constructor calls with non-literal arguments
@@ -99,9 +99,9 @@ The infrastructure partially exists:
 2. Propagate `types.Info` to Result/Option plugins
 3. Use `types.Info.Types[expr]` instead of heuristic inference
 
-### Option<T> Type Implementation
+### Option[T] Type Implementation
 
-**Problem**: Option<T> plugin exists but is incomplete.
+**Problem**: Option[T] plugin exists but is incomplete.
 
 **Current State** (`/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go`):
 - ✅ Basic structure exists (618 lines)
@@ -117,7 +117,7 @@ The infrastructure partially exists:
 - Helper methods: `IsSome()`, `IsNone()`
 - Field access: `*result.some_0`
 
-**Key Difference from Result<T,E>**:
+**Key Difference from Result[T,E]**:
 - Single type parameter (T) vs two (T, E)
 - None variant has no associated data
 - Constructor syntax: `Some(value)` and `None` (constant, not function)
@@ -478,12 +478,12 @@ func (p *ResultTypePlugin) inferTypeFromExpr(expr ast.Expr) string {
 
 **Same changes apply to**: `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go`
 
-### Solution Option<T>: Complete Implementation
+### Solution Option[T]: Complete Implementation
 
-**Strategy**: Mirror Result<T,E> implementation with Option<T>-specific adaptations.
+**Strategy**: Mirror Result[T,E] implementation with Option[T]-specific adaptations.
 
 **Key Differences**:
-1. Single type parameter: `Option<T>` vs `Result<T,E>`
+1. Single type parameter: `Option[T]` vs `Result[T,E]`
 2. None variant: No data field, singleton-like behavior
 3. Constructor: `None` constant vs `None()` function call
 
@@ -537,12 +537,12 @@ Apply same patterns as Result plugin:
 **Parallelizable Tasks** (can be done simultaneously):
 1. Fix A4 implementation (addressability detection + IIFE wrapping)
 2. Fix A5 implementation (go/types integration + TypeInferenceService)
-3. Option<T> basic structure (assuming Fixes A4/A5 exist as library functions)
+3. Option[T] basic structure (assuming Fixes A4/A5 exist as library functions)
 
 **Sequential Dependencies**:
-1. Fix A4 → Option<T> Some() constructor
-2. Fix A5 → Option<T> type inference
-3. Both fixes → Option<T> golden tests
+1. Fix A4 → Option[T] Some() constructor
+2. Fix A5 → Option[T] type inference
+3. Both fixes → Option[T] golden tests
 
 **Recommended Order**:
 1. **Session 1** (4-6 hours): Fix A5 (go/types integration)
@@ -550,8 +550,8 @@ Apply same patterns as Result plugin:
    - Enables accurate testing of other features
 2. **Session 2** (2-3 hours): Fix A4 (literal handling)
    - Unblocks constructor usage
-   - Required for Option<T> constructors
-3. **Session 3** (2-4 hours): Option<T> implementation
+   - Required for Option[T] constructors
+3. **Session 3** (2-4 hours): Option[T] implementation
    - Apply both fixes to Option plugin
    - Write golden tests
    - Integration testing
@@ -559,7 +559,7 @@ Apply same patterns as Result plugin:
 **Why this order?**
 - Fix A5 provides infrastructure (TypeInferenceService) used everywhere
 - Fix A4 is localized to constructor transformation
-- Option<T> consumes both fixes
+- Option[T] consumes both fixes
 
 ### File-by-File Changes
 
@@ -573,7 +573,7 @@ Apply same patterns as Result plugin:
 | `pkg/plugin/builtin/result_type.go` | Add isAddressable(), wrapInTemporaryVariable(), update inferTypeFromExpr() | +120 | Medium |
 | `pkg/plugin/builtin/result_type.go` | Modify transformOkConstructor(), transformErrConstructor() | ~40 | Medium |
 
-**Medium Priority (Option<T>)**:
+**Medium Priority (Option[T])**:
 
 | File | Changes | Lines | Risk |
 |------|---------|-------|------|
@@ -647,7 +647,7 @@ func TestTypeInference_GoTypes(t *testing.T) {
 }
 ```
 
-**Option<T> Tests** (`pkg/plugin/builtin/option_type_test.go`):
+**Option[T] Tests** (`pkg/plugin/builtin/option_type_test.go`):
 - Mirror Result tests
 - Test Some(literal) with IIFE pattern
 - Test type inference with identifiers
@@ -672,7 +672,7 @@ go build -o /tmp/test_result tests/golden/result_03_literals.go
 /tmp/test_result
 # Verify output matches expected
 
-# Test Option<T>
+# Test Option[T]
 go run ./cmd/dingo build tests/golden/option_01_basic.dingo
 go build -o /tmp/test_option tests/golden/option_01_basic.go
 /tmp/test_option
@@ -768,7 +768,7 @@ go build -o /tmp/test_option tests/golden/option_01_basic.go
 - **Impact**: Takes 2-3 days instead of 1-2
 - **Mitigation**:
   - Phased approach (can ship Fix A5 independently)
-  - Clear stopping points (Fix A4, Fix A5, Option<T>)
+  - Clear stopping points (Fix A4, Fix A5, Option[T])
   - Defer non-critical features (None constant, advanced helpers)
 
 ---
@@ -932,7 +932,7 @@ result := Result_int_error{tag: ResultTag_Ok, ok_0: &__tmp0}
 - [ ] Golden test: option_03_literals.dingo compiles and runs
 - [ ] Regression test: Existing Result/Option tests still pass
 
-### Phase 3.3: Option<T> Implementation - 2-4 hours
+### Phase 3.3: Option[T] Implementation - 2-4 hours
 
 **File**: `pkg/plugin/builtin/option_type.go`
 - [ ] Verify Fix A4 applied (addressability + IIFE)
@@ -1007,13 +1007,13 @@ result := Result_int_error{tag: ResultTag_Ok, ok_0: &__tmp0}
 **Developer Experience**:
 - [ ] Ok(42) works as expected (no manual temp variables)
 - [ ] Type inference is accurate and predictable
-- [ ] Option<T> has feature parity with Result<T,E>
+- [ ] Option[T] has feature parity with Result[T,E]
 - [ ] Clear documentation of limitations (None constant)
 
 **Completeness**:
 - [ ] All Fix A4 requirements met
 - [ ] All Fix A5 requirements met
-- [ ] Option<T> basic functionality complete
+- [ ] Option[T] basic functionality complete
 - [ ] Foundation ready for Phase 4 (pattern matching, helpers)
 
 ---
@@ -1063,7 +1063,7 @@ import (
 1. Revert generator.go changes
 2. Keep heuristic-only inference
 3. Defer go/types to Phase 4
-4. Still proceed with Fix A4 and Option<T>
+4. Still proceed with Fix A4 and Option[T]
 
 **Impact**: Type inference limited, but constructors still work
 
@@ -1078,11 +1078,11 @@ import (
 1. Revert isAddressable() and wrapInTemporaryVariable()
 2. Document limitation: "Use variables, not literals"
 3. Update golden tests to use variables
-4. Still proceed with Fix A5 and Option<T> (partial)
+4. Still proceed with Fix A5 and Option[T] (partial)
 
 **Impact**: Constructors require manual temp variables
 
-### If Option<T> Fails
+### If Option[T] Fails
 
 **Symptoms**:
 - Option plugin conflicts with Result plugin
@@ -1090,22 +1090,22 @@ import (
 
 **Rollback**:
 1. Disable Option plugin in default registry
-2. Mark Option<T> as experimental
-3. Keep Fix A4 and Fix A5 (benefit Result<T,E>)
-4. Defer Option<T> to Phase 4
+2. Mark Option[T] as experimental
+3. Keep Fix A4 and Fix A5 (benefit Result[T,E])
+4. Defer Option[T] to Phase 4
 
-**Impact**: Only Result<T,E> available, Option<T> delayed
+**Impact**: Only Result[T,E] available, Option[T] delayed
 
 ---
 
 ## Conclusion
 
-Phase 3 addresses critical foundation issues (Fix A4, Fix A5) and completes Option<T> implementation. The phased approach allows independent delivery of each fix, with clear rollback plans if issues arise.
+Phase 3 addresses critical foundation issues (Fix A4, Fix A5) and completes Option[T] implementation. The phased approach allows independent delivery of each fix, with clear rollback plans if issues arise.
 
 **Next Steps**:
 1. Review this plan with team
 2. Address questions in gaps.json
-3. Proceed with implementation in order: A5 → A4 → Option<T>
+3. Proceed with implementation in order: A5 → A4 → Option[T]
 4. Continuous testing and validation
 
 **Estimated Timeline**: 1-2 days (8-16 hours)

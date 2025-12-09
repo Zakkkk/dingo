@@ -143,11 +143,11 @@ func TestLetCodeGen_ComplexExpressions(t *testing.T) {
 			decl: &ast.LetDecl{
 				LetPos:    token.Pos(1),
 				Names:     []string{"data"},
-				TypeAnnot: ": Option<string>",
+				TypeAnnot: ": Option[string]",
 				Value:     "Some(\"hello\")",
 				HasInit:   true,
 			},
-			expected: "var data Option<string> = Some(\"hello\")",
+			expected: "var data Option[string] = Some(\"hello\")",
 		},
 		{
 			name: "error handling expression",

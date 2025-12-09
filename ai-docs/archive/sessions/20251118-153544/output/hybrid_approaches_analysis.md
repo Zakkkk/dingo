@@ -17,7 +17,7 @@ Features that involve nested structures, semantic dependencies, or require a dee
         *   **Error Reporting:** A full parser can provide precise diagnostics for non-exhaustive patterns, type mismatches, and syntax errors within the `match` block.
 
 *   **Advanced Error Propagation (`?` operator with contextual return types):**
-    *   **Reasoning:** While basic `x?` can be preprocessed, handling complex scenarios where the `?` operator needs to infer or adapt to different return types of the enclosing function (e.g., `Result<T, E>` vs. `(T, error)`) requires semantic analysis. A preprocessor can only perform simple text substitution, which might break in edge cases or require overly complex regex patterns.
+    *   **Reasoning:** While basic `x?` can be preprocessed, handling complex scenarios where the `?` operator needs to infer or adapt to different return types of the enclosing function (e.g., `Result[T, E]` vs. `(T, error)`) requires semantic analysis. A preprocessor can only perform simple text substitution, which might break in edge cases or require overly complex regex patterns.
     *   **Trade-offs:**
         *   **Complexity:** Moderate to high for a full parser, especially for type inference.
         *   **Correctness:** A full parser, especially with `go/types` integration, ensures correct type propagation and error handling.

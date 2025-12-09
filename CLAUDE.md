@@ -71,7 +71,7 @@ examples/           # Example .dingo files
 | safe_nav | 60 | `x?.y` |
 | null_coalesce | 70 | `a ?? b` |
 | lambdas | 80 | `\|x\| expr` or `x => expr` |
-| generics | 110 | `<T>` → `[T]` |
+| generics | 110 | Uses Go's native `[T]` syntax directly |
 | let_binding | 120 | `let x =` → `x :=` |
 
 ## Code Generation Standards
@@ -118,4 +118,4 @@ This disables animation which doesn't render properly in Claude Code.
 - Architecture: `ai-docs/dingo-vs-borgo.md`
 
 ---
-**Last Updated**: 2025-12-08
+**Last Updated**: 2025-12-09

@@ -1,6 +1,6 @@
-# Result<T,E> Type
+# Result[T,E] Type
 
-The `Result<T,E>` type is Dingo's primary error handling mechanism, inspired by Rust. It represents either a successful value (`Ok`) or an error (`Err`).
+The `Result[T,E]` type is Dingo's primary error handling mechanism, inspired by Rust. It represents either a successful value (`Ok`) or an error (`Err`).
 
 ## Why Result Types?
 
@@ -403,7 +403,7 @@ func validateAndSave(input: UserInput) (User, error) {
 ### Current Limitations
 
 1. **Type inference for Result types**: Currently requires explicit type annotations
-2. **No generic Result<T,E>**: Must define specific Result types for each use case
+2. **No generic Result[T,E]**: Must define specific Result types for each use case
 3. **Pattern matching**: Available but requires explicit enum variant names
 
 ### Workarounds

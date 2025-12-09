@@ -229,7 +229,7 @@ returnType = &ast.IndexListExpr{
 ```
 
 **Problem:**
-For a **single** type parameter (e.g., `Option<T>`), Go 1.18+ uses `ast.IndexExpr`, not `ast.IndexListExpr`. `IndexListExpr` is only for **multiple** type parameters.
+For a **single** type parameter (e.g., `Option[T]`), Go 1.18+ uses `ast.IndexExpr`, not `ast.IndexListExpr`. `IndexListExpr` is only for **multiple** type parameters.
 
 **Impact:** Incorrect AST structure for single-parameter generics. May cause issues with go/printer or type checking.
 

@@ -5,7 +5,7 @@
 
 ## Executive Summary
 
-Completed automated development session implementing critical parser fixes and foundational infrastructure for Result<T, E> and Option<T> types. All major tasks completed with documented decisions and implementation details.
+Completed automated development session implementing critical parser fixes and foundational infrastructure for Result[T, E] and Option[T] types. All major tasks completed with documented decisions and implementation details.
 
 **Overall Status:** ✅ **SUCCESS**
 - **Duration:** ~2 hours (automated overnight session)
@@ -91,14 +91,14 @@ Collected and analyzed 3 external code reviews:
 
 ---
 
-### ✅ Task 4: Result<T, E> Type Implementation
+### ✅ Task 4: Result[T, E] Type Implementation
 **Status:** COMPLETED ✅ (Foundation)
 
 **Implementation:**
 
 Created `/Users/jack/mag/dingo/pkg/plugin/builtin/result_type.go` with:
 - `ResultTypePlugin` implementing the Plugin interface
-- Result enum definition: `enum Result<T, E> { Ok(T), Err(E) }`
+- Result enum definition: `enum Result[T, E] { Ok(T), Err(E) }`
 - Helper methods transpilation:
   - `IsOk() bool` - Check if result is Ok variant
   - `IsErr() bool` - Check if result is Err variant
@@ -118,7 +118,7 @@ Created `/Users/jack/mag/dingo/pkg/plugin/builtin/result_type.go` with:
 
 **Transpilation Strategy:**
 ```go
-// Dingo: Result<User, Error>
+// Dingo: Result[User, Error]
 // Go Output:
 type ResultUserError struct {
     tag    ResultTag
@@ -131,20 +131,20 @@ type ResultUserError struct {
 
 ---
 
-### ✅ Task 5: Option<T> Type Implementation
+### ✅ Task 5: Option[T] Type Implementation
 **Status:** COMPLETED ✅ (Foundation)
 
 **Implementation:**
 
 Created `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go` with:
 - `OptionTypePlugin` implementing the Plugin interface
-- Option enum definition: `enum Option<T> { Some(T), None }`
+- Option enum definition: `enum Option[T] { Some(T), None }`
 - Helper methods:
   - `IsSome() bool`
   - `IsNone() bool`
   - `Unwrap() T`
   - `UnwrapOr(default T) T`
-  - `Map<U>(f func(T) U) Option<U>` - Functor transformation
+  - `Map<U>(f func(T) U) Option[U]` - Functor transformation
 
 **Integration:**
 - ✅ Registered in default plugin registry
@@ -158,7 +158,7 @@ Created `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go` with:
 
 **Transpilation Strategy:**
 ```go
-// Dingo: Option<User>
+// Dingo: Option[User]
 // Go Output:
 type OptionUser struct {
     tag    OptionTag
@@ -361,7 +361,7 @@ ai-docs/sessions/20251117-003257/
 4. **Generic type parameters:** Full `<T, E>` parsing
 
 ### Result/Option Completion
-1. **Generic syntax:** Enable `Result<User, Error>` parsing
+1. **Generic syntax:** Enable `Result[User, Error]` parsing
 2. **Interop methods:** `fromGo()`, `toGo()` for Go tuple conversion
 3. **Advanced methods:** `map()`, `andThen()`, `filter()` for Option
 4. **Auto-conversion:** Implicit wrapping of Go `(T, error)` returns
@@ -438,7 +438,7 @@ ai-docs/sessions/20251117-003257/
 
 ## Conclusion
 
-This automated overnight session successfully addressed the critical parser bug blocking golden tests and laid the complete foundation for Result<T, E> and Option<T> types. All major infrastructure is in place and ready for final integration.
+This automated overnight session successfully addressed the critical parser bug blocking golden tests and laid the complete foundation for Result[T, E] and Option[T] types. All major infrastructure is in place and ready for final integration.
 
 **Next Steps:**
 1. Review this report

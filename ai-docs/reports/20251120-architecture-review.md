@@ -34,7 +34,7 @@ Dingo's architecture demonstrates solid design choices for a meta-language trans
 
 ### 2. **Zero Runtime Overhead Design**
 - **Strength**: Generated code is idiomatic Go with no runtime dependencies
-- **Evidence**: `Result<T,E>` implemented as native interfaces, no external libraries
+- **Evidence**: `Result[T,E]` implemented as native interfaces, no external libraries
 - **Impact**: Perfect Go ecosystem compatibility, no performance penalties
 
 ### 3. **Plugin-Based Transform Pipeline**

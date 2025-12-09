@@ -1,7 +1,7 @@
 # Task 1c: Addressability Detection - Design Decisions & Notes
 
 ## Overview
-Task 1c implements Fix A4 foundation - addressability detection and IIFE wrapping for non-addressable expressions. This is reusable infrastructure that both Result<T,E> and Option<T> plugins will use in Batch 2.
+Task 1c implements Fix A4 foundation - addressability detection and IIFE wrapping for non-addressable expressions. This is reusable infrastructure that both Result[T,E] and Option[T] plugins will use in Batch 2.
 
 ## Problem Statement
 
@@ -137,7 +137,7 @@ if isAddressable(arg) {
 **Choice**: Current implementation parses identifiers only, not complex types
 
 **Rationale**:
-- **Phase 3 scope**: Result<T,E> and Option<T> use simple types (`int`, `string`, `User`)
+- **Phase 3 scope**: Result[T,E] and Option[T] use simple types (`int`, `string`, `User`)
 - **Future expansion**: Pattern matching (Phase 4) will need complex types (`*int`, `[]string`)
 - **YAGNI principle**: Don't implement until needed
 - **Clear extension point**: Function is isolated, easy to enhance later

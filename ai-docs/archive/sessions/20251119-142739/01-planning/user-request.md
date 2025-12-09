@@ -56,8 +56,8 @@ All 6 models unanimously agreed:
 
 **Primary Codegen**:
 - `pkg/preprocessor/rust_match.go` - Main enum/match codegen logic
-- `pkg/plugin/builtin/result_type.go` - Result<T,E> type generation
-- `pkg/plugin/builtin/option_type.go` - Option<T> type generation
+- `pkg/plugin/builtin/result_type.go` - Result[T,E] type generation
+- `pkg/plugin/builtin/option_type.go` - Option[T] type generation
 
 **Test Files**:
 - All `tests/golden/*.go.golden` files (46+ files need regeneration)

@@ -79,12 +79,12 @@ config.Error = func(err error) {
 **Impact:** Both constructors are unusable in real code:
 ```dingo
 // This generates Result_T_error (invalid type)
-fn getError() -> Result<User, error> {
+fn getError() -> Result[User, error] {
     return Err(errors.New("failed"))
 }
 
 // This doesn't transform at all
-fn getNothing() -> Option<int> {
+fn getNothing() -> Option[int] {
     return None  // Not transformed, won't compile
 }
 ```
@@ -414,7 +414,7 @@ The TypeInferenceService shows deep understanding of Go type systems:
 ### 3. Idiomatic Helper Methods
 Result and Option implementations follow Rust/functional language patterns:
 - Generated methods: `IsOk()`, `IsErr()`, `Unwrap()`, `UnwrapOr()`, `Match()`
-- Proper generic type parameters (`Result<T, E>`, `Option<T>`)
+- Proper generic type parameters (`Result[T, E]`, `Option[T]`)
 - Composite literal generation follows Go conventions
 
 **Why This Matters:** Users familiar with Rust/Swift/Kotlin will feel at home with Dingo's Result/Option APIs.

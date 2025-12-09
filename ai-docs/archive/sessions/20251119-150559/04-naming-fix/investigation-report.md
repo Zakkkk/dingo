@@ -112,7 +112,7 @@ Checked all golden files in `tests/golden/*.go.golden`:
 
 ## Affected Tests
 
-1. `pattern_match_01_simple` - Result<int, error>, Option<string>
+1. `pattern_match_01_simple` - Result[int, error], Option[string]
 2. `pattern_match_04_exhaustive` - Custom enums with struct variants
 3. `pattern_match_05_guards_basic` - Result types with guards
 4. `pattern_match_06_guards_nested` - Nested patterns

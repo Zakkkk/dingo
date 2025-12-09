@@ -11,8 +11,8 @@
   - Sum types (enum keyword)
   - Pattern matching (match expressions)
   - Error propagation (? operator)
-  - Result<T,E> types (via enum)
-  - Option<T> types (via enum)
+  - Result[T,E] types (via enum)
+  - Option[T] types (via enum)
 - Avoided documenting planned-but-not-implemented features (lambdas, safe navigation, ternary operator)
 
 **Files examined for verification:**

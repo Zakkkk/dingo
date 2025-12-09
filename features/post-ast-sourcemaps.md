@@ -58,7 +58,7 @@ Dingo's current source map generation creates mappings during text-based preproc
 ┌─────────────────────────────────────┐
 │ Stage 2: AST Processing             │
 │ • go/parser (native)                │  Parse to AST
-│ • go/ast transforms                 │  Result<T,E> rewrites
+│ • go/ast transforms                 │  Result[T,E] rewrites
 │ • go/printer                        │  Format to .go file
 │   → FINAL LINE NUMBERS ← 🔴 MISMATCH
 └─────────────────────────────────────┘
@@ -143,7 +143,7 @@ Dingo's current source map generation creates mappings during text-based preproc
 ┌─────────────────────────────────────┐
 │ Stage 2: AST Processing             │
 │ • go/parser (native)                │  Parse to AST
-│ • go/ast transforms                 │  Result<T,E> rewrites
+│ • go/ast transforms                 │  Result[T,E] rewrites
 │ • go/printer → .go file             │  Format with FileSet
 └─────────────────────────────────────┘
     ↓

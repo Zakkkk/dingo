@@ -1,7 +1,7 @@
 # Task 0.1-0.2 Implementation Summary
 
 ## Objective
-Extend the Dingo configuration system to support Result<T, E> and Option<T> type Go interoperability with three configurable modes.
+Extend the Dingo configuration system to support Result[T, E] and Option[T] type Go interoperability with three configurable modes.
 
 ## What Was Implemented
 
@@ -38,8 +38,8 @@ type FeatureConfig struct {
 - Recommended for most users
 
 #### Mode 2: "auto" (Convenient)
-- Automatically wraps `(T, error)` → `Result<T, E>`
-- Automatically wraps `*T` → `Option<T>`
+- Automatically wraps `(T, error)` → `Result[T, E]`
+- Automatically wraps `*T` → `Option[T]`
 - Convenient for greenfield Dingo projects
 - May surprise users unfamiliar with auto-wrapping
 

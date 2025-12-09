@@ -20,7 +20,7 @@ The current two-stage approach (regex-based preprocessor transforming Dingo synt
 
 *   **Stage 2: `go/parser` and AST Transformation**
     *   **Purpose**: Parse the preprocessed, now valid Go code into an AST and apply semantic transformations that require contextual understanding and structural manipulation.
-    *   **Features**: `enum` keyword (sum types), `Result<T,E>` and `Option<T>` types (including IIFE for literals), pattern matching (`match` expressions), and lambda functions. These features involve significant AST restructuring and type-aware transformations.
+    *   **Features**: `enum` keyword (sum types), `Result[T,E]` and `Option[T]` types (including IIFE for literals), pattern matching (`match` expressions), and lambda functions. These features involve significant AST restructuring and type-aware transformations.
     *   **Pros**: Full contextual understanding (with `go/types`), robust for complex structural changes, higher correctness, generates idiomatic Go, leverages official Go tools.
     *   **Cons**: Higher complexity (requires `go/ast` and `go/types` expertise), performance overhead compared to direct text manipulation.
     *   **Complexity**: High.

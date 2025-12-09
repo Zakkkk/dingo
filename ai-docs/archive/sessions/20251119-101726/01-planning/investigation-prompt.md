@@ -5,7 +5,7 @@ You are an expert Go developer and language implementer investigating test failu
 
 ## Project Context
 **Dingo** is a meta-language for Go (like TypeScript for JavaScript) that transpiles `.dingo` files to idiomatic `.go` files. It provides:
-- Result<T,E> and Option<T> types
+- Result[T,E] and Option[T] types
 - Error propagation operator (`?`)
 - Pattern matching (Rust-style syntax)
 - Sum types/enums

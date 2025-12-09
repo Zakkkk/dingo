@@ -273,7 +273,7 @@ Processors run in sequence, each receiving the output of the previous processor:
    - Expands `match` expressions to switch statements
 
 3. **Result/Option Types** (future: `result_option.go`)
-   - Transforms Result<T,E> and Option<T> to Go structs
+   - Transforms Result[T,E] and Option[T] to Go structs
 
 ### Stage 2: Import Injection (FINAL STEP)
 

@@ -5,8 +5,23 @@ import (
 	"strings"
 )
 
+// NOTE ON ARCHITECTURAL COMPLIANCE:
+// The string manipulation in this file (strings.HasPrefix, strings.Contains, etc.)
+// is INTENTIONALLY allowed and does NOT violate the "no string manipulation" rule.
+//
+// The architectural rule prohibits string/regex manipulation of RAW SOURCE CODE
+// (which must go through tokenizer → parser → AST → codegen).
+//
+// These functions operate on TYPE STRINGS that have ALREADY been extracted from
+// the AST by the parser. This is post-AST string manipulation for generating
+// Go-idiomatic type names (e.g., "Result[*User, error]" → "ResultPtrUserError").
+//
+// The distinction:
+//   ❌ BAD: strings.Contains(sourceCode, "Result<") - parsing raw source
+//   ✅ OK:  strings.HasPrefix(extractedType, "*")   - processing AST-derived data
+
 // SanitizeTypeName converts type name parts to camelCase format
-// This is used for Result<T,E> → ResultIntError and Option<T> → OptionString naming
+// This is used for Result[T,E] → ResultIntError and Option[T] → OptionString naming
 // Examples:
 //   ("int", "error") → "IntError"
 //   ("string") → "String"

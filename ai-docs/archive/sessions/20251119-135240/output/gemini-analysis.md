@@ -13,19 +13,19 @@ The current Dingo approach uses PascalCase for both enum types and variants (e.g
 - **Convention**: Exported identifiers start with capital letter
 
 ### Rust (Strong influence on Dingo sum types)
-- **Types**: PascalCase (`HttpMethod`, `Result<T, E>`)
+- **Types**: PascalCase (`HttpMethod`, `Result[T, E]`)
 - **Variants**: PascalCase (`Ok`, `Err`, `Some`, `None`)
 - **Philosophy**: All types and variants are "exported" (public) so PascalCase everywhere
 - **Benefit**: Consistent PascalCase creates visual harmony, variants are type-like
 
 ### Swift
-- **Types**: PascalCase (`HttpMethod`, `Result<T, Error>`)
+- **Types**: PascalCase (`HttpMethod`, `Result[T, Error]`)
 - **Variants**: PascalCase (`Success`, `Failure`)
 - **Philosophy**: Variants are considered types themselves
-- **Result**: `Result<T, Error>.success(value)` looks type-like
+- **Result**: `Result[T, Error].success(value)` looks type-like
 
 ### Kotlin
-- **Types**: PascalCase (`HttpMethod`, `Result<T, E>`)
+- **Types**: PascalCase (`HttpMethod`, `Result[T, E]`)
 - **Variants**: PascalCase (`Success`, `Failure`)
 - **Sealed classes**: Similar to enums but more flexible
 - **Convention**: All "types" (classes, enums) are PascalCase
@@ -118,8 +118,8 @@ enum PaymentStatus {
     Failed(error: string)
 }
 
-enum Result<T, E> { Ok(value: T), Err(error: E) }
-enum Option<T> { Some(value: T), None }
+enum Result[T, E] { Ok(value: T), Err(error: E) }
+enum Option[T] { Some(value: T), None }
 ```
 
 ### Generated Go Code (Compatible)

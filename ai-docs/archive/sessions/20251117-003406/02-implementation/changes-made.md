@@ -164,7 +164,7 @@ These are parser limitations, not plugin issues. The plugin works correctly when
 
 ### Feature Limitations (By Design)
 1. **Result/Option Integration**: Placeholder implementations only
-   - `find()` - Returns Option<T> (requires Option type)
+   - `find()` - Returns Option[T] (requires Option type)
    - `mapResult()` - Short-circuits on errors (requires Result type)
    - `filterSome()` - Filters Some values (requires Option type)
    - These are ready for implementation once Result/Option types are confirmed available

@@ -11,9 +11,9 @@ type TypeKind int
 const (
 	// TypeKindUnknown represents an unresolved or unknown type
 	TypeKindUnknown TypeKind = iota
-	// TypeKindResult represents a Result<T, E> type
+	// TypeKindResult represents a Result[T, E] type
 	TypeKindResult
-	// TypeKindOption represents an Option<T> type
+	// TypeKindOption represents an Option[T] type
 	TypeKindOption
 	// TypeKindBasic represents a basic Go type (int, string, etc.)
 	TypeKindBasic
@@ -49,13 +49,13 @@ type TypeInfo struct {
 	// Name is the type name (e.g., "int", "string", "MyStruct")
 	Name string
 
-	// ValueType is the inner type for Result<T,E> and Option<T>
-	// For Result<string, error>, ValueType = "string"
-	// For Option<int>, ValueType = "int"
+	// ValueType is the inner type for Result[T,E] and Option[T]
+	// For Result[string, error], ValueType = "string"
+	// For Option[int], ValueType = "int"
 	ValueType string
 
-	// ErrorType is the error type for Result<T,E>
-	// For Result<string, MyError>, ErrorType = "MyError"
+	// ErrorType is the error type for Result[T,E]
+	// For Result[string, MyError], ErrorType = "MyError"
 	ErrorType string
 
 	// Package is the package path for named types
@@ -110,12 +110,12 @@ type FunctionInfo struct {
 	Position token.Pos
 }
 
-// IsResult returns true if this TypeInfo represents a Result<T,E> type
+// IsResult returns true if this TypeInfo represents a Result[T,E] type
 func (t TypeInfo) IsResult() bool {
 	return t.Kind == TypeKindResult
 }
 
-// IsOption returns true if this TypeInfo represents an Option<T> type
+// IsOption returns true if this TypeInfo represents an Option[T] type
 func (t TypeInfo) IsOption() bool {
 	return t.Kind == TypeKindOption
 }
@@ -135,11 +135,11 @@ func (t TypeInfo) String() string {
 	switch t.Kind {
 	case TypeKindResult:
 		if t.ErrorType != "" {
-			return "Result<" + t.ValueType + ", " + t.ErrorType + ">"
+			return "Result[" + t.ValueType + ", " + t.ErrorType + "]"
 		}
-		return "Result<" + t.ValueType + ">"
+		return "Result[" + t.ValueType + "]"
 	case TypeKindOption:
-		return "Option<" + t.ValueType + ">"
+		return "Option[" + t.ValueType + "]"
 	case TypeKindBasic, TypeKindNamed:
 		if t.IsPointer {
 			return "*" + t.Name

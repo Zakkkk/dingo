@@ -22,7 +22,7 @@ This document outlines the comprehensive testing strategy for four new Dingo lan
 
 **Key Behaviors:**
 - Smart mode (default): Returns T with zero value fallback
-- Always-option mode: Returns Option<T> wrapping the result
+- Always-option mode: Returns Option[T] wrapping the result
 - Should handle nil base expressions gracefully
 - Configuration-driven behavior via `safe_navigation_unwrap`
 
@@ -35,14 +35,14 @@ This document outlines the comprehensive testing strategy for four new Dingo lan
 **Purpose:** Provide fallback values for nullable types
 
 **Key Behaviors:**
-- Works with Option<T> types (IsSome/Unwrap)
+- Works with Option[T] types (IsSome/Unwrap)
 - Works with Go pointers *T when enabled (nil check and dereference)
 - Configuration-driven via `null_coalescing_pointers`
 - Chaining support (a ?? b ?? c)
 
 **Critical Edge Cases:**
-- Option<T> with Some value
-- Option<T> with None value
+- Option[T] with Some value
+- Option[T] with None value
 - Go pointer with non-nil value
 - Go pointer with nil value
 - Fallback value type matching
@@ -92,7 +92,7 @@ This document outlines the comprehensive testing strategy for four new Dingo lan
 - **Rationale:** Core use case for smart mode
 
 #### Scenario 2: Safe Navigation (Always-Option Mode)
-- **Purpose:** Validate Option<T> wrapping in strict mode
+- **Purpose:** Validate Option[T] wrapping in strict mode
 - **Input:** SafeNavigationExpr with config = "always_option"
 - **Expected Output:** IIFE returning Option_Some or Option_None
 - **Rationale:** Tests configuration-driven behavior
@@ -121,7 +121,7 @@ This document outlines the comprehensive testing strategy for four new Dingo lan
 - **Purpose:** Validate Option unwrapping when value present
 - **Input:** NullCoalescingExpr with Option type (mocked)
 - **Expected Output:** IIFE with IsSome/Unwrap calls
-- **Rationale:** Primary Option<T> use case
+- **Rationale:** Primary Option[T] use case
 
 #### Scenario 2: Pointer Type (Enabled)
 - **Purpose:** Validate Go pointer support when enabled

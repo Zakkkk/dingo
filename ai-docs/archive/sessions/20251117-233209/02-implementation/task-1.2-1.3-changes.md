@@ -88,7 +88,7 @@ err_result := Result_interface{}_error{
 
 1. **Type Inference**: Current implementation uses simple heuristics
    - **TODO**: Integrate with TypeInferenceService for full contextual analysis
-   - **TODO**: Handle explicit type annotations (e.g., `let x: Result<int, error> = Ok(42)`)
+   - **TODO**: Handle explicit type annotations (e.g., `let x: Result[int, error] = Ok(42)`)
 
 2. **AST Transformation**: Currently logs transformations without modifying AST
    - **TODO**: Implement actual AST node replacement in Process() method
@@ -114,7 +114,7 @@ Generates 7 additional helper methods for each Result type:
 
 ### Method Catalog
 
-#### 1. **Map(fn func(T) U) Result<U, E>** (Lines 634-680)
+#### 1. **Map(fn func(T) U) Result[U, E]** (Lines 634-680)
 **Purpose**: Transform the Ok value while preserving Err
 **Signature**:
 ```go
@@ -129,7 +129,7 @@ func (r Result_T_E) Map(fn func(T) interface{}) interface{}
 let user = fetchUser(id).Map(func(u User) string { return u.Name })
 ```
 
-#### 2. **MapErr(fn func(E) F) Result<T, F>** (Lines 682-728)
+#### 2. **MapErr(fn func(E) F) Result[T, F]** (Lines 682-728)
 **Purpose**: Transform the Err value while preserving Ok
 **Signature**:
 ```go
@@ -144,7 +144,7 @@ func (r Result_T_E) MapErr(fn func(E) interface{}) interface{}
 let result = apiCall().MapErr(func(e error) CustomError { return wrap(e) })
 ```
 
-#### 3. **Filter(predicate func(T) bool) Result<T, E>** (Lines 730-804)
+#### 3. **Filter(predicate func(T) bool) Result[T, E]** (Lines 730-804)
 **Purpose**: Convert Ok to Err if predicate fails
 **Signature**:
 ```go
@@ -160,7 +160,7 @@ func (r Result_T_E) Filter(predicate func(T) bool) Result_T_E
 let adult = getUser(id).Filter(func(u User) bool { return u.Age >= 18 })
 ```
 
-#### 4. **AndThen(fn func(T) Result<U, E>) Result<U, E>** (Lines 806-852)
+#### 4. **AndThen(fn func(T) Result[U, E]) Result[U, E]** (Lines 806-852)
 **Purpose**: Monadic bind operation (flatMap)
 **Signature**:
 ```go
@@ -177,7 +177,7 @@ let data = fetchUser(id)
     .AndThen(func(p Profile) Result { return enrichData(p) })
 ```
 
-#### 5. **OrElse(fn func(E) Result<T, F>) Result<T, F>** (Lines 854-900)
+#### 5. **OrElse(fn func(E) Result[T, F]) Result[T, F]** (Lines 854-900)
 **Purpose**: Handle Err case with fallback Result
 **Signature**:
 ```go
@@ -193,7 +193,7 @@ let user = fetchFromCache(id)
     .OrElse(func(e error) Result { return fetchFromDB(id) })
 ```
 
-#### 6. **And(other Result<U, E>) Result<U, E>** (Lines 902-953)
+#### 6. **And(other Result[U, E]) Result[U, E]** (Lines 902-953)
 **Purpose**: Returns other if Ok, propagates Err
 **Signature**:
 ```go
@@ -208,7 +208,7 @@ func (r Result_T_E) And(other interface{}) interface{}
 let step2 = step1.And(performStep2())
 ```
 
-#### 7. **Or(other Result<T, E>) Result<T, E>** (Lines 955-1007)
+#### 7. **Or(other Result[T, E]) Result[T, E]** (Lines 955-1007)
 **Purpose**: Returns self if Ok, else returns other
 **Signature**:
 ```go
@@ -247,13 +247,13 @@ All methods follow consistent AST generation pattern:
 3. Unwrap() T
 4. UnwrapOr(defaultValue T) T
 5. UnwrapErr() E
-6. Map(fn func(T) U) Result<U, E>
-7. MapErr(fn func(E) F) Result<T, F>
-8. Filter(predicate func(T) bool) Result<T, E>
-9. AndThen(fn func(T) Result<U, E>) Result<U, E>
-10. OrElse(fn func(E) Result<T, F>) Result<T, F>
-11. And(other Result<U, E>) Result<U, E>
-12. Or(other Result<T, E>) Result<T, E>
+6. Map(fn func(T) U) Result[U, E]
+7. MapErr(fn func(E) F) Result[T, F]
+8. Filter(predicate func(T) bool) Result[T, E]
+9. AndThen(fn func(T) Result[U, E]) Result[U, E]
+10. OrElse(fn func(E) Result[T, F]) Result[T, F]
+11. And(other Result[U, E]) Result[U, E]
+12. Or(other Result[T, E]) Result[T, E]
 
 ### Limitations & Future Work
 

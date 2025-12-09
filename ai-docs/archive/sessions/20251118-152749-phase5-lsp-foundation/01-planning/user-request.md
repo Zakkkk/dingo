@@ -21,8 +21,8 @@ Implement a Language Server Protocol (LSP) server for Dingo that provides IDE su
 **Supported Dingo Features (Phase 3 complete):**
 1. Type annotations (`: Type` syntax)
 2. Error propagation (`?` operator)
-3. Result<T, E> types
-4. Option<T> types
+3. Result[T, E] types
+4. Option[T] types
 5. Sum types (enums)
 6. Pattern matching
 

@@ -10,12 +10,12 @@
 
 ## Executive Summary
 
-Sum types are the foundational type system feature that enables Result<T, E> and Option<T> - the core value proposition of Dingo. This document outlines a complete architecture for implementing sum types that:
+Sum types are the foundational type system feature that enables Result[T, E] and Option[T] - the core value proposition of Dingo. This document outlines a complete architecture for implementing sum types that:
 
 1. Transpiles to zero-overhead, idiomatic Go code (tagged unions)
 2. Integrates seamlessly with the existing plugin architecture
 3. Provides exhaustiveness checking for pattern matching
-4. Supports generic type parameters (Result<T, E>, Option<T>)
+4. Supports generic type parameters (Result[T, E], Option[T])
 5. Maintains full Go interoperability
 
 ---
@@ -68,7 +68,7 @@ Sum types are the foundational type system feature that enables Result<T, E> and
 
 ```go
 // EnumDecl represents a sum type declaration
-// Example: enum Result<T, E> { Ok(T), Err(E) }
+// Example: enum Result[T, E] { Ok(T), Err(E) }
 type EnumDecl struct {
     Enum      token.Pos         // Position of 'enum' keyword
     Name      *ast.Ident        // Enum name
@@ -330,7 +330,7 @@ type SmallEnum struct {
 **Pointer Optimization** (for single-pointer variants):
 
 ```go
-// For enum Option<T> { Some(T), None }
+// For enum Option[T] { Some(T), None }
 type Option_string struct {
     value *string  // nil = None, non-nil = Some
 }
@@ -339,7 +339,7 @@ type Option_string struct {
 ### 4.3 Generic Sum Types
 
 ```dingo
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
@@ -682,12 +682,12 @@ func TestSumTypes_ResultType(t *testing.T) {
     source := `
         package main
 
-        enum Result<T, E> {
+        enum Result[T, E] {
             Ok(T),
             Err(E)
         }
 
-        func divide(a: int, b: int) -> Result<int, string> {
+        func divide(a: int, b: int) -> Result[int, string] {
             if b == 0 {
                 return Err("division by zero")
             }
@@ -806,7 +806,7 @@ func BenchmarkSumType_PatternMatch(b *testing.B) {
 
 ### Phase 5: Generics Support (Week 3-4)
 
-**Goal**: Support generic enum types (Result<T, E>, Option<T>)
+**Goal**: Support generic enum types (Result[T, E], Option[T])
 
 **Tasks**:
 - [ ] Parse generic type parameters in enum declarations
@@ -815,10 +815,10 @@ func BenchmarkSumType_PatternMatch(b *testing.B) {
 - [ ] Instantiate generic constructors
 - [ ] Type inference for generic variants
 - [ ] Unit tests for generic enums
-- [ ] Golden file: Result<T, E> and Option<T>
+- [ ] Golden file: Result[T, E] and Option[T]
 - [ ] Integration test: Result-based error handling
 
-**Deliverable**: Can define and use `Result<User, Error>`
+**Deliverable**: Can define and use `Result[User, Error]`
 
 **Time Estimate**: 6-8 days
 
@@ -881,7 +881,7 @@ See `gaps.json` for detailed questions requiring user input.
 - [ ] Transform enums to idiomatic Go code
 - [ ] Pattern matching with destructuring works
 - [ ] Exhaustiveness checking catches missing cases
-- [ ] Generic enums (Result<T,E>, Option<T>) work
+- [ ] Generic enums (Result[T,E], Option[T]) work
 - [ ] Zero runtime overhead (no reflection, no allocations)
 - [ ] All tests pass (unit, integration, golden)
 

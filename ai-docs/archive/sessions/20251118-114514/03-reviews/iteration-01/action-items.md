@@ -12,7 +12,7 @@
 **Files**: `pkg/plugin/builtin/type_inference.go:220-285`
 
 **Problem**:
-`parseTypeFromTokensBackward` and `parseTypeFromTokensForward` break for complex types like `Result<map[string]int, error>` because they assume simple `_` token splitting.
+`parseTypeFromTokensBackward` and `parseTypeFromTokensForward` break for complex types like `Result[map[string]int, error]` because they assume simple `_` token splitting.
 
 **Action**:
 - [ ] Store original type parameters in `ResultTypeInfo` struct
@@ -21,10 +21,10 @@
 - [ ] Modify `GetResultTypeParams()` to use cached values only (don't reverse-parse)
 - [ ] Add validation in `RegisterResultType()` to verify round-trip consistency
 - [ ] Add golden tests for complex types:
-  - [ ] `Result<map[string]int, error>`
-  - [ ] `Result<chan int, error>`
-  - [ ] `Result<struct{}, error>`
-  - [ ] `Result<*User, error>` (nested)
+  - [ ] `Result[map[string]int, error]`
+  - [ ] `Result[chan int, error]`
+  - [ ] `Result[struct{}, error]`
+  - [ ] `Result[*User, error]` (nested)
 
 **Code Changes**:
 ```go

@@ -35,7 +35,7 @@ return enumName + "Tag" + variantName // StatusTagPending
 1. Updated Result/Option field names (lines 972-978)
 2. Updated custom enum field names (line 989)
 
-**Result<T,E> and Option<T> Fields** (Lines 972-978):
+**Result[T,E] and Option[T] Fields** (Lines 972-978):
 
 **Before**:
 ```go
@@ -163,9 +163,9 @@ $ go build ./pkg/preprocessor/
 ### Field Names
 | Type | Old Field | New Field |
 |------|-----------|-----------|
-| Result<T,E> Ok | ok_0 | ok0 |
-| Result<T,E> Err | err_0 | err0 |
-| Option<T> Some | some_0 | some0 |
+| Result[T,E] Ok | ok_0 | ok0 |
+| Result[T,E] Err | err_0 | err0 |
+| Option[T] Some | some_0 | some0 |
 | Custom Int | int_0 | int0 |
 | Custom Pending | pending_0 | pending0 |
 
@@ -174,8 +174,8 @@ $ go build ./pkg/preprocessor/
 ## Consistency Check
 
 **✅ All enum types now use consistent CamelCase naming:**
-- Result<T,E>: `ResultTagOk`, `ok0`, `err0`
-- Option<T>: `OptionTagSome`, `some0`
+- Result[T,E]: `ResultTagOk`, `ok0`, `err0`
+- Option[T]: `OptionTagSome`, `some0`
 - Custom enums: `StatusTagPending`, `pending0`
 
 **✅ No underscore separators except:**

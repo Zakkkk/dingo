@@ -16,8 +16,8 @@ import (
 // PatternMatchPlugin validates pattern match exhaustiveness and prepares for transformation
 //
 // This plugin implements exhaustiveness checking for Dingo match expressions:
-// - Result<T,E>: requires Ok and Err patterns (or wildcard)
-// - Option<T>: requires Some and None patterns (or wildcard)
+// - Result[T,E]: requires Ok and Err patterns (or wildcard)
+// - Option[T]: requires Some and None patterns (or wildcard)
 // - Enum: requires all variants (or wildcard)
 //
 // The plugin operates in three phases:

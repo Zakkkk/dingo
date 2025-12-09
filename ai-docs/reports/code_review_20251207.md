@@ -117,7 +117,7 @@
 
 ### 🔍 Questions
 - **Type Inference:** The `generateHumanLikeAssignment` function currently falls back to IIFE due to missing type information. What is the plan for integrating type inference into the code generation to enable human-like assignment for safe navigation?
-- **Error Handling:** How will safe navigation interact with Dingo's `Result<T, E>` types? Will `nil` propagation be implicitly converted to `Ok(nil)` or `Err(...)` depending on the context?
+- **Error Handling:** How will safe navigation interact with Dingo's `Result[T, E]` types? Will `nil` propagation be implicitly converted to `Ok(nil)` or `Err(...)` depending on the context?
 - **Source Mapping for Human-like Code**: The `generateHumanLikeReturn` function directly writes to a `bytes.Buffer` and sets `result.StatementOutput`. How are source mappings generated and associated with these human-like `if/else return` statements? The IIFE generation has explicit source mapping logic, but it's unclear for the human-like paths.
 - **Scope of `dingoExprToString`**: The `dingoExprToString` function recursively generates code for various `ast.Expr` types. Does this mean these nested expressions (e.g., a `SafeNavExpr` inside another expression that is part of a `SafeNavExpr` chain) are always intended to be fully generated/evaluated when their string representation is needed, or should it rather produce a simple string representation (like `x.y` or `f(a)`) and let the main generator handle the full code if necessary?
 

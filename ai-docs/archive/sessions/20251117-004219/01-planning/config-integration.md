@@ -38,7 +38,7 @@ type FeatureConfig struct {
     SafeNavigationUnwrap   string      `toml:"safe_navigation_unwrap"`  // "always_option", "smart"
 
     // NEW: Null coalescing configuration
-    NullCoalescingPointers bool        `toml:"null_coalescing_pointers"`  // true = work with *T, false = Option<T> only
+    NullCoalescingPointers bool        `toml:"null_coalescing_pointers"`  // true = work with *T, false = Option[T] only
 
     // NEW: Operator precedence configuration
     OperatorPrecedence     string      `toml:"operator_precedence"`  // "standard", "explicit"

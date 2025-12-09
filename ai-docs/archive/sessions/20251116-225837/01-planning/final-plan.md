@@ -1123,12 +1123,12 @@ package main
 
 import "fmt"
 
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
 
-func unsafeExtract(r: Result<int, string>) -> int {
+func unsafeExtract(r: Result[int, string]) -> int {
     // With nil_safety_checks = "off", this generates direct dereference
     match r {
         Ok(value) => value,
@@ -1136,7 +1136,7 @@ func unsafeExtract(r: Result<int, string>) -> int {
     }
 }
 
-func safeExtract(r: Result<int, string>) -> int {
+func safeExtract(r: Result[int, string]) -> int {
     // With nil_safety_checks = "on", this adds runtime nil checks
     match r {
         Ok(value) => value,
@@ -1463,8 +1463,8 @@ func main() {
 ### Long-Term
 
 **Phase 5: Stdlib Sum Types**
-- Builtin Option<T>
-- Builtin Result<T, E>
+- Builtin Option[T]
+- Builtin Result[T, E]
 - Interop with Go (T, error)
 
 **Phase 6: LSP Integration**

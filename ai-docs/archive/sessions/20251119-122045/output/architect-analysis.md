@@ -18,7 +18,7 @@ Transpiles to Go structs with PascalCase constructors (e.g., `ResultOk[T,E](T) R
 - Go sum type proposals (#19412): Suggest `PascalCase` variants (e.g., `StatusPending`, `StatusCompleted`)
 
 ### Rust (Primary Inspiration)
-- Enums: `PascalCase` (e.g., `Result<T, E>`)
+- Enums: `PascalCase` (e.g., `Result[T, E]`)
 - Variants: `PascalCase` (e.g., `Ok(T)`, `Err(E)`)
 - Usage: `match result { Ok(v) => ..., Err(e) => ... }`
 - No distinction; consistent casing.

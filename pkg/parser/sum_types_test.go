@@ -152,7 +152,7 @@ func TestParseEnum_Generic(t *testing.T) {
 
 	src := []byte(`package main
 
-enum Result<T, E> {
+enum Result[T, E] {
 	Ok(T),
 	Err(E),
 }

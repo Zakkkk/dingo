@@ -17,7 +17,7 @@
 
 2. **Checked test file syntax**
    - Found: Tests use `->` arrow syntax (not implemented)
-   - Found: Tests use `Result<T,E>` generics (not implemented)
+   - Found: Tests use `Result[T,E]` generics (not implemented)
    - **Conclusion:** Tests written with aspirational syntax
 
 ### Fix #1: Preprocessor Integration (0:25 - 0:30)
@@ -56,11 +56,11 @@ case ResultTagOk:
 ### Fix #3: Test File Syntax (0:55 - 1:05)
 - **Problem:** Tests use unimplemented syntax
   1. Arrow returns: `func foo() -> int` (not supported)
-  2. Generics: `Result<int, error>` (not supported)
+  2. Generics: `Result[int, error]` (not supported)
 
 - **Solution:** Update tests to use supported syntax
   1. Arrow: `func foo() -> int` → `func foo() int`
-  2. Generics: `Result<int, error>` → `Result_int_error`
+  2. Generics: `Result[int, error]` → `Result_int_error`
 
 - **Files modified:** All 4 swift_match_*.dingo files
 - **Method:** Manual edit + sed for bulk replacements
@@ -174,7 +174,7 @@ case ResultTagOk:
    - Simple regex replacement
    - Enables more ergonomic syntax
 
-2. Add generic syntax support (`Result<T,E>` → `Result_T_E`)
+2. Add generic syntax support (`Result[T,E]` → `Result_T_E`)
    - Preprocessor: Transform generics to mangled names
    - More complex: need to parse generic parameters
    - Enables cleaner test code

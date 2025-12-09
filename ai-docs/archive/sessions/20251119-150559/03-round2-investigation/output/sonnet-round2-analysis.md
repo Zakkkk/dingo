@@ -28,7 +28,7 @@
 The bug occurs through this sequence:
 
 1. **TypeAnnotProcessor runs FIRST** (pipeline position 2)
-   - Transforms `func processOption(opt: Option<string>) -> string {`
+   - Transforms `func processOption(opt: Option[string]) -> string {`
    - Into: `func processOption(opt Option_string) string {`
    - Note: The `-> ` is removed, collapsing spacing
 
@@ -255,8 +255,8 @@ Let me think about this differently. Let me trace what ACTUALLY gets collected w
 
 **Original Dingo code (lines 15-21)**:
 ```dingo
-// Example 2: Pattern match on Option<T>
-func processOption(opt: Option<string>) -> string {
+// Example 2: Pattern match on Option[T]
+func processOption(opt: Option[string]) -> string {
 	match opt {
 		Some(s) => s,
 		None => "default"
@@ -266,7 +266,7 @@ func processOption(opt: Option<string>) -> string {
 
 **After TypeAnnotProcessor** (pipeline step 2):
 ```go
-// Example 2: Pattern match on Option<T>
+// Example 2: Pattern match on Option[T]
 func processOption(opt Option_string) string {
 	match opt {
 		Some(s) => s,
@@ -277,7 +277,7 @@ func processOption(opt Option_string) string {
 
 **RustMatchProcessor processes line by line**:
 
-Line 1: `// Example 2: Pattern match on Option<T>`
+Line 1: `// Example 2: Pattern match on Option[T]`
 - No "match " found, pass through
 
 Line 2: `func processOption(opt Option_string) string {`
@@ -742,7 +742,7 @@ After TypeAnnotProcessor, what does line 16 (the `processOption` function) look 
 
 Original line 16:
 ```dingo
-func processOption(opt: Option<string>) -> string {
+func processOption(opt: Option[string]) -> string {
 ```
 
 After GenericSyntaxProcessor:
@@ -799,7 +799,7 @@ So this is all correct!
 
 The failing test has:
 ```dingo
-func processOption(opt: Option<string>) -> string {
+func processOption(opt: Option[string]) -> string {
 	match opt {
 		Some(s) => s,
 		None => "default"
@@ -961,7 +961,7 @@ The fix is to replace this regex-based approach with the ALREADY-IMPLEMENTED `ex
 
 ```
 After TypeAnnotProcessor:
-  Line 15: "// Example 2: Pattern match on Option<T>"
+  Line 15: "// Example 2: Pattern match on Option[T]"
   Line 16: "func processOption(opt Option_string) string {"
   Line 17: "	match opt {"
   Line 18: "		Some(s) => s,"

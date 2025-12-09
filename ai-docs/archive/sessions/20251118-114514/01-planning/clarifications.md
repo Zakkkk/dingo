@@ -9,8 +9,8 @@
 **Decision**: Implement in Phase 3 - Complete all 39 builtin tests
 
 **Implication**: Phase 3 scope expands significantly. We will implement:
-- Map, Filter, AndThen for Result<T,E>
-- Map, Filter, AndThen for Option<T>
+- Map, Filter, AndThen for Result[T,E]
+- Map, Filter, AndThen for Option[T]
 - All other helper methods expected by the test suite
 - Timeline extends by 8-12 hours (total: 16-28 hours)
 
@@ -30,13 +30,13 @@ These questions can be addressed during implementation based on technical constr
 5. **Performance overhead budget**: Measure during A5 implementation, optimize if needed
 6. **Partial type checking failures**: Use graceful degradation initially, adjust if issues arise
 7. **TypeInferenceService scope**: Start with Result/Option only, generalize if needed
-8. **Result<T,E> where E is not error**: Keep current assumption (E is error), revisit in Phase 4
+8. **Result[T,E] where E is not error**: Keep current assumption (E is error), revisit in Phase 4
 
 ## Updated Scope
 Phase 3 is now comprehensive:
 - ✅ Fix A5 (go/types integration)
 - ✅ Fix A4 (IIFE pattern for literals)
-- ✅ Option<T> with type-context-aware None constant
+- ✅ Option[T] with type-context-aware None constant
 - ✅ Complete helper methods suite (Map, Filter, AndThen, etc.)
 - ✅ All 39 builtin plugin tests passing
 - ✅ Enhanced error messages for type inference failures

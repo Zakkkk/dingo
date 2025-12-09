@@ -249,7 +249,7 @@ func process(id: int) error {
 
 ## Future Enhancements
 
-- Integration with `Result<T, E>` types
+- Integration with `Result[T, E]` types
 - Custom error context: `fetchUser(id)? wrap "user fetch failed"`
 - Automatic error wrapping strategies
 

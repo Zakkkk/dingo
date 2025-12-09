@@ -21,7 +21,7 @@ type Settings struct {
 }
 
 // Simulates DB lookup - returns Result
-func fetchUser(id int) Result<User, string> {
+func fetchUser(id int) Result[User, string] {
 	if id == 1 {
 		let u = User{ID: 1, Name: "Alice", Email: "alice@example.com"}
 		return Ok[User, string](u)
@@ -34,7 +34,7 @@ func fetchUser(id int) Result<User, string> {
 }
 
 // Simulates settings lookup - returns Result
-func loadSettings(userId int) Result<Settings, string> {
+func loadSettings(userId int) Result[Settings, string] {
 	if userId == 1 {
 		let s = Settings{Theme: "dark", Language: "en"}
 		return Ok[Settings, string](s)
@@ -43,7 +43,7 @@ func loadSettings(userId int) Result<Settings, string> {
 }
 
 // Simulates optional preference lookup - returns Option
-func getPreference(settings Settings, key string) Option<string> {
+func getPreference(settings Settings, key string) Option[string] {
 	if key == "theme" && settings.Theme != "" {
 		return Some(settings.Theme)
 	}
@@ -57,7 +57,7 @@ func getPreference(settings Settings, key string) Option<string> {
 // When a producer itself calls other fallible operations, guard let shines
 
 // Simulates a complex user lookup that depends on another service
-func fetchUserWithPermissions(id int) Result<User, string> {
+func fetchUserWithPermissions(id int) Result[User, string] {
 	// First, fetch the base user
 	guard let user = fetchUser(id) else |err| {
 		return Err[User](fmt.Sprintf("user lookup failed: %s", err))
@@ -79,7 +79,7 @@ func fetchUserWithPermissions(id int) Result<User, string> {
 // === The power of guard let: chaining multiple fallible operations ===
 
 // WITHOUT guard let (nested pyramid of doom):
-func getUserThemeNested(userId int) Result<string, string> {
+func getUserThemeNested(userId int) Result[string, string] {
 	let userResult = fetchUser(userId)
 	if userResult.IsErr() {
 		return Err[string](userResult.UnwrapErr())
@@ -101,7 +101,7 @@ func getUserThemeNested(userId int) Result<string, string> {
 }
 
 // WITH guard let (linear happy path):
-func getUserTheme(userId int) Result<string, string> {
+func getUserTheme(userId int) Result[string, string] {
 	// Each guard let either unwraps or returns early
 	guard let user = fetchUser(userId) else |err| {
 		return Err[string](err)
@@ -120,7 +120,7 @@ func getUserTheme(userId int) Result<string, string> {
 }
 
 // Another example: validating and processing user data
-func processUserProfile(userId int) Result<string, string> {
+func processUserProfile(userId int) Result[string, string] {
 	guard let user = fetchUser(userId) else |err| {
 		return Err[string](fmt.Sprintf("fetch failed: %s", err))
 	}

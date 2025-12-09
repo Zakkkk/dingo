@@ -134,7 +134,7 @@ Let me look at the actual function at line 21 in `pattern_match_01_simple.dingo`
 
 Ah! It's the `processOption` function:
 ```dingo
-func processOption(opt: Option<string>) -> string {
+func processOption(opt: Option[string]) -> string {
     match opt {  // ← This is around line 21
         Some(s) => s,
         None => "default"
@@ -154,7 +154,7 @@ func getStatusMessage(s Status) string {  // ← Standard Go syntax
 
 **FAILING tests**:
 ```dingo
-func processOption(opt: Option<string>) -> string {  // ← Dingo arrow syntax
+func processOption(opt: Option[string]) -> string {  // ← Dingo arrow syntax
     match opt {
 ```
 
@@ -170,18 +170,18 @@ But when the type annotation preprocessor runs, it might be:
 - **Corrupting the match expression** somehow
 
 Let me check: In `pattern_match_01_simple.dingo`:
-- Line 8: `func processResult(result: Result<int, error>) -> int {`
+- Line 8: `func processResult(result: Result[int, error]) -> int {`
 - Line 9-12: Match expression
 
 The type annotation preprocessor would transform:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
 ```
 
 To:
 ```go
-func processResult(result Result<int, error>) int {
+func processResult(result Result[int, error]) int {
     match result {
 ```
 
@@ -193,7 +193,7 @@ Wait! Look at the **generic types**:
 
 **FAILING test** has:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
 ```
@@ -212,7 +212,7 @@ func getStatusMessage(s Status) string {
 ```
 
 The failing tests use:
-- **Generic types**: `Result<int, error>`, `Option<string>`
+- **Generic types**: `Result[int, error]`, `Option[string]`
 - **Unqualified patterns**: `Ok(value)`, `Some(s)`, `None`
 
 The passing tests use:
@@ -295,7 +295,7 @@ So it:
 
 For this input:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0
@@ -366,7 +366,7 @@ It should return just those 4 lines, not the function braces.
 OH! I see it now. Looking at line 8-12 of `pattern_match_01_simple.dingo`:
 
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0
@@ -438,8 +438,8 @@ Let me trace EXACTLY what happens for the failing case:
 **Function at line 16-21**:
 
 ```dingo
-// Example 2: Pattern match on Option<T>
-func processOption(opt: Option<string>) -> string {
+// Example 2: Pattern match on Option[T]
+func processOption(opt: Option[string]) -> string {
     match opt {
         Some(s) => s,
         None => "default"
@@ -496,7 +496,7 @@ From the code structure, the preprocessors likely run in this order:
 
 If TypeAnnotProcessor or EnumProcessor somehow breaks the match expression...
 
-**WAIT!** The failing tests use `Result<T,E>` and `Option<T>` which are BUILT-IN types, not user-defined enums!
+**WAIT!** The failing tests use `Result[T,E]` and `Option[T]` which are BUILT-IN types, not user-defined enums!
 
 But the patterns `Ok(value)`, `Some(s)` are **unqualified**. The preprocessor might expect them to be `Result_Ok(value)`, `Option_Some(s)`.
 
@@ -517,7 +517,7 @@ It uses **qualified patterns**: `Value_Int(n)`.
 
 But the failing test uses:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,  // ← UNQUALIFIED
 ```

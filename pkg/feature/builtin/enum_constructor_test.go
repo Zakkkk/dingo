@@ -45,12 +45,12 @@ func main() {
 			name: "constructor with arguments",
 			input: `package main
 
-enum Result<T, E> {
+enum Result[T, E] {
 	Ok(T)
 	Err(E)
 }
 
-func test() Result<int, error> {
+func test() Result[int, error] {
 	return Ok(42)
 }`,
 			checks: []string{

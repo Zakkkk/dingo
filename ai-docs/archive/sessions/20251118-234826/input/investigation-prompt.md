@@ -47,7 +47,7 @@ result := func() interface{} {
 
 **Input (Dingo)**:
 ```dingo
-fn map_option(opt: Option<int>) -> Option<int> {
+fn map_option(opt: Option[int]) -> Option[int] {
     // Match in assignment context (THIS IS THE PROBLEM CASE)
     let result = match opt {
         Some(x) => Some(x * 2),

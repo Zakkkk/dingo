@@ -229,7 +229,7 @@ Each stage tested independently:
 
 ```go
 source := []byte(`
-    func readConfig() Result<Config, error> {
+    func readConfig() Result[Config, error] {
         data := readFile("config.json")?
         Ok(parseConfig(data))
     }

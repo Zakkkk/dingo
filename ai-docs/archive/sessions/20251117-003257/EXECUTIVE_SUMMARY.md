@@ -14,13 +14,13 @@
 - **Result:** 3/8 tests now passing (+300% improvement)
 - **Code:** `pkg/parser/participle.go` updated (~50 lines)
 
-### 2. ✅ Result<T, E> Type Foundation Implemented
+### 2. ✅ Result[T, E] Type Foundation Implemented
 - **Plugin Created:** `pkg/plugin/builtin/result_type.go` (~280 lines)
 - **Features:** Ok/Err variants, helper methods (IsOk, IsErr, Unwrap, UnwrapOr)
 - **Architecture:** Plugin-based, integrates with sum types infrastructure
 - **Status:** Foundation complete, awaiting generic syntax parser
 
-### 3. ✅ Option<T> Type Foundation Implemented
+### 3. ✅ Option[T] Type Foundation Implemented
 - **Plugin Created:** `pkg/plugin/builtin/option_type.go` (~300 lines)
 - **Features:** Some/None variants, helper methods including Map()
 - **Design:** Zero-cost transpilation to Go structs

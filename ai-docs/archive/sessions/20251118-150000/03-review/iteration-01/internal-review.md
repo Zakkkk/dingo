@@ -95,7 +95,7 @@ buf.WriteString(fmt.Sprintf("// DINGO:MATCH:id=%d:start:%s\n", matchID, scrutine
 
 **Impact**:
 - Type inference quality varies based on pattern order
-- Cannot handle complex nested types (e.g., `Result<Option<T>, E>`)
+- Cannot handle complex nested types (e.g., `Result[Option[T], E]`)
 - Phase 4.2 guards and tuples will exacerbate this
 
 **Recommendation**:
@@ -110,7 +110,7 @@ buf.WriteString(fmt.Sprintf("// DINGO:MATCH:id=%d:start:%s\n", matchID, scrutine
 
 **Impact**:
 - Users get opaque error: "no valid type context found"
-- Doesn't suggest specific solutions (e.g., "try: let x: Option<int> = None")
+- Doesn't suggest specific solutions (e.g., "try: let x: Option[int] = None")
 - Conservative approach may be too restrictive
 
 **Recommendation**:
@@ -118,7 +118,7 @@ buf.WriteString(fmt.Sprintf("// DINGO:MATCH:id=%d:start:%s\n", matchID, scrutine
 // Improve error message with suggestion
 p.ctx.ReportError(
     fmt.Sprintf("cannot infer type for None constant: ambiguous context. "+
-        "Add explicit type annotation: let x: Option<T> = None", err),
+        "Add explicit type annotation: let x: Option[T] = None", err),
     ident.Pos(),
 )
 ```
@@ -144,7 +144,7 @@ p.ctx.ReportError(
 **Issue**: `generateBinding()` hardcodes field names (`ok_0`, `err_0`, `some_0`).
 
 **Impact**:
-- Won't work for nested generics (e.g., `Result<Option<int>, string>`)
+- Won't work for nested generics (e.g., `Result[Option[int], string]`)
 - Assumes Result/Option have specific field names
 - Coupling to internal Result/Option implementation
 

@@ -118,7 +118,7 @@ require (
 **What Borgo Does (Rust):**
 ```rust
 // Borgo's Rust code (we DON'T use this)
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }

@@ -108,7 +108,7 @@ Add new table section:
 | Priority | Feature | Complexity | Timeline | Status | Notes |
 |----------|---------|------------|----------|--------|-------|
 | **ARCH** | Type Annotations | 🟢 Low | 1 week | ✅ Implemented (Phase 1) | `param: Type` syntax |
-| **ARCH** | Generic Syntax | 🟢 Low | 1 week | ✅ Implemented (Phase 2) | `Result<T,E>` support |
+| **ARCH** | Generic Syntax | 🟢 Low | 1 week | ✅ Implemented (Phase 2) | `Result[T,E]` support |
 | **ARCH** | Keywords | 🟢 Low | 1 week | ✅ Implemented (Phase 1) | Preprocessor-based |
 | **ARCH** | Source Maps | 🟡 Medium | 2 weeks | ✅ Implemented (Phase 5) | LSP position mapping |
 | **ARCH** | Workspace Builds | 🟡 Medium | 2 weeks | ✅ Implemented (Phase 5) | Multi-package support |

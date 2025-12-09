@@ -103,7 +103,7 @@ match result {
 **Behavior:**
 ```go
 let x = None  // ERROR: cannot infer type for None
-// Fix: let x: Option<int> = None
+// Fix: let x: Option[int] = None
 
 // Valid contexts (auto-inferred):
 return None  // OK - from function signature

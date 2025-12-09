@@ -7,7 +7,7 @@ I've consulted 3 external LLM models (Sherlock Think Alpha, Gemini 3 Pro, Grok C
 
 ### 📊 Consensus Analysis (3/3 Models Agree)
 
-**Answer to Question 1:** Convention C - PascalCase for all variants (`Ok<T>`, `Err<E>`, `Some<T>`, `None`) is most Go-idiomatic.
+**Answer to Question 1:** Convention C - PascalCase for all variants (`Ok[T]`, `Err[E]`, `Some[T]`, `None`) is most Go-idiomatic.
 
 **Key Reasons (Across All Models):**
 - **Go Compatibility**: Variants become exported Go functions/types, following Go's PascalCase export convention

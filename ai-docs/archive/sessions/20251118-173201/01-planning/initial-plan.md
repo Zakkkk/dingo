@@ -386,7 +386,7 @@ func (p *PatternMatchPlugin) checkTupleExhaustiveness(patterns []tuplePattern) e
     // Check if all paths lead to a pattern (or wildcard)
 
     // Algorithm: Matrix coverage
-    // Example for Result<T,E> tuple (2 elements):
+    // Example for Result[T,E] tuple (2 elements):
     //   Covered: (Ok, Ok), (Ok, Err), (Err, _)
     //   Missing: None (Err, _) covers (Err, Ok) and (Err, Err)
 
@@ -586,7 +586,7 @@ func (p *PatternMatchPlugin) suggestTypeCorrection(
     expected string,
     actual string,
 ) string {
-    // Example: Expected Result<int, error>, got Option<int>
+    // Example: Expected Result[int, error], got Option[int]
     return fmt.Sprintf("Did you mean to use '%s' instead of '%s'?",
         expected, actual)
 }

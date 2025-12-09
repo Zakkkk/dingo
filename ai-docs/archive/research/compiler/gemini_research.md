@@ -27,7 +27,7 @@ This tight coupling dictates the entire system architecture. The Transpiler and 
 C. Validation by Precedent: Borgo and a-h/templ
 This architectural proposal is not theoretical. The research confirms that both components have been successfully implemented in high-quality, open-source Go projects, providing clear blueprints for development.
 
-For the Transpiler (Language Design): The borgo-lang/borgo project serves as the ideal "language design" precedent. Borgo is a statically typed language that transpiles to Go, designed to be more expressive than Go but less complex than Rust. It successfully demonstrates how to add expressive, ML-inspired features such as sum types (enum), pattern matching (match), and first-class Option<T> and Result<T, E> types, all while generating idiomatic Go code. It provides a direct model for "simplifying" Go's error handling and nil semantics.   
+For the Transpiler (Language Design): The borgo-lang/borgo project serves as the ideal "language design" precedent. Borgo is a statically typed language that transpiles to Go, designed to be more expressive than Go but less complex than Rust. It successfully demonstrates how to add expressive, ML-inspired features such as sum types (enum), pattern matching (match), and first-class Option[T] and Result[T, E] types, all while generating idiomatic Go code. It provides a direct model for "simplifying" Go's error handling and nil semantics.   
 
 For the Language Server (Tooling Architecture): The a-h/templ project provides the exact architectural blueprint for the LSP requirement. templ is a templating language that mixes Go and HTML. Its language server, templ lsp, functions precisely as a proxy on top of gopls. The creator explicitly confirms this architecture, stating they built a "Language Server Protocol proxy to rewrite requests to and from gopls" by "maintaining a map between Go code in the templ language, and the generated Go code".   
 
@@ -104,13 +104,13 @@ Case Study: Borgo The borgo-lang/borgo project provides a direct model for this 
 
 Sum Types and Pattern Matching: Borgo introduces an enum keyword for algebraic data types and an exhaustive match statement. This transpiles to a Go interface{} "sealed" within a package, a type switch, and a default case that panics (to enforce exhaustiveness).   
 
-Error Handling (Result<T, E>): Borgo introduces a Result<T, E> type. This directly replaces Go's (T, error) return-value idiom.   
+Error Handling (Result[T, E]): Borgo introduces a Result[T, E] type. This directly replaces Go's (T, error) return-value idiom.   
 
-Null Safety (Option<T>): Borgo introduces an Option<T> type to eliminate nil pointers and provide true null safety.   
+Null Safety (Option[T]): Borgo introduces an Option[T] type to eliminate nil pointers and provide true null safety.   
 
 Error Propagation (?): Borgo adds the ? operator for clean error propagation, a feature explicitly desired by many Go developers. A foo()? call in Borgo transpiles to the standard Go if err!= nil block.   
 
-A critical feature of any "Meta-Go" language must be seamless interoperability. The Borgo compiler demonstrates the correct approach: it automatically handles the conversion of Go's return types. When a Borgo program calls a standard Go function returning (T, error), the compiler automatically wraps the call to produce a Result<T, E>. Similarly, a Go function returning (T, bool) (a common pattern for map lookups) is automatically converted to an Option<T>. This automatic wrapping is essential for the meta-language to feel like a true superset and not a "foreign" language.   
+A critical feature of any "Meta-Go" language must be seamless interoperability. The Borgo compiler demonstrates the correct approach: it automatically handles the conversion of Go's return types. When a Borgo program calls a standard Go function returning (T, error), the compiler automatically wraps the call to produce a Result[T, E]. Similarly, a Go function returning (T, bool) (a common pattern for map lookups) is automatically converted to an Option[T]. This automatic wrapping is essential for the meta-language to feel like a true superset and not a "foreign" language.   
 
 Case Study: Microsoft's TypeScript-in-Go Port The choice of Go as the implementation language for the transpiler itself is validated by Microsoft's recent project to port its TypeScript compiler from TypeScript to Go.   
 

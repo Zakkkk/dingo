@@ -11,7 +11,7 @@ import (
 
 // TypeRegistry is the central interface for managing type information during AST traversal.
 // It provides scope-aware tracking of variables, functions, and type queries for Dingo's
-// monadic types (Result<T,E>, Option<T>).
+// monadic types (Result[T,E], Option[T]).
 type TypeRegistry interface {
 	// Scope Management
 
@@ -52,19 +52,19 @@ type TypeRegistry interface {
 
 	// Type Queries
 
-	// IsResult returns true if the given expression is a Result<T,E> type
+	// IsResult returns true if the given expression is a Result[T,E] type
 	IsResult(expr string) bool
 
-	// IsOption returns true if the given expression is an Option<T> type
+	// IsOption returns true if the given expression is an Option[T] type
 	IsOption(expr string) bool
 
 	// IsMonadic returns true if the given expression is Result or Option
 	IsMonadic(expr string) bool
 
-	// GetResultTypes extracts T and E from Result<T,E>
+	// GetResultTypes extracts T and E from Result[T,E]
 	GetResultTypes(expr string) (valueType, errorType string, ok bool)
 
-	// GetOptionType extracts T from Option<T>
+	// GetOptionType extracts T from Option[T]
 	GetOptionType(expr string) (valueType string, ok bool)
 
 	// GetExprType attempts to determine the type of an expression
@@ -174,7 +174,7 @@ func (r *DefaultRegistry) LookupMethod(receiver, method string) (FunctionInfo, b
 	return FunctionInfo{}, false
 }
 
-// IsResult returns true if the given expression is a Result<T,E> type
+// IsResult returns true if the given expression is a Result[T,E] type
 func (r *DefaultRegistry) IsResult(expr string) bool {
 	// Direct variable lookup
 	if varInfo, ok := r.GetVariable(expr); ok {
@@ -193,7 +193,7 @@ func (r *DefaultRegistry) IsResult(expr string) bool {
 	return strings.HasPrefix(expr, "Result<") || strings.Contains(expr, "result.Result")
 }
 
-// IsOption returns true if the given expression is an Option<T> type
+// IsOption returns true if the given expression is an Option[T] type
 func (r *DefaultRegistry) IsOption(expr string) bool {
 	// Direct variable lookup
 	if varInfo, ok := r.GetVariable(expr); ok {
@@ -217,7 +217,7 @@ func (r *DefaultRegistry) IsMonadic(expr string) bool {
 	return r.IsResult(expr) || r.IsOption(expr)
 }
 
-// GetResultTypes extracts T and E from Result<T,E>
+// GetResultTypes extracts T and E from Result[T,E]
 func (r *DefaultRegistry) GetResultTypes(expr string) (valueType, errorType string, ok bool) {
 	// Try variable lookup first
 	if varInfo, found := r.GetVariable(expr); found && varInfo.Type.IsResult() {
@@ -232,8 +232,8 @@ func (r *DefaultRegistry) GetResultTypes(expr string) (valueType, errorType stri
 		return typeInfo.ValueType, typeInfo.ErrorType, true
 	}
 
-	// Parse from string representation "Result<T, E>"
-	if strings.HasPrefix(expr, "Result<") && strings.HasSuffix(expr, ">") {
+	// Parse from string representation "Result[T, E]"
+	if strings.HasPrefix(expr, "Result[") && strings.HasSuffix(expr, "]") {
 		inner := expr[len("Result<") : len(expr)-1]
 		parts := strings.Split(inner, ",")
 		if len(parts) == 2 {
@@ -246,7 +246,7 @@ func (r *DefaultRegistry) GetResultTypes(expr string) (valueType, errorType stri
 	return "", "", false
 }
 
-// GetOptionType extracts T from Option<T>
+// GetOptionType extracts T from Option[T]
 func (r *DefaultRegistry) GetOptionType(expr string) (valueType string, ok bool) {
 	// Try variable lookup first
 	if varInfo, found := r.GetVariable(expr); found && varInfo.Type.IsOption() {
@@ -261,8 +261,8 @@ func (r *DefaultRegistry) GetOptionType(expr string) (valueType string, ok bool)
 		return typeInfo.ValueType, true
 	}
 
-	// Parse from string representation "Option<T>"
-	if strings.HasPrefix(expr, "Option<") && strings.HasSuffix(expr, ">") {
+	// Parse from string representation "Option[T]"
+	if strings.HasPrefix(expr, "Option[") && strings.HasSuffix(expr, "]") {
 		inner := expr[len("Option<") : len(expr)-1]
 		return strings.TrimSpace(inner), true
 	}

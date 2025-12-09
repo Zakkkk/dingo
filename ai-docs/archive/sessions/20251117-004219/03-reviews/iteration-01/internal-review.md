@@ -196,7 +196,7 @@ func (p *NullCoalescingPlugin) isOptionType(t types.Type) bool {
 
 **Why This Matters**:
 - Plugin will always fall back to generic transformation
-- Option<T> types won't generate proper `.IsSome()` / `.Unwrap()` calls
+- Option[T] types won't generate proper `.IsSome()` / `.Unwrap()` calls
 - Null coalescing won't work correctly with Option types
 
 **Impact**: Feature is partially broken for Option types
@@ -407,7 +407,7 @@ func (p *LambdaPlugin) Transform(ctx *plugin.Context, node ast.Node) (ast.Node, 
 **Issue**: "Smart" mode claims to unwrap based on context but doesn't inspect parent context.
 
 **Documentation says** (from plan):
-> "Smart unwrapping based on context - If parent expects Option<T>, return Option. If parent expects T (unwrapped), generate with nil check"
+> "Smart unwrapping based on context - If parent expects Option[T], return Option. If parent expects T (unwrapped), generate with nil check"
 
 **Reality**: Always generates the same output regardless of context.
 

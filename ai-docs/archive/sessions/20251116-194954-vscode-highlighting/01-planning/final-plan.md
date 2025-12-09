@@ -77,8 +77,8 @@ This plan implements comprehensive VSCode syntax highlighting enhancements for D
 
 **Marker Types:**
 - `error_propagation` - Error handling code from `?` operator
-- `result_constructor` - Result<T,E> wrapper creation
-- `option_unwrap` - Option<T> unwrapping
+- `result_constructor` - Result[T,E] wrapper creation
+- `option_unwrap` - Option[T] unwrapping
 - `pattern_match` - Match expression expansion
 - `lambda_expansion` - Lambda function desugaring
 
@@ -86,7 +86,7 @@ This plan implements comprehensive VSCode syntax highlighting enhancements for D
 
 **Input (.dingo):**
 ```dingo
-func readConfig(path string) Result<Config, error> {
+func readConfig(path string) Result[Config, error] {
     let data = ReadFile(path)? "failed to read config"
     return Ok(parseConfig(data))
 }
@@ -736,7 +736,7 @@ variables:
 # Replace existing Result/Option patterns (around line 98-104)
 types:
   patterns:
-    # Result<T, E> type
+    # Result[T, E] type
     - name: meta.type.result.dingo
       begin: \b(Result)\s*(<)
       beginCaptures:
@@ -750,7 +750,7 @@ types:
         - name: punctuation.separator.dingo
           match: ","
 
-    # Option<T> type
+    # Option[T] type
     - name: meta.type.option.dingo
       begin: \b(Option)\s*(<)
       beginCaptures:
@@ -788,7 +788,7 @@ func TestMarkerGeneration(t *testing.T) {
     }
 
     input := `
-        func test() Result<int, error> {
+        func test() Result[int, error] {
             let x = compute()? "compute failed"
             return Ok(x)
         }

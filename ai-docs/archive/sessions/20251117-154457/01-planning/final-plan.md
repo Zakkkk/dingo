@@ -30,22 +30,22 @@ Implement complete generic type parameters for all enums:
 
 ```dingo
 // Generic enum definitions
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E)
 }
 
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None
 }
 
 // Usage with type inference
-let x = Ok(42)               // Result<int, error>
-let y = Some("hello")         // Option<string>
+let x = Ok(42)               // Result[int, error]
+let y = Some("hello")         // Option[string]
 
 // Explicit type parameters
-let z: Result<int, MyError> = Ok(42)
+let z: Result[int, MyError] = Ok(42)
 ```
 
 **Implications**:
@@ -63,17 +63,17 @@ Support BOTH modes via dingo.toml configuration:
 **Mode 1: Explicit (Safer)**
 ```dingo
 // Requires explicit type annotation
-let x: Option<int> = None    // OK
+let x: Option[int] = None    // OK
 let y = None                  // ERROR: Cannot infer type
 ```
 
 **Mode 2: Context-based (Ergonomic)**
 ```dingo
 // Infer from assignment context
-let x: Option<int> = None    // OK (explicit)
+let x: Option[int] = None    // OK (explicit)
 let y = None                  // OK (infers from later usage or return type)
 
-fn getName() Option<string> {
+fn getName() Option[string] {
     return None              // OK (infers from return type)
 }
 ```
@@ -99,25 +99,25 @@ none_type_inference = "context"  # Default
 
 Implement all 8-10 helper methods per type for best developer experience:
 
-**Result<T, E> Methods** (8 methods):
+**Result[T, E] Methods** (8 methods):
 1. `Unwrap() T` - Unwrap Ok value (panic on Err)
 2. `UnwrapOr(default T) T` - Unwrap or return default
 3. `UnwrapErr() E` - Unwrap Err value (panic on Ok)
-4. `Map(fn func(T) U) Result<U, E>` - Transform Ok value
-5. `MapErr(fn func(E) F) Result<T, F>` - Transform Err value
-6. `AndThen(fn func(T) Result<U, E>) Result<U, E>` - Chainable operation
+4. `Map(fn func(T) U) Result[U, E]` - Transform Ok value
+5. `MapErr(fn func(E) F) Result[T, F]` - Transform Err value
+6. `AndThen(fn func(T) Result[U, E]) Result[U, E]` - Chainable operation
 7. `IsOk() bool` - Check if Ok (from sum types)
 8. `IsErr() bool` - Check if Err (from sum types)
 
-**Option<T> Methods** (10 methods):
+**Option[T] Methods** (10 methods):
 1. `Unwrap() T` - Unwrap Some value (panic on None)
 2. `UnwrapOr(default T) T` - Unwrap or return default
-3. `Map(fn func(T) U) Option<U>` - Transform Some value
-4. `Filter(fn func(T) bool) Option<T>` - Filter based on predicate
+3. `Map(fn func(T) U) Option[U]` - Transform Some value
+4. `Filter(fn func(T) bool) Option[T]` - Filter based on predicate
 5. `IsSomeAnd(fn func(T) bool) bool` - Check Some with predicate
-6. `And(other Option<T>) Option<T>` - Logical AND
-7. `Or(other Option<T>) Option<T>` - Logical OR
-8. `AndThen(fn func(T) Option<U>) Option<U>` - Chainable operation
+6. `And(other Option[T]) Option[T]` - Logical AND
+7. `Or(other Option[T]) Option[T]` - Logical OR
+8. `AndThen(fn func(T) Option[U]) Option[U]` - Chainable operation
 9. `IsSome() bool` - Check if Some (from sum types)
 10. `IsNone() bool` - Check if None (from sum types)
 
@@ -138,7 +138,7 @@ Implement all 8-10 helper methods per type for best developer experience:
 **Key Insight**: Result and Option ARE sum types with generic parameters and additional helper methods.
 
 **Architecture**:
-1. **Parser**: Recognize generic enum syntax `enum Result<T, E> { ... }`
+1. **Parser**: Recognize generic enum syntax `enum Result[T, E] { ... }`
 2. **Sum Types Plugin**: Transform generic enums to Go structs with type parameters
 3. **Result/Option Plugins**: Inject helper methods onto generated types
 4. **Type Inference**: Handle generic parameter substitution and None inference
@@ -178,7 +178,7 @@ type TypeParameter struct {
 
 2. **Parser Enhancement** (`pkg/parser/participle.go`):
 ```go
-// Parse: enum Result<T, E> { Ok(T), Err(E) }
+// Parse: enum Result[T, E] { Ok(T), Err(E) }
 type EnumSyntax struct {
     Name       string              `@Ident`
     TypeParams *TypeParamList      `[ "<" @@ ">" ]`
@@ -214,7 +214,7 @@ if enumDecl.Name.Name == "Option" {
 - [ ] Unit tests for parser validation
 - [ ] Error messages tested
 
-**Success Criteria**: Parser correctly parses `enum Result<T, E> { Ok(T), Err(E) }`
+**Success Criteria**: Parser correctly parses `enum Result[T, E] { Ok(T), Err(E) }`
 
 ---
 
@@ -232,7 +232,7 @@ func (p *SumTypesPlugin) transformEnumDeclaration(enumDecl *dingoast.EnumDeclara
     // Extract type parameters
     typeParams := extractTypeParams(enumDecl.TypeParams)
 
-    // For Result<T, E> with usage Result<int, error>:
+    // For Result[T, E] with usage Result[int, error]:
     // Generate: Result_int_error struct
     typeName := generateTypeName(enumDecl.Name.Name, typeParams, concreteTypes)
 
@@ -254,7 +254,7 @@ func (p *SumTypesPlugin) transformEnumDeclaration(enumDecl *dingoast.EnumDeclara
 
 2. **Type Parameter Substitution**:
 ```go
-// Input: enum Result<T, E> { Ok(T), Err(E) }
+// Input: enum Result[T, E] { Ok(T), Err(E) }
 // Usage: Ok(42) where T=int, E=error
 // Output:
 type Result_int_error struct {
@@ -279,7 +279,7 @@ type Result_int_error struct {
 - [ ] Result/Option registered with type inference
 - [ ] Unit tests for generic transformation
 
-**Success Criteria**: `enum Result<T, E> { Ok(T), Err(E) }` transforms to valid Go struct
+**Success Criteria**: `enum Result[T, E] { Ok(T), Err(E) }` transforms to valid Go struct
 
 ---
 
@@ -364,7 +364,7 @@ func (p *OptionTypePlugin) shouldInferNone() bool {
 # ... existing options ...
 
 # None type inference mode: "explicit" | "context"
-# - explicit: Requires type annotation: let x: Option<int> = None
+# - explicit: Requires type annotation: let x: Option[int] = None
 # - context: Infers from assignment/return context (default)
 none_type_inference = "context"
 ```
@@ -478,11 +478,11 @@ type InferenceContext struct {
 }
 
 // Example usage:
-// let x: Option<int> = None
-//   -> ExpectedType = Option<int> (from variable declaration)
+// let x: Option[int] = None
+//   -> ExpectedType = Option[int] (from variable declaration)
 //
-// fn getName() Option<string> { return None }
-//   -> ExpectedType = Option<string> (from return type)
+// fn getName() Option[string] { return None }
+//   -> ExpectedType = Option[string] (from return type)
 ```
 
 **Deliverables**:
@@ -493,14 +493,14 @@ type InferenceContext struct {
 - [ ] Unit tests for both modes
 
 **Success Criteria**:
-- `Ok(42)` infers to `Result<int, error>` (if E can be inferred)
+- `Ok(42)` infers to `Result[int, error]` (if E can be inferred)
 - None inference works in both explicit and context modes
 
 ---
 
 ### Phase 3.5: Result Helper Methods (4-5 hours)
 
-**Goal**: Implement comprehensive Result<T, E> helper methods
+**Goal**: Implement comprehensive Result[T, E] helper methods
 
 **Refactor Strategy**: Remove constructor transformation, focus on helper injection
 
@@ -605,19 +605,19 @@ func (p *ResultTypePlugin) generateUnwrapOr(typeName string, okType ast.Expr) *a
     // Similar structure, but return default on Err
 }
 
-// Map(fn func(T) U) Result<U, E> - Transform Ok value
+// Map(fn func(T) U) Result[U, E] - Transform Ok value
 func (p *ResultTypePlugin) generateMap(typeName string, okType, errType ast.Expr) *ast.FuncDecl {
     // Apply fn to Ok value, preserve Err
-    // Requires: Creating new Result type Result<U, E>
+    // Requires: Creating new Result type Result[U, E]
 }
 
-// AndThen(fn func(T) Result<U, E>) Result<U, E> - Chainable operation
+// AndThen(fn func(T) Result[U, E]) Result[U, E] - Chainable operation
 func (p *ResultTypePlugin) generateAndThen(typeName string, okType, errType ast.Expr) *ast.FuncDecl {
-    // Call fn on Ok value, flatten Result<Result<U, E>, E> -> Result<U, E>
+    // Call fn on Ok value, flatten Result[Result<U, E], E> -> Result[U, E]
 }
 
 // UnwrapErr() E - Unwrap Err value (panic on Ok)
-// MapErr(fn func(E) F) Result<T, F> - Transform Err value
+// MapErr(fn func(E) F) Result[T, F] - Transform Err value
 // (IsOk, IsErr already generated by sum types plugin)
 ```
 
@@ -633,7 +633,7 @@ func (p *ResultTypePlugin) generateAndThen(typeName string, okType, errType ast.
 
 ### Phase 3.6: Option Helper Methods (4-5 hours)
 
-**Goal**: Implement comprehensive Option<T> helper methods
+**Goal**: Implement comprehensive Option[T] helper methods
 
 **Implementation**: Mirror Result plugin approach
 
@@ -641,12 +641,12 @@ func (p *ResultTypePlugin) generateAndThen(typeName string, okType, errType ast.
 ```go
 // Unwrap() T - Unwrap Some value (panic on None)
 // UnwrapOr(default T) T - Unwrap or return default
-// Map(fn func(T) U) Option<U> - Transform Some value
-// Filter(fn func(T) bool) Option<T> - Filter based on predicate
+// Map(fn func(T) U) Option[U] - Transform Some value
+// Filter(fn func(T) bool) Option[T] - Filter based on predicate
 // IsSomeAnd(fn func(T) bool) bool - Check Some with predicate
-// And(other Option<T>) Option<T> - Logical AND
-// Or(other Option<T>) Option<T> - Logical OR
-// AndThen(fn func(T) Option<U>) Option<U> - Chainable operation
+// And(other Option[T]) Option[T] - Logical AND
+// Or(other Option[T]) Option[T] - Logical OR
+// AndThen(fn func(T) Option[U]) Option[U] - Chainable operation
 // (IsSome, IsNone already from sum types)
 ```
 
@@ -656,14 +656,14 @@ func (p *ResultTypePlugin) generateAndThen(typeName string, okType, errType ast.
 // Type inference challenge: What is T?
 
 // Solution 1 (explicit mode):
-let x: Option<int> = None  // Type from annotation
+let x: Option[int] = None  // Type from annotation
 
 // Solution 2 (context mode):
-fn getName() Option<string> {
+fn getName() Option[string] {
     return None  // Type from return type
 }
 
-let y: Option<int> = Some(42).Or(None)  // Type from Or argument
+let y: Option[int] = Some(42).Or(None)  // Type from Or argument
 ```
 
 **Deliverables**:
@@ -699,9 +699,9 @@ let y: Option<int> = Some(42).Or(None)  // Type from Or argument
 3. **Integration Tests**:
 ```dingo
 // Test: error_prop_result.dingo
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result[T, E] { Ok(T), Err(E) }
 
-fn divide(a int, b int) Result<int, error> {
+fn divide(a int, b int) Result[int, error] {
     if b == 0 {
         return Err(errors.New("division by zero"))
     }
@@ -716,9 +716,9 @@ fn calculate() (int, error) {
 
 ```dingo
 // Test: pattern_match_option.dingo
-enum Option<T> { Some(T), None }
+enum Option[T] { Some(T), None }
 
-fn getUserName(id int) Option<string> {
+fn getUserName(id int) Option[string] {
     if id == 1 {
         return Some("Alice")
     }
@@ -736,12 +736,12 @@ fn greet(id int) {
 4. **Configuration Testing**:
 ```dingo
 // Test with none_type_inference = "explicit"
-let x: Option<int> = None  // OK
+let x: Option[int] = None  // OK
 let y = None               // ERROR
 
 // Test with none_type_inference = "context"
-let x: Option<int> = None  // OK
-fn test() Option<int> {
+let x: Option[int] = None  // OK
+fn test() Option[int] {
     return None            // OK (infers from return type)
 }
 ```
@@ -772,7 +772,7 @@ fn test() Option<int> {
 1. **Reasoning Documents**:
 ```markdown
 // result_01_basic.reasoning.md
-# Result<T, E> Type - Implementation Reasoning
+# Result[T, E] Type - Implementation Reasoning
 
 ## Community Context
 - Go Proposal #48916: Result type (500+ 👍)
@@ -800,14 +800,14 @@ Reduction: 67%
 ## Result/Option Tests (9 tests)
 
 ### Result Type (5 tests)
-- result_01_basic - Basic Result<T, E> usage
+- result_01_basic - Basic Result[T, E] usage
 - result_02_propagation - Integration with ? operator
 - result_03_pattern_match - Pattern matching
 - result_04_chaining - Map/AndThen chaining
 - result_05_go_interop - Wrapping Go functions
 
 ### Option Type (4 tests)
-- option_01_basic - Basic Option<T> usage
+- option_01_basic - Basic Option[T] usage
 - option_02_pattern_match - Pattern matching
 - option_03_chaining - Map/Filter chaining
 - option_04_go_interop - Pointer wrapping
@@ -817,12 +817,12 @@ Reduction: 67%
 ```markdown
 ## Features
 
-### Result<T, E> Type ✅
-Replace `(value, error)` with `Result<T, E>`:
+### Result[T, E] Type ✅
+Replace `(value, error)` with `Result[T, E]`:
 ```dingo
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result[T, E] { Ok(T), Err(E) }
 
-fn divide(a int, b int) Result<int, error> {
+fn divide(a int, b int) Result[int, error] {
     if b == 0 {
         return Err(errors.New("division by zero"))
     }
@@ -847,7 +847,7 @@ none_type_inference = "context"  # or "explicit"
 ## [Unreleased]
 
 ### Added
-- Full generic enum system for Result<T, E> and Option<T>
+- Full generic enum system for Result[T, E] and Option[T]
 - Configurable None type inference (explicit vs context)
 - Comprehensive helper methods (8-10 per type)
 - 9 golden tests for Result/Option (all passing)
@@ -975,7 +975,7 @@ dingo/
 
 1. **Generic Type Parameter Complexity**:
    - **Risk**: Type substitution and inference more complex than expected
-   - **Mitigation**: Start with simple cases (Result<int, error>), add complexity incrementally
+   - **Mitigation**: Start with simple cases (Result[int, error]), add complexity incrementally
    - **Fallback**: Support concrete types first, add full generics in Phase 3.9
 
 2. **None Inference Context Tracking**:
@@ -1017,11 +1017,11 @@ dingo/
 ### To Be Resolved During Implementation
 
 1. **Type Parameter Constraints**:
-   - Should we support `enum Result<T, E: Error>` (E must implement error)?
+   - Should we support `enum Result[T, E: Error]` (E must implement error)?
    - Decision: Defer to Phase 4+ (not needed for MVP)
 
 2. **Multiple Generic Instantiations**:
-   - How to handle `Result<int, error>` and `Result<string, error>` in same file?
+   - How to handle `Result[int, error]` and `Result[string, error]` in same file?
    - Decision: Generate both types (Result_int_error, Result_string_error)
 
 3. **None Constructor Type Hint**:
@@ -1044,14 +1044,14 @@ let result = try {
     let a = operation1()?;
     let b = operation2(a)?;
     b * 2
-}  // Returns Result<int, error>
+}  // Returns Result[int, error]
 ```
 **Effort**: 8-10 hours
 
 2. **Auto-wrapping Go Functions**:
 ```dingo
 // Go: func ReadFile(path string) ([]byte, error)
-// Auto-wrap: ReadFile("file.txt") -> Result<[]byte, error>
+// Auto-wrap: ReadFile("file.txt") -> Result[[]byte, error]
 let content = ReadFile("file.txt")?  // No manual wrapping
 ```
 **Effort**: 15-20 hours (requires go/types integration)
@@ -1059,13 +1059,13 @@ let content = ReadFile("file.txt")?  // No manual wrapping
 3. **Railway-Oriented Programming Helpers**:
 - `Tap(fn)`: Side effects without transformation
 - `Recover(fn)`: Convert Err to Ok with recovery
-- `Transpose()`: Result<Option<T>, E> → Option<Result<T, E>>
+- `Transpose()`: Result[Option[T], E] → Option[Result[T, E]]
 **Effort**: 6-8 hours
 
 4. **Result/Option Literals**:
 ```dingo
-let x: Result<int, error> = .Ok(42)    // Leading dot syntax
-let y: Option<string> = .Some("hello")
+let x: Result[int, error] = .Ok(42)    // Leading dot syntax
+let y: Option[string] = .Some("hello")
 ```
 **Effort**: 4-6 hours
 

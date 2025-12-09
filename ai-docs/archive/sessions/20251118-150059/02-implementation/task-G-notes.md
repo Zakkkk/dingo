@@ -25,8 +25,8 @@
 
 | Match Type | Variants | Arms | Time | Target | Status |
 |------------|----------|------|------|--------|--------|
-| Result<T,E> | 2 | 2 | <0.1ms | <1ms | ✅ Pass |
-| Option<T> | 2 | 2 | <0.1ms | <1ms | ✅ Pass |
+| Result[T,E] | 2 | 2 | <0.1ms | <1ms | ✅ Pass |
+| Option[T] | 2 | 2 | <0.1ms | <1ms | ✅ Pass |
 | Enum (3-5 variants) | 3-5 | 3-5 | <0.5ms | <1ms | ✅ Pass |
 | Enum (10+ variants) | 10 | 10 | ~0.8ms | <1ms | ✅ Pass |
 
@@ -287,8 +287,8 @@ let x = match result {
 
 **Example working**:
 ```dingo
-func getAge() -> Option<int> {
-    return None  // ✅ Infers Option<int>
+func getAge() -> Option[int] {
+    return None  // ✅ Infers Option[int]
 }
 ```
 
@@ -296,7 +296,7 @@ func getAge() -> Option<int> {
 ```dingo
 let x = None  // ❌ Cannot infer (no context)
 // Workaround:
-let x: Option<int> = None  // ✅ Explicit type
+let x: Option[int] = None  // ✅ Explicit type
 ```
 
 ## Debugging Notes

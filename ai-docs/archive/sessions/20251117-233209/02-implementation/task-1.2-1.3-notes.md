@@ -23,7 +23,7 @@
 - ✅ Simple implementation, easy to test
 - ✅ Works for common cases (Ok with literals, Err with known errors)
 - ❌ Err() constructor produces Result_interface{}_E types (not ideal)
-- ❌ Cannot handle explicit type annotations yet (e.g., `let x: Result<int, error> = Ok(42)`)
+- ❌ Cannot handle explicit type annotations yet (e.g., `let x: Result[int, error] = Ok(42)`)
 
 **Future Enhancement**:
 When TypeInferenceService is available:
@@ -92,7 +92,7 @@ Each method has specific use cases:
 **Rationale**:
 - Go doesn't have full higher-kinded types
 - Go 1.18+ generics work at type declaration level, not runtime
-- Result<T, E> methods that return Result<U, E> need runtime polymorphism
+- Result[T, E] methods that return Result[U, E] need runtime polymorphism
 - interface{} allows method compilation while preserving flexibility
 
 **Example**:
@@ -241,7 +241,7 @@ pkg.CustomError     pkg_CustomError      Result_T_pkg_CustomError
 ## Challenges & Solutions
 
 ### Challenge 1: Generic Type Parameters
-**Problem**: Go doesn't have higher-kinded types for Result<T, E> methods that return Result<U, E>
+**Problem**: Go doesn't have higher-kinded types for Result[T, E] methods that return Result[U, E]
 
 **Solution**: Use interface{} for now, generate type-specific variants later
 
@@ -314,8 +314,8 @@ func (v *visitor) Visit(node ast.Node) ast.Visitor {
 
 **Existing Tests** (10 tests, all passing):
 1. TestResultTypePlugin_Name - Plugin identity
-2. TestResultTypePlugin_BasicResultT - Result<T> handling
-3. TestResultTypePlugin_ResultTwoTypes - Result<T, E> handling
+2. TestResultTypePlugin_BasicResultT - Result[T] handling
+3. TestResultTypePlugin_ResultTwoTypes - Result[T, E] handling
 4. TestResultTypePlugin_SanitizeTypeName - Type name sanitization
 5. TestResultTypePlugin_NoDuplicateEmission - Deduplication
 6. TestResultTypePlugin_HelperMethods - Basic methods (IsOk, IsErr, etc.)

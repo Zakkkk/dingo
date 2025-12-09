@@ -2,7 +2,7 @@
 
 ## Overview
 
-Task 3a implemented the complete suite of Result<T,E> helper methods to achieve feature parity with Rust's Result type and pass all 12 helper method unit tests (now 82/86 total tests passing, up from 70/86).
+Task 3a implemented the complete suite of Result[T,E] helper methods to achieve feature parity with Rust's Result type and pass all 12 helper method unit tests (now 82/86 total tests passing, up from 70/86).
 
 ## Key Design Decisions
 
@@ -405,7 +405,7 @@ if r.tag == ResultTag_Err {
    - Useful for logging/tracing
 
 4. **Transpose() Method**:
-   - Convert Result<Option<T>> → Option<Result<T>>
+   - Convert Result[Option[T]] → Option[Result[T]]
    - Advanced composition pattern
    - Requires Option type implementation
 
@@ -449,7 +449,7 @@ func [U any](r Result_T_E) Map(fn func(T) U) Result_U_E
 
 ### 2. Generic Type Limitations
 
-**Challenge**: Cannot express Result<U,E> without generics support.
+**Challenge**: Cannot express Result[U,E] without generics support.
 
 **Solution**:
 - Use interface{} as escape hatch
@@ -470,4 +470,4 @@ func [U any](r Result_T_E) Map(fn func(T) U) Result_U_E
 
 ## Conclusion
 
-Task 3a successfully implemented all 8 advanced Result<T,E> helper methods, achieving 82/86 test passing rate (95%). The implementation uses pragmatic solutions (interface{}, anonymous structs) to work around Go's lack of generics while maintaining clean, maintainable code. All design decisions are well-documented and have clear upgrade paths for future enhancements.
+Task 3a successfully implemented all 8 advanced Result[T,E] helper methods, achieving 82/86 test passing rate (95%). The implementation uses pragmatic solutions (interface{}, anonymous structs) to work around Go's lack of generics while maintaining clean, maintainable code. All design decisions are well-documented and have clear upgrade paths for future enhancements.

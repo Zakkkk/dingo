@@ -28,7 +28,7 @@ The project has a chicken-and-egg problem:
 
 **The Gap**: Result/Option need special handling because they're:
 - **Built-in types** (not user-defined enums)
-- **Generic** (Result<T, E>, Option<T>)
+- **Generic** (Result[T, E], Option[T])
 - **Used by other features** (error propagation, pattern matching)
 - **Expected to work with enum syntax** in Dingo source files
 
@@ -265,9 +265,9 @@ type HelperMethodGenerator interface {
 // - Unwrap() T
 // - UnwrapOr(T) T
 // - UnwrapErr() E
-// - Map(fn func(T) U) Result<U, E>
-// - MapErr(fn func(E) F) Result<T, F>
-// - AndThen(fn func(T) Result<U, E>) Result<U, E>
+// - Map(fn func(T) U) Result[U, E]
+// - MapErr(fn func(E) F) Result[T, F]
+// - AndThen(fn func(T) Result[U, E]) Result[U, E]
 // - IsOk() bool (already exists from sum types)
 // - IsErr() bool (already exists from sum types)
 ```
@@ -344,8 +344,8 @@ func (s *TypeInferenceService) IsOptionType(name string) bool
 
 1. **Type Name Generation**:
    - Use existing `sanitizeTypeName()` from `type_utils.go`
-   - Result<int, error> → `Result_int_error`
-   - Option<*User> → `Option_ptr_User`
+   - Result[int, error] → `Result_int_error`
+   - Option[*User] → `Option_ptr_User`
 
 2. **Generic Type Handling**:
    - Dingo syntax: `enum Result { Ok(T), Err(E) }`
@@ -391,7 +391,7 @@ func (s *TypeInferenceService) IsOptionType(name string) bool
    - **Question**: How does `None` know what T is? Need type context.
 
 4. **Duplicate Type Declarations**:
-   - Multiple `Result<int, error>` usages → Only emit type once
+   - Multiple `Result[int, error]` usages → Only emit type once
    - Use `emittedTypes map[string]bool` (already in current plugins)
 
 5. **Error Handling**:
@@ -551,7 +551,7 @@ func greet(id: int) {
 
 ### Alternative 3: Generic Enum Base Type
 
-**Approach**: `enum Result<T, E> { Ok(T), Err(E) }` as generic definition
+**Approach**: `enum Result[T, E] { Ok(T), Err(E) }` as generic definition
 
 **Pros**:
 - Most Rust-like syntax
@@ -685,8 +685,8 @@ Before finalizing implementation, verify:
 
 1. **Generic Result/Option Declarations**:
    ```dingo
-   enum Result<T, E> { Ok(T), Err(E) }
-   enum Option<T> { Some(T), None }
+   enum Result[T, E] { Ok(T), Err(E) }
+   enum Option[T] { Some(T), None }
    ```
    - Requires generic type system
    - Type parameter substitution
@@ -695,7 +695,7 @@ Before finalizing implementation, verify:
 2. **Auto-wrapping Go Functions**:
    ```dingo
    // Go: func ReadFile(path string) ([]byte, error)
-   // Dingo: Automatically wraps to Result<[]byte, error>
+   // Dingo: Automatically wraps to Result[[]byte, error]
    let content = ReadFile("file.txt")?  // No manual wrapping
    ```
    - Requires go/types integration
@@ -708,7 +708,7 @@ Before finalizing implementation, verify:
        let a = operation1()?;
        let b = operation2(a)?;
        b * 2
-   }  // Returns Result<int, error>
+   }  // Returns Result[int, error]
    ```
    - Syntactic sugar for error handling
    - 8-10 hours of work
@@ -716,7 +716,7 @@ Before finalizing implementation, verify:
 4. **Railway-Oriented Programming Helpers**:
    - `Tap(fn)`: Side effects without transformation
    - `Recover(fn)`: Convert Err to Ok with recovery function
-   - `Transpose()`: Result<Option<T>, E> → Option<Result<T, E>>
+   - `Transpose()`: Result[Option[T], E] → Option[Result[T, E]]
    - 6-8 hours of work
 
 **Note**: These are outside Phase 3 scope. Focus on foundational integration first.
@@ -733,7 +733,7 @@ Before finalizing implementation, verify:
    - **Fallback**: Start with non-generic (e.g., `Result_int_error` hardcoded in test)
 
 2. **None Constructor Type Inference**:
-   - **Risk**: `None` has no value - how to infer Option<T>?
+   - **Risk**: `None` has no value - how to infer Option[T]?
    - **Mitigation**: Require assignment context: `let x: Option = None`
    - **Fallback**: Require explicit type: `Option_None::<string>()`
 

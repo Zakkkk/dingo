@@ -7,11 +7,11 @@
 
 ## Executive Summary
 
-Phase 3 is a comprehensive update that completes the Result<T,E>/Option<T> foundation with full feature parity. Based on user clarifications, we will implement:
+Phase 3 is a comprehensive update that completes the Result[T,E]/Option[T] foundation with full feature parity. Based on user clarifications, we will implement:
 
 1. **Fix A5**: Enhanced type inference using go/types (4-6 hours)
 2. **Fix A4**: Literal handling with IIFE pattern (2-3 hours)
-3. **Option<T>**: Complete implementation including type-context-aware None constant (6-8 hours)
+3. **Option[T]**: Complete implementation including type-context-aware None constant (6-8 hours)
 4. **Helper Methods**: Full suite for both Result and Option (Map, Filter, AndThen, etc.) (4-6 hours)
 5. **Error Infrastructure**: Clear compile errors on type inference failure (2-3 hours)
 
@@ -31,8 +31,8 @@ Phase 3 is a comprehensive update that completes the Result<T,E>/Option<T> found
 
 ### 2. Complete Helper Methods in Phase 3 (Expanded Scope)
 - Implement ALL expected helper methods:
-  - Result<T,E>: Map, Filter, AndThen, Unwrap, UnwrapOr, UnwrapOrElse, IsOk, IsErr
-  - Option<T>: Map, Filter, AndThen, Unwrap, UnwrapOr, UnwrapOrElse, IsSome, IsNone
+  - Result[T,E]: Map, Filter, AndThen, Unwrap, UnwrapOr, UnwrapOrElse, IsOk, IsErr
+  - Option[T]: Map, Filter, AndThen, Unwrap, UnwrapOr, UnwrapOrElse, IsSome, IsNone
 - This ensures 39/39 builtin test pass rate
 
 ### 3. Generate Compile Error on Type Inference Failure (Strict)
@@ -105,7 +105,7 @@ These tasks are independent and can be executed simultaneously by different deve
 
 These depend on Batch 1 completion. Can be split into two parallel tracks (Result vs Option).
 
-#### Batch 2a: Result<T,E> Plugin - Fix A5 + Fix A4
+#### Batch 2a: Result[T,E] Plugin - Fix A5 + Fix A4
 **Agent**: golang-developer
 **Complexity**: Medium
 **Files Modified**:
@@ -120,9 +120,9 @@ These depend on Batch 1 completion. Can be split into two parallel tracks (Resul
 6. Update unit tests for both fixes
 
 **Dependencies**: Batch 1a (TypeInferenceService), Batch 1c (addressability)
-**Deliverable**: Result<T,E> constructors work with literals and have accurate type inference
+**Deliverable**: Result[T,E] constructors work with literals and have accurate type inference
 
-#### Batch 2b: Option<T> Plugin - Fix A5 + Fix A4 + None Constant
+#### Batch 2b: Option[T] Plugin - Fix A5 + Fix A4 + None Constant
 **Agent**: golang-developer
 **Complexity**: High
 **Files Modified**:
@@ -139,7 +139,7 @@ These depend on Batch 1 completion. Can be split into two parallel tracks (Resul
 5. Update unit tests
 
 **Dependencies**: Batch 1a, Batch 1b, Batch 1c
-**Deliverable**: Option<T> with working Some() and context-aware None constant
+**Deliverable**: Option[T] with working Some() and context-aware None constant
 
 ---
 
@@ -147,7 +147,7 @@ These depend on Batch 1 completion. Can be split into two parallel tracks (Resul
 
 Can be split into two parallel tracks after Batch 2.
 
-#### Batch 3a: Result<T,E> Helper Methods
+#### Batch 3a: Result[T,E] Helper Methods
 **Agent**: golang-developer
 **Complexity**: Medium
 **Files Modified**:
@@ -161,17 +161,17 @@ Can be split into two parallel tracks after Batch 2.
    - `UnwrapOr(defaultVal T) T` - Return ok_0 or defaultVal
    - `UnwrapOrElse(fn func(error) T) T` - Return ok_0 or fn(err_0)
 2. Implement transformation methods (generic helpers):
-   - `Map(fn func(T) U) Result<U,E>` - Transform Ok value
-   - `MapErr(fn func(E) F) Result<T,F>` - Transform Err value
-   - `AndThen(fn func(T) Result<U,E>) Result<U,E>` - Chain operations
-   - `Filter(predicate func(T) bool, err E) Result<T,E>` - Filter Ok values
+   - `Map(fn func(T) U) Result[U,E]` - Transform Ok value
+   - `MapErr(fn func(E) F) Result[T,F]` - Transform Err value
+   - `AndThen(fn func(T) Result[U,E]) Result[U,E]` - Chain operations
+   - `Filter(predicate func(T) bool, err E) Result[T,E]` - Filter Ok values
 3. Add unit tests for each method
 4. Create golden test: `result_05_helpers.dingo`
 
 **Dependencies**: Batch 2a (Result plugin with fixes)
-**Deliverable**: Result<T,E> has complete helper method suite
+**Deliverable**: Result[T,E] has complete helper method suite
 
-#### Batch 3b: Option<T> Helper Methods
+#### Batch 3b: Option[T] Helper Methods
 **Agent**: golang-developer
 **Complexity**: Medium
 **Files Modified**:
@@ -185,14 +185,14 @@ Can be split into two parallel tracks after Batch 2.
    - `UnwrapOr(defaultVal T) T` - Return some_0 or defaultVal
    - `UnwrapOrElse(fn func() T) T` - Return some_0 or fn()
 2. Implement transformation methods:
-   - `Map(fn func(T) U) Option<U>` - Transform Some value
-   - `AndThen(fn func(T) Option<U>) Option<U>` - Chain operations
-   - `Filter(predicate func(T) bool) Option<T>` - Filter Some values
+   - `Map(fn func(T) U) Option[U]` - Transform Some value
+   - `AndThen(fn func(T) Option[U]) Option[U]` - Chain operations
+   - `Filter(predicate func(T) bool) Option[T]` - Filter Some values
 3. Add unit tests for each method
 4. Create golden test: `option_05_helpers.dingo`
 
 **Dependencies**: Batch 2b (Option plugin with fixes)
-**Deliverable**: Option<T> has complete helper method suite
+**Deliverable**: Option[T] has complete helper method suite
 
 ---
 
@@ -275,11 +275,11 @@ Final validation after all features implemented.
 **Goal**: Result and Option plugins have Fix A4/A5 applied
 
 **Success Criteria**:
-- [ ] Result<T,E> constructors work with literals (Fix A4)
-- [ ] Result<T,E> has accurate type inference (Fix A5)
-- [ ] Option<T> constructors work with literals (Fix A4)
-- [ ] Option<T> has accurate type inference (Fix A5)
-- [ ] Option<T> None constant is type-context-aware
+- [ ] Result[T,E] constructors work with literals (Fix A4)
+- [ ] Result[T,E] has accurate type inference (Fix A5)
+- [ ] Option[T] constructors work with literals (Fix A4)
+- [ ] Option[T] has accurate type inference (Fix A5)
+- [ ] Option[T] None constant is type-context-aware
 - [ ] Unit tests: Result plugin 20/20, Option plugin 15/15
 
 **Deliverables**:
@@ -292,8 +292,8 @@ Final validation after all features implemented.
 **Goal**: All expected helper methods implemented
 
 **Success Criteria**:
-- [ ] Result<T,E> has 8 helper methods (IsOk, IsErr, Unwrap, UnwrapOr, UnwrapOrElse, Map, AndThen, Filter)
-- [ ] Option<T> has 8 helper methods (IsSome, IsNone, Unwrap, UnwrapOr, UnwrapOrElse, Map, AndThen, Filter)
+- [ ] Result[T,E] has 8 helper methods (IsOk, IsErr, Unwrap, UnwrapOr, UnwrapOrElse, Map, AndThen, Filter)
+- [ ] Option[T] has 8 helper methods (IsSome, IsNone, Unwrap, UnwrapOr, UnwrapOrElse, Map, AndThen, Filter)
 - [ ] All methods generate idiomatic Go code
 - [ ] Unit tests: All 39/39 builtin plugin tests passing
 - [ ] Golden tests: result_05_helpers and option_05_helpers pass
@@ -522,7 +522,7 @@ func (p *ResultTypePlugin) transformOkConstructor(call *ast.CallExpr) ast.Expr {
 }
 ```
 
-### Option<T> None Constant (Type-Context-Aware)
+### Option[T] None Constant (Type-Context-Aware)
 
 **Challenge**: `None` is an identifier with no inherent type information. We need to infer which `Option_T` type to use from the assignment/return context.
 
@@ -614,7 +614,7 @@ func (p *OptionTypePlugin) transformNoneConstant(ident *ast.Ident, targetType st
 
 ### Helper Methods Generation
 
-**Example: Result<T,E>.Map() method**
+**Example: Result[T,E].Map() method**
 
 ```go
 // Generated in emitResultDeclaration()
@@ -782,14 +782,14 @@ TestHelperMethod_Filter
 
 ### Integration Test Coverage (Golden Tests)
 
-**Result<T,E> Tests**:
+**Result[T,E] Tests**:
 - `result_01_basic.dingo` - Basic Ok/Err usage (EXISTING, should still pass)
 - `result_02_chaining.dingo` - Error propagation (EXISTING, should still pass)
 - `result_03_literals.dingo` - NEW: Ok(42), Err(errors.New("..."))
 - `result_04_type_inference.dingo` - NEW: Ok(x) where x: int
 - `result_05_helpers.dingo` - NEW: Map, Filter, AndThen, Unwrap, etc.
 
-**Option<T> Tests**:
+**Option[T] Tests**:
 - `option_01_basic.dingo` - UPDATED: Use None constant instead of Option_None()
 - `option_02_chaining.dingo` - EXISTING: Should still pass
 - `option_03_literals.dingo` - NEW: Some(42), Some("hello")
@@ -952,7 +952,7 @@ done
 **Completeness**:
 - [ ] All Fix A4 requirements met
 - [ ] All Fix A5 requirements met
-- [ ] Option<T> has feature parity with Result<T,E>
+- [ ] Option[T] has feature parity with Result[T,E]
 - [ ] Foundation ready for Phase 4 (pattern matching)
 - [ ] No major known bugs or limitations (or documented)
 
@@ -970,7 +970,7 @@ done
 **No new external dependencies required** ✅
 
 ### Internal Dependencies
-- Phase 2.16 complete (Result<T,E> foundation, plugin pipeline)
+- Phase 2.16 complete (Result[T,E] foundation, plugin pipeline)
 - All 48/48 preprocessor tests passing
 - Plugin ordering fix (Phase 2.6.1) stable
 
@@ -990,14 +990,14 @@ done
 2. Revert `pkg/plugin/builtin/type_inference.go` changes
 3. Keep heuristic-only inference
 4. Document limitation: "Type inference limited in complex cases"
-5. Proceed with Fix A4 and Option<T> (still valuable)
+5. Proceed with Fix A4 and Option[T] (still valuable)
 
 **If Fix A4 (IIFE) Fails**:
 1. Revert addressability module
 2. Revert constructor changes in Result/Option plugins
 3. Document limitation: "Use variables for constructors, not literals"
 4. Update golden tests to use variables
-5. Proceed with Fix A5 and Option<T> (partial)
+5. Proceed with Fix A5 and Option[T] (partial)
 
 **If None Constant Fails**:
 1. Revert None detection logic
@@ -1064,9 +1064,9 @@ After Phase 3 completes, we'll have a solid foundation for:
 
 **Phase 4 Candidates** (in priority order):
 1. Pattern matching (`match` expression for Result/Option)
-2. Error propagation operator (`?`) for Result<T,E>
-3. Advanced Option<T> features (None in all contexts, chaining)
-4. Automatic Go interop (wrap `(T, error)` → `Result<T,E>`)
+2. Error propagation operator (`?`) for Result[T,E]
+3. Advanced Option[T] features (None in all contexts, chaining)
+4. Automatic Go interop (wrap `(T, error)` → `Result[T,E]`)
 5. Performance optimizations (inline IIFEs, reduce allocations)
 6. Language server integration (gopls proxy for .dingo files)
 
@@ -1076,7 +1076,7 @@ After Phase 3 completes, we'll have a solid foundation for:
 
 ## Conclusion
 
-Phase 3 is the most comprehensive update yet, completing the Result<T,E>/Option<T> foundation with:
+Phase 3 is the most comprehensive update yet, completing the Result[T,E]/Option[T] foundation with:
 - Accurate type inference via go/types integration
 - Literal support via IIFE pattern
 - Type-context-aware None constant

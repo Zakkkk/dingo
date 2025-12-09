@@ -286,12 +286,12 @@ ai-docs/sessions/YYYYMMDD-HHMMSS/
 For one-off tasks, use simpler paths:
 
 ```
-Main Chat: "Understand how Result<T,E> works"
+Main Chat: "Understand how Result[T,E] works"
 
 Delegates to golang-developer:
 - Investigates codebase
 - Writes: ai-docs/analysis/result-type-analysis.md
-- Returns: "Result<T,E> is implemented via AST transformation.
+- Returns: "Result[T,E] is implemented via AST transformation.
            Uses IIFE pattern for constructors.
            Details: ai-docs/analysis/result-type-analysis.md"
 

@@ -12,7 +12,7 @@ Successfully implemented four new language features for Dingo: Safe Navigation (
    - Configuration-aware transformation
 
 2. **pkg/plugin/builtin/null_coalescing.go** - Null coalescing operator (??) plugin
-   - Works with Option<T> types
+   - Works with Option[T] types
    - Configurable support for Go pointers (*T)
    - Type-aware transformation with fallback
 
@@ -96,11 +96,11 @@ All operators use IIFE (Immediately-Invoked Function Expression) pattern:
 
 1. **Safe Navigation**: Smart unwrapping by default
    - Returns T with zero value fallback (smart mode)
-   - Returns Option<T> in always_option mode
+   - Returns Option[T] in always_option mode
    - Chaining support through nested IIFEs
 
 2. **Null Coalescing**: Pointer support enabled by default
-   - Works with Option<T> using IsSome()/Unwrap()
+   - Works with Option[T] using IsSome()/Unwrap()
    - Works with *T using nil checks and dereference
    - Type inference determines transformation
 

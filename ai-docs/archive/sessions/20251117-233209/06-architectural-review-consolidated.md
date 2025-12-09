@@ -79,7 +79,7 @@ Gemini's concerns about incomplete type inference and placeholder implementation
 
 #### Quote
 
-> "The Result<T,E> plugin demonstrates **excellent architectural discipline**. The separation of detection and mutation, the pragmatic type inference design, and the clear extension points show that the developers understand **both Go idioms and compiler architecture patterns**. This is **production-quality code** ready for the next phase."
+> "The Result[T,E] plugin demonstrates **excellent architectural discipline**. The separation of detection and mutation, the pragmatic type inference design, and the clear extension points show that the developers understand **both Go idioms and compiler architecture patterns**. This is **production-quality code** ready for the next phase."
 
 ---
 
@@ -212,7 +212,7 @@ Gemini's concerns about incomplete type inference and placeholder implementation
 1. **Prioritize Full `go/types` Integration** - Critical for accuracy
 2. **Implement Proper Generic Type Parameter Handling** - Replace `interface{}` placeholders
 3. **Refactor Type Name Handling** - Reduce string manipulation, use `types.Type` objects
-4. **Ensure Consistent Result<T> vs Result<T, E> Handling**
+4. **Ensure Consistent Result[T] vs Result[T, E] Handling**
 5. **Performance Monitoring** - Once go/types integrated
 
 #### Long-term Assessment
@@ -435,12 +435,12 @@ Adjusting for consensus agreement (3/4 approved): **7.875/10** → **8/10** (rou
 3. Add full go/types support to `inferTypeFromExpr()`
 4. Test with complex types (nested pointers, selectors, etc.)
 
-### Phase 2 (Option<T> Type)
+### Phase 2 (Option[T] Type)
 
 **Timeline**: Continue as planned
 **Dependency**: None - can proceed immediately
 
-The current Result<T,E> implementation provides a solid foundation for Option<T>.
+The current Result[T,E] implementation provides a solid foundation for Option[T].
 
 ### Phase 3 (Error Propagation Operator)
 

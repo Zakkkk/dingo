@@ -306,8 +306,8 @@ Phase V focuses **exclusively on infrastructure, tooling, and developer experien
    ```markdown
    | Feature           | Status    | Tests     | Examples  |
    |-------------------|-----------|-----------|-----------|
-   | Result<T,E>       | ✅ Working | 5/5 pass  | ✅ Available |
-   | Option<T>         | ✅ Working | 4/6 pass  | ✅ Available |
+   | Result[T,E]       | ✅ Working | 5/5 pass  | ✅ Available |
+   | Option[T]         | ✅ Working | 4/6 pass  | ✅ Available |
    | Error Prop (?)    | ✅ Working | 8/9 pass  | ✅ Available |
    | Pattern Matching  | 🟡 Partial | 5/12 pass | ✅ Available |
    ```
@@ -495,7 +495,7 @@ Phase V focuses **exclusively on infrastructure, tooling, and developer experien
 
 2. **First Dingo Project**
    - Creating main.dingo
-   - Using Result<T,E> and Option<T>
+   - Using Result[T,E] and Option[T]
    - Error propagation with ?
    - Transpiling and running
 
@@ -529,8 +529,8 @@ Organize existing feature documentation into discoverable structure:
 ```
 docs/features/
 ├── README.md                 # Feature index and status
-├── result-type.md            # Result<T,E> documentation
-├── option-type.md            # Option<T> documentation
+├── result-type.md            # Result[T,E] documentation
+├── option-type.md            # Option[T] documentation
 ├── error-propagation.md      # ? operator
 ├── pattern-matching.md       # match expressions
 ├── enums.md                  # Sum types/enums
@@ -567,7 +567,7 @@ For each feature:
 
 2. **Common Patterns**
    - Error handling: `if err != nil` → `?`
-   - Nullable values: `*T` → `Option<T>`
+   - Nullable values: `*T` → `Option[T]`
    - Tagged unions: interfaces → enums
    - Pattern matching: type switches → match
 

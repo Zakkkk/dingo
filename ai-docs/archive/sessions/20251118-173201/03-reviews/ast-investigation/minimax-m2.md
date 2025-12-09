@@ -39,13 +39,13 @@ if match.switchStmt.Init != nil {
 ### ✅ **CURRENT STATUS**
 
 - **pattern_match_01_basic**: ✅ **PASSES** (main bug fixed!)
-- **Other pattern match tests**: Still failing due to TypeAnnotProcessor not handling nested generics like `Result<int, error>`
+- **Other pattern match tests**: Still failing due to TypeAnnotProcessor not handling nested generics like `Result[int, error]`
 
 ### 🔧 **REMAINING WORK**
 
 The TypeAnnotProcessor regex `([^,)]+)` stops at the first comma, breaking generics. Need to implement proper nesting-aware parsing for types like:
 ```go
-func processResult(result: Result<int, error>) -> int
+func processResult(result: Result[int, error]) -> int
                            ^^^^^^^^^^^^^^^^
                            This gets truncated to "Result<int"
 ```

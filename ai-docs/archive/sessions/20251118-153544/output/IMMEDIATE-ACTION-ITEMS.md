@@ -54,7 +54,7 @@ Pattern: `(\w+)\s*:\s*([A-Z]\w*(?:<[^>]+>)?)`
 Purpose: Transform param: Type to param Type
 Examples:
 - Input: `name: string` → Output: `name string`
-- Input: `data: Result<T, E>` → Output: `data Result<T, E>`
+- Input: `data: Result[T, E]` → Output: `data Result[T, E]`
 Edge cases: ...
 ```
 

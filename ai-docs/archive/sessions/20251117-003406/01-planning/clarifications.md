@@ -24,7 +24,7 @@ The user wants a more complete initial release including:
 ### 3. Result/Option Integration
 **Decision**: Yes, they exist - integrate with them
 
-Result<T, E> and Option<T> types are already implemented in the codebase. We should:
+Result[T, E] and Option[T] types are already implemented in the codebase. We should:
 - Implement Result/Option-aware functional utilities
 - Add operations like mapResult, filterSome, etc.
 - Provide deep integration with Dingo's type system

@@ -391,4 +391,4 @@ Phase 2.2 is **100% complete**. All 8 error_prop tests pass with correct, compil
 - ✅ Handles edge cases (escapes, struct literals, etc.)
 - ✅ Performance < 1ms per file
 
-**Next:** Phase 3 - Integrate Result<T,E> and Option<T> types.
+**Next:** Phase 3 - Integrate Result[T,E] and Option[T] types.

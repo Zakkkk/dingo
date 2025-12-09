@@ -49,9 +49,9 @@ func (p *EnumParser) ParseEnumDecl() (*EnumDecl, int, error) {
 
 	p.skipWhitespace()
 
-	// Parse optional type parameters <T, E>
+	// Parse optional type parameters [T, E] (Go-style generic syntax)
 	var typeParams *TypeParamList
-	if p.peek() == '<' {
+	if p.peek() == '[' {
 		typeParams, err = p.parseTypeParams()
 		if err != nil {
 			return nil, p.pos, fmt.Errorf("invalid type parameters: %w", err)
@@ -108,10 +108,10 @@ func (p *EnumParser) parseIdent() (*Ident, error) {
 	}, nil
 }
 
-// parseTypeParams parses generic type parameters: <T, E>
+// parseTypeParams parses generic type parameters: [T, E] (Go-style generic syntax)
 func (p *EnumParser) parseTypeParams() (*TypeParamList, error) {
-	if p.peek() != '<' {
-		return nil, fmt.Errorf("expected '<'")
+	if p.peek() != '[' {
+		return nil, fmt.Errorf("expected '['")
 	}
 	opening := token.Pos(p.offset + p.pos + 1)
 	p.advance()
@@ -120,7 +120,7 @@ func (p *EnumParser) parseTypeParams() (*TypeParamList, error) {
 	for {
 		p.skipWhitespace()
 
-		if p.peek() == '>' {
+		if p.peek() == ']' {
 			break
 		}
 
@@ -136,14 +136,14 @@ func (p *EnumParser) parseTypeParams() (*TypeParamList, error) {
 			p.advance()
 			continue
 		}
-		if p.peek() == '>' {
+		if p.peek() == ']' {
 			break
 		}
-		return nil, fmt.Errorf("expected ',' or '>' in type params")
+		return nil, fmt.Errorf("expected ',' or ']' in type params")
 	}
 
-	if p.peek() != '>' {
-		return nil, fmt.Errorf("expected '>'")
+	if p.peek() != ']' {
+		return nil, fmt.Errorf("expected ']'")
 	}
 	closing := token.Pos(p.offset + p.pos + 1)
 	p.advance()
@@ -337,14 +337,14 @@ func (p *EnumParser) parseTypeExpr() (*TypeExpr, error) {
 		p.advance()
 	}
 
-	// Handle generic type arguments
-	if p.peek() == '<' {
+	// Handle generic type arguments (Go-style [T, E] syntax)
+	if p.peek() == '[' {
 		depth := 1
 		p.advance()
 		for depth > 0 && p.pos < len(p.src) {
-			if p.peek() == '<' {
+			if p.peek() == '[' {
 				depth++
-			} else if p.peek() == '>' {
+			} else if p.peek() == ']' {
 				depth--
 			}
 			p.advance()

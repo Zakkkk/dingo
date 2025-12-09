@@ -96,7 +96,7 @@
 
 ---
 
-### 3. **Result<T,E> Type** ✅ Complete (100%)
+### 3. **Result[T,E] Type** ✅ Complete (100%)
 
 **Status**: Fully implemented with 13 helper methods
 **Plugin**: `ResultTypePlugin`
@@ -148,7 +148,7 @@ type Result_T_E struct {
 
 ---
 
-### 4. **Option<T> Type** ✅ Complete (100%)
+### 4. **Option[T] Type** ✅ Complete (100%)
 
 **Status**: Fully implemented with 8 helper methods
 **Plugin**: `OptionTypePlugin`
@@ -321,7 +321,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 **Capabilities**:
 - Converts Rust-style `Type<T>` → Go-style `Type[T]`
 - Pattern: `\b([A-Z]\w*)<([^>]+)>`
-- Handles: `Result<T,E>`, `Option<T>`, `Vec<int>`, etc.
+- Handles: `Result[T,E]`, `Option[T]`, `Vec<int>`, etc.
 
 **Implementation Details**:
 - Simple regex replacement
@@ -704,8 +704,8 @@ type Mapping struct {
 **File**: `/Users/jack/mag/dingo/pkg/plugin/builtin/exhaustiveness.go`
 
 **Capabilities**:
-- Result<T,E> exhaustiveness (requires Ok+Err or wildcard)
-- Option<T> exhaustiveness (requires Some+None or wildcard)
+- Result[T,E] exhaustiveness (requires Ok+Err or wildcard)
+- Option[T] exhaustiveness (requires Some+None or wildcard)
 - Enum exhaustiveness (requires all variants or wildcard)
 - Guard support (guards don't affect exhaustiveness)
 - Tuple exhaustiveness (cartesian product of patterns)
@@ -787,8 +787,8 @@ type Mapping struct {
 1. ✅ Type annotations
 2. ✅ Generic syntax (`<>` → `[]`)
 3. ✅ Keywords (`let` → `:=`)
-4. ✅ Result<T,E> (13 methods)
-5. ✅ Option<T> (8 methods)
+4. ✅ Result[T,E] (13 methods)
+5. ✅ Option[T] (8 methods)
 6. ✅ Source maps
 7. ✅ Workspace builds
 8. ✅ Plugin system
@@ -949,7 +949,7 @@ if len(ctx.errors) >= MaxErrors {
 Dingo has a **solid, production-ready foundation** with 8 major features fully implemented:
 
 - ✅ **Core Language Features**: Type annotations, generics, keywords, error propagation
-- ✅ **Advanced Types**: Result<T,E> (13 methods), Option<T> (8 methods), Enums
+- ✅ **Advanced Types**: Result[T,E] (13 methods), Option[T] (8 methods), Enums
 - ✅ **Pattern Matching**: Basic, guards, nested, tuples, exhaustiveness
 - ✅ **Infrastructure**: Source maps, workspace builds, plugin system, type inference
 

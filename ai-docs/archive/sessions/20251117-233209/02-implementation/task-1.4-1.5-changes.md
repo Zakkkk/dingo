@@ -8,7 +8,7 @@
 
 ## Overview
 
-Implemented type inference infrastructure for Result<T, E> and Option<T> types, plus None validation to catch type inference errors at compile time.
+Implemented type inference infrastructure for Result[T, E] and Option[T] types, plus None validation to catch type inference errors at compile time.
 
 ## Files Created
 
@@ -84,7 +84,7 @@ type TypeRegistry struct {
 
 ### 2. `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go` (599 lines)
 
-**Purpose**: Generate Option<T> type declarations with None validation.
+**Purpose**: Generate Option[T] type declarations with None validation.
 
 **Key Components**:
 
@@ -137,12 +137,12 @@ if !ok {
 **Error Message Format** (as specified in requirements):
 ```
 Error: Cannot infer type for None at line X, column Y
-Help: Add explicit type annotation: let varName: Option<YourType> = None
+Help: Add explicit type annotation: let varName: Option[YourType] = None
 ```
 
 #### Integration Points
 - **SetTypeInference(service)**: Wire up TypeInferenceService
-- **Process(node)**: Scans AST for Option<T>, None, Some() usage
+- **Process(node)**: Scans AST for Option[T], None, Some() usage
 - **RegisterOptionType**: Add generated types to registry
 
 ## Files Modified
@@ -229,8 +229,8 @@ ok, suggestion := typeInference.ValidateNoneInference(noneExpr)
 
 **Currently**: Returns (false, helpful_message) for all None expressions
 **Future**: Will check context:
-- Assignment with explicit type: `let x: Option<int> = None` ✅
-- Function parameter with type: `foo(x: Option<int>)` where `foo(None)` ✅
+- Assignment with explicit type: `let x: Option[int] = None` ✅
+- Function parameter with type: `foo(x: Option[int])` where `foo(None)` ✅
 - Return from typed function: ✅
 - Bare None expression: ❌ Error
 
@@ -238,7 +238,7 @@ ok, suggestion := typeInference.ValidateNoneInference(noneExpr)
 ```go
 pos := fileSet.Position(noneExpr.Pos())
 errorMsg := fmt.Sprintf(
-    "Error: Cannot infer type for None at line %d, column %d\nHelp: Add explicit type annotation: let varName: Option<YourType> = None",
+    "Error: Cannot infer type for None at line %d, column %d\nHelp: Add explicit type annotation: let varName: Option[YourType] = None",
     pos.Line, pos.Column,
 )
 logger.Error(errorMsg)
@@ -348,9 +348,9 @@ go test ./pkg/plugin/builtin -v
 ```go
 func (s *TypeInferenceService) InferTypeFromContext(node ast.Node) (types.Type, bool) {
     // Check parent nodes:
-    // - Assignment: let x: Option<int> = None
-    // - Return: func() Option<int> { return None }
-    // - Function arg: foo(None) where foo(x: Option<int>)
+    // - Assignment: let x: Option[int] = None
+    // - Return: func() Option[int] { return None }
+    // - Function arg: foo(None) where foo(x: Option[int])
 }
 ```
 
@@ -391,7 +391,7 @@ optionPlugin.SetTypeInference(typeInferenceService)
 
 ### With Future Plugins
 - **Pattern Matching**: Use type info for match arm type checking
-- **Go Interop**: Detect (T, error) → Result<T, E> conversions
+- **Go Interop**: Detect (T, error) → Result[T, E] conversions
 - **Type Aliases**: Resolve type aliases to canonical names
 
 ## Limitations & Future Work
@@ -424,14 +424,14 @@ optionPlugin.SetTypeInference(typeInferenceService)
 1. **Implement Context Inference**
    ```go
    // Infer from assignment
-   let x: Option<int> = None  ✅
+   let x: Option[int] = None  ✅
 
    // Infer from function param
-   func foo(x: Option<int>) { ... }
+   func foo(x: Option[int]) { ... }
    foo(None)  ✅
 
    // Infer from return type
-   func bar() Option<int> { return None }  ✅
+   func bar() Option[int] { return None }  ✅
    ```
 
 2. **Error Collection System**
@@ -499,7 +499,7 @@ optionPlugin.SetTypeInference(typeInferenceService)
    - go/types integration foundation
 
 2. **Option Type Plugin** (599 lines)
-   - Complete Option<T> code generation
+   - Complete Option[T] code generation
    - None validation (Task 1.5)
    - Helpful error messages
    - TypeInferenceService integration

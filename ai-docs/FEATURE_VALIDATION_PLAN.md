@@ -164,7 +164,7 @@ go build /tmp/test_safe_nav.go
 **Success Criteria**:
 - [ ] `user?.name` generates nil-check IIFE
 - [ ] Works with pointers (*T)
-- [ ] Works with Option<T>
+- [ ] Works with Option[T]
 - [ ] 11/11 safe_nav golden tests pass
 - [ ] Add unit tests for SafeNavTypePlugin
 

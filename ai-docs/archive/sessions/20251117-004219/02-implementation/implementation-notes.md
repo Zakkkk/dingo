@@ -52,7 +52,7 @@ var x = func() T {
 - More ergonomic for common cases
 - Reduces boilerplate in typical usage
 - Matches TypeScript/C# behavior
-- Option<T> mode still available for strictness
+- Option[T] mode still available for strictness
 
 **Caveat**: Requires proper zero value inference (currently uses nil).
 
@@ -140,7 +140,7 @@ var x = func() T {
 - Different AST nodes prevent conflicts
 
 ### Challenge 2: Option Type Detection
-**Problem**: Need to detect Option<T> types for ?? operator.
+**Problem**: Need to detect Option[T] types for ?? operator.
 
 **Solution**:
 - Implemented type inference helper
@@ -199,9 +199,9 @@ var x = func() T {
    - Separate AST nodes
    - Can combine: `(user?.name)?` (safe nav + error prop)
 
-2. **Option<T>**: Synergistic
-   - Safe navigation can return Option<T>
-   - Null coalescing unwraps Option<T>
+2. **Option[T]**: Synergistic
+   - Safe navigation can return Option[T]
+   - Null coalescing unwraps Option[T]
    - Complementary features
 
 3. **Sum Types**: Compatible

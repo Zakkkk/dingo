@@ -58,7 +58,7 @@ func main() {
     let user = UserOption_Some(User{name: "Alice"})
 
     // Safe property access
-    let name = user?.name  // Returns Option<string>
+    let name = user?.name  // Returns Option[string]
 
     if name.IsSome() {
         println("User:", *name.some)
@@ -86,7 +86,7 @@ func main() {
     let user = UserOption_Some(User{id: 123})
 
     // Safe method call
-    let name = user?.getName()  // Returns Option<string>
+    let name = user?.getName()  // Returns Option[string]
 
     // Method with arguments
     let formatted = user?.format("json", true)
@@ -183,7 +183,7 @@ type Profile struct {
 }
 
 let user: UserOption = getUser()
-let name = user?.profile.name  // Returns Option<string>
+let name = user?.profile.name  // Returns Option[string]
 ```
 
 **Why:** Once the chain starts with Option, the entire result is Option (because the initial user could be None).
@@ -222,7 +222,7 @@ type Address struct {
 }
 
 let user: UserOption = getUser()
-let city = user?.address?.city  // Returns Option<string>
+let city = user?.address?.city  // Returns Option[string]
 ```
 
 **Why:** Starting with Option means the entire chain must be Option (to handle the initial None case). The intermediate pointer is checked but doesn't change the final type.
@@ -239,8 +239,8 @@ let result = value?.property  // Compiler error!
 **Error message:**
 ```
 safe navigation requires nullable type
-  Variable 'value' is not Option<T> or pointer type (*T)
-  Help: Use Option<T> for nullable values, or use pointer type (*T)
+  Variable 'value' is not Option[T] or pointer type (*T)
+  Help: Use Option[T] for nullable values, or use pointer type (*T)
   Note: If this is a pointer/Option, ensure type annotation is explicit
 ```
 
@@ -255,11 +255,11 @@ let result = value?.property            // ✅ Works
 
 | Base Type | Field Type | `?.` Result |
 |-----------|------------|-------------|
-| `Option<T>` | `F` | `Option<F>` |
-| `Option<T>` | `*F` | `Option<F>` (pointer dereferenced) |
+| `Option[T]` | `F` | `Option[F]` |
+| `Option[T]` | `*F` | `Option[F]` (pointer dereferenced) |
 | `*T` | `F` | `*F` |
 | `*T` | `*F` | `*F` (or `**F` if needed) |
-| `Option<T>` + `*F` + `G` | Mixed | `Option<G>` |
+| `Option[T]` + `*F` + `G` | Mixed | `Option[G]` |
 
 **Key Insight:** The leftmost type in the chain determines the final wrapper type. Option always wins over pointer.
 
@@ -704,7 +704,7 @@ match user?.getRole() {
 ### With Error Propagation
 
 ```go
-func processUser(id: int) -> Result<Report, Error> {
+func processUser(id: int) -> Result[Report, Error] {
     let user = getUser(id)?  // Error propagation
     let city = user?.address?.city ?? "Unknown"  // Safe navigation
     return Ok(Report{user: user, city: city})

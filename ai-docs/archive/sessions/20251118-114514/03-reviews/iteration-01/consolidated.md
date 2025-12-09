@@ -2,7 +2,7 @@
 **Date**: 2025-11-18
 **Session**: 20251118-114514
 **Reviews Consolidated**: 4 (Internal, OpenAI GPT-5.1 Codex, Google Gemini 2.5 Flash, MiniMax M2)
-**Phase**: Phase 3 - Fix A4/A5 + Option<T> + Helper Methods
+**Phase**: Phase 3 - Fix A4/A5 + Option[T] + Helper Methods
 
 ---
 
@@ -64,7 +64,7 @@ The `parseTypeFromTokensBackward` and `parseTypeFromTokensForward` methods have 
 
 **Example Failure**:
 ```go
-// Type: Result<map[string]int, error>
+// Type: Result[map[string]int, error]
 // Sanitized to: Result_map_string_int_error
 // Tokens: ["map", "string", "int", "error"]
 // Backward parse: E = "error" (correct)
@@ -73,9 +73,9 @@ The `parseTypeFromTokensBackward` and `parseTypeFromTokensForward` methods have 
 ```
 
 **Impact**:
-- Map types will fail: `Result<map[string]int, error>` → broken type
-- Nested types may fail: `Result<*User, error>` → may work by accident
-- Struct types completely broken: `Result<struct{}, error>` → unparseable
+- Map types will fail: `Result[map[string]int, error]` → broken type
+- Nested types may fail: `Result[*User, error]` → may work by accident
+- Struct types completely broken: `Result[struct{}, error]` → unparseable
 - Silent failures - no error, just wrong behavior
 
 **Multiple Reviewers Noted Similar Issues**:
@@ -116,7 +116,7 @@ func (s *TypeInferenceService) RegisterResultType(...) {
 }
 ```
 
-**Test Gap**: No tests for `Result<map[string]int, error>`, `Result<chan int, error>`, `Result<struct{}, error>`
+**Test Gap**: No tests for `Result[map[string]int, error]`, `Result[chan int, error]`, `Result[struct{}, error]`
 
 **Priority**: **CRITICAL - Must fix before Phase 4**
 
@@ -496,7 +496,7 @@ Helper methods like `Map()` use `interface{}` for return types instead of proper
 
 ```go
 func (r Result_int_error) Map(fn func(int) interface{}) interface{} {
-    // Returns interface{} instead of Result<U, error>
+    // Returns interface{} instead of Result[U, error]
 }
 ```
 

@@ -163,7 +163,7 @@ After all updates complete:
 
 ### 1. Test Simple Delegation
 ```
-User: "Investigate how Result<T,E> works"
+User: "Investigate how Result[T,E] works"
 Expected:
 - Agent writes detailed analysis to file
 - Agent returns 4-line summary

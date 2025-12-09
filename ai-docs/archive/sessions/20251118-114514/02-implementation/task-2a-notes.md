@@ -281,7 +281,7 @@ if p.typeInference != nil {
 
 ## Conclusion
 
-Task 2a successfully integrated Fix A5 (go/types type inference) and Fix A4 (IIFE wrapping) into the Result<T,E> plugin. All core functionality works, with expected test failures in out-of-scope areas (helper methods) and behavior-changed tests (fallback strategy).
+Task 2a successfully integrated Fix A5 (go/types type inference) and Fix A4 (IIFE wrapping) into the Result[T,E] plugin. All core functionality works, with expected test failures in out-of-scope areas (helper methods) and behavior-changed tests (fallback strategy).
 
 **Key Achievements:**
 - ✅ Accurate type inference via go/types
@@ -295,4 +295,4 @@ Task 2a successfully integrated Fix A5 (go/types type inference) and Fix A4 (IIF
 - Err() constructor Ok type still uses "interface{}" (expected limitation)
 - Helper methods not implemented (Batch 3)
 
-**Recommendation:** Proceed to Task 2b (Option<T> Plugin) or Task 4a (Testing & Validation) per execution plan.
+**Recommendation:** Proceed to Task 2b (Option[T] Plugin) or Task 4a (Testing & Validation) per execution plan.

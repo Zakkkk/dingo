@@ -1,6 +1,6 @@
 package main
 
-// Test: Option<T> helper methods
+// Test: Option[T] helper methods
 // Feature: UnwrapOrElse, Map, AndThen, Filter
 // Complexity: advanced
 

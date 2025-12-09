@@ -1,8 +1,8 @@
-# Task 3b: Option<T> Helper Methods - Design Decisions
+# Task 3b: Option[T] Helper Methods - Design Decisions
 
 ## Implementation Overview
 
-This task completed the Option<T> helper method suite by adding 4 new methods to the existing 4, bringing the total to 8 methods that enable fluent, functional-style programming with optional values.
+This task completed the Option[T] helper method suite by adding 4 new methods to the existing 4, bringing the total to 8 methods that enable fluent, functional-style programming with optional values.
 
 ## Design Decisions
 
@@ -102,8 +102,8 @@ func (o Option_T) Method(...) ... {
 **Comparison with Rust**:
 ```rust
 // Rust Option::map
-impl<T> Option<T> {
-    pub fn map<U>(self, f: FnOnce(T) -> U) -> Option<U> {
+impl<T> Option[T] {
+    pub fn map<U>(self, f: FnOnce(T) -> U) -> Option[U] {
         match self {
             Some(x) => Some(f(x)),
             None => None,  // Short-circuit
@@ -372,7 +372,7 @@ Future phases could:
 
 ## Conclusion
 
-Task 3b successfully implemented all 4 remaining Option<T> helper methods, completing the 8-method suite. The implementation:
+Task 3b successfully implemented all 4 remaining Option[T] helper methods, completing the 8-method suite. The implementation:
 
 ✅ Generates idiomatic Go code
 ✅ Handles all edge cases correctly

@@ -345,7 +345,7 @@ This implementation delivers the **core foundation** for error propagation with 
 
 1. Error context wrapping: `expr? wrap "message"`
 2. Custom error handlers per project
-3. Result<T, E> type integration
+3. Result[T, E] type integration
 4. LSP source map integration
 5. Performance optimization
 

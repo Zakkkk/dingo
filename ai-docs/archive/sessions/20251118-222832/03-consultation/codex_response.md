@@ -118,17 +118,17 @@ AST parent tracking is crucial for both strict exhaustiveness checking and gener
 **Aid in Strict Exhaustiveness Checking:**
 
 *   **Scope and Type Information:** When analyzing a `match` expression, AST parent tracking allows the plugin to determine:
-    *   The type of the target value being matched (e.g., `Result<T, E>`).
+    *   The type of the target value being matched (e.g., `Result[T, E]`).
     *   All possible variants/states of that type (e.g., `Ok` and `Err` for `Result`).
     *   Whether the `match` is occurring within a function, loop, or block, which can influence control flow and required exhaustive paths (e.g., ensuring all return paths are covered if the match is at the end of a function).
-*   **Tracing Matched Paths:** As the AST is traversed, parent tracking enables the system to understand which branches of the `match` statement have been covered by patterns. For example, if a `match` on `Result<T,E>` sees a `case Ok(x)`, parent tracking helps confirm that the `Err` variant is not covered, thus flagging a non-exhaustive pattern.
+*   **Tracing Matched Paths:** As the AST is traversed, parent tracking enables the system to understand which branches of the `match` statement have been covered by patterns. For example, if a `match` on `Result[T,E]` sees a `case Ok(x)`, parent tracking helps confirm that the `Err` variant is not covered, thus flagging a non-exhaustive pattern.
 *   **Guard Condition Analysis:** For patterns with guards, parent tracking can help the system understand that a `Ok(x) if x > 0` truly only covers a *subset* of `Ok` values. When considering exhaustiveness, the system would then know to look for an `Ok(y)` or `Ok(x) if x <= 0` to cover the remaining `Ok` cases. This requires analyzing the guard condition in the context of the type system, which parent tracking facilitates by providing access to type information from the larger AST.
 
 **Aid in Generating `rustc-style` Error Messages:**
 
 *   **Precise Source Location:** With AST parent tracking, Dingo can pinpoint the exact code snippet (line and column numbers) where an error occurs *in the original `.dingo` file*. When an exhaustiveness check fails, the parent tracking (and associated source map) can identify the specific `match` or `case` clause responsible.
 *   **Contextual Information:** `rustc-style` errors are known for being highly contextual. Parent tracking allows Dingo to:
-    *   **Identify the missing variants:** If a `Result<T,E>` match is non-exhaustive, the system knows (via type info from parent) that `Err` is missing and can specifically state, "missing match arm for `Err` variant."
+    *   **Identify the missing variants:** If a `Result[T,E]` match is non-exhaustive, the system knows (via type info from parent) that `Err` is missing and can specifically state, "missing match arm for `Err` variant."
     *   **Suggest Fixes:** Knowing the type and missing variants, Dingo can suggest adding a `case Err(e) => { ... }` or a general wildcard pattern `_ => { ... }`.
     *   **Highlight Relevant Code:** Instead of just a line number, `rustc` errors often show the problematic code snippet with `^` markers. With source map coordination and parent tracking, Dingo can extract and present the relevant `.dingo` code snippet directly.
 *   **Chain of Causation:** For more complex errors (e.g., a type mismatch within a pattern binding), parent tracking helps build a "chain of causation" – illustrating how a type was inferred from a parent expression, which then led to a mismatch in a child pattern. This provides a much clearer explanation than a simple type error.

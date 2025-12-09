@@ -387,7 +387,7 @@ func (s *TypeInferenceService) IsResultType(typ types.Type) (T, E types.Type, ok
     // Check if it's in synthetic type registry (more reliable than name parsing)
     if info, found := s.GetSyntheticType(name); found {
         // Extract T and E from underlying struct
-        // Result<T, E> has fields: tag ResultTag, ok_0 T, err_0 E
+        // Result[T, E] has fields: tag ResultTag, ok_0 T, err_0 E
         structType, ok := info.Underlying.Underlying().(*types.Struct)
         if !ok {
             return nil, nil, false
@@ -425,7 +425,7 @@ func (s *TypeInferenceService) IsOptionType(typ types.Type) (T types.Type, ok bo
 
     // Check synthetic registry
     if info, found := s.GetSyntheticType(name); found {
-        // Option<T> has fields: tag OptionTag, some_0 T
+        // Option[T] has fields: tag OptionTag, some_0 T
         structType, ok := info.Underlying.Underlying().(*types.Struct)
         if !ok {
             return nil, false
@@ -557,7 +557,7 @@ func (p *ErrorPropagationPlugin) Transform(file *ast.File, ctx *plugin.Context) 
 func (p *SumTypesPlugin) Transform(file *ast.File, ctx *plugin.Context) error {
     // ... existing enum transformation logic ...
 
-    // After generating Result<T, E> or Option<T> enum
+    // After generating Result[T, E] or Option[T] enum
     if ctx.TypeInference != nil {
         // Register synthetic type for other plugins to detect
         ctx.TypeInference.RegisterSyntheticType(enumName, &SyntheticTypeInfo{
@@ -601,11 +601,11 @@ func (p *SumTypesPlugin) Transform(file *ast.File, ctx *plugin.Context) error {
 - `/Users/jack/mag/dingo/tests/integration/type_inference_test.go` (new file)
 - Test cross-plugin type detection:
   ```dingo
-  // SumTypesPlugin generates Result<int, error>
-  enum Result<int, error> { Ok(int), Err(error) }
+  // SumTypesPlugin generates Result[int, error]
+  enum Result[int, error] { Ok(int), Err(error) }
 
   // ResultTypePlugin should detect this type
-  let x = Ok(42)  // Should recognize Result<int, error>
+  let x = Ok(42)  // Should recognize Result[int, error]
   ```
 - Test pipeline with and without type inference
 - Test degraded mode (plugins work when TypeInference is nil)
@@ -677,10 +677,10 @@ func (p *SumTypesPlugin) Transform(file *ast.File, ctx *plugin.Context) error {
 
 ```toml
 [transpiler]
-# Auto-wrap Go functions returning (T, error) in Result<T, E>
+# Auto-wrap Go functions returning (T, error) in Result[T, E]
 auto_wrap_go_errors = true  # default: true
 
-# Auto-wrap nil-able types in Option<T>
+# Auto-wrap nil-able types in Option[T]
 auto_wrap_go_nils = false   # default: false (less invasive)
 
 [transpiler.performance]
@@ -749,8 +749,8 @@ func DefaultConfig() *TranspilerConfig {
 
 **Syntax:**
 ```dingo
-let result = Ok(42)              // Infers Result<int, error>
-let failure = Err(errors.New())  // Infers Result<T, error>
+let result = Ok(42)              // Infers Result[int, error]
+let failure = Err(errors.New())  // Infers Result[T, error]
 ```
 
 **Transform to:**
@@ -847,14 +847,14 @@ func (p *ResultTypePlugin) transformOkLiteral(callExpr *ast.CallExpr, ctx *plugi
 
 #### Feature 3.3.2: Go Interop - Auto-wrapping (2 hours)
 
-**Goal:** Automatically wrap Go functions returning (T, error) in Result<T, E>
+**Goal:** Automatically wrap Go functions returning (T, error) in Result[T, E]
 
 **User Control:** Configurable via `auto_wrap_go_errors` in dingo.toml
 
 **Syntax:**
 ```dingo
 let data = readFile("config.json")  // readFile returns ([]byte, error)
-// With auto_wrap_go_errors = true, wraps to Result<[]byte, error>
+// With auto_wrap_go_errors = true, wraps to Result[[]byte, error]
 ```
 
 **Transform to:**
@@ -914,7 +914,7 @@ func (p *ResultTypePlugin) shouldWrapGoCall(assignStmt *ast.AssignStmt, ctx *plu
 
         // TODO: More sophisticated detection
         // For MVP, require explicit Result type annotation:
-        // var data Result<[]byte, error> = readFile("config.json")
+        // var data Result[[]byte, error] = readFile("config.json")
         return p.lhsExpectsResult(assignStmt.Lhs[0], ctx)
     }
 
@@ -1015,8 +1015,8 @@ func (p *ResultTypePlugin) wrapGoCall(assignStmt *ast.AssignStmt, ctx *plugin.Co
 
 **Syntax:**
 ```dingo
-func processData() Result<Data, error> {
-    let config = readConfig()?  // readConfig returns Result<Config, error>
+func processData() Result[Data, error] {
+    let config = readConfig()?  // readConfig returns Result[Config, error]
     let validated = validate(config)?
     return Ok(validated)
 }
@@ -1133,7 +1133,7 @@ func (p *ErrorPropagationPlugin) unwrapResultType(
 ```
 
 **Testing:**
-- Test `?` with Result<T, E> types
+- Test `?` with Result[T, E] types
 - Test `?` with Go (T, error) tuples (existing behavior)
 - Test mixed usage in same function
 - Test error type propagation
@@ -1152,8 +1152,8 @@ func (p *ErrorPropagationPlugin) unwrapResultType(
 
 **Syntax:**
 ```dingo
-let value = Some(42)        // Option<int>
-let empty = None            // Option<T> (requires type context)
+let value = Some(42)        // Option[int]
+let empty = None            // Option[T] (requires type context)
 ```
 
 **Transform to:**
@@ -1205,7 +1205,7 @@ func (p *OptionTypePlugin) transformNoneLiteral(ident *ast.Ident, ctx *plugin.Co
     // This is trickier - need to infer expected type from LHS
 
     // For MVP, may require explicit type annotation:
-    // var x Option<int> = None
+    // var x Option[int] = None
 
     // TODO: Implement type context inference
 }
@@ -1224,7 +1224,7 @@ func (p *OptionTypePlugin) transformNoneLiteral(ident *ast.Ident, ctx *plugin.Co
 
 **Syntax:**
 ```dingo
-let value = maybeValue ?? 0  // maybeValue is Option<int>
+let value = maybeValue ?? 0  // maybeValue is Option[int]
 ```
 
 **Transform to:**
@@ -1356,7 +1356,7 @@ func (p *SafeNavigationPlugin) Transform(file *ast.File, ctx *plugin.Context) er
         stepType, err := ctx.TypeInference.InferType(navStep)
         if err == nil {
             if T, isOption := ctx.TypeInference.IsOptionType(stepType); isOption {
-                // This step returns Option<T>, need to unwrap for next step
+                // This step returns Option[T], need to unwrap for next step
                 navStep = p.unwrapOptionForChain(navStep, T, ctx)
             }
         }
@@ -1376,8 +1376,8 @@ func (p *SafeNavigationPlugin) Transform(file *ast.File, ctx *plugin.Context) er
 ### Phase 3 Deliverables
 
 - [ ] Configuration system implemented (dingo.toml support)
-- [ ] Result<T, E> literals working (Ok/Err)
-- [ ] Option<T> literals working (Some/None)
+- [ ] Result[T, E] literals working (Ok/Err)
+- [ ] Option[T] literals working (Some/None)
 - [ ] Go (T, error) auto-wrapping functional (configurable)
 - [ ] Error propagation (?) works with Result types
 - [ ] Null coalescing (??) works with Option types
@@ -1558,7 +1558,7 @@ type Type struct {
     // Named type: int, string, MyStruct
     NamedType *string `parser:"| @Ident"`
 
-    // Generic type: Result<T, E>
+    // Generic type: Result[T, E]
     GenericType *GenericType `parser:"| @@"`
 }
 
@@ -1775,8 +1775,8 @@ go test ./tests/golden/... -v | grep PASS | wc -l  # Count passing tests
 - [ ] 100% backward compatibility
 
 ### Phase 3 Success
-- [ ] Result<T, E> fully functional
-- [ ] Option<T> fully functional
+- [ ] Result[T, E] fully functional
+- [ ] Option[T] fully functional
 - [ ] Auto-wrapping configurable and working
 - [ ] 30+ new tests passing
 - [ ] Golden tests for Result/Option

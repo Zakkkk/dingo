@@ -16,7 +16,7 @@ After implementing features and fixing bugs, we found that **Result and Option t
 
 **Example 1: pattern_match_01_simple.dingo**
 ```dingo
-fn process_result(r: Result<int, string>) -> int {
+fn process_result(r: Result[int, string]) -> int {
     match r {
         Ok(x) => x,
         Err(e) => 0
@@ -101,12 +101,12 @@ Stage 2: AST Processing (go/parser + plugins)
 
 **File**: `pkg/plugin/builtin/result_type.go` (727 lines)
 - Contains `ResultTypePlugin` with Inject() method
-- Should generate Result<T,E> type definitions
+- Should generate Result[T,E] type definitions
 - Has logic for creating type structs, constants, helper methods
 
 **File**: `pkg/plugin/builtin/option_type.go`
 - Contains `OptionTypePlugin` with Inject() method
-- Should generate Option<T> type definitions
+- Should generate Option[T] type definitions
 
 **File**: `pkg/generator/codegen.go`
 - Orchestrates plugin pipeline
@@ -160,8 +160,8 @@ Stage 2: AST Processing (go/parser + plugins)
 ### Test Cases to Analyze
 
 **Simplest failing test**: `tests/golden/pattern_match_01_simple.dingo`
-- Uses Result<int, string>
-- Uses Option<int>
+- Uses Result[int, string]
+- Uses Option[int]
 - Only 110 lines, easy to trace
 
 **What to check**:

@@ -137,8 +137,8 @@
 
 **Coverage:**
 - ✅ Getting started guide (installation, first program, IDE setup, building)
-- ✅ Result<T,E> type documentation (comprehensive)
-- ✅ Option<T> type documentation (comprehensive)
+- ✅ Result[T,E] type documentation (comprehensive)
+- ✅ Option[T] type documentation (comprehensive)
 - ✅ Error propagation documentation (pre-existing, not modified)
 - ✅ Pattern matching documentation (comprehensive)
 - ✅ Sum types/enums documentation (comprehensive)

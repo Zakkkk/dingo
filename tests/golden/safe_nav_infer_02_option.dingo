@@ -2,7 +2,7 @@ package main
 
 // Test: Safe navigation with Option type detection (explicit annotations)
 // Tests that Option types are correctly detected via naming convention
-// Note: Uses UserOption struct instead of generic Option<T> for current implementation
+// Note: Uses UserOption struct instead of generic Option[T] for current implementation
 
 type UserOption struct {
 	value *User

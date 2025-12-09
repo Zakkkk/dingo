@@ -36,7 +36,7 @@ Successfully implemented a complete enum preprocessor that transforms Dingo `enu
 
 - ✅ Simple enums (unit variants only)
 - ✅ Struct variants (with single and multiple fields)
-- ✅ Generic enums (Option<T>-like)
+- ✅ Generic enums (Option[T]-like)
 - ✅ Multiple enums in one file
 - ✅ No enums (passthrough)
 - ✅ Comments in enum body
@@ -200,7 +200,7 @@ While not implemented in Phase 2, these features could be added:
 1. **Match expression support**: Generate accessor methods for variant fields
 2. **Exhaustiveness checking**: Warn if switch statements don't cover all variants
 3. **Derive traits**: Auto-generate String(), Equal(), Hash() methods
-4. **Generic enums**: Full support for `enum Option<T> { None, Some(T) }`
+4. **Generic enums**: Full support for `enum Option[T] { None, Some(T) }`
 
 ## Performance Characteristics
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Test: Complete Result<T,E> helper method suite
+// Test: Complete Result[T,E] helper method suite
 // Feature: IsOk, IsErr, Unwrap, UnwrapOr, UnwrapOrElse, Map, MapErr, Filter, AndThen, OrElse, And, Or
 // Complexity: comprehensive
 

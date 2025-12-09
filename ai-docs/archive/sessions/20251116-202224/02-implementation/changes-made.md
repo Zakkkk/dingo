@@ -163,7 +163,7 @@ Implemented:
 - Generate helpful error messages
 
 **Phase 5: Generics & Prelude** (6-8 days)
-- Standard Result<T, E> and Option<T> definitions
+- Standard Result[T, E] and Option[T] definitions
 - Auto-import mechanism
 - Generic match support
 - Type parameter constraints

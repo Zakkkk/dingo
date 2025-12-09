@@ -89,7 +89,7 @@ ls -lh features/INDEX.md.backup
    | Priority | Feature | Complexity | Status | Notes |
    |----------|---------|------------|--------|-------|
    | **ARCH** | Type Annotations | 🟢 Low | ✅ Implemented (Phase 1) | `param: Type` syntax |
-   | **ARCH** | Generic Syntax | 🟢 Low | ✅ Implemented (Phase 2) | `Result<T,E>` support |
+   | **ARCH** | Generic Syntax | 🟢 Low | ✅ Implemented (Phase 2) | `Result[T,E]` support |
    | **ARCH** | Keywords | 🟢 Low | ✅ Implemented (Phase 1) | Preprocessor-based |
    | **ARCH** | Source Maps | 🟡 Medium | ✅ Implemented (Phase 5) | LSP position mapping |
    | **ARCH** | Workspace Builds | 🟡 Medium | ✅ Implemented (Phase 5) | Multi-package support |

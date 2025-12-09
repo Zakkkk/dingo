@@ -14,7 +14,7 @@ Phase 3 has been successfully completed with all planned features implemented, t
 **Key Achievements:**
 - ✅ Fix A5: go/types integration for accurate type inference
 - ✅ Fix A4: IIFE pattern for literal handling
-- ✅ Type-context-aware None constant for Option<T>
+- ✅ Type-context-aware None constant for Option[T]
 - ✅ Complete helper method suite (16 methods total)
 - ✅ 3 critical code review issues fixed
 - ✅ 97.7% test pass rate (259/265 tests)
@@ -49,14 +49,14 @@ Phase 3 has been successfully completed with all planned features implemented, t
 ### Batch 2: Core Plugin Updates (Completed)
 **Estimated**: 6-8 hours | **Actual**: ~7 hours
 
-1. **Task 2a - Result<T,E> Plugin** ✅
+1. **Task 2a - Result[T,E] Plugin** ✅
    - Integrated Fix A5 (go/types type inference)
    - Integrated Fix A4 (IIFE wrapping for literals)
    - Updated transformOkConstructor() and transformErrConstructor()
    - 88% test pass rate
    - File: `pkg/plugin/builtin/result_type.go`
 
-2. **Task 2b - Option<T> Plugin** ✅
+2. **Task 2b - Option[T] Plugin** ✅
    - Integrated Fix A5 and Fix A4
    - Implemented type-context-aware None constant detection
    - 17/17 unit tests passing
@@ -66,12 +66,12 @@ Phase 3 has been successfully completed with all planned features implemented, t
 ### Batch 3: Helper Methods (Completed)
 **Estimated**: 4-6 hours | **Actual**: ~5 hours
 
-1. **Task 3a - Result<T,E> Helpers** ✅
+1. **Task 3a - Result[T,E] Helpers** ✅
    - Implemented 8 methods: UnwrapOrElse, Map, MapErr, Filter, AndThen, OrElse, And, Or
    - 82/86 tests passing (95%)
    - Golden test: `result_06_helpers.dingo`
 
-2. **Task 3b - Option<T> Helpers** ✅
+2. **Task 3b - Option[T] Helpers** ✅
    - Implemented 8 methods: UnwrapOrElse, Map, AndThen, Filter, IsSome, IsNone, Unwrap, UnwrapOr
    - All tests passing
    - Golden test: `option_05_helpers.dingo`

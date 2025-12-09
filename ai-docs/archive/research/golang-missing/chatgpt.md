@@ -61,7 +61,7 @@ Sum Types and Enumerations (Algebraic Data Types)
 
 Related to pattern matching is the desire for sum types – also known as discriminated unions or sealed variants. A sum type allows a variable to hold one of a fixed set of types, typically with a tag to indicate which. For example, in Rust you might have:
 
-enum Result<T> { Ok(T), Err(String) }
+enum Result[T] { Ok(T), Err(String) }
 
 which can be either an Ok carrying a value or an Err carrying a message. In Go, the closest equivalent is an interface{} or a union of interfaces, but Go interfaces are open (any type implementing the interface could appear) and there’s no compiler enforcement of handling all variants. The lack of true sum types means Go developers often resort to booleans alongside values, empty interfaces with type assertions, or manual “tag” fields in structs – patterns that involve more boilerplate and are error-prone.
 

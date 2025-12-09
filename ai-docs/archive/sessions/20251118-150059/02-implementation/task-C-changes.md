@@ -56,8 +56,8 @@ case ResultTagErr:
 **Purpose:** Comprehensive unit tests for RustMatchProcessor
 
 **Test Coverage:**
-- `TestRustMatchProcessor_SimpleResult` - Basic Result<T,E> pattern match
-- `TestRustMatchProcessor_SimpleOption` - Basic Option<T> pattern match
+- `TestRustMatchProcessor_SimpleResult` - Basic Result[T,E] pattern match
+- `TestRustMatchProcessor_SimpleOption` - Basic Option[T] pattern match
 - `TestRustMatchProcessor_Wildcard` - Wildcard pattern handling
 - `TestRustMatchProcessor_MultipleMatches` - Counter increment across matches
 - `TestRustMatchProcessor_NoMatch` - Pass-through for non-match code
@@ -75,8 +75,8 @@ case ResultTagErr:
 **Purpose:** Golden test file demonstrating pattern matching examples
 
 **Examples Included:**
-1. Simple Result<T,E> match in function
-2. Simple Option<T> match in function
+1. Simple Result[T,E] match in function
+2. Simple Option[T] match in function
 3. Enum pattern match with wildcard
 4. Pattern match in assignment context (let result = match ...)
 5. Nested pattern matching (match inside match)

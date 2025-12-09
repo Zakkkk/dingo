@@ -177,7 +177,7 @@ match (e1, e2, e3, e4, e5, e6) {
 3. Document this limitation in `docs/tuple-patterns.md`
 
 **Priority**: IMPORTANT (not CRITICAL) because:
-- Rare in practice (most tuples use Result<T,E> with 2 variants)
+- Rare in practice (most tuples use Result[T,E] with 2 variants)
 - 6-element limit already mitigates
 - Algorithm doesn't crash, just slow
 

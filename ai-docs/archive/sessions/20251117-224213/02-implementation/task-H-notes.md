@@ -203,7 +203,7 @@ ok  	github.com/MadAppGang/dingo/pkg/preprocessor	0.185s
 These tests could be extended to verify:
 - Source map correctness for multi-value returns
 - Import injection with multi-value returns
-- Interaction with other Dingo features (Result<T,E>, Option<T>)
+- Interaction with other Dingo features (Result[T,E], Option[T])
 
 ## Conclusion
 

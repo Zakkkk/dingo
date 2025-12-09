@@ -34,8 +34,8 @@
 | # | Feature | Doc Status | Implementation | Tests | Gap? | Complexity | Dependencies | Effort |
 |---|---------|------------|----------------|-------|------|------------|--------------|--------|
 | **Core Types** |
-| 1 | Result<T,E> | P0 (INDEX) | ✅ Complete (13 methods) | ⭐⭐⭐⭐⭐ (5 tests) | ⚠️ Doc outdated | 🟡 Medium | None | **DONE** |
-| 2 | Option<T> | P0 (INDEX) | ✅ Complete (8 methods) | ⭐⭐⭐⭐⭐ (6 tests) | ⚠️ Doc outdated | 🟡 Medium | None | **DONE** |
+| 1 | Result[T,E] | P0 (INDEX) | ✅ Complete (13 methods) | ⭐⭐⭐⭐⭐ (5 tests) | ⚠️ Doc outdated | 🟡 Medium | None | **DONE** |
+| 2 | Option[T] | P0 (INDEX) | ✅ Complete (8 methods) | ⭐⭐⭐⭐⭐ (6 tests) | ⚠️ Doc outdated | 🟡 Medium | None | **DONE** |
 | **Error Handling** |
 | 3 | Error Propagation (`?`) | P0 (INDEX) | ✅ Complete (95%) | ⭐⭐⭐⭐⭐ (8/9 tests) | ⚠️ Doc outdated | 🟢 Low | Result type | **DONE** |
 | **Pattern Matching** |
@@ -70,7 +70,7 @@
 
 ### ✅ Complete Features (11 features, 58%)
 
-#### 1. **Result<T,E> Type** ✅ Complete
+#### 1. **Result[T,E] Type** ✅ Complete
 **Implementation**: 100% complete, production-ready
 **File**: `/Users/jack/mag/dingo/pkg/plugin/builtin/result_type.go` (1931 lines)
 
@@ -79,7 +79,7 @@
 - 13 helper methods: `IsOk`, `IsErr`, `Unwrap`, `UnwrapOr`, `UnwrapOrElse`, `UnwrapErr`, `Map`, `MapErr`, `Filter`, `AndThen`, `OrElse`, `And`, `Or`
 - IIFE pattern for literals (`Ok(42)` works without type annotations)
 - Full go/types integration for type inference
-- Go interop: `(T, error)` → `Result<T,E>` conversion
+- Go interop: `(T, error)` → `Result[T,E]` conversion
 
 **Test Coverage**: ⭐⭐⭐⭐⭐ Excellent
 - 5 golden tests: basic, propagation, pattern_match, chaining, go_interop
@@ -90,7 +90,7 @@
 
 ---
 
-#### 2. **Option<T> Type** ✅ Complete
+#### 2. **Option[T] Type** ✅ Complete
 **Implementation**: 100% complete, production-ready
 **File**: `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type.go` (1262 lines)
 
@@ -241,7 +241,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 **Capabilities**:
 - Converts Rust-style `Type<T>` → Go-style `Type[T]`
 - Pattern: `\b([A-Z]\w*)<([^>]+)>`
-- Handles: `Result<T,E>`, `Option<T>`, `Vec<int>`, etc.
+- Handles: `Result[T,E]`, `Option[T]`, `Vec<int>`, etc.
 
 **Test Coverage**: ✅ High (used extensively in golden tests)
 
@@ -442,7 +442,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 
 **What It Would Do**:
 - Syntax: `a?.b?.c` → nested nil checks
-- Returns Option<T>
+- Returns Option[T]
 - Short-circuits on first None
 
 **Test Coverage**: ⏸️ Tests exist but skipped
@@ -455,7 +455,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 
 **What's Needed**:
 - Preprocessor for safe navigation operator
-- Option type integration (return Option<T> from chains)
+- Option type integration (return Option[T] from chains)
 - Type inference for chained field access
 
 **Complexity**: 🟡 Medium (complex chaining edge cases)

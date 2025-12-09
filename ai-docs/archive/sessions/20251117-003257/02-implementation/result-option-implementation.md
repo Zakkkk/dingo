@@ -1,14 +1,14 @@
-# Result<T, E> and Option<T> Implementation
+# Result[T, E] and Option[T] Implementation
 
 ## Overview
 
-Implemented Result<T, E> and Option<T> as framework plugins that provide infrastructure for these built-in generic types. While full generic enum support requires parser extensions, the plugin architecture is now in place to support these types.
+Implemented Result[T, E] and Option[T] as framework plugins that provide infrastructure for these built-in generic types. While full generic enum support requires parser extensions, the plugin architecture is now in place to support these types.
 
 ## Implementation Details
 
 ### 1. ResultTypePlugin (`pkg/plugin/builtin/result_type.go`)
 
-The ResultTypePlugin provides the built-in Result<T, E> type infrastructure:
+The ResultTypePlugin provides the built-in Result[T, E] type infrastructure:
 
 **Features:**
 - Synthetic enum definition with Ok(T) and Err(E) variants
@@ -18,7 +18,7 @@ The ResultTypePlugin provides the built-in Result<T, E> type infrastructure:
 
 **Structure:**
 ```go
-type Result<T, E> enum {
+type Result[T, E] enum {
     Ok(T)    // Success variant
     Err(E)   // Error variant
 }
@@ -47,7 +47,7 @@ type Result[T, E] struct {
 
 ### 2. OptionTypePlugin (`pkg/plugin/builtin/option_type.go`)
 
-The OptionTypePlugin provides the built-in Option<T> type infrastructure:
+The OptionTypePlugin provides the built-in Option[T] type infrastructure:
 
 **Features:**
 - Synthetic enum definition with Some(T) and None variants
@@ -57,7 +57,7 @@ The OptionTypePlugin provides the built-in Option<T> type infrastructure:
 
 **Structure:**
 ```go
-type Option<T> enum {
+type Option[T] enum {
     Some(T)  // Value is present
     None     // Value is absent
 }
@@ -68,7 +68,7 @@ type Option<T> enum {
 - `IsNone() bool` - Check if None
 - `Unwrap() T` - Unwrap value (panic if None)
 - `UnwrapOr(default T) T` - Unwrap or return default
-- `Map<U>(f func(T) U) Option<U>` - Transform the value
+- `Map<U>(f func(T) U) Option[U]` - Transform the value
 
 **Transpilation:**
 ```go
@@ -91,8 +91,8 @@ Both plugins registered in the default plugin registry (`pkg/plugin/builtin/buil
 ```go
 func NewDefaultRegistry() (*plugin.Registry, error) {
     plugins := []plugin.Plugin{
-        NewResultTypePlugin(),        // Built-in Result<T, E> type
-        NewOptionTypePlugin(),        // Built-in Option<T> type
+        NewResultTypePlugin(),        // Built-in Result[T, E] type
+        NewOptionTypePlugin(),        // Built-in Option[T] type
         NewErrorPropagationPlugin(),  // Error propagation with ? operator
         NewSumTypesPlugin(),          // Sum types (enums) with pattern matching
     }
@@ -112,7 +112,7 @@ Created comprehensive golden tests demonstrating usage:
 1. `option_01_basic.dingo` - Basic Option enum usage with IsSome/IsNone
 2. `option_02_pattern_match.dingo` - Pattern matching with Option type
 
-**Note:** Current tests demonstrate the enum infrastructure. Full generic support (Result<T, E> syntax) requires parser enhancements to handle generic type parameters.
+**Note:** Current tests demonstrate the enum infrastructure. Full generic support (Result[T, E] syntax) requires parser enhancements to handle generic type parameters.
 
 ## Architecture Integration
 
@@ -133,7 +133,7 @@ The ResultTypePlugin provides the foundation for ? operator integration:
 
 ## Current Limitations
 
-1. **Parser Support**: Full generic syntax `Result<T, E>` requires parser enhancements for generic type parameters
+1. **Parser Support**: Full generic syntax `Result[T, E]` requires parser enhancements for generic type parameters
 2. **Type Instantiation**: Currently supports monomorphized Result/Option (concrete types), not full generics
 3. **Automatic Conversion**: Go (T, error) → Result conversion not yet implemented
 4. **Helper Methods**: Not all planned helper methods implemented (unwrapOrElse, map, etc.)
@@ -151,8 +151,8 @@ The ResultTypePlugin provides the foundation for ? operator integration:
 - [ ] Support type constraints (E: Error)
 
 ### Phase 3: Interop
-- [ ] Auto-wrap Go (T, error) → Result<T, E>
-- [ ] Auto-wrap Go *T → Option<T>
+- [ ] Auto-wrap Go (T, error) → Result[T, E]
+- [ ] Auto-wrap Go *T → Option[T]
 - [ ] Add fromGo/toGo conversion methods
 
 ### Phase 4: Advanced Features

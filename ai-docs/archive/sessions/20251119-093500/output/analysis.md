@@ -34,13 +34,13 @@
 
 ## Integration Tests
 ### Phase 2 — `error_propagation_result_type`
-- **Observation:** `go test ./tests -run TestIntegrationPhase2EndToEnd/error_propagation_result_type` stops during parse with `missing type constraint`. The CLI builds only the test fixture (no stdlib) so the generated Go still contains `type Result<T, E>` syntax, which go/parser rightfully rejects.
+- **Observation:** `go test ./tests -run TestIntegrationPhase2EndToEnd/error_propagation_result_type` stops during parse with `missing type constraint`. The CLI builds only the test fixture (no stdlib) so the generated Go still contains `type Result[T, E]` syntax, which go/parser rightfully rejects.
 - **Root Cause:** Integration harness no longer injects the `Result` helper definitions. Phase 3 moved Result/Option implementations into generator plugins that emit concrete `Result_<T,E>` structs at transform time, but the integration fixture predates this and expects a textual alias in the input file.
 - **Fix:** Update the fixture directory to import/use the canonical Result definitions produced by `pkg/runtime/result` (or call `Result[int, error]` so the plugin expands it). Alternatively, have the harness copy `pkg/runtime/result.dingo` alongside the test file before invoking `dingo build`.
 - **Files to Modify:**
   - `tests/integration_phase2_test.go` (fixture creation logic)
-  - `tests/testdata/phase2/error_propagation_result_type/*.dingo` (ensure they no longer embed manual `type Result<T,E>` declarations)
-  - `pkg/generator/plugins/result` (optional guard: detect bare `Result<T,E>` declarations and emit a friendlier error)
+  - `tests/testdata/phase2/error_propagation_result_type/*.dingo` (ensure they no longer embed manual `type Result[T,E]` declarations)
+  - `pkg/generator/plugins/result` (optional guard: detect bare `Result[T,E]` declarations and emit a friendlier error)
 
 ### Phase 4 — Pattern Matching suites
 1. **`pattern_match_rust_syntax` & `pattern_match_non_exhaustive_error`**

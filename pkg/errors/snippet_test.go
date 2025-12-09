@@ -199,14 +199,14 @@ func TestPatternTypeMismatchError(t *testing.T) {
 	file := fset.AddFile("test.dingo", 1, 100)
 	pos := file.Pos(10)
 
-	err := PatternTypeMismatchError(fset, pos, "Result<T, E>", "Option<T>")
+	err := PatternTypeMismatchError(fset, pos, "Result[T, E]", "Option[T]")
 
 	enhanced, ok := err.(*EnhancedError)
 	if !ok {
 		t.Fatal("Expected EnhancedError")
 	}
 
-	if !strings.Contains(enhanced.Message, "expected Result<T, E>, got Option<T>") {
+	if !strings.Contains(enhanced.Message, "expected Result[T, E], got Option[T]") {
 		t.Errorf("Expected type mismatch message, got %q", enhanced.Message)
 	}
 

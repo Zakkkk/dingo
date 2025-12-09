@@ -2,7 +2,7 @@
 
 **Context:**
 - Previous session (20251117-233209) successfully implemented Fix A2 and Fix A3
-- Commit 7675185 pushed to main with Result<T,E> constructor transformations
+- Commit 7675185 pushed to main with Result[T,E] constructor transformations
 - Core implementation is complete and reviewed (75% approval rate)
 - Test suite now has compilation errors due to API changes
 

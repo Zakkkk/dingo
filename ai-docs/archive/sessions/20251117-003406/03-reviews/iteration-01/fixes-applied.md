@@ -373,8 +373,8 @@ func (p *FunctionalUtilitiesPlugin) transformMap(...)
 func NewDefaultRegistry() (*plugin.Registry, error) {
     // ... implementation with numbered comments
     plugins := []plugin.Plugin{
-        NewResultTypePlugin(),           // 1. Core type: Result<T, E>
-        NewOptionTypePlugin(),           // 1. Core type: Option<T>
+        NewResultTypePlugin(),           // 1. Core type: Result[T, E]
+        NewOptionTypePlugin(),           // 1. Core type: Option[T]
         NewSumTypesPlugin(),             // 2. Sum types - MUST run before error propagation!
         NewErrorPropagationPlugin(),     // 3. Error propagation (depends on Result, SumTypes cleanup)
         NewFunctionalUtilitiesPlugin(),  // 4. Functional utilities (future: depends on Result/Option)

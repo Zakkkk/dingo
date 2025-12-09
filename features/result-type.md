@@ -9,7 +9,7 @@
 
 ## Overview
 
-The `Result<T, E>` type is a discriminated union that represents either a successful value of type `T` or an error of type `E`. This eliminates Go's verbose `(value, error)` tuple pattern and provides type-safe error handling without exceptions.
+The `Result[T, E]` type is a discriminated union that represents either a successful value of type `T` or an error of type `E`. This eliminates Go's verbose `(value, error)` tuple pattern and provides type-safe error handling without exceptions.
 
 ## Motivation
 
@@ -58,7 +58,7 @@ func processUser(id string) (*User, error) {
 
 ```dingo
 // Dingo built-in type
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T)
     Err(E)
 }
@@ -68,7 +68,7 @@ enum Result<T, E> {
 
 ```dingo
 // Function returning Result
-func fetchUser(id: string) -> Result<User, Error> {
+func fetchUser(id: string) -> Result[User, Error] {
     if !isValidID(id) {
         return Err(errors.New("invalid ID"))
     }
@@ -78,7 +78,7 @@ func fetchUser(id: string) -> Result<User, Error> {
 }
 
 // Consuming Result
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let result = fetchUser(id)
 
     match result {
@@ -97,7 +97,7 @@ func processUser(id: string) -> Result<User, Error> {
 ### With Error Propagation (`?` operator)
 
 ```dingo
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let user = fetchUser(id)?           // Auto-return on Err
     let validated = validateUser(user)? // Chain safely
     let saved = saveUser(validated)?    // No boilerplate
@@ -165,13 +165,13 @@ func processUser(id string) ResultUserError {
 ### Swift's Result Type
 
 ```swift
-enum Result<Success, Failure: Error> {
+enum Result[Success, Failure: Error] {
     case success(Success)
     case failure(Failure)
 }
 
 // Usage
-func fetchUser(id: String) -> Result<User, Error> {
+func fetchUser(id: String) -> Result[User, Error] {
     guard isValid(id) else {
         return .failure(ValidationError.invalidID)
     }
@@ -196,13 +196,13 @@ case .failure(let error):
 ### Kotlin's Sealed Result Class
 
 ```kotlin
-sealed class Result<out T> {
-    data class Success<out T>(val value: T) : Result<T>()
-    data class Error(val message: String) : Result<Nothing>()
+sealed class Result[out T] {
+    data class Success<out T>(val value: T) : Result[T]()
+    data class Error(val message: String) : Result[Nothing]()
 }
 
 // Usage
-fun fetchUser(id: String): Result<User> {
+fun fetchUser(id: String): Result[User] {
     return if (isValid(id)) {
         Result.Success(user)
     } else {
@@ -226,13 +226,13 @@ when (val result = fetchUser("123")) {
 ### Rust's Result Type
 
 ```rust
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
 
 // Usage with ? operator
-fn process_user(id: &str) -> Result<User, Error> {
+fn process_user(id: &str) -> Result[User, Error] {
     let user = fetch_user(id)?;      // Early return on Err
     let validated = validate(user)?;  // Chains elegantly
     let saved = save(validated)?;     // No boilerplate
@@ -306,13 +306,13 @@ We chose **variant-based naming** that references the actual type states:
 
 ```dingo
 // Result is a built-in generic sum type
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T)    // Success variant with value
     Err(E)   // Error variant with error
 }
 
 // Compiler-generated methods
-impl Result<T, E> {
+impl Result[T, E] {
     // Check if result is Ok
     func isOk() -> bool
 
@@ -329,10 +329,10 @@ impl Result<T, E> {
     func unwrapOrElse(f: fn(E) -> T) -> T
 
     // Map the Ok value
-    func map<U>(f: fn(T) -> U) -> Result<U, E>
+    func map<U>(f: fn(T) -> U) -> Result[U, E]
 
     // Map the Err value
-    func mapErr<F>(f: fn(E) -> F) -> Result<T, F>
+    func mapErr[F](f: fn(E) -> F) -> Result[T, F]
 }
 ```
 
@@ -343,7 +343,7 @@ impl Result<T, E> {
 let goFunc = import("some/package").GoFunction
 
 // Dingo wraps automatically
-let result: Result<string, error> = goFunc.call("arg")
+let result: Result[string, error] = goFunc.call("arg")
 
 // Or explicit conversion
 let result = Result.fromGo(goFunc("arg"))
@@ -356,13 +356,13 @@ let (value, err) = result.toGo()
 
 ```dingo
 // Generic error type (any type)
-func fetch<E>(id: string) -> Result<User, E>
+func fetch<E>(id: string) -> Result[User, E]
 
 // Constrained error type (must implement Error interface)
-func fetch(id: string) -> Result<User, Error>
+func fetch(id: string) -> Result[User, Error]
 
 // Specific error type
-func fetch(id: string) -> Result<User, UserError>
+func fetch(id: string) -> Result[User, UserError]
 ```
 
 ---
@@ -406,7 +406,7 @@ func fetch(id: string) -> Result<User, UserError>
 - ❓ Learning curve (but familiar from Rust/Swift)
 
 ### Mitigation Strategies
-- Type inference reduces verbosity: `let result = fetch(id)` not `let result: Result<User, Error> = ...`
+- Type inference reduces verbosity: `let result = fetch(id)` not `let result: Result[User, Error] = ...`
 - Compiler optimizations can eliminate wrapper overhead
 - Excellent documentation and examples
 - Gradual adoption path (mix with Go error handling)
@@ -449,7 +449,7 @@ func fetch(id: string) -> Result<User, UserError>
 ### Example 1: HTTP Request
 
 ```dingo
-func fetchJSON(url: string) -> Result<Response, HttpError> {
+func fetchJSON(url: string) -> Result[Response, HttpError] {
     let resp = http.Get(url)?
 
     if resp.StatusCode != 200 {
@@ -473,7 +473,7 @@ func main() {
 ### Example 2: File Operations
 
 ```dingo
-func readConfig(path: string) -> Result<Config, IOError> {
+func readConfig(path: string) -> Result[Config, IOError] {
     let data = os.ReadFile(path)?
     let config = json.Unmarshal(data)?
     return Ok(config)
@@ -490,7 +490,7 @@ func main() {
 ### Example 3: Database Query
 
 ```dingo
-func getUser(db: Database, id: int) -> Result<User, DbError> {
+func getUser(db: Database, id: int) -> Result[User, DbError] {
     let row = db.QueryRow("SELECT * FROM users WHERE id = ?", id)?
 
     let user = User{}
@@ -500,7 +500,7 @@ func getUser(db: Database, id: int) -> Result<User, DbError> {
 }
 
 // Chain multiple operations
-func getUserWithPosts(db: Database, id: int) -> Result<UserWithPosts, DbError> {
+func getUserWithPosts(db: Database, id: int) -> Result[UserWithPosts, DbError] {
     let user = getUser(db, id)?
     let posts = getPosts(db, user.ID)?
 

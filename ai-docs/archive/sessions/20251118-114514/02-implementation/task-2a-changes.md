@@ -1,4 +1,4 @@
-# Task 2a: Result<T,E> Plugin - Fix A5 + Fix A4 Integration
+# Task 2a: Result[T,E] Plugin - Fix A5 + Fix A4 Integration
 
 ## Files Modified
 

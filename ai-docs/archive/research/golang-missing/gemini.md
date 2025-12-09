@@ -130,7 +130,7 @@ Unlike the error-handling debate, which is "Closed," the enum debate is Open. Th
 B. Sum Types (Tagged Unions): The Post-Generics Frontier
 A more advanced request for type safety is for sum types (also known as tagged unions or algebraic data types). In Go, the interface{} type is used to represent a value that could be "one of many" types. This is a major hole in type safety, as it requires runtime type assertions (e.g., switch v.(type)) with no compile-time guarantees.   
 
-Developers want sum types to create robust, compiler-checked types, such as the Result<T, E> or Option<T> types common in Rust and Swift.   
+Developers want sum types to create robust, compiler-checked types, such as the Result[T, E] or Option[T] types common in Rust and Swift.   
 
 This entire discussion was unblocked by the introduction of generics. The generics proposal itself laid the groundwork for this. It introduced "type sets" as a mechanism for constraints. In the official generics proposal, the Go team wrote:   
 

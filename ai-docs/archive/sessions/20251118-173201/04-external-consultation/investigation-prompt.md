@@ -19,7 +19,7 @@ package main
 
 import "fmt"
 
-// Example 1: Pattern match on Result<T,E>
+// Example 1: Pattern match on Result[T,E]
 func processResult(result Result_int_error) int {
     __match_0 := result
     switch __match_0.tag {

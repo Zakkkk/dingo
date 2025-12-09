@@ -24,7 +24,7 @@
 
 **Decision:** Use `ast.IndexListExpr` for generics (Go 1.18+)
 
-**Challenge:** Generic types like `Result<T, E>` need to be represented in AST
+**Challenge:** Generic types like `Result[T, E]` need to be represented in AST
 
 **Solution:**
 - Store type parameters in `EnumDecl.TypeParams` as `ast.FieldList`
@@ -276,7 +276,7 @@ func Shape_Circle(r float64) Shape {
 **Integration Tests:**
 - Full enum → Go compilation
 - Match expression → Go compilation
-- Generic Result<T, E> usage
+- Generic Result[T, E] usage
 
 ### Golden File Tests Needed
 
@@ -321,7 +321,7 @@ func Shape_Circle(r float64) Shape {
 ### Phase 5 Priorities
 
 1. **Standard Prelude**
-   - Define Result<T, E> and Option<T>
+   - Define Result[T, E] and Option[T]
    - Implement auto-import mechanism
    - Add common methods (unwrap, map, etc.)
 

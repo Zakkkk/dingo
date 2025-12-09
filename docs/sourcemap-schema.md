@@ -221,7 +221,7 @@ if err1 != nil {
 
 **Dingo Source**:
 ```dingo
-result: Result<int, error> = Ok(42)
+result: Result[int, error] = Ok(42)
 ```
 
 **Generated Go**:

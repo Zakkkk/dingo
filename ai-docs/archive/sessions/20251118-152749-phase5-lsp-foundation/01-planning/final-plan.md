@@ -4,7 +4,7 @@
 **Created:** 2025-11-18
 **Status:** FINAL - Ready for Implementation
 **Architect:** golang-architect agent
-**Scope:** LSP support for Phase 3 features only (error propagation, Result<T,E>, Option<T>)
+**Scope:** LSP support for Phase 3 features only (error propagation, Result[T,E], Option[T])
 
 ## Executive Summary
 

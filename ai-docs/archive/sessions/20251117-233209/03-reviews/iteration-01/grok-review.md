@@ -101,7 +101,7 @@ func (p *ResultTypePlugin) inferTypeFromExpr(expr ast.Expr) string {
 
 #### 4. Inconsistent Return Types in Helpers
 **Category**: Correctness
-**Issue**: Advanced methods use `interface{}` for return types instead of proper `Result<T, U>` or `Result<U, E>` types.
+**Issue**: Advanced methods use `interface{}` for return types instead of proper `Result[T, U]` or `Result[U, E]` types.
 
 **Location**: Lines 664-668 (Map return type), 714-718 (MapErr return type), etc.
 

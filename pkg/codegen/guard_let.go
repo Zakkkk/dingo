@@ -43,8 +43,8 @@ func InferExprType(exprText string, fileContext []byte) (ExprType, error) {
 //   - No binding → Option type (nothing to bind)
 //
 // This is semantically correct because:
-//   - Result<T, E> has both Ok and Err variants - guard let binds the error
-//   - Option<T> has only Some and None - nothing to bind on None
+//   - Result[T, E] has both Ok and Err variants - guard let binds the error
+//   - Option[T] has only Some and None - nothing to bind on None
 func InferExprTypeWithBinding(exprText string, hasBinding bool) (ExprType, error) {
 	if hasBinding {
 		// Pipe binding (|err|) means Result type - error value to bind

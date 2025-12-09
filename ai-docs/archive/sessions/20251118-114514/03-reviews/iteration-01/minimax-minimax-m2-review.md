@@ -10,7 +10,7 @@
 
 **Overall Status**: ✅ **READY FOR MERGE**
 
-The Phase 3 implementation exceeds all planned targets with production-quality code, achieving 97.8% test pass rate and implementing all planned features (Fix A5, Fix A4, Option<T>, 16 helper methods).
+The Phase 3 implementation exceeds all planned targets with production-quality code, achieving 97.8% test pass rate and implementing all planned features (Fix A5, Fix A4, Option[T], 16 helper methods).
 
 **Key Metrics**:
 - Test Pass Rate: 261/267 (97.8%) - **EXCEEDS** target of >90%
@@ -117,7 +117,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) types.Type {
 - Code generation templates are maintainable
 - Golden tests demonstrate real-world usage
 
-**Result<T,E> Helper Example**:
+**Result[T,E] Helper Example**:
 ```go
 // Generated Map method
 func (r Result_int_error) Map(fn func(int) interface{}) interface{} {
@@ -137,7 +137,7 @@ func (r Result_int_error) Map(fn func(int) interface{}) interface{} {
 ### 5. Zero Regressions
 **What Works Well**:
 - All 48 preprocessor tests still pass
-- All Phase 2.16 Result<T,E> baseline tests still pass
+- All Phase 2.16 Result[T,E] baseline tests still pass
 - Plugin pipeline ordering still works
 - No breaking changes to existing golden tests
 
@@ -408,7 +408,7 @@ doubled := result.Map(func(x int) int { return x * 2 })
 2. **Phase 5 enhancement** - Implement Dingo generics:
    ```dingo
    // Future syntax
-   func Map<T, U>(r: Result<T, E>, fn: func(T) U) Result<U, E> {
+   func Map<T, U>(r: Result[T, E], fn: func(T) U) Result[U, E] {
        match r {
            Ok(val) => Ok(fn(val)),
            Err(e) => Err(e),
@@ -456,15 +456,15 @@ Err only has error value, no Ok value to infer type from.
 1. **Require type annotation** for Err (explicit is better):
    ```dingo
    // Syntax 1: Type annotation
-   func divide(a int, b int) Result<int, error> {
+   func divide(a int, b int) Result[int, error] {
        if b == 0 {
-           return Err<int>(errors.New("div by zero"))  // Explicit int type
+           return Err[int](errors.New("div by zero"))  // Explicit int type
        }
        return Ok(a / b)
    }
 
    // Syntax 2: Infer from return type (Phase 4)
-   func divide(a int, b int) Result<int, error> {
+   func divide(a int, b int) Result[int, error] {
        if b == 0 {
            return Err(errors.New("div by zero"))  // Infer int from return type
        }
@@ -483,7 +483,7 @@ Err only has error value, no Ok value to infer type from.
        if enclosingFunc != nil && len(enclosingFunc.Type.Results.List) > 0 {
            returnType := enclosingFunc.Type.Results.List[0].Type
            if resultType := extractResultType(returnType); resultType != "" {
-               okType = resultType.OkType  // Extract from Result<T,E>
+               okType = resultType.OkType  // Extract from Result[T,E]
            }
        }
    }
@@ -599,7 +599,7 @@ func (p *ResultTypePlugin) inferOkTypeFromContext(
 ) string {
     // Walk up AST to find enclosing function
     // Query function return type from go/types
-    // Extract Result<T,E> and return T
+    // Extract Result[T,E] and return T
 }
 ```
 
@@ -693,7 +693,7 @@ func (r Result_int_error) MapToBool(fn func(int) bool) Result_bool_error
 
 **Alternative 2**: Wait for Dingo generics (Phase 5+)
 ```dingo
-func Map<T, U, E>(r: Result<T,E>, fn: func(T) U) Result<U,E>
+func Map<T, U, E>(r: Result[T,E], fn: func(T) U) Result[U,E]
 ```
 - **Pros**: Ideal solution, type-safe
 - **Cons**: Requires implementing generics in Dingo
@@ -916,7 +916,7 @@ Phase 3 delivers on all planned objectives with production-quality implementatio
 **Delivered**:
 - ✅ Fix A5 (go/types): 95% accuracy achieved
 - ✅ Fix A4 (IIFE): 100% success rate
-- ✅ Option<T>: Complete with None constant (limited context)
+- ✅ Option[T]: Complete with None constant (limited context)
 - ✅ Helper Methods: All 16 implemented
 - ✅ Test Coverage: 97.8% pass rate, 2.1:1 test ratio
 - ✅ Zero Regressions: All Phase 2.16 tests still pass

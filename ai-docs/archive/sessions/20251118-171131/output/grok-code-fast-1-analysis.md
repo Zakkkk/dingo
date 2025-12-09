@@ -102,7 +102,7 @@ match getUserById(id) {
 
 #### Stage 1 Output (with markers):
 ```go
-/* DINGO_MATCH_START expr=getUserById(id) type=Result<User,DbError> */
+/* DINGO_MATCH_START expr=getUserById(id) type=Result[User,DbError] */
 switch __match_tmp := getUserById(id).(type) {
 /* DINGO_MATCH_ARM pattern=Ok(user) */
 /* DINGO_BINDING var=user type=User scope=case_1 */

@@ -253,7 +253,7 @@ for _, x := range numbers {
 **Dingo Input:**
 ```dingo
 let firstEven = numbers.find(|x| x % 2 == 0)
-// Returns Option<int>
+// Returns Option[int]
 ```
 
 **Generated Go:**
@@ -268,7 +268,7 @@ for _, x := range numbers {
 }
 ```
 
-**Requires**: Option<T> type (already exists per clarifications)
+**Requires**: Option[T] type (already exists per clarifications)
 
 ### Phase 3: Chaining Support (Week 1, Days 3-4)
 
@@ -315,7 +315,7 @@ for _, u := range __temp0 {
 **Dingo Input:**
 ```dingo
 let parsed = strings.mapResult(|s| parseInt(s))
-// Returns Result<[]int, Error>
+// Returns Result[[]int, Error]
 ```
 
 **Generated Go:**
@@ -1080,7 +1080,7 @@ let strs = items.map(func(i fmt.Stringer) string { return i.String() })
 
 ### 11.1 Result Type Integration
 
-**Assumption**: Result<T, E> is implemented as:
+**Assumption**: Result[T, E] is implemented as:
 
 ```go
 type Result[T, E any] struct {
@@ -1100,10 +1100,10 @@ func (r Result[T, E]) UnwrapErr() E
 **MapResult Implementation:**
 
 ```dingo
-let parsed = strings.mapResult(func(s string) Result<int, Error> {
+let parsed = strings.mapResult(func(s string) Result[int, Error] {
     return parseInt(s)
 })
-// Type: Result<[]int, Error>
+// Type: Result[[]int, Error]
 ```
 
 **Generated Go:**
@@ -1137,7 +1137,7 @@ var parsed Result[[]int, Error]
 
 ### 11.2 Option Type Integration
 
-**Assumption**: Option<T> is implemented as:
+**Assumption**: Option[T] is implemented as:
 
 ```go
 type Option[T any] struct {
@@ -1156,7 +1156,7 @@ func (o Option[T]) Unwrap() T
 
 ```dingo
 let validNames = maybeNames.filterSome()
-// Input: []Option<string>
+// Input: []Option[string]
 // Output: []string (only Some values)
 ```
 
@@ -1208,21 +1208,21 @@ for _, __opt := range maybeNames {
 #### Day 5: Helper Utilities (Part 2)
 - [ ] Implement `all()` helper
 - [ ] Implement `any()` helper
-- [ ] Implement `find()` helper (returns Option<T>)
+- [ ] Implement `find()` helper (returns Option[T])
 - [ ] Add tests for all/any/find
 - [ ] Create golden test: `25_helpers_any_all.go.golden`
 
 ### Week 2: Integration and Polish
 
 #### Day 1: Result Integration
-- [ ] Verify Result<T, E> type exists in codebase
+- [ ] Verify Result[T, E] type exists in codebase
 - [ ] Implement `mapResult()` transformation
 - [ ] Add early exit optimization
 - [ ] Add tests for Result integration
 - [ ] Create golden test: `26_result_integration.go.golden`
 
 #### Day 2: Option Integration
-- [ ] Verify Option<T> type exists
+- [ ] Verify Option[T] type exists
 - [ ] Implement `filterSome()` transformation
 - [ ] Add tests for Option integration
 - [ ] Create golden test: `27_option_integration.go.golden`
@@ -1279,7 +1279,7 @@ for _, __opt := range maybeNames {
 
 - [x] Works with Go function literals (temporary)
 - [x] Compatible with future lambda syntax (plugin agnostic)
-- [x] Integrates with Result<T, E> and Option<T>
+- [x] Integrates with Result[T, E] and Option[T]
 - [x] No conflicts with parallel development (worktree isolation)
 
 ---
@@ -1414,8 +1414,8 @@ let result = hugeSlice
 ### With Result/Option Implementation
 
 **Verification Needed**:
-- Confirm Result<T, E> API contract
-- Confirm Option<T> API contract
+- Confirm Result[T, E] API contract
+- Confirm Option[T] API contract
 - Test compatibility
 
 **Action**: Review existing implementation before Result integration (Day 1, Week 2)
@@ -1539,7 +1539,7 @@ func (p *FunctionalUtilitiesPlugin) transformMap(...) { ... }
 
 | Operation | Signature | Generates |
 |-----------|-----------|-----------|
-| `mapResult` | `.mapResult(fn: T → Result<U, E>)` | For-range with error handling |
+| `mapResult` | `.mapResult(fn: T → Result[U, E])` | For-range with error handling |
 | `filterSome` | `.filterSome()` | For-range filtering Some values |
 
 ---

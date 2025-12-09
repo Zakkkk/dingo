@@ -47,7 +47,7 @@ Same as #1 but for Option types:
 **Action:**
 Implement context-based type inference for Err():
 - Walk AST to find enclosing function
-- Extract Result<T, E> from function return type
+- Extract Result[T, E] from function return type
 - Parse T parameter from Result type annotation
 - Fall back to error message if inference fails (don't use "T")
 

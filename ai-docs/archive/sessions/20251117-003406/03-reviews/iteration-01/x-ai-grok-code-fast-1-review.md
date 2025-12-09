@@ -18,7 +18,7 @@ The functional utilities plugin implementation demonstrates solid architecture a
 1. **Incomplete Core Functionality** - `transformFind`, `transformMapResult`, `transformFilterSome` return `nil` instead of transforming
    - **Location:** `pkg/plugin/builtin/functional_utils.go:751-769`
    - **Impact:** These features are documented as complete in the changes-made.md but are entirely missing from implementation
-   - **Evidence:** Methods contain skeleton code: `// Note: This requires Option<T> type to be available // For now, we'll return nil`
+   - **Evidence:** Methods contain skeleton code: `// Note: This requires Option[T] type to be available // For now, we'll return nil`
 
 2. **Limited Function Body Support** - Only handles single-line functions, ignores complex bodies
    - **Location:** `pkg/plugin/builtin/functional_utils.go:774-796`

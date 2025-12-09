@@ -54,7 +54,7 @@
 
 3. **Advanced Type Inference** (future)
    - Generic type parameter inference
-   - Complex Result<T,E> chaining
+   - Complex Result[T,E] chaining
    - Context-dependent type resolution
 
 4. **Plugin System Extensions**

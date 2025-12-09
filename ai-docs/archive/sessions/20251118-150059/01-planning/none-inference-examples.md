@@ -2,10 +2,10 @@
 
 ## The Problem
 
-In Dingo, `None` represents the absence of a value in `Option<T>`. But what type is `T`?
+In Dingo, `None` represents the absence of a value in `Option[T]`. But what type is `T`?
 
 ```go
-let x = None  // What is the type of x? Option<int>? Option<string>? Option<??>?
+let x = None  // What is the type of x? Option[int]? Option[string]? Option[??]?
 ```
 
 This is ambiguous without context. We need rules to infer the type.
@@ -16,30 +16,30 @@ This is ambiguous without context. We need rules to infer the type.
 
 ### Case 1.1: Explicit Type Annotation
 ```go
-let x: Option<int> = None  // ✅ Clear: Option<int>
+let x: Option[int] = None  // ✅ Clear: Option[int]
 ```
-**Type:** Explicitly declared as `Option<int>`
+**Type:** Explicitly declared as `Option[int]`
 
 ### Case 1.2: Return Type Context
 ```go
-fn getAge() -> Option<int> {
-    return None  // ✅ Clear from function signature: Option<int>
+fn getAge() -> Option[int] {
+    return None  // ✅ Clear from function signature: Option[int]
 }
 ```
 **Type:** Inferred from function return type
 
 ### Case 1.3: Assignment to Typed Variable
 ```go
-let x: Option<int>
-x = None  // ✅ Clear from variable type: Option<int>
+let x: Option[int]
+x = None  // ✅ Clear from variable type: Option[int]
 ```
 **Type:** Inferred from variable declaration
 
 ### Case 1.4: Function Call Parameter
 ```go
-fn processAge(age: Option<int>) { ... }
+fn processAge(age: Option[int]) { ... }
 
-processAge(None)  // ✅ Clear from function signature: Option<int>
+processAge(None)  // ✅ Clear from function signature: Option[int]
 ```
 **Type:** Inferred from function parameter type
 
@@ -57,19 +57,19 @@ println(x)    // Used later, but println accepts any type
 1. **Error (require explicit type)** ← RECOMMENDED
    ```go
    let x = None  // ERROR: cannot infer type for None
-   // Fix: let x: Option<int> = None
+   // Fix: let x: Option[int] = None
    ```
 
 2. **Use later usage context**
    ```go
    let x = None
-   processAge(x)  // Infer x as Option<int> from call site
+   processAge(x)  // Infer x as Option[int] from call site
    ```
    **Problem:** Requires complex forward type inference, hard to implement
 
-3. **Default to Option<interface{}>** (risky)
+3. **Default to Option[interface{}]** (risky)
    ```go
-   let x = None  // Inferred as Option<interface{}>
+   let x = None  // Inferred as Option[interface{}]
    ```
    **Problem:** Loses type safety, needs runtime type assertions
 
@@ -77,14 +77,14 @@ println(x)    // Used later, but println accepts any type
 
 ### Case 2.2: Multiple Possible Contexts
 ```go
-fn handleAge(age: Option<int>) { ... }
-fn handleName(name: Option<string>) { ... }
+fn handleAge(age: Option[int]) { ... }
+fn handleName(name: Option[string]) { ... }
 
 let x = None
 if condition {
-    handleAge(x)  // Wants Option<int>
+    handleAge(x)  // Wants Option[int]
 } else {
-    handleName(x)  // Wants Option<string>
+    handleName(x)  // Wants Option[string]
 }
 ```
 
@@ -96,27 +96,27 @@ if condition {
    let x = None  // ERROR: conflicting type contexts for None
    // Fix: use None directly in calls
    if condition {
-       handleAge(None)  // Option<int> from parameter
+       handleAge(None)  // Option[int] from parameter
    } else {
-       handleName(None)  // Option<string> from parameter
+       handleName(None)  // Option[string] from parameter
    }
    ```
 
 2. **Union type** (complex, not planned for Phase 4)
    ```go
-   let x: Option<int | string> = None
+   let x: Option[int | string] = None
    ```
 
 ---
 
 ### Case 2.3: Deferred Usage (Variable Declared, Used Later)
 ```go
-let result: Option<int>
+let result: Option[int]
 
 if condition {
     result = Some(42)
 } else {
-    result = None  // ✅ Type known from result declaration: Option<int>
+    result = None  // ✅ Type known from result declaration: Option[int]
 }
 ```
 **Type:** Inferred from variable declaration (Case 1.3)
@@ -126,7 +126,7 @@ if condition {
 let result  // ❓ What type?
 
 if condition {
-    result = Some(42)  // Wants Option<int>
+    result = Some(42)  // Wants Option[int]
 } else {
     result = None  // Wants to infer from first assignment?
 }
@@ -136,14 +136,14 @@ if condition {
 1. **Error (require type annotation for uninitialized variables)**
    ```go
    let result  // ERROR: type annotation required for uninitialized variable
-   // Fix: let result: Option<int>
+   // Fix: let result: Option[int]
    ```
 
 2. **Infer from first assignment**
    ```go
-   let result = Some(42)  // Inferred as Option<int>
+   let result = Some(42)  // Inferred as Option[int]
    // Later:
-   result = None  // OK, already known as Option<int>
+   result = None  // OK, already known as Option[int]
    ```
    **But:** What if first assignment is `None`? Back to square one.
 
@@ -157,17 +157,17 @@ enum Status {
 }
 
 let age = match status {
-    Active(id) => Some(getUserAge(id))  // Returns Option<int>
-    Inactive => None  // ❓ What type? Should match Some branch: Option<int>
+    Active(id) => Some(getUserAge(id))  // Returns Option[int]
+    Inactive => None  // ❓ What type? Should match Some branch: Option[int]
 }
 ```
 
 **Type:** Inferred from other match arms (expression mode requires type compatibility)
 
 **This works!** Match expression mode requires all arms to return the same type:
-- `Some(getUserAge(id))` returns `Option<int>`
-- `None` must also be `Option<int>` to match
-- Infer `None` as `Option<int>` ✅
+- `Some(getUserAge(id))` returns `Option[int]`
+- `None` must also be `Option[int]` to match
+- Infer `None` as `Option[int]` ✅
 
 ---
 
@@ -181,13 +181,13 @@ let users = [Some(42), None, Some(99)]  // ❓ Type of None?
 **Options:**
 1. **Infer from array element type**
    ```go
-   let users: []Option<int> = [Some(42), None, Some(99)]  // None is Option<int>
+   let users: []Option[int] = [Some(42), None, Some(99)]  // None is Option[int]
    ```
 
 2. **Infer from other elements**
    ```go
    let users = [Some(42), None, Some(99)]
-   // First element is Option<int>, so None must be Option<int>
+   // First element is Option[int], so None must be Option[int]
    ```
 
 ---
@@ -196,12 +196,12 @@ let users = [Some(42), None, Some(99)]  // ❓ Type of None?
 ```go
 type User struct {
     name: string
-    age: Option<int>
+    age: Option[int]
 }
 
 let user = User{
     name: "Alice",
-    age: None  // ✅ Inferred from struct field type: Option<int>
+    age: None  // ✅ Inferred from struct field type: Option[int]
 }
 ```
 **Type:** Inferred from struct field declaration
@@ -214,7 +214,7 @@ let user = User{
 **None can only be used where type is inferrable from immediate context:**
 
 ✅ **Allowed:**
-- Explicit type annotation: `let x: Option<int> = None`
+- Explicit type annotation: `let x: Option[int] = None`
 - Return statement: `return None` (infer from function signature)
 - Function call: `processAge(None)` (infer from parameter)
 - Assignment to typed variable: `x = None` (x already typed)
@@ -255,7 +255,7 @@ processAge(x)  // Can't look ahead to infer x's type
 **Future (Phase 5+):** Implement bidirectional type inference (like TypeScript):
 ```go
 let x = None  // Deferred type inference
-processAge(x)  // Infer x as Option<int> from call
+processAge(x)  // Infer x as Option[int] from call
 ```
 
 This requires more sophisticated type checking (go/types integration with constraint solving).
@@ -268,7 +268,7 @@ This requires more sophisticated type checking (go/types integration with constr
 |----------|------|------|----------------|
 | **Error (require explicit type)** | Simple, safe, clear errors | More verbose, user must annotate | ✅ **RECOMMENDED for Phase 4** |
 | **Closest context precedence** | Smart, less verbose | Complex inference, potential surprises | Consider for Phase 5 |
-| **Option<interface{}>** | Always works | Loses type safety, defeats purpose | ❌ **Never do this** |
+| **Option[interface{}]** | Always works | Loses type safety, defeats purpose | ❌ **Never do this** |
 
 ---
 
@@ -277,10 +277,10 @@ This requires more sophisticated type checking (go/types integration with constr
 ### ✅ Valid Code
 ```go
 // Explicit annotation
-let x: Option<int> = None
+let x: Option[int] = None
 
 // Return type context
-fn getAge() -> Option<int> {
+fn getAge() -> Option[int] {
     return None  // OK
 }
 
@@ -301,21 +301,21 @@ let result = match status {
 ```go
 // No context
 let x = None  // ERROR: cannot infer type for None
-              // Fix: let x: Option<int> = None
+              // Fix: let x: Option[int] = None
 
 // Ambiguous context
 let x = None
 if cond {
-    handleAge(x)     // Wants Option<int>
+    handleAge(x)     // Wants Option[int]
 } else {
-    handleName(x)    // Wants Option<string> - conflict!
+    handleName(x)    // Wants Option[string] - conflict!
 }
 // Fix: use None directly in calls
 
 // Untyped initialization
 let x
 x = None  // ERROR: x has no type yet
-// Fix: let x: Option<int>
+// Fix: let x: Option[int]
 ```
 
 ---
@@ -326,10 +326,10 @@ x = None  // ERROR: x has no type yet
 1. **NoneContextPlugin** uses AST parent tracking to find context
 2. Check contexts in precedence order (annotation > return > parameter > field > match arm)
 3. If no valid context found, emit error: "cannot infer type for None constant, use explicit type annotation"
-4. Error message should suggest fix: `let x: Option<T> = None` or use in typed context
+4. Error message should suggest fix: `let x: Option[T] = None` or use in typed context
 
 **go/types Integration:**
 - Use `types.Info.Types` to get expected type at None position
-- Check if expected type is `Option<T>` for some T
-- If yes, rewrite None as `Option<T>{}` (zero value)
+- Check if expected type is `Option[T]` for some T
+- If yes, rewrite None as `Option[T]{}` (zero value)
 - If no expected type, error

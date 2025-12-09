@@ -125,7 +125,7 @@ type Result_T_E struct {
 ### Success Criteria
 
 - No undefined constant errors in integration tests
-- All Result<T,E> golden tests pass
+- All Result[T,E] golden tests pass
 - Code follows Go naming conventions (camelCase for exported constants)
 
 ### Expected Progress

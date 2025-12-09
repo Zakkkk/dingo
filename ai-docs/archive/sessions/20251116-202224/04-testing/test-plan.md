@@ -19,7 +19,7 @@
    - Parse unit variants (e.g., `Pending`)
    - Parse tuple variants (e.g., `Circle(radius: float64)`)
    - Parse struct variants (e.g., `Rectangle { width: float64, height: float64 }`)
-   - Handle generic type parameters (e.g., `Result<T, E>`)
+   - Handle generic type parameters (e.g., `Result[T, E]`)
    - Accept trailing commas in variant lists
 
 2. **Enum to Go Transformation**
@@ -113,7 +113,7 @@
 
 #### Scenario: Generic Tag Enum
 - **Purpose:** Ensure type parameters don't affect tag generation
-- **Input:** `enum Result<T, E> { Ok(T), Err(E) }`
+- **Input:** `enum Result[T, E] { Ok(T), Err(E) }`
 - **Expected:** Non-generic tag enum (tags don't depend on T or E)
 - **Rationale:** Tag is discriminator, not type-parameterized
 
@@ -142,7 +142,7 @@
 
 #### Scenario: Generic Union Struct
 - **Purpose:** Validate generic type parameter handling
-- **Input:** `enum Option<T> { Some(T), None }`
+- **Input:** `enum Option[T] { Some(T), None }`
 - **Expected:**
   ```go
   type Option[T any] struct {
@@ -196,7 +196,7 @@
 
 #### Scenario: Generic Constructor
 - **Purpose:** Validate type parameter propagation
-- **Input:** `enum Result<T, E> { Ok(T) }`
+- **Input:** `enum Result[T, E] { Ok(T) }`
 - **Expected:**
   ```go
   func Result_Ok[T any, E any](value T) Result[T, E] {
@@ -220,7 +220,7 @@
 
 #### Scenario: Generic Is* Methods
 - **Purpose:** Validate receiver type for generics
-- **Input:** `enum Option<T> { Some(T), None }`
+- **Input:** `enum Option[T] { Some(T), None }`
 - **Expected:**
   ```go
   func (o Option[T]) IsSome() bool { return o.tag == OptionTag_Some }
@@ -238,7 +238,7 @@
 
 #### Scenario: Parse Enum with Generic Parameters
 - **Purpose:** Validate type parameter parsing
-- **Input:** `enum Result<T, E> { Ok(T), Err(E) }`
+- **Input:** `enum Result[T, E] { Ok(T), Err(E) }`
 - **Expected:** EnumDecl with TypeParams containing T and E
 - **Rationale:** Generic enums are P0 requirement
 
@@ -362,12 +362,12 @@
   ```dingo
   package main
 
-  enum Option<T> {
+  enum Option[T] {
       Some(T),
       None,
   }
 
-  func unwrapOr<T>(opt: Option<T>, def: T) -> T {
+  func unwrapOr<T>(opt: Option[T], def: T) -> T {
       if opt.IsSome() {
           return *opt.some
       }

@@ -37,7 +37,7 @@ func (p *ResultTypePlugin) Transform(file *dingoast.File) error {
 ```
 
 **Impact:**
-- Result<T, E> and Option<T> types in source code are not transpiled
+- Result[T, E] and Option[T] types in source code are not transpiled
 - Helper methods are never injected into output
 - Plugins are skeleton code with no functionality
 

@@ -9,13 +9,13 @@
    - 3/8 golden tests now passing (was 0/8)
    - Modified parser grammar to support multiple return values
 
-2. **✅ Implemented Result<T, E> Type Foundation**
+2. **✅ Implemented Result[T, E] Type Foundation**
    - New plugin: `pkg/plugin/builtin/result_type.go` (~280 lines)
    - Variants: Ok(T), Err(E)
    - Methods: IsOk(), IsErr(), Unwrap(), UnwrapOr()
    - Ready for integration with `?` operator
 
-3. **✅ Implemented Option<T> Type Foundation**
+3. **✅ Implemented Option[T] Type Foundation**
    - New plugin: `pkg/plugin/builtin/option_type.go` (~300 lines)
    - Variants: Some(T), None
    - Methods: IsSome(), IsNone(), Unwrap(), UnwrapOr(), Map()

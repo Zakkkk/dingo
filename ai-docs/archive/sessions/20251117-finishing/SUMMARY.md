@@ -78,8 +78,8 @@ const (
 - `pkg/plugin/builtin/option_type.go:93-98`
 
 Removed defensive fallback logic. Always use proper generic syntax:
-- `Result<T, E>` → `IndexListExpr` (2 params)
-- `Option<T>` → `IndexExpr` (1 param)
+- `Result[T, E]` → `IndexListExpr` (2 params)
+- `Option[T]` → `IndexExpr` (1 param)
 
 Let Go compiler catch invalid type args instead of generating incorrect AST.
 

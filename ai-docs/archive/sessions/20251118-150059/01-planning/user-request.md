@@ -13,7 +13,7 @@
 **Current Status**:
 - Phase 3 is 97.8% complete (261/267 tests passing)
 - Two-stage transpilation pipeline is working
-- Result<T,E> and Option<T> types are fully implemented
+- Result[T,E] and Option[T] types are fully implemented
 - Error propagation (`?` operator) is working
 - Enum/sum types are implemented
 

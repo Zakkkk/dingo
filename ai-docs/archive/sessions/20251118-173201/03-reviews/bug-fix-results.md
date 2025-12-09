@@ -12,7 +12,7 @@ Successfully resolved the primary blocker preventing pattern match tests from co
 
 ### 1. Generic Syntax Conversion (NEW PREPROCESSOR)
 
-**Problem**: Pattern match tests used Rust-style generic syntax `Result<T, E>` which Go's parser interpreted as comparison operators, causing parse errors.
+**Problem**: Pattern match tests used Rust-style generic syntax `Result[T, E]` which Go's parser interpreted as comparison operators, causing parse errors.
 
 **Solution**: Created new `GenericSyntaxProcessor` to run FIRST in preprocessor pipeline.
 
@@ -20,8 +20,8 @@ Successfully resolved the primary blocker preventing pattern match tests from co
 
 **Implementation**:
 - Pattern: `\b([A-Z]\w*)<([^>]+)>` matches generic type declarations
-- Transformation: `Result<int, error>` → `Result[int, error]`
-- Transformation: `Option<string>` → `Option[string]`
+- Transformation: `Result[int, error]` → `Result[int, error]`
+- Transformation: `Option[string]` → `Option[string]`
 - Zero source mapping overhead (simple bracket replacement)
 
 **Preprocessor Pipeline Order** (updated):
@@ -129,7 +129,7 @@ func processResult(result: Result[int, error]) -> int {
 
 ### 2. Primary Blocker Resolved
 
-The generic syntax issue (`Result<T,E>` vs `Result[T,E]`) was the **primary blocker** preventing ANY pattern match tests from even compiling. This is now fully resolved.
+The generic syntax issue (`Result[T,E]` vs `Result[T,E]`) was the **primary blocker** preventing ANY pattern match tests from even compiling. This is now fully resolved.
 
 ### 3. Remaining Issues Are Minor
 
@@ -175,7 +175,7 @@ The generic syntax issue (`Result<T,E>` vs `Result[T,E]`) was the **primary bloc
 
 **Input** (`pattern_match_01_simple.dingo`):
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result {
         Ok(value) => value * 2,
         Err(e) => 0
@@ -234,7 +234,7 @@ go test ./tests -run TestGoldenFiles/pattern_match_01_simple -v
 golden/pattern_match_01_simple.dingo:8:33: missing ',' in parameter list
 ```
 
-**Cause**: `Result<int, error>` parsed as `Result < int` (comparison)
+**Cause**: `Result[int, error]` parsed as `Result < int` (comparison)
 
 **Tests Passing**: 0/13 (0%)
 

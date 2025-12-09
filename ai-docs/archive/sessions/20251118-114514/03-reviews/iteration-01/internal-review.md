@@ -1,7 +1,7 @@
 # Phase 3 Code Review - Internal Assessment
 **Date**: 2025-11-18
 **Reviewer**: code-reviewer agent
-**Phase**: Phase 3 - Fix A4/A5 + Option<T> + Helper Methods
+**Phase**: Phase 3 - Fix A4/A5 + Option[T] + Helper Methods
 **Test Results**: 261/267 tests passing (97.8%)
 
 ---
@@ -68,9 +68,9 @@ tokens = ["map", "string", "int", "error"]
 ```
 
 **Impact**:
-- Map types will fail: `Result<map[string]int, error>` → broken type
-- Nested types will fail: `Result<*User, error>` → may work by accident
-- Struct types will fail: `Result<struct{}, error>` → completely broken
+- Map types will fail: `Result[map[string]int, error]` → broken type
+- Nested types will fail: `Result[*User, error]` → may work by accident
+- Struct types will fail: `Result[struct{}, error]` → completely broken
 
 **Recommendation**:
 ```go
@@ -91,7 +91,7 @@ func (s *TypeInferenceService) parseComplexType(tokens []string) (types.Type, in
 ```
 
 **Test Gap**:
-No tests for `Result<map[string]int, error>`, `Result<chan int, error>`, `Result<struct{}, error>`
+No tests for `Result[map[string]int, error]`, `Result[chan int, error]`, `Result[struct{}, error]`
 
 **Priority**: HIGH - Add golden tests for complex types before Phase 4
 
@@ -609,7 +609,7 @@ Will transpiler ever run plugins in parallel? If yes, TypeRegistry needs synchro
 ---
 
 ### Q4: Type Parsing Strategy
-Should complex types (map, chan, struct, func) be parsed from sanitized names, or should we store original AST nodes? Current approach will break for `Result<map[string]int, error>`.
+Should complex types (map, chan, struct, func) be parsed from sanitized names, or should we store original AST nodes? Current approach will break for `Result[map[string]int, error]`.
 
 **Recommendation**: Store original type AST in ResultTypeInfo instead of trying to parse sanitized strings
 

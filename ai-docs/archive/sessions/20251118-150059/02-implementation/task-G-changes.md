@@ -40,8 +40,8 @@ if g.pipeline != nil && g.pipeline.Ctx != nil {
 ```
 
 **Plugin Order (Critical)**:
-1. ResultTypePlugin - Injects Result<T,E> types
-2. OptionTypePlugin - Injects Option<T> types
+1. ResultTypePlugin - Injects Result[T,E] types
+2. OptionTypePlugin - Injects Option[T] types
 3. **PatternMatchPlugin** - Uses Result/Option, checks exhaustiveness (Phase 4)
 4. **NoneContextPlugin** - Uses parent map and types.Info (Phase 4)
 5. UnusedVarsPlugin - Cleanup, runs last

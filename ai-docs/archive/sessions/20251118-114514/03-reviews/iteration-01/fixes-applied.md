@@ -23,7 +23,7 @@ All fixes implemented, tested, and verified.
 - `pkg/plugin/builtin/option_type.go`
 
 **Problem**:
-`parseTypeFromTokensBackward/Forward` broke for complex types like `Result<map[string]int, error>` because they assumed simple `_` token splitting. Reverse-parsing is lossy due to sanitization (e.g., `[` → `_`, `]` → `_`).
+`parseTypeFromTokensBackward/Forward` broke for complex types like `Result[map[string]int, error]` because they assumed simple `_` token splitting. Reverse-parsing is lossy due to sanitization (e.g., `[` → `_`, `]` → `_`).
 
 **Solution**:
 
@@ -117,7 +117,7 @@ p.typeInference.RegisterOptionType(optionTypeName, vType, valueType)
 ```
 
 **Impact**:
-- ✅ Complex types like `Result<map[string]int, error>` now work correctly
+- ✅ Complex types like `Result[map[string]int, error]` now work correctly
 - ✅ Cache-first approach prevents lossy reverse-parsing
 - ✅ Validation warns if type name doesn't round-trip properly
 - ✅ All existing tests pass with updated expectations

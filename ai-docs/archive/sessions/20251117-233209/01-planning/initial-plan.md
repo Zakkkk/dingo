@@ -28,7 +28,7 @@
    - Nil safety modes
 
 4. ✅ **Parser** - Full Dingo syntax support
-   - Generic types (Result<T, E>, Option<T>)
+   - Generic types (Result[T, E], Option[T])
    - Type declarations
    - Tuple returns
    - Method calls
@@ -37,11 +37,11 @@
 According to CLAUDE.md, features/INDEX.md, and the feature specs:
 
 **P0 Critical Features (Not Yet Integrated):**
-- ❌ Result<T, E> type constructor integration (Ok/Err)
-- ❌ Option<T> type constructor integration (Some/None)
+- ❌ Result[T, E] type constructor integration (Ok/Err)
+- ❌ Option[T] type constructor integration (Some/None)
 - ❌ Pattern matching on Result/Option
 - ❌ Helper methods (unwrap, unwrapOr, map, etc.)
-- ❌ Go interoperability (auto-wrap `(T, error)` → `Result<T, E>`)
+- ❌ Go interoperability (auto-wrap `(T, error)` → `Result[T, E]`)
 
 ### Strategic Decision Point
 
@@ -323,7 +323,7 @@ Configuration flag: `auto_wrap_go_nils` (default: false)
 **Implementation:**
 Make `?` operator work with Result types:
 ```dingo
-func processUser(id: string) -> Result<User, Error> {
+func processUser(id: string) -> Result[User, Error] {
     let user = fetchUser(id)?  // Propagate Err variant
     return Ok(user)
 }
@@ -356,7 +356,7 @@ func processUser(id string) Result_User_Error {
 **Implementation:**
 Make `?.` operator work with Option types:
 ```dingo
-let name = user?.name  // Returns Option<string>
+let name = user?.name  // Returns Option[string]
 ```
 
 Transform to:

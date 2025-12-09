@@ -570,7 +570,7 @@ Error: Non-exhaustive match in file.dingo:42:5
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern: Err(_)
 
 Note: This enum defined here:
-  10 | enum Result<T, E> {
+  10 | enum Result[T, E] {
   11 |     Ok(T),
   12 |     Err(E)
      |     ^^^^^^ This variant is missing

@@ -149,13 +149,13 @@ Please provide:
 
 ```dingo
 // Result type
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
 
 // Option type  
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None,
 }

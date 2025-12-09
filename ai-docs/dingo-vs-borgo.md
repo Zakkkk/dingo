@@ -24,10 +24,10 @@ impl Display for User {
 }
 
 // Borgo: Hindley-Milner type inference
-let x = Some(1)  // Borgo infers Option<int> differently than Go would
+let x = Some(1)  // Borgo infers Option[int] differently than Go would
 
 // Borgo: Algebraic data types as first-class
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result[T, E] { Ok(T), Err(E) }
 // This is a REAL sum type in Borgo, not an interface pattern
 ```
 
@@ -39,7 +39,7 @@ Dingo doesn't add new type concepts - it adds **syntax** for existing Go pattern
 
 ```dingo
 // Dingo: Just syntax sugar for Go generics
-func fetch() -> Result<User, error> { ... }
+func fetch() -> Result[User, error] { ... }
 
 // Transforms to REAL Go:
 func fetch() Result[User, error] { ... }
@@ -64,7 +64,7 @@ func (StatusPending) isStatus() {}
 | | Borgo | Dingo |
 |-|-------|-------|
 | After transformation | Still needs Borgo semantics | Pure Go - gopls works |
-| `Result<T,E>` | Borgo's own type | Go's `Result[T,E]` generic |
+| `Result[T,E]` | Borgo's own type | Go's `Result[T,E]` generic |
 | Pattern matching | Borgo's exhaustiveness rules | Transforms to Go switch |
 | Type inference | Borgo's rules (different from Go) | Go's rules (unchanged) |
 

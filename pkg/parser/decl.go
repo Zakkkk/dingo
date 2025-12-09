@@ -130,7 +130,7 @@ func (p *StmtParser) parseVarSpec() *ast.ValueSpec {
 }
 
 // parseType parses a type expression
-// This handles basic types, generic types like Result<T,E>, and composite types
+// This handles basic types, generic types like Result[T,E], and composite types
 func (p *StmtParser) parseType() ast.Expr {
 	if !p.curTokenIs(tokenizer.IDENT) {
 		p.addError(fmt.Sprintf("expected type, got %s", p.curToken.Kind))
@@ -144,7 +144,7 @@ func (p *StmtParser) parseType() ast.Expr {
 	}
 	p.nextToken()
 
-	// Check for generic type arguments (Result<T, E>)
+	// Check for generic type arguments (Result[T, E])
 	if p.curTokenIs(tokenizer.LT) {
 		return p.parseGenericType(typeName)
 	}
@@ -152,7 +152,7 @@ func (p *StmtParser) parseType() ast.Expr {
 	return typeName
 }
 
-// parseGenericType parses a generic type with type arguments (Result<T, E>)
+// parseGenericType parses a generic type with type arguments (Result[T, E])
 func (p *StmtParser) parseGenericType(baseName *ast.Ident) ast.Expr {
 	p.nextToken() // consume '<'
 

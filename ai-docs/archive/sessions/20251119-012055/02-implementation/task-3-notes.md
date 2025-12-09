@@ -61,7 +61,7 @@ func f() Result_int_CustomError {
 ### 5. Error Message Design
 **Decision**: Provide example usage in error message
 **Rationale**:
-- Users may not be familiar with Result<T,E> syntax
+- Users may not be familiar with Result[T,E] syntax
 - Shows two solutions: explicit annotation OR typed constructor
 - Reduces friction for new users
 - Follows best practices from Rust/TypeScript
@@ -153,7 +153,7 @@ Example: var r Result_int_error = Err(errors.New("failed")) or use Result_int_er
    - Context and logging infrastructure
 
 ### Downstream Impact:
-1. **None Inference**: Same pattern can enhance Option<T> inference
+1. **None Inference**: Same pattern can enhance Option[T] inference
 2. **Ok() Constructor**: Could add similar context inference (future)
 3. **Pattern Matching**: Benefits from more Result type registrations
 4. **Error Messages**: Consistent error reporting across all constructors

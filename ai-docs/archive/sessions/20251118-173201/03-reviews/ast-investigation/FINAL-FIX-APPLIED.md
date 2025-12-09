@@ -78,7 +78,7 @@ Error: golden/pattern_match_01_simple.dingo:8:33: missing ',' in parameter list
 
 These tests use syntax like:
 ```dingo
-func processResult(result: Result<int, error>) -> int {
+func processResult(result: Result[int, error]) -> int {
     match result { ... }
 }
 ```

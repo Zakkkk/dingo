@@ -7,13 +7,13 @@ When starting Task 1.1, I discovered:
 1. **No existing Result plugin** - Despite task description mentioning "foundation from Phase 2.8", no such file existed
 2. **Minimal plugin infrastructure** - The `pkg/plugin/plugin.go` is largely stubbed out
 3. **Sum types reference missing** - Plan references `sum_types.go` pattern, but file doesn't exist
-4. **Golden test mismatch** - Current `result_01_basic.dingo` uses `enum Result` syntax, not generic `Result<T, E>`
+4. **Golden test mismatch** - Current `result_01_basic.dingo` uses `enum Result` syntax, not generic `Result[T, E]`
 
 ### Strategic Decision
 **Implemented standalone plugin following the plan specification**, not the golden test syntax.
 
 **Rationale:**
-- Plan clearly defines generic `Result<T, E>` syntax
+- Plan clearly defines generic `Result[T, E]` syntax
 - Task 1.1 scope: Type declaration generation
 - Golden tests will be updated in later integration tasks
 - Clean foundation allows proper Phase 3 implementation
@@ -121,17 +121,17 @@ type ResultTypePlugin struct {
 
 **Why This Works:**
 1. **O(1) lookup** - Fast duplicate detection
-2. **Type-specific** - Each Result<T, E> tracked independently
+2. **Type-specific** - Each Result[T, E] tracked independently
 3. **Session-scoped** - Per-plugin instance, cleared per file
 4. **Simple** - No complex state management
 
 **Tested Behavior:**
 ```go
 // First call: generates declarations
-p.Process(Result<int>)  // Emits Result_int_error
+p.Process(Result[int])  // Emits Result_int_error
 
 // Second call: skips (duplicate)
-p.Process(Result<int>)  // No new declarations
+p.Process(Result[int])  // No new declarations
 ```
 
 **Alternative Considered:** AST scanning for existing types
@@ -172,7 +172,7 @@ result.UnwrapOr(default) // Safe with fallback
 **Decision:** Support both Go 1.17 and Go 1.18+ syntax
 
 ```go
-// Go 1.17: Result<T> as IndexExpr
+// Go 1.17: Result[T] as IndexExpr
 &ast.IndexExpr{
     X:     Result,
     Index: T,
@@ -192,8 +192,8 @@ result.UnwrapOr(default) // Safe with fallback
 
 **Shorthand Support:**
 ```go
-Result<T>      → Result_T_error     (default error type)
-Result<T, E>   → Result_T_E         (explicit error type)
+Result[T]      → Result_T_error     (default error type)
+Result[T, E]   → Result_T_E         (explicit error type)
 ```
 
 **Default Error Type:** `error` interface (standard Go convention)
@@ -308,7 +308,7 @@ case "disabled": // No Go interop
 **Decision:** Focus on plugin interface, not integration
 
 **Test Categories:**
-1. **Type generation** - Result<T> and Result<T, E> emit correct structures
+1. **Type generation** - Result[T] and Result[T, E] emit correct structures
 2. **Sanitization** - Edge cases for type name cleaning
 3. **Deduplication** - Multiple references handled correctly
 4. **Method generation** - All helpers present and correct
@@ -402,7 +402,7 @@ case "disabled": // No Go interop
 
 ### Task 3.1: Error Propagation Integration
 **Required:**
-- Make `?` operator work with Result<T, E>
+- Make `?` operator work with Result[T, E]
 - Transform `expr?` to early return on Err
 - Preserve type information through transformation
 

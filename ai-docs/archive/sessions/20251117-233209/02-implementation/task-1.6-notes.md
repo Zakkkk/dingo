@@ -4,7 +4,7 @@
 
 ### What the Result Type Plugin Does
 
-The Result type plugin generates Go code for Dingo's `Result<T, E>` type:
+The Result type plugin generates Go code for Dingo's `Result[T, E]` type:
 
 1. **Type Declarations** - Generates struct with tag and variant fields
 2. **Constructors** - Ok(value) and Err(error) constructor functions
@@ -15,7 +15,7 @@ The Result type plugin generates Go code for Dingo's `Result<T, E>` type:
 ### Critical Test Scenarios Identified
 
 #### 1. Type Declaration (5 scenarios)
-- **Basic types** - Result<int>, Result<string>
+- **Basic types** - Result[int], Result[string]
 - **Complex types** - Pointers, slices, maps
 - **Type sanitization** - Converting types to valid Go identifiers
 - **Multiple types** - Multiple Result types in same file

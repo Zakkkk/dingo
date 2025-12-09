@@ -94,9 +94,9 @@ BenchmarkGoToDingoPath                 75,731,480 ops   15.77 ns/op     ✅ (<10
 **`examples/lsp-demo/demo.dingo`** (52 LOC)
 - Realistic example with Phase 3 features
 - User struct with type annotations
-- fetchUserData function returning Result<User, error>
+- fetchUserData function returning Result[User, error]
 - Error propagation with ? operator
-- Option<T> usage with IsSome() and Unwrap()
+- Option[T] usage with IsSome() and Unwrap()
 - Sum type (enum) Status with variants
 - Pattern matching with match expression
 - Comments guiding LSP testing (autocomplete, go-to-definition, hover, diagnostics)

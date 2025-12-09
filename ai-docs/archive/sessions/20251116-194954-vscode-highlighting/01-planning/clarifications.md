@@ -30,7 +30,7 @@ This gives users flexibility based on their preference and theme.
 **All improvements** - Implement everything we have:
 1. ✅ Error messages in `expr? "message"` - HIGH priority
 2. ✅ Generated variable patterns (`__err0`, `__tmp0`) - MEDIUM priority
-3. ✅ Result/Option types (`Result<T,E>`, `Option<T>`) - MEDIUM priority
+3. ✅ Result/Option types (`Result[T,E]`, `Option[T]`) - MEDIUM priority
 4. ✅ Error propagation operator (`?`) - Already working, enhance if needed
 5. ✅ "Everything we have for now" - All current Dingo syntax features
 

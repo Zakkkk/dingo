@@ -84,8 +84,8 @@ The following features work correctly in the showcase:
 1. ✅ **Enum** - Sum types with variants
 2. ✅ **Match** - Pattern matching on enums
 3. ✅ **Error Propagation** - All 3 patterns (`?`, `? "msg"`, `? |e| f(e)`)
-4. ✅ **Result** - `Result<T, E>` with `Ok[T]()`/`Err[T]()`
-5. ✅ **Option** - `Option<T>` with `Some[T]()`/`None[T]()`
+4. ✅ **Result** - `Result[T, E]` with `Ok[T]()`/`Err[T]()`
+5. ✅ **Option** - `Option[T]` with `Some[T]()`/`None[T]()`
 8. ✅ **Safe Navigation** - `obj?.field`
 10. ✅ **Null Coalesce** - `a ?? b`
 11. ✅ **Guard Let** - `guard let x = expr else { ... }`

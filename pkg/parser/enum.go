@@ -11,7 +11,7 @@ import (
 )
 
 // parseEnumDecl parses an enum declaration
-// enum Result<T, E> { Ok(T), Err(E) }
+// enum Result[T, E] { Ok(T), Err(E) }
 // enum Color { Red, Green, Blue, RGB { r: int, g: int, b: int } }
 //
 // NOTE: Returns ast.BadDecl as a placeholder since Dingo EnumDecl doesn't implement go/ast.Decl.
@@ -349,7 +349,7 @@ func (p *StmtParser) parseStructVariant(name *dingoast.Ident) *dingoast.EnumVari
 // parseTypeExpr parses a type expression
 // This handles:
 //   - Simple types: int, string, T
-//   - Generic types: Option<T>, Result<T, E>
+//   - Generic types: Option[T], Result[T, E]
 //   - Slice types: []int
 //   - Pointer types: *int (if supported)
 func (p *StmtParser) parseTypeExpr() *dingoast.TypeExpr {
@@ -388,7 +388,7 @@ func (p *StmtParser) parseTypeExpr() *dingoast.TypeExpr {
 	endPos := p.curToken.Pos + token.Pos(len(typeName))
 	p.nextToken()
 
-	// Check for generic type arguments: Option<T>
+	// Check for generic type arguments: Option[T]
 	if p.curTokenIs(tokenizer.LT) {
 		p.nextToken() // consume '<'
 
@@ -423,7 +423,7 @@ func (p *StmtParser) parseTypeExpr() *dingoast.TypeExpr {
 		endPos = p.curToken.Pos + 1
 		p.nextToken() // consume '>'
 
-		// Build generic type text: Result<T, E>
+		// Build generic type text: Result[T, E]
 		typeText := typeName + "<"
 		for i, arg := range typeArgs {
 			if i > 0 {

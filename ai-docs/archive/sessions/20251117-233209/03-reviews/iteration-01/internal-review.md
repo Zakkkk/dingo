@@ -1,4 +1,4 @@
-# Stage 1 Result<T, E> Implementation - Internal Code Review
+# Stage 1 Result[T, E] Implementation - Internal Code Review
 
 **Reviewer**: code-reviewer (Sonnet 4.5)
 **Date**: 2025-11-18
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-The Stage 1 implementation successfully delivers a production-ready Result<T, E> type system for Dingo. The code demonstrates excellent architecture, comprehensive testing, and thoughtful design decisions. **Zero critical issues found**. Two important improvements and several minor refinements recommended for future iterations.
+The Stage 1 implementation successfully delivers a production-ready Result[T, E] type system for Dingo. The code demonstrates excellent architecture, comprehensive testing, and thoughtful design decisions. **Zero critical issues found**. Two important improvements and several minor refinements recommended for future iterations.
 
 **Quality Score**: 9.2/10
 
@@ -126,7 +126,7 @@ func (r Result_T_E) Map(fn func(T) interface{}) interface{} {
 
 **Impact**:
 - Methods compile but produce runtime errors when called
-- Type safety lost (returns interface{} instead of Result<U, E>)
+- Type safety lost (returns interface{} instead of Result[U, E])
 - Incomplete Task 1.3 functionality
 
 **Why Important**:
@@ -280,9 +280,9 @@ func(int) string → ??? ✗
 ```
 
 **Impact**:
-- Can't create Result<map[K]V, E>
-- Can't create Result<chan T, E>
-- Can't create Result<func(...), E>
+- Can't create Result[map[K]V, E]
+- Can't create Result[chan T, E]
+- Can't create Result[func(...), E]
 
 **Why Minor**:
 - Most common types (primitives, pointers, slices) work
@@ -327,14 +327,14 @@ func (p *ResultTypePlugin) sanitizeTypeName(typeName string) string {
 func (s *TypeInferenceService) ValidateNoneInference(noneExpr ast.Expr) (ok bool, suggestion string) {
     // Placeholder: Always fail for now (Task 1.5 will implement this)
     return false, fmt.Sprintf(
-        "Cannot infer type for None at %s\nHelp: Add explicit type annotation: let varName: Option<YourType> = None",
+        "Cannot infer type for None at %s\nHelp: Add explicit type annotation: let varName: Option[YourType] = None",
         s.fset.Position(noneExpr.Pos()),
     )
 }
 ```
 
 **Impact**:
-- Users must always explicitly type None: `let x: Option<int> = None`
+- Users must always explicitly type None: `let x: Option[int] = None`
 - Cannot write `let x = None` even when type is obvious from context
 - More verbose than Rust (which infers from context)
 
@@ -439,7 +439,7 @@ func (p *ResultTypePlugin) emitGoInteropWrappers() {
 
 3. **Documentation**: Every exported symbol has godoc
    ```go
-   // ResultTypePlugin generates Result<T, E> type declarations and transformations
+   // ResultTypePlugin generates Result[T, E] type declarations and transformations
    //
    // This plugin implements...
    ```
@@ -690,7 +690,7 @@ pkg/
 
 **Quality Examples**:
 ```go
-// ResultTypePlugin generates Result<T, E> type declarations and transformations
+// ResultTypePlugin generates Result[T, E] type declarations and transformations
 //
 // This plugin implements the Result type as a tagged union (sum type) with two variants:
 // - Ok(T): Success case containing a value of type T

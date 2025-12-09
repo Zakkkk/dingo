@@ -670,7 +670,7 @@ add a wildcard arm: _ => ...
 
 **Should be**:
 ```
-error: non-exhaustive match on Result<User, Error>
+error: non-exhaustive match on Result[User, Error]
   --> user.dingo:23:5
    |
 23 | match result {

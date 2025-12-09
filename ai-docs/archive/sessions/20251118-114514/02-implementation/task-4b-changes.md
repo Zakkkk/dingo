@@ -10,8 +10,8 @@
   - Fix A5: go/types integration (280 lines)
   - Fix A4: IIFE pattern for literals (450 lines)
   - Error infrastructure (120 lines)
-  - Result<T,E> helper methods (650 lines)
-  - Option<T> complete implementation
+  - Result[T,E] helper methods (650 lines)
+  - Option[T] complete implementation
 - Added testing summary:
   - Unit tests: 261/267 passing (97.8%)
   - Expected failures: 7 tests (all documented)

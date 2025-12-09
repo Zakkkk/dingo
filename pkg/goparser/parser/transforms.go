@@ -20,7 +20,7 @@ type TokenMapping struct {
 //
 // This is a minimal transformer that:
 // 1. Converts ? to markers (?, ??, ?. → comments for now)
-// 2. Handles generic syntax (Result<T,E> → Result[T,E])
+// 2. Handles generic syntax (Result[T,E] → Result[T,E])
 // 3. Handles let declarations (let x = → x :=)
 //
 // More complex transformations (enum, match, lambda) are handled by pkg/parser/
@@ -67,7 +67,7 @@ func TransformToGo(src []byte) ([]byte, []TokenMapping, error) {
 		t := tokens[i]
 		offset := file.Offset(t.pos) // Convert Pos to byte offset
 
-		// Handle generic type syntax: Result<T, E> -> Result[T, E]
+		// Handle generic type syntax: Result[T, E] -> Result[T, E]
 		// Replace '<' with '[' when after an identifier (type name)
 		if t.tok == gotoken.LSS { // '<'
 			if i > 0 && tokens[i-1].tok == gotoken.IDENT {

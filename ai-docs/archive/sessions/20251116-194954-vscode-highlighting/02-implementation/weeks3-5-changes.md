@@ -34,8 +34,8 @@ This document details all changes made during Weeks 3-5 of the VSCode syntax hig
 
 3. **Enhanced Result/Option Type Patterns**
    - Changed from simple `match` to `begin/end` patterns
-   - `Result<T, E>` now properly highlights type parameters inside `<>`
-   - `Option<T>` similarly improved with type parameter detection
+   - `Result[T, E]` now properly highlights type parameters inside `<>`
+   - `Option[T]` similarly improved with type parameter detection
    - Added punctuation scopes for `<`, `>`, and `,` separators
    - Recursive type inclusion for nested generics
 
@@ -258,7 +258,7 @@ This document details all changes made during Weeks 3-5 of the VSCode syntax hig
 - [ ] Open `.dingo` file with `expr? "message"` syntax
 - [ ] Verify error message has distinct color
 - [ ] Check `__err0` and `__tmp0` are muted/grayed
-- [ ] Verify `Result<Config, error>` highlights type parameters
+- [ ] Verify `Result[Config, error]` highlights type parameters
 - [ ] Check `Ok()`, `Err()`, `Some()`, `None()` have constructor colors
 - [ ] Test with different VSCode themes (Dark+, Light+, Monokai)
 

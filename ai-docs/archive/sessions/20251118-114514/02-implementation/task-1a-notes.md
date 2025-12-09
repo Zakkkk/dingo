@@ -95,7 +95,7 @@ if err != nil {
 - Channels: chan, chan<-, <-chan
 - Complex nested types: map[string]*[]User
 
-**Benefit:** Accurate type names for all Result<T,E> and Option<T> combinations
+**Benefit:** Accurate type names for all Result[T,E] and Option[T] combinations
 
 ## Deviations from Plan
 

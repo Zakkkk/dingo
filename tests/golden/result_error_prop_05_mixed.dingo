@@ -24,7 +24,7 @@ func WrapIOError(err error) AppError {
 }
 
 // Test mixing all three patterns in one function
-func ProcessData(db *sql.DB, reader io.Reader) Result<string, AppError> {
+func ProcessData(db *sql.DB, reader io.Reader) Result[string, AppError] {
 	// Pattern 1: Struct literal
 	let rows = db.Query("SELECT * FROM data")? AppError{Code: "DB_ERROR", Message: err.Error()}
 	defer rows.Close()

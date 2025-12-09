@@ -1,4 +1,4 @@
-# Task 3b: Option<T> Helper Methods - Files Modified/Created
+# Task 3b: Option[T] Helper Methods - Files Modified/Created
 
 ## Files Modified
 
@@ -218,7 +218,7 @@ func (o Option_int) Filter(predicate func(int) bool) Option_int {
 - **Golden output execution**: ✅ Correct output produced
 
 ### Capabilities Delivered:
-1. ✅ **UnwrapOrElse**: Lazy default computation for Option<T>
+1. ✅ **UnwrapOrElse**: Lazy default computation for Option[T]
 2. ✅ **Map**: Transform Some values, propagate None
 3. ✅ **AndThen**: Chain optional operations (monadic bind)
 4. ✅ **Filter**: Conditional value filtering
@@ -260,7 +260,7 @@ func (o Option_int) Filter(predicate func(int) bool) Option_int {
 4. **No null safety**: Direct field access `*o.some_0` possible (internal only)
 
 ### Next Steps:
-- ✅ Task 3b complete: All 8 Option<T> helper methods implemented
+- ✅ Task 3b complete: All 8 Option[T] helper methods implemented
 - ❌ End-to-end transpiler testing (Batch 4)
-- ❌ Result<T,E> helper methods (parallel task)
+- ❌ Result[T,E] helper methods (parallel task)
 - ❌ Integration with full pipeline (Batch 4)

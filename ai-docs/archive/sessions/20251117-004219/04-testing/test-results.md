@@ -62,7 +62,7 @@ All comprehensive unit tests for the four new language features PASSED successfu
 
 #### Test 4: TestSafeNavTransformAlwaysOptionMode
 - **Status:** PASS
-- **Purpose:** Validate Option<T> wrapping in strict mode
+- **Purpose:** Validate Option[T] wrapping in strict mode
 - **Input:** SafeNavigationExpr with config.SafeNavigationUnwrap = "always_option"
 - **Expected:** IIFE returning Option_Some or Option_None
 - **Result:** Generated correct Option-returning IIFE:

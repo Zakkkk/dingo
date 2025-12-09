@@ -28,8 +28,8 @@
 1. Collect all patterns from case clauses
 2. Determine type (Result, Option) from scrutinee name or patterns
 3. Get all possible variants for type:
-   - Result<T,E>: [Ok, Err]
-   - Option<T>: [Some, None]
+   - Result[T,E]: [Ok, Err]
+   - Option[T]: [Some, None]
 4. Compute uncovered = All - Covered
 5. Error if uncovered set non-empty (unless wildcard exists)
 
@@ -139,8 +139,8 @@ This approach handles multiple matches in one file by matching each comment to i
 
 ### Exhaustiveness Checking
 Currently supports:
-- ✅ Result<T,E> types (Ok, Err)
-- ✅ Option<T> types (Some, None)
+- ✅ Result[T,E] types (Ok, Err)
+- ✅ Option[T] types (Some, None)
 - ✅ Wildcard pattern (_) makes any match exhaustive
 - ⏳ Enum types (deferred to Phase 4.2 with go/types integration)
 

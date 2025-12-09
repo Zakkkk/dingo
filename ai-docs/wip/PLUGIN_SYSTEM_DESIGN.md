@@ -119,8 +119,8 @@ func (p *Pipeline) TransformNode(node ast.Node) (ast.Node, error)
 Transform Dingo syntax nodes to Go AST.
 
 **Examples:**
-- `result-type` - Transforms `Result<T, E>` to Go structs
-- `option-type` - Transforms `Option<T>` to Go pointers with validation
+- `result-type` - Transforms `Result[T, E]` to Go structs
+- `option-type` - Transforms `Option[T]` to Go pointers with validation
 - `lambda` - Transforms `|x| x * 2` to Go func literals
 
 ### 2. Operator Plugins
@@ -149,7 +149,7 @@ Extend or validate the type system.
 
 ### Phase 2 (Week 2)
 
-1. **`result-type`** - Result<T, E> implementation
+1. **`result-type`** - Result[T, E] implementation
    - Priority: P0
    - Dependencies: None
    - Status: Pending
@@ -159,7 +159,7 @@ Extend or validate the type system.
    - Dependencies: `result-type`
    - Status: Pending
 
-3. **`option-type`** - Option<T> implementation
+3. **`option-type`** - Option[T] implementation
    - Priority: P0
    - Dependencies: None
    - Status: Pending
@@ -204,7 +204,7 @@ dingo build --all-plugins hello.dingo
 // dingo:enable result-type,error-propagation
 package main
 
-func fetchUser(id: string) -> Result<User, Error> {
+func fetchUser(id: string) -> Result[User, Error] {
     // ...
 }
 ```
@@ -239,7 +239,7 @@ func fetchUser(id: string) -> Result<User, Error> {
 
 #### Day 5-7: First Plugin - Result Type
 - [ ] Implement `result-type` plugin
-- [ ] Transform `Result<T, E>` to Go structs
+- [ ] Transform `Result[T, E]` to Go structs
 - [ ] Generate helper methods (Ok, Err, IsOk, IsErr, etc.)
 - [ ] Add tests
 - [ ] Update examples

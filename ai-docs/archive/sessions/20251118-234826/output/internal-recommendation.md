@@ -278,7 +278,7 @@ func (c *Context) RegisterVariable(name, typ string) {
 }
 
 // Populate context during preprocessing:
-// - Function parameters: "opt: Option<int>" → ctx.RegisterVariable("opt", "Option_int")
+// - Function parameters: "opt: Option[int]" → ctx.RegisterVariable("opt", "Option_int")
 // - Let bindings: "let x = ..." → track type
 ```
 

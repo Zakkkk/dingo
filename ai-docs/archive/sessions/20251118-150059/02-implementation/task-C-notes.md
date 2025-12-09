@@ -4,7 +4,7 @@
 
 ### Supported Pattern Formats
 
-**Decision:** Use Rust-like syntax as default (consistent with Result<T,E>, Option<T>)
+**Decision:** Use Rust-like syntax as default (consistent with Result[T,E], Option[T])
 
 ```dingo
 match scrutinee {
@@ -38,7 +38,7 @@ match scrutinee {
 - `None` → No binding (unit variant)
 
 **Rationale:**
-- Result<T,E> and Option<T> implementations (Phase 3) use:
+- Result[T,E] and Option[T] implementations (Phase 3) use:
   - Pointer fields for Ok/Some values (allows any type T)
   - Direct field for Err error value
   - No field for None
@@ -233,7 +233,7 @@ KeywordProcessor     (let → var)
 **Decision:** Realistic examples, not toy cases
 
 **Examples:**
-- `processResult` - Real function using Result<T,E>
+- `processResult` - Real function using Result[T,E]
 - `doubleIfPresent` - Pattern match in assignment
 - `processNested` - Match inside match (common pattern)
 

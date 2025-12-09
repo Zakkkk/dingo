@@ -1,4 +1,4 @@
-// Package builtin provides Result<T, E> type generation plugin
+// Package builtin provides Result[T, E] type generation plugin
 package builtin
 
 import (
@@ -12,7 +12,7 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// ResultTypePlugin generates Result<T, E> type declarations and transformations
+// ResultTypePlugin generates Result[T, E] type declarations and transformations
 //
 // This plugin implements the Result type as a tagged union (sum type) with two variants:
 // - Ok(T): Success case containing a value of type T
@@ -60,10 +60,10 @@ type ResultTypePlugin struct {
 	resultTypeRewrites map[*ast.IndexListExpr]bool
 }
 
-// resultReturnInfo holds parsed Result<T, E> return type information
+// resultReturnInfo holds parsed Result[T, E] return type information
 type resultReturnInfo struct {
-	okType         string // The T in Result<T, E>
-	errType        string // The E in Result<T, E>
+	okType         string // The T in Result[T, E]
+	errType        string // The E in Result[T, E]
 	resultTypeName string // The sanitized type name (e.g., "ResultUserDBError")
 }
 
@@ -134,7 +134,7 @@ func (p *ResultTypePlugin) Process(node ast.Node) error {
 			// Track function literal return type if it's a Result type
 			p.trackFunctionResultType(n, n.Type)
 		case *ast.IndexExpr:
-			// Result<T> or Result<T, E>
+			// Result[T] or Result[T, E]
 			p.handleGenericResult(n)
 		case *ast.IndexListExpr:
 			// Go 1.18+ generic syntax: Result[T, E]
@@ -544,7 +544,7 @@ func (p *ResultTypePlugin) trackFunctionResultType(funcNode ast.Node, funcType *
 	}
 }
 
-// handleGenericResult processes Result<T> or Result<T, E> syntax (IndexExpr)
+// handleGenericResult processes Result[T] or Result[T, E] syntax (IndexExpr)
 func (p *ResultTypePlugin) handleGenericResult(expr *ast.IndexExpr) {
 	// With Go 1.18+ generics, we keep Result[T] as-is
 	// The preprocessor already adds runtime. prefix (Result[T] → dgo.Result[T])
@@ -1686,7 +1686,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, unwrapOrElseMethod)
 
-	// Map(fn func(T) U) Result<U, E>
+	// Map(fn func(T) U) Result[U, E]
 	// Transforms the Ok value if present
 	// Note: Since we don't have generics, we use interface{} for U and return a generic Result
 	mapMethod := &ast.FuncDecl{
@@ -1721,7 +1721,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 			},
 			Results: &ast.FieldList{
 				List: []*ast.Field{
-					{Type: ast.NewIdent("interface{}")}, // Returns Result<U, E>
+					{Type: ast.NewIdent("interface{}")}, // Returns Result[U, E]
 				},
 			},
 		},
@@ -1817,7 +1817,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, mapMethod)
 
-	// MapErr(fn func(E) F) Result<T, F>
+	// MapErr(fn func(E) F) Result[T, F]
 	// Transforms the Err value if present (returns interface{} for simplicity)
 	mapErrMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -1851,7 +1851,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 			},
 			Results: &ast.FieldList{
 				List: []*ast.Field{
-					{Type: ast.NewIdent("interface{}")}, // Returns Result<T, F>
+					{Type: ast.NewIdent("interface{}")}, // Returns Result[T, F]
 				},
 			},
 		},
@@ -1948,7 +1948,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, mapErrMethod)
 
-	// Filter(predicate func(T) bool) Result<T, E>
+	// Filter(predicate func(T) bool) Result[T, E]
 	// Converts Ok to Err if predicate fails
 	filterMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -2024,7 +2024,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, filterMethod)
 
-	// AndThen(fn func(T) Result<U, E>) Result<U, E>
+	// AndThen(fn func(T) Result[U, E]) Result[U, E]
 	// Monadic bind operation
 	andThenMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -2049,7 +2049,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 							},
 							Results: &ast.FieldList{
 								List: []*ast.Field{
-									{Type: ast.NewIdent("interface{}")}, // Result<U, E>
+									{Type: ast.NewIdent("interface{}")}, // Result[U, E]
 								},
 							},
 						},
@@ -2122,7 +2122,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, andThenMethod)
 
-	// OrElse(fn func(E) Result<T, F>) Result<T, F>
+	// OrElse(fn func(E) Result[T, F]) Result[T, F]
 	// Handle Err case with fallback
 	orElseMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -2147,7 +2147,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 							},
 							Results: &ast.FieldList{
 								List: []*ast.Field{
-									{Type: ast.NewIdent("interface{}")}, // Result<T, F>
+									{Type: ast.NewIdent("interface{}")}, // Result[T, F]
 								},
 							},
 						},
@@ -2220,7 +2220,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, orElseMethod)
 
-	// And(other Result<U, E>) Result<U, E>
+	// And(other Result[U, E]) Result[U, E]
 	// Returns other if Ok, returns Err if Err
 	andMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -2237,7 +2237,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 				List: []*ast.Field{
 					{
 						Names: []*ast.Ident{ast.NewIdent("other")},
-						Type:  ast.NewIdent("interface{}"), // Generic Result<U, E>
+						Type:  ast.NewIdent("interface{}"), // Generic Result[U, E]
 					},
 				},
 			},
@@ -2273,7 +2273,7 @@ func (p *ResultTypePlugin) emitAdvancedHelperMethods(resultTypeName, okType, err
 	}
 	p.pendingDecls = append(p.pendingDecls, andMethod)
 
-	// Or(other Result<T, E>) Result<T, E>
+	// Or(other Result[T, E]) Result[T, E]
 	// Returns r if Ok, returns other if Err
 	orMethod := &ast.FuncDecl{
 		Recv: &ast.FieldList{

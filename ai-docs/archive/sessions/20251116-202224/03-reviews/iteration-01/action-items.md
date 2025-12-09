@@ -104,7 +104,7 @@ Zero test coverage - cannot verify correctness
 4. Match lowering unit test (verify switch generation)
 
 **Fix - Priority 2 (Recommended):**
-5. Generic enum test (Option<T>)
+5. Generic enum test (Option[T])
 6. Integration test: .dingo → .go → go build
 7. Negative tests (duplicate variants, invalid patterns)
 

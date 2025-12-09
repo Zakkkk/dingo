@@ -432,7 +432,7 @@ Type inference system (`pkg/plugin/builtin/type_inference.go`) doesn't have logi
 - `/Users/jack/mag/dingo/pkg/plugin/builtin/type_inference_context_test.go`
 
 **Current Context Types** (5):
-1. Variable assignment: `var x Option<int> = None`
+1. Variable assignment: `var x Option[int] = None`
 2. Function parameter: `foo(None)`
 3. Map value: `m["key"] = None`
 4. Slice element: `s[0] = None`
@@ -537,13 +537,13 @@ func findParentFunction(node ast.Node) *ast.FuncDecl {
 
 **Input Dingo Code**:
 ```go
-func getDefault() Option<int> {
-    return None  // Should infer Option<int>
+func getDefault() Option[int] {
+    return None  // Should infer Option[int]
 }
 
-func processData() (Option<string>, error) {
+func processData() (Option[string], error) {
     if someCondition {
-        return None, nil  // Should infer Option<string>
+        return None, nil  // Should infer Option[string]
     }
     return Some("data"), nil
 }
@@ -552,7 +552,7 @@ func processData() (Option<string>, error) {
 **Expected Behavior**:
 1. Parser encounters `return None`
 2. Inference finds parent function `getDefault`
-3. Extracts return type: `Option<int>`
+3. Extracts return type: `Option[int]`
 4. Transforms `None` → `None[int]()`
 
 ### Validation Strategy
@@ -569,11 +569,11 @@ go test ./pkg/plugin/builtin -run TestTypeInference.*Return -v
 cat > tests/golden/option_07_return_inference.dingo << 'EOF'
 package main
 
-func getDefault() Option<int> {
+func getDefault() Option[int] {
     return None
 }
 
-func getTuple() (Option<string>, Option<int>) {
+func getTuple() (Option[string], Option[int]) {
     return None, None
 }
 EOF

@@ -5,7 +5,7 @@
 - pkg/plugin/builtin/result_type.go (1081 lines)
 - pkg/plugin/builtin/result_type_test.go (1600 lines)
 
-**Context:** Stage 1 Result<T, E> implementation with 38 unit tests
+**Context:** Stage 1 Result[T, E] implementation with 38 unit tests
 
 ---
 

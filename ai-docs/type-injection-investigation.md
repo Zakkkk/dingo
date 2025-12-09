@@ -61,7 +61,7 @@ func (p *ResultTypePlugin) Process(node ast.Node) error {
     ast.Inspect(node, func(n ast.Node) bool {
         switch n := n.(type) {
         case *ast.IndexExpr:
-            // Result<T> or Result<T, E>
+            // Result[T] or Result[T, E]
             p.handleGenericResult(n)
         case *ast.IndexListExpr:
             // Go 1.18+ generic syntax: Result[T, E]

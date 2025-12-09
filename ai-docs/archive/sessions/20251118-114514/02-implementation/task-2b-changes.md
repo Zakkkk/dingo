@@ -1,4 +1,4 @@
-# Task 2b: Option<T> Plugin - Files Modified/Created
+# Task 2b: Option[T] Plugin - Files Modified/Created
 
 ## Files Modified
 
@@ -158,7 +158,7 @@ if !inferred {
 
 ### 1. `/Users/jack/mag/dingo/pkg/plugin/builtin/option_type_test.go`
 
-**Purpose:** Comprehensive unit test suite for Option<T> plugin
+**Purpose:** Comprehensive unit test suite for Option[T] plugin
 
 **Test Coverage:**
 

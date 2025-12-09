@@ -10,7 +10,7 @@
 
 ## Overview
 
-The `??` operator provides concise default values for `Option<T>` types, eliminating verbose unwrapping code.
+The `??` operator provides concise default values for `Option[T]` types, eliminating verbose unwrapping code.
 
 ## Proposed Syntax
 

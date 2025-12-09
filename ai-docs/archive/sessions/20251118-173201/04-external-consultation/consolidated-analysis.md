@@ -283,7 +283,7 @@ func (r *RustMatchProcessor) generateCaseWithReturn(scrutineeVar string, arm pat
 
 Create `pattern_match_14_assignment_iife.dingo`:
 ```dingo
-func test(opt: Option<int>) -> Option<int> {
+func test(opt: Option[int]) -> Option[int] {
     let result = match opt {
         Some(x) => Some(x * 2),
         None => None

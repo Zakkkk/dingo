@@ -61,12 +61,12 @@ All tests passing:
 
 ### Result Type Go Interop Modes
 1. **"opt-in"** (default) - Requires explicit `Result.FromGo()` wrapper
-2. **"auto"** - Automatically wraps `(T, error)` → `Result<T, E>`
+2. **"auto"** - Automatically wraps `(T, error)` → `Result[T, E]`
 3. **"disabled"** - No Go interop, pure Dingo types only
 
 ### Option Type Go Interop Modes
 1. **"opt-in"** (default) - Requires explicit `Option.FromPtr()` wrapper
-2. **"auto"** - Automatically wraps `*T` → `Option<T>`
+2. **"auto"** - Automatically wraps `*T` → `Option[T]`
 3. **"disabled"** - No Go interop, pure Dingo types only
 
 ## Validation Rules

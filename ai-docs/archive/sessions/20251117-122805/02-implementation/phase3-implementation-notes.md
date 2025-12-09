@@ -159,7 +159,7 @@ let result = Err(errors.New("failed"))  // What is T?
 Requires parent context tracking:
 1. Find parent assignment statement
 2. Extract LHS type annotation
-3. Parse Result<T, E> to get T
+3. Parse Result[T, E] to get T
 4. Or: Find enclosing function return type
 
 **Complexity:** Medium (3-4 hours to implement correctly)
@@ -181,7 +181,7 @@ func (p *ResultTypePlugin) inferTFromContext(callExpr *ast.CallExpr) string {
 
 **Example:**
 ```dingo
-let maybe: Option<int> = None  // Need to know it's Option_int
+let maybe: Option[int] = None  // Need to know it's Option_int
 ```
 
 **Why Deferred:**
@@ -279,7 +279,7 @@ NewResultTypePlugin() *ResultTypePlugin {
     return &ResultTypePlugin{
         BasePlugin: *plugin.NewBasePlugin(
             "result_type",
-            "Built-in Result<T, E> generic type for error handling",
+            "Built-in Result[T, E] generic type for error handling",
             []string{"sum_types"}, // Explicit dependency
         ),
     }
@@ -385,7 +385,7 @@ func TestResultWithSumTypes(t *testing.T) {
 **Golden File Tests:**
 ```dingo
 // tests/golden/result_basic.dingo
-enum Result<int, error> { Ok(int), Err(error) }
+enum Result[int, error] { Ok(int), Err(error) }
 
 let success = Ok(42)
 let failure = Err(errors.New("oops"))

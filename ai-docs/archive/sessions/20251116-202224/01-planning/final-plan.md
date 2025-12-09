@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-This plan finalizes the implementation of sum types in Dingo, incorporating all user design decisions. Sum types are the foundational type system feature enabling Result<T, E> and Option<T> - Dingo's core value proposition.
+This plan finalizes the implementation of sum types in Dingo, incorporating all user design decisions. Sum types are the foundational type system feature enabling Result[T, E] and Option[T] - Dingo's core value proposition.
 
 **Key Design Decisions:**
 - Match arms use `=>` (Rust-style, avoids arrow function conflict)
@@ -35,12 +35,12 @@ enum HttpResponse {
 }
 
 // Generic enums
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),  // Trailing comma OK
 }
 
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None,  // Trailing comma OK
 }
@@ -220,13 +220,13 @@ match shape {
 package std
 
 // Result type for fallible operations
-enum Result<T, E> {
+enum Result[T, E] {
     Ok(T),
     Err(E),
 }
 
 // Optional values
-enum Option<T> {
+enum Option[T] {
     Some(T),
     None,
 }
@@ -705,7 +705,7 @@ func (p *SumTypesPlugin) Transform(
 
 ### Phase 5: Generics Support (Week 3-4: Days 23-30)
 
-**Goal:** Support generic enum types (Result<T, E>, Option<T>)
+**Goal:** Support generic enum types (Result[T, E], Option[T])
 
 **Tasks:**
 - [ ] Parse generic type parameters in enum declarations
@@ -723,14 +723,14 @@ func (p *SumTypesPlugin) Transform(
 - [ ] Integration test: Result-based error handling
 - [ ] Integration test: Option for nullable values
 
-**Deliverable:** Can define and use `Result<User, Error>` with standard prelude
+**Deliverable:** Can define and use `Result[User, Error]` with standard prelude
 
 **Time Estimate:** 6-8 days
 
 **Success Criteria:**
 - [ ] Generic enums parse correctly
 - [ ] Generic constructors work (type parameters inferred)
-- [ ] Result<T, E> and Option<T> available without imports
+- [ ] Result[T, E] and Option[T] available without imports
 - [ ] Match works with generic enums
 - [ ] Helper methods work with generics
 - [ ] Prelude types integrate seamlessly
@@ -854,7 +854,7 @@ func BenchmarkSumType_HelperMethod(b *testing.B)
 - [x] Match works as expression (can return values) *(Decision: expression-based)*
 - [x] Exhaustiveness checking catches missing cases *(Decision: error on missing)*
 - [x] Wildcard `_` pattern allowed as catch-all *(Decision: allow escape hatch)*
-- [x] Generic enums (Result<T,E>, Option<T>) work
+- [x] Generic enums (Result[T,E], Option[T]) work
 - [x] Standard prelude with Result/Option *(Decision: auto-import)*
 - [x] Zero runtime overhead (no reflection, minimal allocations)
 - [x] All tests pass (unit, integration, golden)
@@ -962,7 +962,7 @@ func BenchmarkSumType_HelperMethod(b *testing.B)
 - Common patterns
 
 **Guide: Error Handling with Result** (`docs/guides/error-handling.md`):
-- Result<T, E> usage
+- Result[T, E] usage
 - Integration with `?` operator
 - Converting from Go errors
 - Best practices
@@ -970,8 +970,8 @@ func BenchmarkSumType_HelperMethod(b *testing.B)
 ### 12.2 API Documentation
 
 **Prelude Types** (`docs/api/prelude.md`):
-- Result<T, E> API
-- Option<T> API
+- Result[T, E] API
+- Option[T] API
 - Auto-import behavior
 
 ---

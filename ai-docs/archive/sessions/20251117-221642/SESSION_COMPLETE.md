@@ -139,8 +139,8 @@ Successfully identified and resolved **4 critical bugs** found by external code 
 ➡️ Ready to start **Phase 3: Result/Option Integration**
 
 ### Phase 3.1 Plan (2 weeks)
-- Integrate Result<T, E> constructors with type inference
-- Integrate Option<T> constructors with type inference
+- Integrate Result[T, E] constructors with type inference
+- Integrate Option[T] constructors with type inference
 - Pattern matching support for Result/Option
 - Go interop (auto-wrapping)
 - Comprehensive golden tests

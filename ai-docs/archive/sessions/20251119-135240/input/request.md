@@ -2,9 +2,9 @@ Gather comprehensive recommendations for enum variant naming conventions in the 
 
 Dingo is a Go transcompiler that adds sum types through enum keywords. Current examples include:
 
-enum Result< T, E> { Ok<T> Err<E> }
+enum Result[ T, E] { Ok[T] Err[E] }
 
-enum Optional<T> { Some<T> None }
+enum Optional<T> { Some[T] None }
 
 enum Tree { Leaf(value int) Node(left *Tree, right *Tree) }
 

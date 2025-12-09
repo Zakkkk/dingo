@@ -197,7 +197,7 @@ When lambda syntax is implemented:
 
 **Code Ready:**
 ```go
-// transformFind would return Option<T>
+// transformFind would return Option[T]
 // transformMapResult would short-circuit on Result.IsErr()
 // transformFilterSome would call Option.IsSome()
 ```

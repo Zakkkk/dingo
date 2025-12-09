@@ -5,8 +5,8 @@ Check the status of the following tasks and implement them:
 
 1. 🔨 Golden File Integration Testing
 2. 🔨 End-to-End Sum Types Validation
-3. 🔜 Result Type (`Result<T, E>`)
-4. 🔜 Option Type (`Option<T>`)
+3. 🔜 Result Type (`Result[T, E]`)
+4. 🔜 Option Type (`Option[T]`)
 
 ## Context
 Based on the project CHANGELOG.md, the following is already implemented:
@@ -39,7 +39,7 @@ However, the **golden file tests** (which are end-to-end integration tests) are 
 
 **Assessment**: Unit tests pass, but end-to-end integration tests need fixing.
 
-### Result Type (`Result<T, E>`)
+### Result Type (`Result[T, E]`)
 **Status**: 🔴 **NOT STARTED**
 
 The feature specification exists at `/features/result-type.md` with full design:
@@ -50,7 +50,7 @@ The feature specification exists at `/features/result-type.md` with full design:
 
 **Prerequisite**: Sum types are implemented ✅, so Result can be built as a special enum
 
-### Option Type (`Option<T>`)
+### Option Type (`Option[T]`)
 **Status**: 🔴 **NOT STARTED**
 
 The feature specification exists at `/features/option-type.md` with full design:

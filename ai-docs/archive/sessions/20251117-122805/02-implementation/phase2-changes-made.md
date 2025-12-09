@@ -54,8 +54,8 @@ Successfully implemented Phase 2 of the Dingo project: Type Inference System Int
   - `Refresh(file *ast.File) error` - Refresh types after AST modifications
   - `Close() error` - Resource cleanup (returns error now)
   - `InferType(expr ast.Expr) (types.Type, error)` - Cached type inference
-  - `IsResultType(typ types.Type) (T, E types.Type, ok bool)` - Detect Result<T, E>
-  - `IsOptionType(typ types.Type) (T types.Type, ok bool)` - Detect Option<T>
+  - `IsResultType(typ types.Type) (T, E types.Type, ok bool)` - Detect Result[T, E]
+  - `IsOptionType(typ types.Type) (T types.Type, ok bool)` - Detect Option[T]
   - `IsPointerType(typ types.Type) bool` - Check if pointer
   - `IsErrorType(typ types.Type) bool` - Check if error or implements error
   - `IsGoErrorTuple(sig *types.Signature) (valueType types.Type, ok bool)` - Detect (T, error) returns
@@ -138,7 +138,7 @@ Successfully implemented Phase 2 of the Dingo project: Type Inference System Int
 - Plugins work (with reduced functionality) without type info
 
 ### 4. Synthetic Type Registry
-**Purpose:** Track generated types (Result<T, E>, Option<T>, enum variants)
+**Purpose:** Track generated types (Result[T, E], Option[T], enum variants)
 
 **Status:** Infrastructure complete, registration deferred to Phase 3
 - Registration hooks exist in TypeInferenceService
@@ -222,7 +222,7 @@ if ctx.TypeInference != nil {
 
 3. **Error Propagation Enhancement**
    - Detect Result types with `IsResultType()`
-   - Support `?` operator on Result<T, E> types
+   - Support `?` operator on Result[T, E] types
    - Migrate from local TypeInference to shared service
 
 4. **Configuration System**

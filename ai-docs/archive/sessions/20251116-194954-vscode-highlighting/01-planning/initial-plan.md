@@ -25,7 +25,7 @@ This document outlines a comprehensive approach to enhance VSCode syntax highlig
 ```yaml
 - Comments (line and block)
 - Keywords (control flow, declarations)
-- Result<T,E> and Option<T> types
+- Result[T,E] and Option[T] types
 - Operators including ? (error propagation)
 - Enum variants and pattern matching
 - Functions and lambdas

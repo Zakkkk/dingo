@@ -13,7 +13,7 @@ Created 4 comprehensive golden tests for the pattern guards feature, demonstrati
 - `/Users/jack/mag/dingo/tests/golden/pattern_match_05_guards_basic.go.golden` (96 lines)
 
 **Coverage:**
-- Simple guards with 'if' keyword on Result<T,E> type
+- Simple guards with 'if' keyword on Result[T,E] type
 - Multiple guards on same variant (Ok with different conditions)
 - Guards with complex boolean expressions (&&, comparison operators)
 - Guards with function call conditions (isEven(n))
@@ -37,13 +37,13 @@ Created 4 comprehensive golden tests for the pattern guards feature, demonstrati
 
 **Coverage:**
 - Swift-style 'where' keyword guards
-- Nested pattern matching with guards (Result<Option<T>>)
+- Nested pattern matching with guards (Result[Option[T]])
 - Complex guard expressions (modulo operations, multiple conditions)
 - Guard fallthrough with multiple conditions per variant
 
 **Test Cases in File:**
-1. `analyzeValue()` - Multiple where guards on Option<T> (x > 100, x > 10, x > 0)
-2. `processNestedResult()` - Nested Result<Option<T>> with guards
+1. `analyzeValue()` - Multiple where guards on Option[T] (x > 100, x > 10, x > 0)
+2. `processNestedResult()` - Nested Result[Option[T]] with guards
 3. `categorize()` - FizzBuzz example showing guard precedence
 
 **Key Demonstration:**

@@ -1,5 +1,5 @@
 // Real-world example: Database repository with Result types
-// Result<T, E> makes success/failure states explicit and type-safe
+// Result[T, E] makes success/failure states explicit and type-safe
 package main
 
 import (

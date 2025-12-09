@@ -59,16 +59,16 @@ The Transform phase currently focuses on safety enforcement rather than code gen
 ## Files Created
 
 ### 3. `/Users/jack/mag/dingo/tests/golden/pattern_match_03_result_option.dingo`
-**Purpose:** Comprehensive golden test for Result<T,E> and Option<T> pattern matching
+**Purpose:** Comprehensive golden test for Result[T,E] and Option[T] pattern matching
 
 **Examples included:**
 1. **Result pattern match** - User age validation
-   - validateAge() returns Result<int, error>
+   - validateAge() returns Result[int, error]
    - processAge() matches Ok(age) vs Err(e)
    - Realistic error handling scenario
 
 2. **Option pattern match** - User lookup
-   - findUser() returns Option<User>
+   - findUser() returns Option[User]
    - getUserName() matches Some(user) vs None
    - Default value pattern
 

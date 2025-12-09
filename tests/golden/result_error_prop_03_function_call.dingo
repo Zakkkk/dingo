@@ -18,7 +18,7 @@ func WrapDBError(err error) ServiceError {
 }
 
 // Test WrapFunc(err) pattern
-func FindProducts(db *sql.DB) Result<[]string, ServiceError> {
+func FindProducts(db *sql.DB) Result[[]string, ServiceError] {
 	let rows = db.Query("SELECT * FROM products")? WrapDBError(err)
 	defer rows.Close()
 	return ResultSliceStringServiceErrorOk([]string{"product1", "product2"})

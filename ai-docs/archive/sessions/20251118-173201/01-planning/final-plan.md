@@ -1242,7 +1242,7 @@ func (p *PatternMatchPlugin) generateExhaustivenessSuggestion(
 func (p *PatternMatchPlugin) generateTypeSuggestion(
     expected, actual string,
 ) string {
-    // Example: Expected Result<int, error>, got Option<int>
+    // Example: Expected Result[int, error], got Option[int]
     return fmt.Sprintf(
         "Did you mean to use '%s' instead of '%s'?",
         expected, actual,

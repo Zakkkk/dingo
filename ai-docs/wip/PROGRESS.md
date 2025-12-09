@@ -28,8 +28,8 @@
   - `NullCoalescingExpr` (`??` operator)
   - `TernaryExpr` (ternary operator)
   - `LambdaExpr` (lambda functions)
-  - `ResultType` (Result<T, E>)
-  - `OptionType` (Option<T>)
+  - `ResultType` (Result[T, E])
+  - `OptionType` (Option[T])
 
 **Benefits:**
 - Leverage `go/printer` for code generation
@@ -247,7 +247,7 @@ Parser → Transformer → Generator
 
 ### Future Phases:
 - **Phase 2:** Null coalescing, ternary, functional utilities
-- **Phase 3:** Result<T, E>, Option<T>, pattern matching
+- **Phase 3:** Result[T, E], Option[T], pattern matching
 - **Phase 4:** Tree-sitter migration, language server
 
 ---

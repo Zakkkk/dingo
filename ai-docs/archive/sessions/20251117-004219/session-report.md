@@ -13,7 +13,7 @@ Successfully implemented four new operators and language features for Dingo with
 ### Features Implemented
 
 1. **Safe Navigation Operator (`?.`)** - Null-safe field access with smart unwrapping
-2. **Null Coalescing Operator (`??`)** - Default values for Option<T> and Go pointers
+2. **Null Coalescing Operator (`??`)** - Default values for Option[T] and Go pointers
 3. **Ternary Operator (`? :`)** - Inline conditional expressions
 4. **Lambda Functions** - Rust-style `|x| expr` syntax support
 
@@ -62,7 +62,7 @@ All features integrate with existing plugin architecture and configuration syste
 [features]
 lambda_syntax = "rust"                  # "rust" | "arrow" | "both"
 safe_navigation_unwrap = "smart"        # "smart" | "always_option"
-null_coalescing_pointers = true         # true = work with *T, false = Option<T> only
+null_coalescing_pointers = true         # true = work with *T, false = Option[T] only
 operator_precedence = "standard"        # "standard" | "explicit"
 ```
 

@@ -23,25 +23,25 @@ All 4 batches completed successfully with 97.8% test pass rate.
 - Ready for plugin integration
 
 ## Batch 2: Core Plugin Updates (6-8 hours)
-### Task 2a: Result<T,E> Plugin ✅
+### Task 2a: Result[T,E] Plugin ✅
 - Integrated Fix A5 (go/types type inference)
 - Integrated Fix A4 (IIFE wrapping for literals)
 - Updated transformOkConstructor() and transformErrConstructor()
 - 88% test pass rate, zero compilation errors
 
-### Task 2b: Option<T> Plugin ✅
+### Task 2b: Option[T] Plugin ✅
 - Integrated Fix A5 and Fix A4
 - Implemented type-context-aware None constant
 - 17/17 unit tests passing
 - Golden test created
 
 ## Batch 3: Helper Methods (4-6 hours)
-### Task 3a: Result<T,E> Helpers ✅
+### Task 3a: Result[T,E] Helpers ✅
 - Implemented 8 advanced methods: UnwrapOrElse, Map, MapErr, Filter, AndThen, OrElse, And, Or
 - 82/86 tests passing (95%)
 - Golden test: result_06_helpers.dingo
 
-### Task 3b: Option<T> Helpers ✅
+### Task 3b: Option[T] Helpers ✅
 - Implemented 8 helper methods: UnwrapOrElse, Map, AndThen, Filter
 - Comprehensive golden test with config parsing example
 - All tests passing

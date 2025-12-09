@@ -1052,7 +1052,7 @@ Account for:
 **Impact**: Medium (nice-to-have, not critical)
 
 ### 3. Generic Sum Types
-**Question**: Support `enum Result<T, E>`?
+**Question**: Support `enum Result[T, E]`?
 **Recommendation**: Test with sum_types_03_generic.dingo, implement if not too complex
 **Impact**: High (Result/Option need generics)
 

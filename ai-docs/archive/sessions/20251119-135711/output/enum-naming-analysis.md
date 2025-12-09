@@ -200,7 +200,7 @@ let e = NewErr("failed")
 1. **Default Convention**: PascalCase for all variants
    ```dingo
    enum Status { Active, Pending, Complete }
-   enum Result<T, E> { Ok(T), Err(E) }
+   enum Result[T, E] { Ok(T), Err(E) }
    ```
 
 2. **Transpilation Strategy**:
@@ -228,14 +228,14 @@ let e = NewErr("failed")
 **Good:**
 ```dingo
 enum Color { Red, Green, Blue }
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result[T, E] { Ok(T), Err(E) }
 enum Tree { Leaf(int), Node(left: Tree, right: Tree) }
 ```
 
 **Bad:**
 ```dingo
 enum Color { RED, GREEN, BLUE }        // Don't use UPPER_CASE
-enum Result<T, E> { ok(T), err(E) }    // Don't use lowerCase
+enum Result[T, E] { ok(T), err(E) }    // Don't use lowerCase
 enum Tree { IsLeaf(int), IsNode(...) } // Don't add prefixes
 ```
 
@@ -264,7 +264,7 @@ type Result[T any] Ok(T) | Err(error)
 
 Our Dingo syntax aligns well:
 ```dingo
-enum Result<T, E> { Ok(T), Err(E) }
+enum Result[T, E] { Ok(T), Err(E) }
 ```
 
 This means Dingo code could potentially migrate smoothly if Go ever adds native sum types.
@@ -280,7 +280,7 @@ This means Dingo code could potentially migrate smoothly if Go ever adds native 
 
 2. **database/sql**
    - `NullString`, `NullInt64`, etc.
-   - Natural fit for Option: `Option<string>`, `Option<int64>`
+   - Natural fit for Option: `Option[string]`, `Option[int64]`
 
 3. **encoding/json**
    - `RawMessage` for deferred parsing
@@ -303,7 +303,7 @@ enum NullableValue<T> {
 }
 
 // Better than sql.NullString
-let name: Option<string> = row.getName()
+let name: Option[string] = row.getName()
 match name {
     Some(n) => println("Name: ", n),
     None => println("Name is NULL"),

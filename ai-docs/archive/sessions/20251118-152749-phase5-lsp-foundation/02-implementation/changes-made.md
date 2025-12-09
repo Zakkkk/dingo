@@ -178,8 +178,8 @@
 ## Supported Dingo Features (Phase 3)
 - ✅ Type annotations (`: Type` syntax)
 - ✅ Error propagation (`?` operator)
-- ✅ Result<T, E> types
-- ✅ Option<T> types
+- ✅ Result[T, E] types
+- ✅ Option[T] types
 - ✅ Sum types (enums)
 
 ---

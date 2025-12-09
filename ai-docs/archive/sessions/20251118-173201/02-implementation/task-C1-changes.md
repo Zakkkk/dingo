@@ -91,7 +91,7 @@ Result: Exhaustive
 7. **TestTupleExhaustivenessChecker_SixElements** - Max limit (64 patterns for Result)
 8. **TestTupleExhaustivenessChecker_ArityMismatch** - Error on wrong arity
 9. **TestTupleExhaustivenessChecker_PartialWildcard** - Wildcard in second position
-10. **TestTupleExhaustivenessChecker_OptionType** - Option<T> tuples
+10. **TestTupleExhaustivenessChecker_OptionType** - Option[T] tuples
 11. **TestTupleExhaustivenessChecker_FourElements** - 4-element with wildcards
 12. **TestTupleExhaustivenessChecker_NonExhaustive_MultipleMissing** - Multiple missing patterns
 

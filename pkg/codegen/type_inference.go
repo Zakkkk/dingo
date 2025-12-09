@@ -43,7 +43,7 @@ func InferReturnTypeNames(src []byte, exprPos int) []string {
 
 // InferEnclosingFunctionReturnsResult checks if the enclosing function returns a Result type.
 // Returns the Result's T type if it does, empty string otherwise.
-// For example, for `func foo() Result<User, error>`, returns "User".
+// For example, for `func foo() Result[User, error]`, returns "User".
 func InferEnclosingFunctionReturnsResult(src []byte, exprPos int) string {
 	typeNames := InferReturnTypeNames(src, exprPos)
 	if len(typeNames) == 0 {

@@ -177,7 +177,7 @@ func (fm *FeatureMatrix) IsFeatureEnabled(name string) bool {
 	}
 }
 
-// ResultTypeConfig controls Result<T, E> type behavior
+// ResultTypeConfig controls Result[T, E] type behavior
 type ResultTypeConfig struct {
 	// Enabled controls whether Result type is available
 	Enabled bool `toml:"enabled"`
@@ -185,12 +185,12 @@ type ResultTypeConfig struct {
 	// GoInterop controls how Go (T, error) returns are handled
 	// Valid values: "opt-in", "auto", "disabled"
 	// - "opt-in": Requires explicit Result.FromGo() wrapper (safe default)
-	// - "auto": Automatically wraps (T, error) → Result<T, E>
+	// - "auto": Automatically wraps (T, error) → Result[T, E]
 	// - "disabled": No Go interop, pure Dingo types only
 	GoInterop string `toml:"go_interop"`
 }
 
-// OptionTypeConfig controls Option<T> type behavior
+// OptionTypeConfig controls Option[T] type behavior
 type OptionTypeConfig struct {
 	// Enabled controls whether Option type is available
 	Enabled bool `toml:"enabled"`
@@ -198,7 +198,7 @@ type OptionTypeConfig struct {
 	// GoInterop controls how Go pointer types (*T) are handled
 	// Valid values: "opt-in", "auto", "disabled"
 	// - "opt-in": Requires explicit Option.FromPtr() wrapper (safe default)
-	// - "auto": Automatically wraps *T → Option<T>
+	// - "auto": Automatically wraps *T → Option[T]
 	// - "disabled": No Go interop, pure Dingo types only
 	GoInterop string `toml:"go_interop"`
 }
@@ -231,13 +231,13 @@ type FeatureConfig struct {
 
 	// SafeNavigationUnwrap controls how the ?. operator handles return types
 	// Valid values: "always_option", "smart"
-	// - "always_option": Always returns Option<T>
+	// - "always_option": Always returns Option[T]
 	// - "smart": Unwraps to T based on context (default)
 	SafeNavigationUnwrap string `toml:"safe_navigation_unwrap"`
 
 	// NullCoalescingPointers enables ?? operator for Go pointers (*T)
-	// When true: Works with both Option<T> and *T
-	// When false: Works only with Option<T> (stricter type safety)
+	// When true: Works with both Option[T] and *T
+	// When false: Works only with Option[T] (stricter type safety)
 	NullCoalescingPointers bool `toml:"null_coalescing_pointers"`
 
 	// OperatorPrecedence controls ternary/null-coalescing precedence checking
@@ -246,10 +246,10 @@ type FeatureConfig struct {
 	// - "explicit": Require parentheses for ambiguous mixing
 	OperatorPrecedence string `toml:"operator_precedence"`
 
-	// ResultType controls Result<T, E> type generation and Go interop
+	// ResultType controls Result[T, E] type generation and Go interop
 	ResultType ResultTypeConfig `toml:"result_type"`
 
-	// OptionType controls Option<T> type generation and Go interop
+	// OptionType controls Option[T] type generation and Go interop
 	OptionType OptionTypeConfig `toml:"option_type"`
 }
 

@@ -129,7 +129,7 @@ This decision enables ALL planned Dingo features (pattern matching, lambdas, adv
 │  • Emit marker comments for complex constructs          │
 │  • Pattern matching: /* DINGO:MATCH ... */             │
 │  • Closures: /* DINGO:CLOSURE captures=[x,y] */        │
-│  • Type hints: /* DINGO:TYPE inferred=Result<T,E> */   │
+│  • Type hints: /* DINGO:TYPE inferred=Result[T,E] */   │
 │                                                         │
 │  Output: Valid Go code + Marker comments                │
 └─────────────────────────────────────────────────────────┘
@@ -213,7 +213,7 @@ This decision enables ALL planned Dingo features (pattern matching, lambdas, adv
 
 **Pattern Matching**:
 ```go
-/* DINGO:MATCH expr=getUserById(id) type=Result<User,Error> line=42 */
+/* DINGO:MATCH expr=getUserById(id) type=Result[User,Error] line=42 */
 switch __discriminant_0 := getUserById(id).(type) {
     /* DINGO:ARM pattern=Ok(user) binding=user */
     case ResultOk:
@@ -244,7 +244,7 @@ func() int {
 
 **Type Inference**:
 ```go
-/* DINGO:TYPE var=result inferred=Result<User,DbError> */
+/* DINGO:TYPE var=result inferred=Result[User,DbError] */
 result := fetchUser(id)
 /* DINGO:GENERIC_CHAIN start=result */
 result.map(func(u User) string { return u.name })?
@@ -729,10 +729,10 @@ Value      ::= QuotedString | Identifier | Number
 #### Examples
 
 ```go
-/* DINGO:MATCH expr=result type=Result<T,E> line=42 */
+/* DINGO:MATCH expr=result type=Result[T,E] line=42 */
 /* DINGO:ARM pattern=Ok(value) binding=value type=T */
 /* DINGO:CLOSURE captures=[x,y] mutable=[x] */
-/* DINGO:TYPE var=result inferred=Result<User,Error> */
+/* DINGO:TYPE var=result inferred=Result[User,Error] */
 /* DINGO:SCOPE var=value type=User start=45 end=50 */
 ```
 
@@ -862,7 +862,7 @@ func InferMatchType(expr ast.Expr, ctx *TransformContext) types.Type {
         return nil
     }
 
-    // Handle Result<T,E> generic
+    // Handle Result[T,E] generic
     if named, ok := tv.Type.(*types.Named); ok {
         if named.Obj().Name() == "Result" {
             // Extract type parameters

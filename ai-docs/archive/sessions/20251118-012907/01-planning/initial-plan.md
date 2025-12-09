@@ -2,7 +2,7 @@
 
 ## Problem Summary
 
-The previous session (7675185) successfully implemented Fix A2 (Constructor AST Mutation) and Fix A3 (Type Inference) for the Result<T,E> type plugin. However, these refactoring changes altered several APIs, causing compilation errors in the test suite:
+The previous session (7675185) successfully implemented Fix A2 (Constructor AST Mutation) and Fix A3 (Type Inference) for the Result[T,E] type plugin. However, these refactoring changes altered several APIs, causing compilation errors in the test suite:
 
 **Test Files with Errors:**
 - `tests/error_propagation_test.go` - 4 undefined symbol errors
@@ -23,8 +23,8 @@ The plugin refactoring removed old factory functions and changed the plugin arch
 - `builtin.NewStatementLifter()` - REMOVED
 
 **NEW APIs (current implementation):**
-- `builtin.NewResultTypePlugin()` - Implements Result<T,E> type with Ok/Err constructors
-- `builtin.NewOptionTypePlugin()` - Implements Option<T> type with Some/None
+- `builtin.NewResultTypePlugin()` - Implements Result[T,E] type with Ok/Err constructors
+- `builtin.NewOptionTypePlugin()` - Implements Option[T] type with Some/None
 - `builtin.NewTypeInferenceService(fset, file, logger)` - Type inference for Result/Option types
 - Plugin components are now internal to the plugins (no exposed StatementLifter, ErrorWrapper, etc.)
 
@@ -77,8 +77,8 @@ The test's `testLogger` implements methods with `(format string, args ...interfa
 - Exposed components: StatementLifter, ErrorWrapper
 
 **NEW Architecture (actual implementation):**
-- `ResultTypePlugin` - Handles Result<T,E> type generation, Ok/Err constructors
-- `OptionTypePlugin` - Handles Option<T> type generation, Some/None
+- `ResultTypePlugin` - Handles Result[T,E] type generation, Ok/Err constructors
+- `OptionTypePlugin` - Handles Option[T] type generation, Some/None
 - `TypeInferenceService` - Type inference for both Result and Option
 - Internal components - No exposed StatementLifter or ErrorWrapper
 

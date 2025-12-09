@@ -400,8 +400,8 @@ func TestTranslateNewMethodResult(t *testing.T) {
 **Phase 3 Features:**
 ✅ **Type Annotations:** `: Type` syntax
 ✅ **Error Propagation:** `?` operator
-✅ **Result<T,E> Types:** Sum types with helpers
-✅ **Option<T> Types:** Optional values with helpers
+✅ **Result[T,E] Types:** Sum types with helpers
+✅ **Option[T] Types:** Optional values with helpers
 ✅ **Sum Types (Enums):** Tagged unions
 
 **Phase 4.1 Features:**

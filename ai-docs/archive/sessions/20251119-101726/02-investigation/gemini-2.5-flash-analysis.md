@@ -58,7 +58,7 @@
     *   **Task**: Enhance `ResultTypePlugin.Process` to identify `ast.Ident` nodes that match the `Result_T_E` naming convention (e.g., `Result_int_error`) and trigger `emitResultDeclaration` accordingly to generate the necessary struct and tag constants. This should ensure `ResultTagOk` and `Result_int_error` are defined when needed.
 
 4.  **Implement `None` Context Inference (PKG/PLUGIN/BUILTIN/OPTION_TYPE.GO):**
-    *   **Task**: Replace the stub in `OptionTypePlugin.inferNoneTypeFromContext`. Implement logic that correctly uses `p.ctx.TypeInfo` (via `TypeInferenceService`) and AST parent tracking to determine the expected `Option<T>` type from the surrounding context (e.g., assignment target, function return type).
+    *   **Task**: Replace the stub in `OptionTypePlugin.inferNoneTypeFromContext`. Implement logic that correctly uses `p.ctx.TypeInfo` (via `TypeInferenceService`) and AST parent tracking to determine the expected `Option[T]` type from the surrounding context (e.g., assignment target, function return type).
 
 5.  **Enhance Pattern Matching for Nested Variants (PKG/PLUGIN/BUILTIN/PATTERN_MATCH.GO):**
     *   **Task A: Structured Pattern Parsing**: Refactor `PatternMatchPlugin.parsePatternArms` to parse the `// DINGO_PATTERN:` comments into a recursive data structure that accurately represents nested enum variants and their bindings.

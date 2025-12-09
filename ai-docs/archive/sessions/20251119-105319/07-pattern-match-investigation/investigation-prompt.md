@@ -23,14 +23,14 @@
 
 **File**: `tests/golden/pattern_match_01_simple.dingo`
 ```dingo
-fn process_result(r: Result<int, string>) -> int {
+fn process_result(r: Result[int, string]) -> int {
     match r {
         Ok(x) => x,
         Err(e) => 0
     }
 }
 
-fn process_option(o: Option<int>) -> int {
+fn process_option(o: Option[int]) -> int {
     match o {
         Some(x) => x,
         None => 0
