@@ -57,6 +57,26 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("tuple type alias error: %w", err)
 	}
 
+	// Step 2a2: Transform tuple literals (must run before Go parser)
+	// Pattern: (a, b) → __tuple2__(a, b)
+	// Run in a loop to handle nested tuples: ((a, b), (c, d)) needs multiple passes
+	// First pass: inner tuples (a, b) → __tuple2__(a, b)
+	// Second pass: outer tuple (__tuple2__(a, b), __tuple2__(c, d)) → __tuple2__(__tuple2__(a, b), __tuple2__(c, d))
+	const maxTupleLiteralPasses = 5 // Prevent infinite loops on malformed input
+	for pass := 0; pass < maxTupleLiteralPasses; pass++ {
+		prevLen := len(transformedSource)
+		var tupleLitMappings []dingoast.SourceMapping
+		transformedSource, tupleLitMappings, err = transformTupleLiterals(transformedSource)
+		if err != nil {
+			return nil, fmt.Errorf("tuple literal error (pass %d): %w", pass, err)
+		}
+		typeAliasMappings = append(typeAliasMappings, tupleLitMappings...)
+		// If no changes were made, we're done
+		if len(transformedSource) == prevLen {
+			break
+		}
+	}
+
 	// Step 2b: Transform tuples - Pass 1 (syntax to markers)
 	transformedSource, tupleMappings, err := transformTuplePass1(transformedSource)
 	if err != nil {

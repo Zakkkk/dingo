@@ -124,26 +124,22 @@ func main() {
 
 	// Calculate bounding box
 	bbox := CalculateBoundingBox(points)
-	tmp9 := bbox
-	minX := tmp9.First.First
-	minY := tmp9.First.Second
-	maxX := tmp9.Second.First
-	maxY := tmp9.Second.Second
-	fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
+	_ = /* ERROR: nested tuple destructure not yet supported */
+		fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
 
 	// Transform all points (scale by 2)
 	scaled := TransformPoints(points, func(p Point2D) Point2D {
-		tmp10 := p
-		x := tmp10.First
-		y := tmp10.Second
+		tmp9 := p
+		x := tmp9.First
+		y := tmp9.Second
 		return tuples.Tuple2[float64, float64]{First: x * 2, Second: y * 2}
 	})
 
 	fmt.Println("\n=== Scaled Points (2x) ===")
 	for i, p := range scaled {
-		tmp11 := p
-		x := tmp11.First
-		y := tmp11.Second
+		tmp10 := p
+		x := tmp10.First
+		y := tmp10.Second
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 }

@@ -33,8 +33,9 @@ var operatorPrecedence = map[tokenizer.TokenKind]int{
 	tokenizer.QUESTION_DOT:      PrecPostfix,  // x?.field (safe navigation)
 
 	// Standard Go operators
-	tokenizer.DOT:    PrecCall, // x.y (selector/method call)
-	tokenizer.LPAREN: PrecCall, // x() (function call)
+	tokenizer.DOT:      PrecCall, // x.y (selector/method call)
+	tokenizer.LPAREN:   PrecCall, // x() (function call)
+	tokenizer.LBRACKET: PrecCall, // x[i] (index expression)
 
 	// Binary operators
 	tokenizer.OR:    PrecLogicalOr,  // ||
@@ -119,6 +120,7 @@ func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	// Register infix parse functions for standard Go operators
 	p.registerInfix(tokenizer.DOT, p.parseSelectorExpr)
 	p.registerInfix(tokenizer.LPAREN, p.parseCallExpr)
+	p.registerInfix(tokenizer.LBRACKET, p.parseIndexExpr)
 
 	// Register binary operators
 	binaryOps := []tokenizer.TokenKind{
@@ -732,6 +734,50 @@ func (p *PrattParser) parseCallExpr(left ast.Expr) ast.Expr {
 	return &ast.RawExpr{
 		StartPos: left.Pos(),
 		EndPos:   rparenPos,
+		Text:     fullText,
+	}
+}
+
+// parseIndexExpr handles the infix LBRACKET operator (index/slice expressions)
+// This allows parsing expressions like points[0] or arr[1:3]
+func (p *PrattParser) parseIndexExpr(left ast.Expr) ast.Expr {
+	// Current token is LBRACKET '['
+	lbracketPos := p.curToken.Pos
+
+	p.nextToken() // consume '['
+
+	// Parse the index expression
+	index := p.ParseExpression(PrecLowest)
+
+	// Expect closing bracket
+	if !p.expectPeek(tokenizer.RBRACKET) {
+		p.addError("expected ']' after index expression")
+		return nil
+	}
+	rbracketPos := p.curToken.End
+
+	// Build the full index expression as RawExpr
+	leftText := ""
+	if ident, ok := left.(*ast.DingoIdent); ok {
+		leftText = ident.Name
+	} else if raw, ok := left.(*ast.RawExpr); ok {
+		leftText = raw.Text
+	} else {
+		leftText = left.String()
+	}
+
+	indexText := ""
+	if index != nil {
+		indexText = index.String()
+	}
+
+	fullText := leftText + "[" + indexText + "]"
+
+	_ = lbracketPos // suppress unused warning
+
+	return &ast.RawExpr{
+		StartPos: left.Pos(),
+		EndPos:   rbracketPos,
 		Text:     fullText,
 	}
 }

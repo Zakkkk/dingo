@@ -168,7 +168,7 @@ func TestTupleCodeGen_SimpleDestructure(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest2__("x", "y", point)`
+	expected := `__tupleDest2__("x:0", "y:1", point)`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -191,7 +191,7 @@ func TestTupleCodeGen_DestructureWithWildcard(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest2__("x", "_", pair)`
+	expected := `__tupleDest2__("x:0", "_:1", pair)`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -215,7 +215,7 @@ func TestTupleCodeGen_DestructureMultipleWildcards(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest3__("x", "_", "z", triple)`
+	expected := `__tupleDest3__("x:0", "_:1", "z:2", triple)`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -238,7 +238,7 @@ func TestTupleCodeGen_DestructureComplexExpression(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest2__("a", "b", getPoint())`
+	expected := `__tupleDest2__("a:0", "b:1", getPoint())`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -495,7 +495,7 @@ func TestTupleCodeGen_RealWorld_Destructure(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest2__("x", "y", point)`
+	expected := `__tupleDest2__("x:0", "y:1", point)`
 	if string(result.Output) != expected {
 		t.Errorf("Expected: %s, Got: %s", expected, string(result.Output))
 	}

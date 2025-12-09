@@ -123,16 +123,21 @@ func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeG
 	g.Write(markerName)
 	g.WriteByte('(')
 
-	// Generate pattern as string literals
+	// Generate pattern as string literals with path encoding
+	// Format: "name:path" where path is dot-separated indices
+	// Example: "x:0" for first element, "y:1" for second element
 	for i, elem := range dest.Pattern {
 		if i > 0 {
 			g.Write(", ")
 		}
 
-		// Quote the identifier name (including "_" for wildcards)
+		// Quote the identifier name with its path index
 		// At this point, we know elem.IsNested() is false, so Name is valid
+		// The path is just the index for flat patterns (e.g., "x:0", "y:1")
 		g.WriteByte('"')
 		g.Write(elem.Name)
+		g.WriteByte(':')
+		g.Write(strconv.Itoa(i))
 		g.WriteByte('"')
 	}
 

@@ -173,6 +173,197 @@ func joinTypes(types []string) string {
 	return result
 }
 
+// tupleLiteralLoc holds location and elements of a tuple literal
+type tupleLiteralLoc struct {
+	start    int      // start position of '('
+	end      int      // end position after ')'
+	elements []string // element expressions as strings
+}
+
+// transformTupleLiterals transforms tuple literal expressions before Go parsing.
+// This is a PRE-PASS that must run before the Go parser because the syntax
+// `(expr1, expr2)` in expression contexts is ambiguous.
+//
+// Pattern: (a, b) → tuples.Tuple2[<types>]{First: a, Second: b}
+// Since we don't have types yet, we use: (a, b) → __tuple2__(a, b)
+// which will be resolved in Pass 2 with type information.
+//
+// Key distinction from type aliases:
+// - Type aliases: `type X = (A, B)` - types after `=`
+// - Literals: `return (a, b)` - expressions in various contexts
+func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
+	tok := tokenizer.New(src)
+	result := src
+	var mappings []ast.SourceMapping
+	var locs []tupleLiteralLoc
+
+	// Track context to distinguish tuple literals from other parens
+	// We need to find `(expr, expr)` but NOT:
+	// - Function calls: `foo(a, b)` (preceded by IDENT)
+	// - Type assertions: `x.(Type)` (preceded by `.`)
+	// - Grouped expressions: `(a + b)` (no comma at depth 1)
+	// - Slice index: `a[i:j]` (inside brackets)
+	// - Let destructure patterns: `let ((a, b), c) = ...` (all parens after let until =)
+
+	var prevToken tokenizer.Token
+	var prevPrevToken tokenizer.Token
+	inLetDestructure := false // Track if we're inside a let destructure pattern
+	letDestructureDepth := 0  // Track paren depth within let destructure
+
+	for {
+		t := tok.NextToken()
+		if t.Kind == tokenizer.EOF {
+			break
+		}
+
+		// Track let destructure context
+		if t.Kind == tokenizer.LET {
+			inLetDestructure = true
+			letDestructureDepth = 0
+			prevPrevToken = prevToken
+			prevToken = t
+			continue
+		}
+
+		// Exit let destructure context when we see = (the assignment)
+		if inLetDestructure && t.Kind == tokenizer.ASSIGN {
+			inLetDestructure = false
+			letDestructureDepth = 0
+			prevPrevToken = prevToken
+			prevToken = t
+			continue
+		}
+
+		// Track paren depth within let destructure
+		if inLetDestructure {
+			if t.Kind == tokenizer.LPAREN {
+				letDestructureDepth++
+				prevPrevToken = prevToken
+				prevToken = t
+				continue // Skip all parens within let destructure
+			}
+			if t.Kind == tokenizer.RPAREN {
+				letDestructureDepth--
+				prevPrevToken = prevToken
+				prevToken = t
+				continue
+			}
+			// Continue to next token if we're in destructure pattern
+			prevPrevToken = prevToken
+			prevToken = t
+			continue
+		}
+
+		// Look for LPAREN that could start a tuple literal
+		if t.Kind == tokenizer.LPAREN {
+			// Skip if this is a function call (preceded by IDENT or RPAREN)
+			if prevToken.Kind == tokenizer.IDENT || prevToken.Kind == tokenizer.RPAREN {
+				prevPrevToken = prevToken
+				prevToken = t
+				continue
+			}
+
+			// Skip if this is a type assertion (preceded by .)
+			if prevToken.Kind == tokenizer.DOT {
+				prevPrevToken = prevToken
+				prevToken = t
+				continue
+			}
+
+			// Skip if this is a type alias context (handled by transformTupleTypeAliases)
+			// Pattern: type X = ( → already handled
+			if prevToken.Kind == tokenizer.ASSIGN && prevPrevToken.Kind == tokenizer.IDENT {
+				prevPrevToken = prevToken
+				prevToken = t
+				continue
+			}
+
+			// Potential tuple literal - scan to find if it has a comma at depth 1
+			startPos := int(t.Pos) - 1 // 1-based to 0-based
+			depth := 1
+			hasCommaAtDepth1 := false
+			var elements []string
+			elemStart := int(t.End) - 1
+
+			for depth > 0 {
+				inner := tok.NextToken()
+				if inner.Kind == tokenizer.EOF {
+					break
+				}
+
+				switch inner.Kind {
+				case tokenizer.LPAREN:
+					depth++
+				case tokenizer.RPAREN:
+					depth--
+					if depth == 0 {
+						// Collect final element
+						if hasCommaAtDepth1 {
+							elemStr := string(src[elemStart : int(inner.Pos)-1])
+							elements = append(elements, trimTypeWhitespace(elemStr))
+
+							locs = append(locs, tupleLiteralLoc{
+								start:    startPos,
+								end:      int(inner.End) - 1,
+								elements: elements,
+							})
+						}
+					}
+				case tokenizer.COMMA:
+					if depth == 1 {
+						// Collect element before comma
+						elemStr := string(src[elemStart : int(inner.Pos)-1])
+						elements = append(elements, trimTypeWhitespace(elemStr))
+						elemStart = int(inner.End) - 1
+						hasCommaAtDepth1 = true
+					}
+				}
+			}
+		}
+
+		prevPrevToken = prevToken
+		prevToken = t
+	}
+
+	// Transform from end to beginning (reverse order to preserve positions)
+	for i := len(locs) - 1; i >= 0; i-- {
+		loc := locs[i]
+		if len(loc.elements) < 2 {
+			continue // Not a valid tuple
+		}
+
+		// Generate marker: __tuple{N}__(elem1, elem2, ...)
+		// This will be resolved in Pass 2 with type information
+		var buf bytes.Buffer
+		buf.WriteString(fmt.Sprintf("__tuple%d__(", len(loc.elements)))
+		for j, elem := range loc.elements {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(elem)
+		}
+		buf.WriteString(")")
+		marker := buf.Bytes()
+
+		// Replace the tuple literal with the marker
+		newResult := make([]byte, 0, len(result)-(loc.end-loc.start)+len(marker))
+		newResult = append(newResult, result[:loc.start]...)
+		newResult = append(newResult, marker...)
+		newResult = append(newResult, result[loc.end:]...)
+		result = newResult
+
+		mappings = append(mappings, ast.SourceMapping{
+			DingoStart: loc.start,
+			DingoEnd:   loc.end,
+			GoStart:    loc.start,
+			GoEnd:      loc.start + len(marker),
+			Kind:       "tuple_literal",
+		})
+	}
+
+	return result, mappings, nil
+}
+
 // transformTuplePass1 transforms all tuple syntax using parser-produced AST nodes.
 // This is Pass 1 of the two-pass tuple pipeline:
 //   - Literals: (a, b) → __tuple2__(a, b)
@@ -245,12 +436,15 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 
 	result := src
 	var mappings []ast.SourceMapping
-	gen := codegen.NewTupleCodeGen()
 
 	// Transform each tuple from end to beginning
 	for _, node := range tupleNodes {
 		var genResult ast.CodeGenResult
 		var replaceStart, replaceEnd int
+
+		// IMPORTANT: Create fresh generator for each node to avoid buffer accumulation.
+		// Each codegen has its own buffer, so reusing would concatenate all outputs.
+		gen := codegen.NewTupleCodeGen()
 
 		switch node.kind {
 		case ast.TupleKindLiteral:
