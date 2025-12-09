@@ -21,7 +21,7 @@ type TupleLiteral struct {
 // Element represents a single element in a tuple literal
 // Can be either a regular expression or a nested tuple
 type Element struct {
-	Expr   string        // Expression as string (e.g., "10", "user.Name", "x + y")
+	Expr   Expr          // Expression (can be any ast.Expr including TupleLiteral)
 	Nested *TupleLiteral // If nested tuple, this is set (e.g., (a, b) in ((a, b), c))
 }
 
@@ -36,6 +36,27 @@ func (t *TupleLiteral) Pos() token.Pos {
 // End returns the end position of the tuple literal
 func (t *TupleLiteral) End() token.Pos {
 	return t.Rparen + 1
+}
+
+// exprNode implements the Expr marker method
+func (t *TupleLiteral) exprNode() {}
+
+// String returns a string representation of the tuple literal
+func (t *TupleLiteral) String() string {
+	var result strings.Builder
+	result.WriteString("(")
+	for i, elem := range t.Elements {
+		if i > 0 {
+			result.WriteString(", ")
+		}
+		if elem.Nested != nil {
+			result.WriteString(elem.Nested.String())
+		} else if elem.Expr != nil {
+			result.WriteString(elem.Expr.String())
+		}
+	}
+	result.WriteString(")")
+	return result.String()
 }
 
 // IsNested returns true if this tuple contains any nested tuples
@@ -57,7 +78,7 @@ type TupleDestructure struct {
 	LetPos  token.Pos            // Position of 'let' keyword
 	Pattern []DestructureElement // Destructuring pattern (supports nesting)
 	Assign  token.Pos            // Position of '=' operator
-	Value   string               // RHS expression being destructured
+	Value   Expr                 // RHS expression being destructured
 }
 
 // DestructureElement represents an element in a destructuring pattern
@@ -75,11 +96,16 @@ func (t *TupleDestructure) Pos() token.Pos {
 	return t.LetPos
 }
 
-// End returns the end position (approximation based on value length)
+// End returns the end position of the destructuring statement
 func (t *TupleDestructure) End() token.Pos {
-	// Approximate end: let + pattern + = + value
-	return t.Assign + token.Pos(len(t.Value))
+	if t.Value != nil {
+		return t.Value.End()
+	}
+	return t.Assign + 1
 }
+
+// stmtNode implements the Stmt marker method
+func (t *TupleDestructure) stmtNode() {}
 
 // IsNested returns true if this destructuring pattern contains nested patterns
 func (t *TupleDestructure) IsNested() bool {
@@ -94,6 +120,47 @@ func (t *TupleDestructure) IsNested() bool {
 // IsNested returns true if this element is a nested pattern
 func (e *DestructureElement) IsNested() bool {
 	return len(e.Nested) > 0
+}
+
+// TupleTypeExpr represents a tuple type expression
+// Examples:
+//   - (int, string) - Simple tuple type
+//   - (T1, T2, T3) - Generic tuple type
+//   - ((int, int), string) - Nested tuple type
+type TupleTypeExpr struct {
+	Lparen token.Pos // Position of opening '('
+	Types  []Expr    // Type expressions
+	Rparen token.Pos // Position of closing ')'
+}
+
+// Node implements DingoNode marker interface
+func (t *TupleTypeExpr) Node() {}
+
+// Pos returns the position of the tuple type
+func (t *TupleTypeExpr) Pos() token.Pos {
+	return t.Lparen
+}
+
+// End returns the end position of the tuple type
+func (t *TupleTypeExpr) End() token.Pos {
+	return t.Rparen + 1
+}
+
+// exprNode implements the Expr marker method
+func (t *TupleTypeExpr) exprNode() {}
+
+// String returns a string representation of the tuple type
+func (t *TupleTypeExpr) String() string {
+	var result strings.Builder
+	result.WriteString("(")
+	for i, typ := range t.Types {
+		if i > 0 {
+			result.WriteString(", ")
+		}
+		result.WriteString(typ.String())
+	}
+	result.WriteString(")")
+	return result.String()
 }
 
 // ToGo converts TupleLiteral to Go code with marker function call
@@ -116,8 +183,8 @@ func (t *TupleLiteral) ToGo(markerName string) string {
 			// Recursive call for nested tuple
 			nestedMarker := generateNestedMarker(i)
 			result.WriteString(elem.Nested.ToGo(nestedMarker))
-		} else {
-			result.WriteString(elem.Expr)
+		} else if elem.Expr != nil {
+			result.WriteString(elem.Expr.String())
 		}
 	}
 
@@ -135,7 +202,9 @@ func (t *TupleDestructure) ToGo() string {
 
 	// Generate temporary variable for RHS
 	result.WriteString("tmp := ")
-	result.WriteString(t.Value)
+	if t.Value != nil {
+		result.WriteString(t.Value.String())
+	}
 	result.WriteString("\n")
 
 	// Generate destructuring assignments
@@ -185,12 +254,12 @@ func (t *TupleDestructure) generateDestructuring(result *strings.Builder, patter
 }
 
 // formatTmpVar formats temporary variable name following CLAUDE.md naming convention
-// First tmp is unnumbered, subsequent are tmp1, tmp2, etc.
+// Sequence: tmp, tmp1, tmp2, tmp3, ... (counter 1, 2, 3, 4, ...)
 func formatTmpVar(counter int) string {
 	if counter == 1 {
 		return "tmp"
 	}
-	return "tmp" + formatNumber(counter)
+	return "tmp" + formatNumber(counter-1)
 }
 
 // formatFieldIndex formats tuple field index (_0, _1, _2, etc.)

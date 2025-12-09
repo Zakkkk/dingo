@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
+	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 )
 
@@ -13,6 +14,10 @@ type StmtParser struct {
 	*PrattParser
 	recovery *RecoveryHelper
 	fset     *token.FileSet
+
+	// Parsed Dingo-specific statements (for pipeline integration)
+	TupleDestructures []*dingoast.TupleDestructure
+	TupleLiterals     []*dingoast.TupleLiteral
 }
 
 // NewStmtParser creates a new StmtParser with statement parsing support
@@ -20,11 +25,23 @@ func NewStmtParser(t *tokenizer.Tokenizer, fset *token.FileSet) *StmtParser {
 	pratt := NewPrattParser(t)
 	recovery := NewRecoveryHelper(nil, fset, NewRecoveryContext())
 
-	return &StmtParser{
+	stmtParser := &StmtParser{
 		PrattParser: pratt,
 		recovery:    recovery,
 		fset:        fset,
 	}
+
+	// Register callback to collect tuple literals during parsing
+	pratt.OnTupleLiteral = func(t *dingoast.TupleLiteral) {
+		stmtParser.TupleLiterals = append(stmtParser.TupleLiterals, t)
+	}
+
+	return stmtParser
+}
+
+// IsAtEnd returns true if the parser has reached the end of input
+func (p *StmtParser) IsAtEnd() bool {
+	return p.curTokenIs(tokenizer.EOF)
 }
 
 // ParseStatement parses a single statement
@@ -48,6 +65,11 @@ func (p *StmtParser) ParseStatement() (ast.Stmt, error) {
 
 // parseStmt is the core statement parsing logic
 func (p *StmtParser) parseStmt() ast.Stmt {
+	// Check for EOF first
+	if p.curTokenIs(tokenizer.EOF) {
+		return nil
+	}
+
 	// Map lexer tokens to go/token for standard statements
 	switch p.curToken.Kind {
 	case tokenizer.VAR:
@@ -55,8 +77,10 @@ func (p *StmtParser) parseStmt() ast.Stmt {
 	case tokenizer.LET:
 		return p.parseLetStmt()
 	default:
-		// For now, try parsing as expression statement
-		return p.parseExprStmt()
+		// Skip tokens we don't handle and return nil to advance
+		// This prevents infinite loops on unrecognized input
+		p.nextToken()
+		return nil
 	}
 }
 
@@ -98,12 +122,23 @@ func (p *StmtParser) parseVarStmt() ast.Stmt {
 	return &ast.DeclStmt{Decl: decl}
 }
 
-// parseLetStmt parses let declarations (let x = expr)
+// parseLetStmt parses let declarations (let x = expr or let (x, y) = expr)
 // This is Dingo-specific syntax that will be transformed to Go
 func (p *StmtParser) parseLetStmt() ast.Stmt {
 	startPos := p.curToken.Pos
 	p.nextToken() // consume 'let'
 
+	// Check for tuple destructuring pattern: let (a, b) = expr
+	if p.curTokenIs(tokenizer.LPAREN) {
+		return p.parseLetTupleDestructure(startPos)
+	}
+
+	// Single-variable let statement
+	return p.parseLetSingleVar(startPos)
+}
+
+// parseLetSingleVar parses single-variable let statements (let x = expr)
+func (p *StmtParser) parseLetSingleVar(startPos token.Pos) ast.Stmt {
 	// Expect identifier
 	if !p.curTokenIs(tokenizer.IDENT) {
 		p.addError("expected identifier after 'let'")
@@ -481,6 +516,78 @@ func (p *StmtParser) parseSelectStmt() *ast.SelectStmt {
 			Rbrace: p.curToken.Pos,
 		},
 	}
+}
+
+// parseLetTupleDestructure parses tuple destructuring with nested pattern support
+// Syntax: let (a, b) = expr or let ((a, b), c) = expr
+// RHS uses full Pratt parser, supporting ?, ?., ?? operators
+// Stores the TupleDestructure node in parser for pipeline integration
+func (p *StmtParser) parseLetTupleDestructure(letPos token.Pos) ast.Stmt {
+	// Parse destructuring pattern
+	pattern := p.parseDestructurePattern()
+
+	// Expect '='
+	if !p.curTokenIs(tokenizer.ASSIGN) {
+		p.addError("expected '=' after tuple pattern")
+		return &ast.BadStmt{From: letPos, To: p.curToken.Pos}
+	}
+	assignPos := p.curToken.Pos
+	p.nextToken() // consume '='
+
+	// Parse RHS with full Pratt parser (supports ?, ?., ??)
+	value := p.ParseExpression(PrecLowest)
+
+	// Create TupleDestructure node
+	tupleDestruct := &dingoast.TupleDestructure{
+		LetPos:  letPos,
+		Pattern: pattern,
+		Assign:  assignPos,
+		Value:   value,
+	}
+
+	// Store in parser for pipeline integration
+	p.TupleDestructures = append(p.TupleDestructures, tupleDestruct)
+
+	// Return placeholder for now (pipeline integration will use stored nodes)
+	// This allows the parser to compile while maintaining compatibility
+	return &ast.BadStmt{From: letPos, To: p.curToken.Pos}
+}
+
+// parseDestructurePattern parses a destructuring pattern with recursive nesting support
+// Syntax: (a, b) or ((a, b), c) or (a, (b, c))
+func (p *StmtParser) parseDestructurePattern() []dingoast.DestructureElement {
+	p.nextToken() // consume '('
+
+	var pattern []dingoast.DestructureElement
+
+	for !p.curTokenIs(tokenizer.RPAREN) && !p.curTokenIs(tokenizer.EOF) {
+		if p.curTokenIs(tokenizer.LPAREN) {
+			// Nested pattern: ((a, b), c)
+			nested := p.parseDestructurePattern()
+			pattern = append(pattern, dingoast.DestructureElement{Nested: nested})
+		} else if p.curTokenIs(tokenizer.IDENT) {
+			// Simple identifier
+			pattern = append(pattern, dingoast.DestructureElement{Name: p.curToken.Lit})
+			p.nextToken()
+		} else {
+			p.addError("expected identifier or '(' in destructure pattern")
+			p.nextToken() // skip invalid token
+			continue
+		}
+
+		// Consume comma if present (allows trailing comma)
+		if p.curTokenIs(tokenizer.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	if !p.curTokenIs(tokenizer.RPAREN) {
+		p.addError("expected ')' to close pattern")
+	} else {
+		p.nextToken() // consume ')'
+	}
+
+	return pattern
 }
 
 // Helper methods

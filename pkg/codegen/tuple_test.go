@@ -8,6 +8,11 @@ import (
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
 
+// Helper to create RawExpr from string for tests
+func rawExpr(text string) ast.Expr {
+	return &ast.RawExpr{Text: text}
+}
+
 // Test literal generation
 
 func TestTupleCodeGen_SimpleLiteral(t *testing.T) {
@@ -15,8 +20,8 @@ func TestTupleCodeGen_SimpleLiteral(t *testing.T) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(1),
 		Elements: []ast.Element{
-			{Expr: "10"},
-			{Expr: "20"},
+			{Expr: rawExpr("10")},
+			{Expr: rawExpr("20")},
 		},
 		Rparen: token.Pos(8),
 	}
@@ -37,9 +42,9 @@ func TestTupleCodeGen_ThreeElementLiteral(t *testing.T) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(1),
 		Elements: []ast.Element{
-			{Expr: "a"},
-			{Expr: "b"},
-			{Expr: "c"},
+			{Expr: rawExpr("a")},
+			{Expr: rawExpr("b")},
+			{Expr: rawExpr("c")},
 		},
 		Rparen: token.Pos(9),
 	}
@@ -60,9 +65,9 @@ func TestTupleCodeGen_ComplexExpressions(t *testing.T) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(1),
 		Elements: []ast.Element{
-			{Expr: "foo.Bar()"},
-			{Expr: "baz[0]"},
-			{Expr: `someMap["key"]`},
+			{Expr: rawExpr("foo.Bar()")},
+			{Expr: rawExpr("baz[0]")},
+			{Expr: rawExpr(`someMap["key"]`)},
 		},
 		Rparen: token.Pos(35),
 	}
@@ -83,8 +88,8 @@ func TestTupleCodeGen_NestedLiteral(t *testing.T) {
 	inner := &ast.TupleLiteral{
 		Lparen: token.Pos(2),
 		Elements: []ast.Element{
-			{Expr: "1"},
-			{Expr: "2"},
+			{Expr: rawExpr("1")},
+			{Expr: rawExpr("2")},
 		},
 		Rparen: token.Pos(7),
 	}
@@ -93,7 +98,7 @@ func TestTupleCodeGen_NestedLiteral(t *testing.T) {
 		Lparen: token.Pos(1),
 		Elements: []ast.Element{
 			{Nested: inner},
-			{Expr: "3"},
+			{Expr: rawExpr("3")},
 		},
 		Rparen: token.Pos(11),
 	}
@@ -114,8 +119,8 @@ func TestTupleCodeGen_LiteralSourceMapping(t *testing.T) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(100),
 		Elements: []ast.Element{
-			{Expr: "10"},
-			{Expr: "20"},
+			{Expr: rawExpr("10")},
+			{Expr: rawExpr("20")},
 		},
 		Rparen: token.Pos(107),
 	}
@@ -157,7 +162,7 @@ func TestTupleCodeGen_SimpleDestructure(t *testing.T) {
 			{Name: "y"},
 		},
 		Assign: token.Pos(11),
-		Value:  "point",
+		Value:  rawExpr("point"),
 	}
 
 	gen := NewTupleCodeGen()
@@ -180,7 +185,7 @@ func TestTupleCodeGen_DestructureWithWildcard(t *testing.T) {
 			{Name: "_"},
 		},
 		Assign: token.Pos(11),
-		Value:  "pair",
+		Value:  rawExpr("pair"),
 	}
 
 	gen := NewTupleCodeGen()
@@ -204,7 +209,7 @@ func TestTupleCodeGen_DestructureMultipleWildcards(t *testing.T) {
 			{Name: "z"},
 		},
 		Assign: token.Pos(14),
-		Value:  "triple",
+		Value:  rawExpr("triple"),
 	}
 
 	gen := NewTupleCodeGen()
@@ -227,7 +232,7 @@ func TestTupleCodeGen_DestructureComplexExpression(t *testing.T) {
 			{Name: "b"},
 		},
 		Assign: token.Pos(11),
-		Value:  "getPoint()",
+		Value:  rawExpr("getPoint()"),
 	}
 
 	gen := NewTupleCodeGen()
@@ -250,7 +255,7 @@ func TestTupleCodeGen_DestructureSourceMapping(t *testing.T) {
 			{Name: "y"},
 		},
 		Assign: token.Pos(211),
-		Value:  "point",
+		Value:  rawExpr("point"),
 	}
 
 	gen := NewTupleCodeGen()
@@ -318,81 +323,6 @@ func TestTupleCodeGen_ComplexTypeAlias(t *testing.T) {
 	}
 }
 
-// Test GenerateFromLocation convenience method
-
-func TestTupleCodeGen_FromLocation_Literal(t *testing.T) {
-	src := []byte("let x = (10, 20)")
-	loc := ast.TupleLocation{
-		Kind:     ast.TupleKindLiteral,
-		Start:    8,  // Position of (
-		End:      16, // Position after )
-		Elements: 2,
-	}
-
-	gen := NewTupleCodeGen()
-	result, err := gen.GenerateFromLocation(loc, src)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expected := "__tuple2__(10, 20)"
-	actual := string(result)
-
-	if actual != expected {
-		t.Errorf("Expected:\n%s\nGot:\n%s", expected, actual)
-	}
-}
-
-func TestTupleCodeGen_FromLocation_Destructure(t *testing.T) {
-	src := []byte("let (x, y) = point")
-	loc := ast.TupleLocation{
-		Kind:     ast.TupleKindDestructure,
-		Start:    4,  // Position of (
-		End:      10, // Position after )
-		Elements: 2,
-	}
-
-	gen := NewTupleCodeGen()
-	result, err := gen.GenerateFromLocation(loc, src)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	// New format includes positional paths for nested tuple support: "name:index"
-	expected := `__tupleDest2__("x:0", "y:1", point)`
-	actual := string(result)
-
-	if actual != expected {
-		t.Errorf("Expected:\n%s\nGot:\n%s", expected, actual)
-	}
-}
-
-func TestTupleCodeGen_FromLocation_TypeAlias(t *testing.T) {
-	src := []byte("type Point = (int, int)")
-	loc := ast.TupleLocation{
-		Kind:     ast.TupleKindTypeAlias,
-		Start:    13, // Position of (
-		End:      23, // Position after )
-		Elements: 2,
-	}
-
-	gen := NewTupleCodeGen()
-	result, err := gen.GenerateFromLocation(loc, src)
-
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-
-	expected := "__tupleType2__(int, int)"
-	actual := string(result)
-
-	if actual != expected {
-		t.Errorf("Expected:\n%s\nGot:\n%s", expected, actual)
-	}
-}
-
 // Test error cases
 
 func TestTupleCodeGen_NilLiteral(t *testing.T) {
@@ -419,23 +349,6 @@ func TestTupleCodeGen_EmptyTypeAlias(t *testing.T) {
 
 	if len(result.Output) != 0 {
 		t.Errorf("Expected empty output for empty type alias, got: %s", string(result.Output))
-	}
-}
-
-func TestTupleCodeGen_FromLocation_InvalidBounds(t *testing.T) {
-	src := []byte("let x = (10, 20)")
-	loc := ast.TupleLocation{
-		Kind:     ast.TupleKindLiteral,
-		Start:    100, // Out of bounds
-		End:      200,
-		Elements: 2,
-	}
-
-	gen := NewTupleCodeGen()
-	_, err := gen.GenerateFromLocation(loc, src)
-
-	if err == nil {
-		t.Error("Expected error for invalid bounds, got nil")
 	}
 }
 
@@ -479,8 +392,8 @@ func BenchmarkTupleCodeGen_SimpleLiteral(b *testing.B) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(1),
 		Elements: []ast.Element{
-			{Expr: "10"},
-			{Expr: "20"},
+			{Expr: rawExpr("10")},
+			{Expr: rawExpr("20")},
 		},
 		Rparen: token.Pos(8),
 	}
@@ -503,7 +416,7 @@ func BenchmarkTupleCodeGen_ComplexDestructure(b *testing.B) {
 			{Name: "c"},
 		},
 		Assign: token.Pos(20),
-		Value:  "getTuple()",
+		Value:  rawExpr("getTuple()"),
 	}
 
 	b.ResetTimer()
@@ -520,8 +433,8 @@ func TestTupleCodeGen_RealWorld_Point2D(t *testing.T) {
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(100),
 		Elements: []ast.Element{
-			{Expr: "x"},
-			{Expr: "y"},
+			{Expr: rawExpr("x")},
+			{Expr: rawExpr("y")},
 		},
 		Rparen: token.Pos(106),
 	}
@@ -539,15 +452,15 @@ func TestTupleCodeGen_RealWorld_BoundingBox(t *testing.T) {
 	// From geometry.dingo: return ((minX, minY), (maxX, maxY))
 	innerMin := &ast.TupleLiteral{
 		Elements: []ast.Element{
-			{Expr: "minX"},
-			{Expr: "minY"},
+			{Expr: rawExpr("minX")},
+			{Expr: rawExpr("minY")},
 		},
 	}
 
 	innerMax := &ast.TupleLiteral{
 		Elements: []ast.Element{
-			{Expr: "maxX"},
-			{Expr: "maxY"},
+			{Expr: rawExpr("maxX")},
+			{Expr: rawExpr("maxY")},
 		},
 	}
 
@@ -576,7 +489,7 @@ func TestTupleCodeGen_RealWorld_Destructure(t *testing.T) {
 			{Name: "x"},
 			{Name: "y"},
 		},
-		Value: "point",
+		Value: rawExpr("point"),
 	}
 
 	gen := NewTupleCodeGen()

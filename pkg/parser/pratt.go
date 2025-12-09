@@ -63,6 +63,9 @@ type PrattParser struct {
 	// Prefix and infix parse functions
 	prefixParseFns map[tokenizer.TokenKind]prefixParseFn
 	infixParseFns  map[tokenizer.TokenKind]infixParseFn
+
+	// Callback for collecting tuple literals during parsing
+	OnTupleLiteral func(*ast.TupleLiteral)
 }
 
 // ParseError represents a parser error
@@ -331,8 +334,11 @@ func (p *PrattParser) parseUnaryExpr() ast.Expr {
 	}
 }
 
-// parseGroupedOrLambda handles both grouped expressions and TypeScript lambdas
-// Performs lookahead to distinguish (expr) from (params) => body
+// parseGroupedOrLambda handles grouped expressions, TypeScript lambdas, and tuple literals
+// Performs lookahead to distinguish:
+//   - (params) => body  -> TypeScript lambda
+//   - (expr1, expr2)    -> Tuple literal
+//   - (expr)            -> Grouped expression
 func (p *PrattParser) parseGroupedOrLambda() ast.Expr {
 	// Check if this is a TypeScript lambda
 	lambda := p.parseLambda()
@@ -340,20 +346,88 @@ func (p *PrattParser) parseGroupedOrLambda() ast.Expr {
 		return lambda
 	}
 
-	// Not a lambda, parse as grouped expression
-	return p.parseGroupedExpression()
+	// Not a lambda, parse as grouped expression or tuple
+	return p.parseGroupedOrTuple()
 }
 
-func (p *PrattParser) parseGroupedExpression() ast.Expr {
+// parseGroupedOrTuple disambiguates grouped expressions from tuple literals
+// Detection strategy:
+//   - (expr,    -> tuple literal (comma after first element)
+//   - (expr)    -> grouped expression (closing paren after first element)
+func (p *PrattParser) parseGroupedOrTuple() ast.Expr {
+	lparenPos := p.curToken.Pos
 	p.nextToken() // consume '('
 
-	expr := p.ParseExpression(PrecLowest)
+	// Parse first element
+	first := p.ParseExpression(PrecLowest)
+
+	// Check for comma -> tuple literal
+	if p.peekTokenIs(tokenizer.COMMA) {
+		return p.finishTupleLiteral(lparenPos, first)
+	}
+
+	// Single element -> grouped expression
+	if !p.expectPeek(tokenizer.RPAREN) {
+		return nil
+	}
+
+	return first
+}
+
+// finishTupleLiteral completes tuple literal parsing after detecting comma
+// Called when we've parsed (first_expr and see a comma
+func (p *PrattParser) finishTupleLiteral(lparen token.Pos, first ast.Expr) *ast.TupleLiteral {
+	elements := []ast.Element{{Expr: first}}
+
+	// Parse remaining elements
+	for p.peekTokenIs(tokenizer.COMMA) {
+		p.nextToken() // consume ','
+		p.nextToken() // move to next element
+
+		// Check for nested tuple
+		var elem ast.Element
+		if p.curTokenIs(tokenizer.LPAREN) {
+			// Nested tuple - recursively parse
+			nested := p.parseGroupedOrTuple()
+			if nested == nil {
+				// Parse error in nested expression - propagate
+				return nil
+			}
+			if tupleLit, ok := nested.(*ast.TupleLiteral); ok {
+				elem = ast.Element{Nested: tupleLit}
+			} else {
+				// If not a tuple, treat as regular expression
+				elem = ast.Element{Expr: nested}
+			}
+		} else {
+			// Regular expression
+			expr := p.ParseExpression(PrecLowest)
+			if expr == nil {
+				// Parse error - propagate
+				return nil
+			}
+			elem = ast.Element{Expr: expr}
+		}
+
+		elements = append(elements, elem)
+	}
 
 	if !p.expectPeek(tokenizer.RPAREN) {
 		return nil
 	}
 
-	return expr
+	lit := &ast.TupleLiteral{
+		Lparen:   lparen,
+		Elements: elements,
+		Rparen:   p.curToken.Pos,
+	}
+
+	// Notify collector if callback is registered
+	if p.OnTupleLiteral != nil {
+		p.OnTupleLiteral(lit)
+	}
+
+	return lit
 }
 
 // Infix parse functions for Dingo operators
