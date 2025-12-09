@@ -50,11 +50,19 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 		return nil, fmt.Errorf("transform error: %w", err)
 	}
 
-	// Step 2: Transform tuples - Pass 1 (syntax to markers)
+	// Step 2a: Transform tuple type aliases (must run before Go parser)
+	// Pattern: type Point = (int, int) → type Point = __tupleType2__(int, int)
+	transformedSource, typeAliasMappings, err := transformTupleTypeAliases(transformedSource)
+	if err != nil {
+		return nil, fmt.Errorf("tuple type alias error: %w", err)
+	}
+
+	// Step 2b: Transform tuples - Pass 1 (syntax to markers)
 	transformedSource, tupleMappings, err := transformTuplePass1(transformedSource)
 	if err != nil {
 		return nil, fmt.Errorf("tuple pass 1 error: %w", err)
 	}
+	tupleMappings = append(tupleMappings, typeAliasMappings...)
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
 	transformedSource, stmtMappings, err := transformErrorPropStatements(transformedSource)

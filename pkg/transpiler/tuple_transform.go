@@ -22,11 +22,163 @@ type tupleNodeWithPos struct {
 	destructure *ast.TupleDestructure
 }
 
+// transformTupleTypeAliases transforms tuple type aliases before Go parsing.
+// This is a PRE-PASS that must run before the Go parser because the syntax
+// `type Point = (int, int)` is not valid Go and would cause parse errors.
+//
+// Pattern: type Name = (Type1, Type2, ...) → type Name = __tupleType{N}__(Type1, Type2, ...)
+//
+// NOTE: This uses tokenizer-based scanning which is normally discouraged per CLAUDE.md,
+// but is necessary here because type declarations cannot be parsed by our statement parser.
+func transformTupleTypeAliases(src []byte) ([]byte, []ast.SourceMapping, error) {
+	tok := tokenizer.New(src)
+	result := src
+	var mappings []ast.SourceMapping
+
+	// Find all type alias locations (scan backwards to avoid offset drift)
+	type typeAliasLoc struct {
+		tupleStart int      // Position of '('
+		tupleEnd   int      // Position after ')'
+		types      []string // Element type strings
+	}
+	var locs []typeAliasLoc
+
+	for {
+		current := tok.NextToken()
+		if current.Kind == tokenizer.EOF {
+			break
+		}
+
+		// Look for: type IDENT = (
+		if current.Kind == tokenizer.TYPE {
+			// Save position to restore if not a tuple type
+			savedPos := tok.SavePos()
+
+			ident := tok.NextToken()
+			if ident.Kind != tokenizer.IDENT {
+				tok.RestorePos(savedPos)
+				continue
+			}
+
+			assign := tok.NextToken()
+			if assign.Kind != tokenizer.ASSIGN {
+				tok.RestorePos(savedPos)
+				continue
+			}
+
+			lparen := tok.NextToken()
+			if lparen.Kind != tokenizer.LPAREN {
+				tok.RestorePos(savedPos)
+				continue
+			}
+
+			// Found "type X = (" - now parse the tuple type elements
+			// NOTE: token.Pos is 1-based, so subtract 1 for 0-based array indexing
+			tupleStart := int(lparen.Pos) - 1
+			var types []string
+			depth := 1
+			typeStart := int(lparen.End) - 1
+			hasComma := false
+			var tupleEnd int
+
+			for depth > 0 {
+				t := tok.NextToken()
+				if t.Kind == tokenizer.EOF {
+					break
+				}
+
+				switch t.Kind {
+				case tokenizer.LPAREN:
+					depth++
+				case tokenizer.RPAREN:
+					depth--
+					if depth == 0 {
+						tupleEnd = int(t.End) - 1
+						if hasComma {
+							// Collect final type (1-based to 0-based conversion)
+							typeStr := string(src[typeStart : int(t.Pos)-1])
+							types = append(types, trimTypeWhitespace(typeStr))
+						}
+					}
+				case tokenizer.COMMA:
+					if depth == 1 {
+						// Collect type before comma (1-based to 0-based conversion)
+						typeStr := string(src[typeStart : int(t.Pos)-1])
+						types = append(types, trimTypeWhitespace(typeStr))
+						typeStart = int(t.End) - 1
+						hasComma = true
+					}
+				}
+			}
+
+			// Only add if it's actually a tuple (has comma)
+			if hasComma && len(types) >= 2 {
+				locs = append(locs, typeAliasLoc{
+					tupleStart: tupleStart,
+					tupleEnd:   tupleEnd,
+					types:      types,
+				})
+			}
+		}
+	}
+
+	// Transform from end to beginning (reverse order)
+	for i := len(locs) - 1; i >= 0; i-- {
+		loc := locs[i]
+		// Generate Go generic type: tuples.Tuple{N}[Type1, Type2, ...]
+		// This directly produces valid Go code without needing Pass 2 resolution
+		marker := fmt.Sprintf("tuples.Tuple%d[%s]", len(loc.types), joinTypes(loc.types))
+
+		// Replace the tuple syntax with the marker
+		newResult := make([]byte, 0, len(result)-(loc.tupleEnd-loc.tupleStart)+len(marker))
+		newResult = append(newResult, result[:loc.tupleStart]...)
+		newResult = append(newResult, []byte(marker)...)
+		newResult = append(newResult, result[loc.tupleEnd:]...)
+		result = newResult
+
+		mappings = append(mappings, ast.SourceMapping{
+			DingoStart: loc.tupleStart,
+			DingoEnd:   loc.tupleEnd,
+			GoStart:    loc.tupleStart,
+			GoEnd:      loc.tupleStart + len(marker),
+			Kind:       "tuple_type_alias",
+		})
+	}
+
+	return result, mappings, nil
+}
+
+// trimTypeWhitespace removes leading/trailing whitespace from type string
+func trimTypeWhitespace(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
+}
+
+// joinTypes joins type strings with ", "
+func joinTypes(types []string) string {
+	result := ""
+	for i, t := range types {
+		if i > 0 {
+			result += ", "
+		}
+		result += t
+	}
+	return result
+}
+
 // transformTuplePass1 transforms all tuple syntax using parser-produced AST nodes.
 // This is Pass 1 of the two-pass tuple pipeline:
 //   - Literals: (a, b) → __tuple2__(a, b)
 //   - Destructuring: let (x, y) = point → let __tupleDest2__("x", "y", point)
-//   - Type aliases: type Point = (int, int) → type Point = __tupleType2__(int, int)
+//
+// Note: Type aliases are handled by transformTupleTypeAliases() which runs BEFORE this.
 //
 // The markers are valid Go code that will be type-checked by go/types.
 // Pass 2 will then resolve the markers to actual struct types.
