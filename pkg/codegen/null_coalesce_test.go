@@ -159,13 +159,11 @@ func TestNullCoalesceGenerator_SourceMappingPositions(t *testing.T) {
 		t.Fatalf("Expected 3 mappings, got %d", len(result.Mappings))
 	}
 
-	// All mappings should have positive Dingo positions
+	// Mappings now use relative positions (DingoStart=0, transformer adds actual offset)
+	// So we just verify GoStart/GoEnd are valid
 	for i, m := range result.Mappings {
-		if m.DingoStart <= 0 {
-			t.Errorf("Mapping %d has invalid DingoStart: %d", i, m.DingoStart)
-		}
-		if m.DingoEnd <= 0 {
-			t.Errorf("Mapping %d has invalid DingoEnd: %d", i, m.DingoEnd)
+		if m.DingoEnd < m.DingoStart {
+			t.Errorf("Mapping %d has invalid DingoEnd: %d < DingoStart %d", i, m.DingoEnd, m.DingoStart)
 		}
 		if m.GoStart < 0 {
 			t.Errorf("Mapping %d has invalid GoStart: %d", i, m.GoStart)

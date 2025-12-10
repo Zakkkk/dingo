@@ -81,32 +81,24 @@ func (t *Translator) TranslatePosition(
 			log.Printf("[LSP Translator] Dingo line %d out of range, using identity mapping", line)
 			newLine, newCol = line, col
 		} else {
+			// Calculate line shift from transforms that occur BEFORE this position
+			// Each transform may add or remove lines, affecting subsequent line numbers
+			lineShift := reader.CalculateLineShift(dingoByteOffset)
+
 			// Add column offset (col is 1-based, so subtract 1)
-			dingoByteOffset += (col - 1)
+			fullDingoOffset := dingoByteOffset + (col - 1)
 
 			// Look up mapping: Dingo byte offset → Go byte range
-			goStart, goEnd, kind := reader.FindByDingoPos(dingoByteOffset)
+			_, _, kind := reader.FindByDingoPos(fullDingoOffset)
 
-			// If no mapping found (identity), goStart == dingoByteOffset
-			if kind == "" {
-				// Identity mapping - translate coordinates directly
-				log.Printf("[LSP Translator] No mapping for Dingo position, using identity")
-				newLine, newCol = line, col
+			// Apply line shift to get the Go line number
+			newLine = line + lineShift
+			newCol = col
+
+			if kind != "" {
+				log.Printf("[LSP Translator] Position in mapped region (kind=%s), lineShift=%d", kind, lineShift)
 			} else {
-				// Proportional mapping within the range
-				// For now, map to start of Go range (simple approach)
-				// Future: could do proportional offset like dmap lookup.go would
-				log.Printf("[LSP Translator] Mapped Dingo byte %d to Go byte range [%d, %d), kind=%s",
-					dingoByteOffset, goStart, goEnd, kind)
-
-				// Convert Go byte offset → line:column
-				newLine = reader.GoByteToLine(goStart)
-				lineStartOffset := reader.GoLineToByteOffset(newLine)
-				if lineStartOffset >= 0 {
-					newCol = goStart - lineStartOffset + 1 // +1 for 1-based
-				} else {
-					newCol = 1
-				}
+				log.Printf("[LSP Translator] No mapping for Dingo position, lineShift=%d", lineShift)
 			}
 		}
 

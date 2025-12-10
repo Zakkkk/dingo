@@ -178,13 +178,14 @@ func TestTernaryCodeGen_SourceMappings(t *testing.T) {
 	}
 
 	mapping := result.Mappings[0]
-	if mapping.DingoStart != int(startPos) {
-		t.Errorf("Expected DingoStart=%d, got %d", startPos, mapping.DingoStart)
+	// DingoStart is relative (0) - transformer adds the actual position offset
+	if mapping.DingoStart != 0 {
+		t.Errorf("Expected DingoStart=0 (relative), got %d", mapping.DingoStart)
 	}
-	// TernaryExpr.End() returns Colon + 1, so expected end is colonPos + 1
-	expectedEnd := int(colonPos) + 1
+	// DingoEnd is also relative: (colonPos + 1) - startPos = (30 + 1) - 10 = 21
+	expectedEnd := int(colonPos) + 1 - int(startPos)
 	if mapping.DingoEnd != expectedEnd {
-		t.Errorf("Expected DingoEnd=%d, got %d", expectedEnd, mapping.DingoEnd)
+		t.Errorf("Expected DingoEnd=%d (relative), got %d", expectedEnd, mapping.DingoEnd)
 	}
 	if mapping.GoStart != 0 {
 		t.Errorf("Expected GoStart=0, got %d", mapping.GoStart)

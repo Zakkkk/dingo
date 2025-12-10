@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -203,6 +204,9 @@ func (s *Server) handleDefinitionWithTranslation(
 		return reply(ctx, nil, err)
 	}
 
+	s.config.Logger.Debugf("[Definition] Request for URI=%s, Line=%d, Char=%d",
+		params.TextDocument.URI.Filename(), params.Position.Line, params.Position.Character)
+
 	// If not a .dingo file, forward directly
 	if !isDingoFile(params.TextDocument.URI) {
 		result, err := s.gopls.Definition(ctx, params)
@@ -217,6 +221,9 @@ func (s *Server) handleDefinitionWithTranslation(
 		return reply(ctx, result, err)
 	}
 
+	s.config.Logger.Debugf("[Definition] Translated to Go: URI=%s, Line=%d, Char=%d",
+		goURI.Filename(), goPos.Line, goPos.Character)
+
 	// Update params with translated position
 	params.TextDocument.URI = goURI
 	params.Position = goPos
@@ -224,7 +231,15 @@ func (s *Server) handleDefinitionWithTranslation(
 	// Forward to gopls
 	result, err := s.gopls.Definition(ctx, params)
 	if err != nil {
+		s.config.Logger.Warnf("[Definition] gopls error: %v", err)
 		return reply(ctx, nil, err)
+	}
+
+	s.config.Logger.Debugf("[Definition] gopls returned %d locations", len(result))
+	for i, loc := range result {
+		s.config.Logger.Debugf("[Definition]   [%d] URI=%s, Range=L%d:C%d-L%d:C%d",
+			i, loc.URI.Filename(), loc.Range.Start.Line, loc.Range.Start.Character,
+			loc.Range.End.Line, loc.Range.End.Character)
 	}
 
 	// Translate response: Go locations → Dingo locations
@@ -234,6 +249,8 @@ func (s *Server) handleDefinitionWithTranslation(
 		s.config.Logger.Warnf("Definition response translation failed: %v", err)
 		return reply(ctx, nil, fmt.Errorf("position translation failed: %w (try re-transpiling file)", err))
 	}
+
+	s.config.Logger.Debugf("[Definition] Returning %d translated locations", len(translatedResult))
 
 	return reply(ctx, translatedResult, nil)
 }
@@ -249,6 +266,9 @@ func (s *Server) handleHoverWithTranslation(
 		return reply(ctx, nil, err)
 	}
 
+	s.config.Logger.Debugf("[Hover] Request for URI=%s, Line=%d, Char=%d",
+		params.TextDocument.URI.Filename(), params.Position.Line, params.Position.Character)
+
 	originalURI := params.TextDocument.URI
 
 	// If not a .dingo file, forward directly
@@ -260,10 +280,13 @@ func (s *Server) handleHoverWithTranslation(
 	// Translate Dingo position → Go position
 	goURI, goPos, err := s.translator.TranslatePosition(params.TextDocument.URI, params.Position, DingoToGo)
 	if err != nil {
-		s.config.Logger.Warnf("Position translation failed: %v", err)
+		s.config.Logger.Warnf("[Hover] Position translation failed: %v", err)
 		result, err := s.gopls.Hover(ctx, params)
 		return reply(ctx, result, err)
 	}
+
+	s.config.Logger.Debugf("[Hover] Translated to Go: URI=%s, Line=%d, Char=%d",
+		goURI.Filename(), goPos.Line, goPos.Character)
 
 	// Update params with translated position
 	params.TextDocument.URI = goURI
@@ -272,13 +295,22 @@ func (s *Server) handleHoverWithTranslation(
 	// Forward to gopls
 	result, err := s.gopls.Hover(ctx, params)
 	if err != nil {
+		s.config.Logger.Warnf("[Hover] gopls error: %v", err)
+		// Handle "column is beyond end of line" gracefully - this happens when
+		// line lengths differ between Dingo and Go files after transformation
+		if strings.Contains(err.Error(), "column is beyond") {
+			return reply(ctx, nil, nil) // Return empty result instead of error
+		}
 		return reply(ctx, nil, err)
 	}
 
 	// Debug: Log hover result from gopls
 	if result != nil {
-		s.config.Logger.Debugf("Hover from gopls: Kind=%q, ValueLen=%d, HasRange=%v",
-			result.Contents.Kind, len(result.Contents.Value), result.Range != nil)
+		s.config.Logger.Debugf("[Hover] gopls returned: Kind=%q, ValueLen=%d, Value=%q, HasRange=%v",
+			result.Contents.Kind, len(result.Contents.Value),
+			truncateStr(result.Contents.Value, 100), result.Range != nil)
+	} else {
+		s.config.Logger.Debugf("[Hover] gopls returned nil")
 	}
 
 	// Translate response: Go range → Dingo range
@@ -290,11 +322,18 @@ func (s *Server) handleHoverWithTranslation(
 
 	// Debug: Log translated hover
 	if translatedResult != nil {
-		s.config.Logger.Debugf("Hover translated: Kind=%q, ValueLen=%d, HasRange=%v",
+		s.config.Logger.Debugf("[Hover] Returning: Kind=%q, ValueLen=%d, HasRange=%v",
 			translatedResult.Contents.Kind, len(translatedResult.Contents.Value), translatedResult.Range != nil)
 	}
 
 	return reply(ctx, translatedResult, nil)
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 // handlePublishDiagnostics processes diagnostics from gopls and translates to Dingo positions
@@ -327,15 +366,10 @@ func (s *Server) handlePublishDiagnostics(
 	}
 	s.config.Logger.Debugf("[Diagnostic Handler] Successfully translated to %d diagnostics", len(translatedDiagnostics))
 
-	// Publish diagnostics for the .dingo file
+	// Publish diagnostics for the .dingo file using unified cache
 	dingoURI := uri.File(dingoPath)
-	translatedParams := protocol.PublishDiagnosticsParams{
-		URI:         dingoURI,
-		Diagnostics: translatedDiagnostics,
-		Version:     params.Version,
-	}
 
-	s.config.Logger.Debugf("[Diagnostic Handler] Publishing %d diagnostics for %s", len(translatedDiagnostics), dingoPath)
+	s.config.Logger.Debugf("[Diagnostic Handler] Publishing %d gopls diagnostics for %s", len(translatedDiagnostics), dingoPath)
 
 	// Log details of each diagnostic being published
 	for i, diag := range translatedDiagnostics {
@@ -345,27 +379,9 @@ func (s *Server) handlePublishDiagnostics(
 			diag.Range.End.Line, diag.Range.End.Character)
 	}
 
-	// CRITICAL FIX C1: Actually publish to IDE connection (thread-safe)
-	ideConn, serverCtx := s.GetConn()
-	if ideConn == nil {
-		s.config.Logger.Warnf("[Diagnostic Handler] ERROR: No IDE connection available, cannot publish diagnostics")
-		return nil
-	}
+	// Use unified diagnostic cache to merge with lint diagnostics
+	s.updateAndPublishDiagnostics(dingoURI, "gopls", translatedDiagnostics)
 
-	s.config.Logger.Debugf("[Diagnostic Handler] IDE connection available, publishing now...")
-
-	// Use server context if available, otherwise use provided context
-	publishCtx := serverCtx
-	if publishCtx == nil {
-		publishCtx = ctx
-	}
-
-	err = ideConn.Notify(publishCtx, "textDocument/publishDiagnostics", translatedParams)
-	if err != nil {
-		s.config.Logger.Warnf("[Diagnostic Handler] ERROR: Failed to publish diagnostics: %v", err)
-		return err
-	}
-
-	s.config.Logger.Debugf("[Diagnostic Handler] SUCCESS: Published %d diagnostics to IDE", len(translatedDiagnostics))
+	s.config.Logger.Debugf("[Diagnostic Handler] SUCCESS: Published diagnostics to IDE")
 	return nil
 }

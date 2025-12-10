@@ -281,9 +281,9 @@ func TestLambdaCodeGen_SourceMappings(t *testing.T) {
 		t.Error("Expected source mappings, got none")
 	}
 
-	// First mapping should map from lambda start position
-	if result.Mappings[0].DingoStart != 100 {
-		t.Errorf("Expected DingoStart=100, got %d", result.Mappings[0].DingoStart)
+	// First mapping should have relative DingoStart=0 (transformer adds actual offset)
+	if result.Mappings[0].DingoStart != 0 {
+		t.Errorf("Expected DingoStart=0 (relative), got %d", result.Mappings[0].DingoStart)
 	}
 
 	// Should map to output start

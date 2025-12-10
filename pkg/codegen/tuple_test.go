@@ -134,8 +134,9 @@ func TestTupleCodeGen_LiteralSourceMapping(t *testing.T) {
 	}
 
 	m := result.Mappings[0]
-	if m.DingoStart != 100 {
-		t.Errorf("Expected DingoStart=100, got %d", m.DingoStart)
+	// DingoStart is relative (0) - the transformer adds the actual position offset
+	if m.DingoStart != 0 {
+		t.Errorf("Expected DingoStart=0 (relative), got %d", m.DingoStart)
 	}
 
 	if m.GoStart != 0 {
@@ -191,7 +192,8 @@ func TestTupleCodeGen_DestructureWithWildcard(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest2__("x:0", "_:1", pair)`
+	// Wildcards are skipped - only x binding at index 0
+	expected := `__tupleDest1__("x:0", pair)`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -215,7 +217,8 @@ func TestTupleCodeGen_DestructureMultipleWildcards(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	expected := `__tupleDest3__("x:0", "_:1", "z:2", triple)`
+	// Wildcards are skipped - only x at index 0 and z at index 2
+	expected := `__tupleDest2__("x:0", "z:2", triple)`
 	actual := string(result.Output)
 
 	if actual != expected {
@@ -267,8 +270,9 @@ func TestTupleCodeGen_DestructureSourceMapping(t *testing.T) {
 	}
 
 	m := result.Mappings[0]
-	if m.DingoStart != 200 {
-		t.Errorf("Expected DingoStart=200, got %d", m.DingoStart)
+	// DingoStart is relative (0) - the transformer adds the actual position offset
+	if m.DingoStart != 0 {
+		t.Errorf("Expected DingoStart=0 (relative), got %d", m.DingoStart)
 	}
 
 	if m.Kind != "tuple_destructure" {
@@ -364,21 +368,21 @@ func TestTupleCodeGen_IntegrationPlaceholder(t *testing.T) {
 
 // Test helper functions
 
-func TestFormatTmpVar(t *testing.T) {
+func TestFormatTplVar(t *testing.T) {
 	tests := []struct {
 		counter  int
 		expected string
 	}{
-		{1, "tmp"},
-		{2, "tmp1"},
-		{3, "tmp2"},
-		{10, "tmp9"},
+		{1, "tpl"},
+		{2, "tpl1"},
+		{3, "tpl2"},
+		{10, "tpl9"},
 	}
 
 	for _, tt := range tests {
-		actual := formatTmpVar(tt.counter)
+		actual := formatTplVar(tt.counter)
 		if actual != tt.expected {
-			t.Errorf("formatTmpVar(%d): expected %s, got %s", tt.counter, tt.expected, actual)
+			t.Errorf("formatTplVar(%d): expected %s, got %s", tt.counter, tt.expected, actual)
 		}
 	}
 }

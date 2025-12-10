@@ -408,3 +408,54 @@ func (r *Reader) KindCount() int {
 	defer r.mu.RUnlock()
 	return len(r.kinds)
 }
+
+// CalculateLineShift calculates the cumulative line shift at a given Dingo byte position.
+// This accounts for transforms that add or remove lines (e.g., error propagation adds 4 lines).
+// Returns the number of lines to ADD to the Dingo line number to get the Go line number.
+func (r *Reader) CalculateLineShift(dingoByteOffset int) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	totalShift := 0
+
+	// Iterate through all mappings
+	for _, entry := range r.dingoEntries {
+		// Only consider mappings that END before our position
+		// (transforms that have completed before this point)
+		if int(entry.DingoEnd) <= dingoByteOffset {
+			// Count lines in the Dingo range
+			dingoLineCount := r.countLinesInRangeUint32(r.dingoLines, int(entry.DingoStart), int(entry.DingoEnd))
+			// Count lines in the Go range
+			goLineCount := r.countLinesInRangeUint32(r.goLines, int(entry.GoStart), int(entry.GoEnd))
+
+			// Add the difference to the total shift
+			totalShift += (goLineCount - dingoLineCount)
+		}
+	}
+
+	return totalShift
+}
+
+// countLinesInRangeUint32 counts how many line boundaries are crossed in a byte range.
+// Returns 1 for a range on a single line, 2 for a range spanning 2 lines, etc.
+func (r *Reader) countLinesInRangeUint32(lineOffsets []uint32, start, end int) int {
+	if len(lineOffsets) == 0 {
+		return 1
+	}
+
+	startLine := 1
+	endLine := 1
+
+	for i, offset := range lineOffsets {
+		if int(offset) <= start {
+			startLine = i + 1
+		}
+		if int(offset) <= end {
+			endLine = i + 1
+		} else {
+			break
+		}
+	}
+
+	return endLine - startLine + 1
+}
