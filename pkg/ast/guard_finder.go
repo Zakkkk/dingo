@@ -1,11 +1,13 @@
 package ast
 
 import (
+	"fmt"
+
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 )
 
-// GuardLetLocation represents a guard let statement in source
-type GuardLetLocation struct {
+// GuardLocation represents a guard statement in source
+type GuardLocation struct {
 	// Statement boundaries
 	Start int // byte offset of 'guard' keyword
 	End   int // byte offset after closing brace
@@ -13,6 +15,12 @@ type GuardLetLocation struct {
 	// Binding information
 	IsTuple  bool     // true if (a, b) pattern
 	VarNames []string // ["user"] or ["name", "age"]
+
+	// IsDecl indicates whether this guard uses := (true) or = (false)
+	// Examples:
+	//   true:  guard user := FindUser(id) else { ... }  // declaration with :=
+	//   false: guard user = FindUser(id) else { ... }   // assignment with =
+	IsDecl   bool
 
 	// Expression (RHS of =)
 	ExprStart int    // start of expression
@@ -30,28 +38,46 @@ type GuardLetLocation struct {
 	Column int // 1-indexed column number
 }
 
-// FindGuardLetStatements finds guard let statements in source
-func FindGuardLetStatements(src []byte) ([]GuardLetLocation, error) {
+// FindGuardStatements finds guard statements in source
+func FindGuardStatements(src []byte) ([]GuardLocation, error) {
 	tok := tokenizer.New(src)
 	tokens, err := tok.Tokenize()
 	if err != nil {
 		return nil, err
 	}
 
-	var locations []GuardLetLocation
+	var locations []GuardLocation
 
 	for i := 0; i < len(tokens); i++ {
 		t := tokens[i]
 
-		// Look for: guard let ...
+		// Look for: guard PATTERN := EXPR or guard PATTERN = EXPR
 		if t.Kind == tokenizer.GUARD {
-			if i+1 < len(tokens) && tokens[i+1].Kind == tokenizer.LET {
-				loc := parseGuardLetStatement(tokens, i, src)
-				if loc != nil {
-					locations = append(locations, *loc)
-					// Skip past this statement
-					i = findTokenAtByte(tokens, loc.End)
+			if i+1 >= len(tokens) {
+				continue
+			}
+
+			// Check for legacy 'guard let' syntax and provide helpful error
+			if tokens[i+1].Kind == tokenizer.LET {
+				// Return error instead of silently ignoring
+				line := tokens[i].Line
+				col := tokens[i].Column
+				return nil, &GuardSyntaxError{
+					Line:    line,
+					Column:  col,
+					Message: "guard let syntax removed: use 'guard x :=' instead of 'guard let x ='",
 				}
+			}
+
+			// Parse new syntax: guard PATTERN := or guard PATTERN =
+			loc, err := parseGuardStatement(tokens, i, src)
+			if err != nil {
+				return nil, err
+			}
+			if loc != nil {
+				locations = append(locations, *loc)
+				// Skip past this statement
+				i = findTokenAtByte(tokens, loc.End)
 			}
 		}
 	}
@@ -59,45 +85,76 @@ func FindGuardLetStatements(src []byte) ([]GuardLetLocation, error) {
 	return locations, nil
 }
 
-// parseGuardLetStatement parses a complete guard let statement
-// Pattern: guard let PATTERN = EXPR else [|PARAM|] { BLOCK }
-func parseGuardLetStatement(tokens []tokenizer.Token, startIdx int, src []byte) *GuardLetLocation {
+// GuardSyntaxError represents a guard syntax error
+type GuardSyntaxError struct {
+	Line    int
+	Column  int
+	Message string
+}
+
+func (e *GuardSyntaxError) Error() string {
+	// Use standard Go error format (line:col: message) for IDE integration
+	return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Message)
+}
+
+// parseGuardStatement parses a complete guard statement
+// Pattern: guard PATTERN := EXPR else [|PARAM|] { BLOCK }
+// Pattern: guard PATTERN = EXPR else [|PARAM|] { BLOCK }
+func parseGuardStatement(tokens []tokenizer.Token, startIdx int, src []byte) (*GuardLocation, error) {
 	guardToken := tokens[startIdx]
 	stmtStart := guardToken.BytePos()
 
-	loc := &GuardLetLocation{
+	loc := &GuardLocation{
 		Start:  stmtStart,
 		Line:   guardToken.Line,
 		Column: guardToken.Column,
 	}
 
-	// Skip 'guard let'
-	i := startIdx + 2
+	// Skip 'guard' keyword
+	i := startIdx + 1
 	if i >= len(tokens) {
-		return nil
+		return nil, nil
 	}
 
 	// Parse binding pattern (single or tuple)
 	varNames, isTuple, nextIdx := parseBindingPattern(tokens, i)
 	if varNames == nil {
-		return nil
+		return nil, nil
 	}
 
 	loc.VarNames = varNames
 	loc.IsTuple = isTuple
 	i = nextIdx
 
-	// Expect '='
-	if i >= len(tokens) || tokens[i].Kind != tokenizer.ASSIGN {
-		return nil
+	// Expect ':=' or '='
+	if i >= len(tokens) {
+		return nil, nil
 	}
-	i++ // skip '='
+
+	if tokens[i].Kind == tokenizer.DEFINE {
+		loc.IsDecl = true
+		i++ // skip ':='
+	} else if tokens[i].Kind == tokenizer.ASSIGN {
+		loc.IsDecl = false
+		i++ // skip '='
+	} else {
+		return nil, nil
+	}
 
 	// Parse expression until 'else'
+	if i >= len(tokens) {
+		return nil, nil
+	}
+
 	exprStart := tokens[i].BytePos()
 	exprEnd, elseIdx := findElseKeyword(tokens, i)
 	if elseIdx == -1 {
-		return nil
+		// Missing else block - return helpful error instead of silently skipping
+		return nil, &GuardSyntaxError{
+			Line:    guardToken.Line,
+			Column:  guardToken.Column,
+			Message: "guard statement missing 'else' block",
+		}
 	}
 
 	loc.ExprStart = exprStart
@@ -107,7 +164,7 @@ func parseGuardLetStatement(tokens []tokenizer.Token, startIdx int, src []byte) 
 	// Skip 'else'
 	i = elseIdx + 1
 	if i >= len(tokens) {
-		return nil
+		return nil, nil
 	}
 
 	// Check for pipe binding: |param|
@@ -121,20 +178,20 @@ func parseGuardLetStatement(tokens []tokenizer.Token, startIdx int, src []byte) 
 
 	// Expect opening brace
 	if i >= len(tokens) || tokens[i].Kind != tokenizer.LBRACE {
-		return nil
+		return nil, nil
 	}
 
 	// Parse else block
 	blockStart, blockEnd, endIdx := parseElseBlock(tokens, i)
 	if blockStart == -1 {
-		return nil
+		return nil, nil
 	}
 
 	loc.ElseStart = blockStart
 	loc.ElseEnd = blockEnd
 	loc.End = tokens[endIdx].ByteEnd()
 
-	return loc
+	return loc, nil
 }
 
 // parseBindingPattern parses single or tuple binding
@@ -196,7 +253,7 @@ func parseTupleBinding(tokens []tokenizer.Token, startIdx int) ([]string, bool, 
 	return nil, false, -1
 }
 
-// findElseKeyword finds the 'else' keyword in a guard let statement
+// findElseKeyword finds the 'else' keyword in a guard statement
 // Returns: exprEnd (byte position), elseIdx (token index)
 func findElseKeyword(tokens []tokenizer.Token, startIdx int) (int, int) {
 	depth := 0
@@ -262,6 +319,8 @@ func parseElseBlock(tokens []tokenizer.Token, lbraceIdx int) (int, int, int) {
 
 	depth := 1
 	blockStart := tokens[lbraceIdx].ByteEnd() // Start after opening brace
+	startLine := tokens[lbraceIdx].Line
+	startCol := tokens[lbraceIdx].Column
 	i := lbraceIdx + 1
 
 	for i < len(tokens) {
@@ -281,6 +340,11 @@ func parseElseBlock(tokens []tokenizer.Token, lbraceIdx int) (int, int, int) {
 		i++
 	}
 
-	// No matching closing brace
+	// No matching closing brace - this indicates unclosed braces
+	// Note: We return -1 to signal error. The caller should check this.
+	// In practice, the tokenizer may have already caught this as a syntax error,
+	// but we handle it defensively here.
+	_ = startLine // Will be used when we propagate GuardSyntaxError from parseElseBlock
+	_ = startCol
 	return -1, -1, -1
 }

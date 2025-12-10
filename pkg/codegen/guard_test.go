@@ -61,12 +61,13 @@ func TestInferExprType_Deprecated(t *testing.T) {
 	}
 }
 
-func TestGuardLetGenerator_SingleBinding_Result(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGuardGenerator_SingleBinding_Result(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         50,
 		IsTuple:     false,
 		VarNames:    []string{"user"},
+		IsDecl:      true, // Declaration with :=
 		ExprStart:   16,
 		ExprEnd:     30,
 		ExprText:    "FindUser(id)",
@@ -78,7 +79,7 @@ func TestGuardLetGenerator_SingleBinding_Result(t *testing.T) {
 		Column:      1,
 	}
 
-	gen := NewGuardLetGenerator(loc, TypeResult)
+	gen := NewGuardGenerator(loc, TypeResult)
 	result := gen.Generate()
 
 	output := string(result.Output)
@@ -97,16 +98,17 @@ func TestGuardLetGenerator_SingleBinding_Result(t *testing.T) {
 	}
 
 	if !strings.Contains(output, "user := *tmp.Ok") {
-		t.Errorf("Missing variable binding, got:\n%s", output)
+		t.Errorf("Missing variable binding with :=, got:\n%s", output)
 	}
 }
 
-func TestGuardLetGenerator_SingleBinding_Option(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGuardGenerator_SingleBinding_Option(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         45,
 		IsTuple:     false,
 		VarNames:    []string{"config"},
+		IsDecl:      true, // Declaration with :=
 		ExprStart:   16,
 		ExprEnd:     28,
 		ExprText:    "LoadConfig()",
@@ -118,7 +120,7 @@ func TestGuardLetGenerator_SingleBinding_Option(t *testing.T) {
 		Column:      1,
 	}
 
-	gen := NewGuardLetGenerator(loc, TypeOption)
+	gen := NewGuardGenerator(loc, TypeOption)
 	result := gen.Generate()
 
 	output := string(result.Output)
@@ -137,16 +139,105 @@ func TestGuardLetGenerator_SingleBinding_Option(t *testing.T) {
 	}
 
 	if !strings.Contains(output, "config := *tmp.Some") {
-		t.Errorf("Missing variable binding, got:\n%s", output)
+		t.Errorf("Missing variable binding with :=, got:\n%s", output)
 	}
 }
 
-func TestGuardLetGenerator_TupleBinding_Result(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGuardGenerator_SingleAssignment_Result(t *testing.T) {
+	loc := dingoast.GuardLocation{
+		Start:       0,
+		End:         50,
+		IsTuple:     false,
+		VarNames:    []string{"user"},
+		IsDecl:      false, // Assignment with =
+		ExprStart:   16,
+		ExprEnd:     30,
+		ExprText:    "FindUser(id)",
+		HasBinding:  true,
+		BindingName: "err",
+		ElseStart:   40,
+		ElseEnd:     48,
+		Line:        1,
+		Column:      1,
+	}
+
+	gen := NewGuardGenerator(loc, TypeResult)
+	result := gen.Generate()
+
+	output := string(result.Output)
+
+	// Check generated code structure
+	if !strings.Contains(output, "tmp := FindUser(id)") {
+		t.Errorf("Missing temp assignment, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "if tmp.IsErr()") {
+		t.Errorf("Missing IsErr check, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "err := *tmp.Err") {
+		t.Errorf("Missing error binding, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "user = *tmp.Ok") {
+		t.Errorf("Missing variable assignment with =, got:\n%s", output)
+	}
+
+	// Ensure it's not using :=
+	if strings.Contains(output, "user := *tmp.Ok") {
+		t.Errorf("Should use = not := for assignment, got:\n%s", output)
+	}
+}
+
+func TestGuardGenerator_SingleAssignment_Option(t *testing.T) {
+	loc := dingoast.GuardLocation{
+		Start:       0,
+		End:         45,
+		IsTuple:     false,
+		VarNames:    []string{"config"},
+		IsDecl:      false, // Assignment with =
+		ExprStart:   16,
+		ExprEnd:     28,
+		ExprText:    "LoadConfig()",
+		HasBinding:  false,
+		BindingName: "",
+		ElseStart:   35,
+		ElseEnd:     43,
+		Line:        1,
+		Column:      1,
+	}
+
+	gen := NewGuardGenerator(loc, TypeOption)
+	result := gen.Generate()
+
+	output := string(result.Output)
+
+	// Check generated code structure
+	if !strings.Contains(output, "tmp := LoadConfig()") {
+		t.Errorf("Missing temp assignment, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "if tmp.IsNone()") {
+		t.Errorf("Missing IsNone check, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "config = *tmp.Some") {
+		t.Errorf("Missing variable assignment with =, got:\n%s", output)
+	}
+
+	// Ensure it's not using :=
+	if strings.Contains(output, "config := *tmp.Some") {
+		t.Errorf("Should use = not := for assignment, got:\n%s", output)
+	}
+}
+
+func TestGuardGenerator_TupleBinding_Result(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         60,
 		IsTuple:     true,
 		VarNames:    []string{"name", "age"},
+		IsDecl:      true, // Declaration with :=
 		ExprStart:   23,
 		ExprEnd:     40,
 		ExprText:    "ParseInfo(data)",
@@ -158,7 +249,7 @@ func TestGuardLetGenerator_TupleBinding_Result(t *testing.T) {
 		Column:      1,
 	}
 
-	gen := NewGuardLetGenerator(loc, TypeResult)
+	gen := NewGuardGenerator(loc, TypeResult)
 	result := gen.Generate()
 
 	output := string(result.Output)
@@ -177,20 +268,21 @@ func TestGuardLetGenerator_TupleBinding_Result(t *testing.T) {
 	}
 
 	if !strings.Contains(output, "name := (*tmp.Ok).Item1") {
-		t.Errorf("Missing first tuple item binding, got:\n%s", output)
+		t.Errorf("Missing first tuple item binding with :=, got:\n%s", output)
 	}
 
 	if !strings.Contains(output, "age := (*tmp.Ok).Item2") {
-		t.Errorf("Missing second tuple item binding, got:\n%s", output)
+		t.Errorf("Missing second tuple item binding with :=, got:\n%s", output)
 	}
 }
 
-func TestGuardLetGenerator_TupleBinding_Option(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGuardGenerator_TupleBinding_Option(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         50,
 		IsTuple:     true,
 		VarNames:    []string{"x", "y"},
+		IsDecl:      true, // Declaration with :=
 		ExprStart:   20,
 		ExprEnd:     32,
 		ExprText:    "GetCoords()",
@@ -202,7 +294,7 @@ func TestGuardLetGenerator_TupleBinding_Option(t *testing.T) {
 		Column:      1,
 	}
 
-	gen := NewGuardLetGenerator(loc, TypeOption)
+	gen := NewGuardGenerator(loc, TypeOption)
 	result := gen.Generate()
 
 	output := string(result.Output)
@@ -217,23 +309,120 @@ func TestGuardLetGenerator_TupleBinding_Option(t *testing.T) {
 	}
 
 	if !strings.Contains(output, "x := (*tmp.Some).Item1") {
-		t.Errorf("Missing first tuple item binding, got:\n%s", output)
+		t.Errorf("Missing first tuple item binding with :=, got:\n%s", output)
 	}
 
 	if !strings.Contains(output, "y := (*tmp.Some).Item2") {
-		t.Errorf("Missing second tuple item binding, got:\n%s", output)
+		t.Errorf("Missing second tuple item binding with :=, got:\n%s", output)
 	}
 }
 
-func TestGuardLetGenerator_VariableNaming(t *testing.T) {
+func TestGuardGenerator_TupleAssignment_Result(t *testing.T) {
+	loc := dingoast.GuardLocation{
+		Start:       0,
+		End:         60,
+		IsTuple:     true,
+		VarNames:    []string{"name", "age"},
+		IsDecl:      false, // Assignment with =
+		ExprStart:   23,
+		ExprEnd:     40,
+		ExprText:    "ParseInfo(data)",
+		HasBinding:  true,
+		BindingName: "e",
+		ElseStart:   50,
+		ElseEnd:     58,
+		Line:        1,
+		Column:      1,
+	}
+
+	gen := NewGuardGenerator(loc, TypeResult)
+	result := gen.Generate()
+
+	output := string(result.Output)
+
+	// Check generated code structure
+	if !strings.Contains(output, "tmp := ParseInfo(data)") {
+		t.Errorf("Missing temp assignment, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "if tmp.IsErr()") {
+		t.Errorf("Missing IsErr check, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "e := *tmp.Err") {
+		t.Errorf("Missing error binding, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "name = (*tmp.Ok).Item1") {
+		t.Errorf("Missing first tuple item assignment with =, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "age = (*tmp.Ok).Item2") {
+		t.Errorf("Missing second tuple item assignment with =, got:\n%s", output)
+	}
+
+	// Ensure it's not using :=
+	if strings.Contains(output, "name := (*tmp.Ok).Item1") {
+		t.Errorf("Should use = not := for assignment, got:\n%s", output)
+	}
+}
+
+func TestGuardGenerator_TupleAssignment_Option(t *testing.T) {
+	loc := dingoast.GuardLocation{
+		Start:       0,
+		End:         50,
+		IsTuple:     true,
+		VarNames:    []string{"x", "y"},
+		IsDecl:      false, // Assignment with =
+		ExprStart:   20,
+		ExprEnd:     32,
+		ExprText:    "GetCoords()",
+		HasBinding:  false,
+		BindingName: "",
+		ElseStart:   40,
+		ElseEnd:     48,
+		Line:        1,
+		Column:      1,
+	}
+
+	gen := NewGuardGenerator(loc, TypeOption)
+	result := gen.Generate()
+
+	output := string(result.Output)
+
+	// Check generated code structure
+	if !strings.Contains(output, "tmp := GetCoords()") {
+		t.Errorf("Missing temp assignment, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "if tmp.IsNone()") {
+		t.Errorf("Missing IsNone check, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "x = (*tmp.Some).Item1") {
+		t.Errorf("Missing first tuple item assignment with =, got:\n%s", output)
+	}
+
+	if !strings.Contains(output, "y = (*tmp.Some).Item2") {
+		t.Errorf("Missing second tuple item assignment with =, got:\n%s", output)
+	}
+
+	// Ensure it's not using :=
+	if strings.Contains(output, "x := (*tmp.Some).Item1") {
+		t.Errorf("Should use = not := for assignment, got:\n%s", output)
+	}
+}
+
+func TestGuardGenerator_VariableNaming(t *testing.T) {
 	// Test that multiple guard lets use tmp, tmp1, tmp2 pattern
-	loc1 := dingoast.GuardLetLocation{
+	loc1 := dingoast.GuardLocation{
 		VarNames: []string{"a"},
 		ExprText: "GetA()",
+		IsDecl:   true,
 		Line:     1,
 	}
 
-	gen1 := NewGuardLetGenerator(loc1, TypeOption)
+	gen1 := NewGuardGenerator(loc1, TypeOption)
 	result1 := gen1.Generate()
 	output1 := string(result1.Output)
 
@@ -242,13 +431,14 @@ func TestGuardLetGenerator_VariableNaming(t *testing.T) {
 	}
 
 	// Second generator should use tmp1
-	loc2 := dingoast.GuardLetLocation{
+	loc2 := dingoast.GuardLocation{
 		VarNames: []string{"b"},
 		ExprText: "GetB()",
+		IsDecl:   true,
 		Line:     2,
 	}
 
-	gen2 := NewGuardLetGenerator(loc2, TypeOption)
+	gen2 := NewGuardGenerator(loc2, TypeOption)
 	gen2.Counter = 2 // Simulate second usage
 	result2 := gen2.Generate()
 	output2 := string(result2.Output)
@@ -258,12 +448,13 @@ func TestGuardLetGenerator_VariableNaming(t *testing.T) {
 	}
 }
 
-func TestGuardLetGenerator_ThreeElementTuple(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGuardGenerator_ThreeElementTuple(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         70,
 		IsTuple:     true,
 		VarNames:    []string{"name", "age", "email"},
+		IsDecl:      true, // Declaration with :=
 		ExprStart:   30,
 		ExprEnd:     50,
 		ExprText:    "ParseUserData(raw)",
@@ -275,7 +466,7 @@ func TestGuardLetGenerator_ThreeElementTuple(t *testing.T) {
 		Column:      1,
 	}
 
-	gen := NewGuardLetGenerator(loc, TypeResult)
+	gen := NewGuardGenerator(loc, TypeResult)
 	result := gen.Generate()
 
 	output := string(result.Output)
@@ -294,20 +485,21 @@ func TestGuardLetGenerator_ThreeElementTuple(t *testing.T) {
 	}
 }
 
-func TestGenerateGuardLet_EntryPoint(t *testing.T) {
-	loc := dingoast.GuardLetLocation{
+func TestGenerateGuard_EntryPoint(t *testing.T) {
+	loc := dingoast.GuardLocation{
 		VarNames: []string{"user"},
 		ExprText: "FindUser(id)",
+		IsDecl:   true,
 		Line:     1,
 	}
 
-	result := GenerateGuardLet(loc, TypeResult)
+	result := GenerateGuard(loc, TypeResult)
 
 	output := string(result.Output)
 
 	// Verify it produces valid output
 	if len(output) == 0 {
-		t.Error("GenerateGuardLet should produce output")
+		t.Error("GenerateGuard should produce output")
 	}
 
 	if !strings.Contains(output, "FindUser(id)") {
@@ -315,17 +507,18 @@ func TestGenerateGuardLet_EntryPoint(t *testing.T) {
 	}
 }
 
-func TestGenerateGuardLetWithSource_ElseBlock(t *testing.T) {
+func TestGenerateGuardWithSource_ElseBlock(t *testing.T) {
 	// guard let user = FindUser(id) else |err| { return Err(err) }
 	//                                            ^^^^^^^^^^^^^^^^
 	//                                            positions 43-59
 	src := []byte(`guard let user = FindUser(id) else |err| { return Err(err) }`)
 
-	loc := dingoast.GuardLetLocation{
+	loc := dingoast.GuardLocation{
 		Start:       0,
 		End:         60,
 		VarNames:    []string{"user"},
 		ExprText:    "FindUser(id)",
+		IsDecl:      true, // Declaration with :=
 		HasBinding:  true,
 		BindingName: "err",
 		ElseStart:   43, // Start after "{ "
@@ -334,7 +527,7 @@ func TestGenerateGuardLetWithSource_ElseBlock(t *testing.T) {
 		Column:      1,
 	}
 
-	result := GenerateGuardLetWithSource(loc, TypeResult, src)
+	result := GenerateGuardWithSource(loc, TypeResult, src)
 
 	output := string(result.Output)
 

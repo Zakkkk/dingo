@@ -1,0 +1,83 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+enum Result {
+	Ok(string)
+	Err(error)
+}
+
+func FindUser(id int) Result {
+	if id > 0 {
+		return Result::Ok(fmt.Sprintf("User%d", id))
+	}
+	return Result::Err(errors.New("user not found"))
+}
+
+func FindOrder(userID int) Result {
+	if userID == 1 {
+		return Result::Ok("Order123")
+	}
+	return Result::Err(errors.New("order not found"))
+}
+
+// Basic guard with Result - NEW SYNTAX with :=
+func GetUserOrder(userID int) Result {
+	guard user := FindUser(userID) else |err| {
+		return Result::Err(err)
+	}
+
+	guard order := FindOrder(userID) else |err| {
+		return Result::Err(err)
+	}
+
+	return Result::Ok(fmt.Sprintf("%s has %s", user, order))
+}
+
+// Multiple guards in sequence - NEW SYNTAX with :=
+func ProcessUserOrders(userID int) Result {
+	guard user := FindUser(userID) else |err| {
+		return Result::Err(err)
+	}
+
+	guard order := FindOrder(userID) else |err| {
+		return Result::Err(err)
+	}
+
+	fmt.Printf("Processing: %s, %s\n", user, order)
+	return Result::Ok("success")
+}
+
+// Custom error handling in else block - NEW SYNTAX with :=
+func GetUserWithLogging(userID int) Result {
+	guard user := FindUser(userID) else |err| {
+		fmt.Printf("Failed to find user %d: %v\n", userID, err)
+		return Result::Err(fmt.Errorf("user lookup failed: %w", err))
+	}
+
+	fmt.Printf("Found user: %s\n", user)
+	return Result::Ok(user)
+}
+
+func main() {
+	result := GetUserOrder(1)
+	match result {
+		Ok(msg) => fmt.Println(msg)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+
+	result2 := ProcessUserOrders(1)
+	match result2 {
+		Ok(msg) => fmt.Println(msg)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+
+	result3 := GetUserWithLogging(999)
+	match result3 {
+		Ok(msg) => fmt.Println(msg)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+}

@@ -4,22 +4,22 @@ import (
 	"testing"
 )
 
-func TestFindGuardLetStatements_SingleBinding(t *testing.T) {
+func TestFindGuardStatements_SingleBinding(t *testing.T) {
 	src := []byte(`package main
 
 func process(id int) Result[User, error] {
-    guard let user = FindUser(id) else |err| { return Err(err) }
+    guard user := FindUser(id) else |err| { return Err(err) }
     return Ok(user)
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -30,6 +30,11 @@ func process(id int) Result[User, error] {
 	}
 	if len(loc.VarNames) != 1 || loc.VarNames[0] != "user" {
 		t.Errorf("Expected VarNames=[user], got %v", loc.VarNames)
+	}
+
+	// Check IsDecl
+	if !loc.IsDecl {
+		t.Errorf("Expected IsDecl=true for :=")
 	}
 
 	// Check expression
@@ -62,22 +67,22 @@ func process(id int) Result[User, error] {
 	}
 }
 
-func TestFindGuardLetStatements_TupleBinding(t *testing.T) {
+func TestFindGuardStatements_TupleBinding(t *testing.T) {
 	src := []byte(`package main
 
 func parse(data string) Result[Info, error] {
-    guard let (name, age) = ParseInfo(data) else |e| { return Err(e) }
+    guard (name, age) := ParseInfo(data) else |e| { return Err(e) }
     return Ok(Info{name, age})
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -91,6 +96,11 @@ func parse(data string) Result[Info, error] {
 	}
 	if loc.VarNames[0] != "name" || loc.VarNames[1] != "age" {
 		t.Errorf("Expected VarNames=[name, age], got %v", loc.VarNames)
+	}
+
+	// Check IsDecl
+	if !loc.IsDecl {
+		t.Errorf("Expected IsDecl=true for :=")
 	}
 
 	// Check expression
@@ -108,22 +118,22 @@ func parse(data string) Result[Info, error] {
 	}
 }
 
-func TestFindGuardLetStatements_NoBinding(t *testing.T) {
+func TestFindGuardStatements_NoBinding(t *testing.T) {
 	src := []byte(`package main
 
 func load() Option[Config] {
-    guard let config = LoadConfig() else { return None() }
+    guard config := LoadConfig() else { return None() }
     return Some(config)
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -136,6 +146,11 @@ func load() Option[Config] {
 	// Check variable name
 	if len(loc.VarNames) != 1 || loc.VarNames[0] != "config" {
 		t.Errorf("Expected VarNames=[config], got %v", loc.VarNames)
+	}
+
+	// Check IsDecl
+	if !loc.IsDecl {
+		t.Errorf("Expected IsDecl=true for :=")
 	}
 
 	// Check expression
@@ -152,11 +167,11 @@ func load() Option[Config] {
 	}
 }
 
-func TestFindGuardLetStatements_MultiLine(t *testing.T) {
+func TestFindGuardStatements_MultiLine(t *testing.T) {
 	src := []byte(`package main
 
 func complex() Result[Data, error] {
-    guard let data = FetchData(url) else |err| {
+    guard data := FetchData(url) else |err| {
         log.Error("fetch failed", err)
         return Err(err)
     }
@@ -164,13 +179,13 @@ func complex() Result[Data, error] {
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -186,70 +201,70 @@ func complex() Result[Data, error] {
 	}
 }
 
-func TestFindGuardLetStatements_Multiple(t *testing.T) {
+func TestFindGuardStatements_Multiple(t *testing.T) {
 	src := []byte(`package main
 
 func chain() Result[Result, error] {
-    guard let a = First() else |e1| { return Err(e1) }
-    guard let (b, c) = Second(a) else |e2| { return Err(e2) }
-    guard let d = Third(b, c) else { return None() }
+    guard a := First() else |e1| { return Err(e1) }
+    guard (b, c) := Second(a) else |e2| { return Err(e2) }
+    guard d := Third(b, c) else { return None() }
     return Ok(Result{a, b, c, d})
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 3 {
-		t.Fatalf("Expected 3 guard lets, got %d", len(locs))
+		t.Fatalf("Expected 3 guards, got %d", len(locs))
 	}
 
-	// First guard let
+	// First guard
 	if len(locs[0].VarNames) != 1 || locs[0].VarNames[0] != "a" {
-		t.Errorf("First guard let: expected VarNames=[a], got %v", locs[0].VarNames)
+		t.Errorf("First guard: expected VarNames=[a], got %v", locs[0].VarNames)
 	}
 	if locs[0].BindingName != "e1" {
-		t.Errorf("First guard let: expected BindingName=e1, got %q", locs[0].BindingName)
+		t.Errorf("First guard: expected BindingName=e1, got %q", locs[0].BindingName)
 	}
 
-	// Second guard let (tuple)
+	// Second guard (tuple)
 	if !locs[1].IsTuple {
-		t.Errorf("Second guard let: expected IsTuple=true")
+		t.Errorf("Second guard: expected IsTuple=true")
 	}
 	if len(locs[1].VarNames) != 2 || locs[1].VarNames[0] != "b" || locs[1].VarNames[1] != "c" {
-		t.Errorf("Second guard let: expected VarNames=[b, c], got %v", locs[1].VarNames)
+		t.Errorf("Second guard: expected VarNames=[b, c], got %v", locs[1].VarNames)
 	}
 	if locs[1].BindingName != "e2" {
-		t.Errorf("Second guard let: expected BindingName=e2, got %q", locs[1].BindingName)
+		t.Errorf("Second guard: expected BindingName=e2, got %q", locs[1].BindingName)
 	}
 
-	// Third guard let (no binding)
+	// Third guard (no binding)
 	if locs[2].HasBinding {
-		t.Errorf("Third guard let: expected HasBinding=false")
+		t.Errorf("Third guard: expected HasBinding=false")
 	}
 	if len(locs[2].VarNames) != 1 || locs[2].VarNames[0] != "d" {
-		t.Errorf("Third guard let: expected VarNames=[d], got %v", locs[2].VarNames)
+		t.Errorf("Third guard: expected VarNames=[d], got %v", locs[2].VarNames)
 	}
 }
 
-func TestFindGuardLetStatements_ComplexExpression(t *testing.T) {
+func TestFindGuardStatements_ComplexExpression(t *testing.T) {
 	src := []byte(`package main
 
 func nested() Result[Value, error] {
-    guard let val = process(fetch(id).Map(transform)) else |err| { return Err(err) }
+    guard val := process(fetch(id).Map(transform)) else |err| { return Err(err) }
     return Ok(val)
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -261,22 +276,22 @@ func nested() Result[Value, error] {
 	}
 }
 
-func TestFindGuardLetStatements_ThreeElementTuple(t *testing.T) {
+func TestFindGuardStatements_ThreeElementTuple(t *testing.T) {
 	src := []byte(`package main
 
 func parse3() Result[Triple, error] {
-    guard let (x, y, z) = Parse3D(data) else |e| { return Err(e) }
+    guard (x, y, z) := Parse3D(data) else |e| { return Err(e) }
     return Ok(Triple{x, y, z})
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -293,11 +308,11 @@ func parse3() Result[Triple, error] {
 	}
 }
 
-func TestFindGuardLetStatements_NestedBraces(t *testing.T) {
+func TestFindGuardStatements_NestedBraces(t *testing.T) {
 	src := []byte(`package main
 
 func withNested() Result[Data, error] {
-    guard let data = fetch() else |err| {
+    guard data := fetch() else |err| {
         if err.Critical {
             panic(err)
         }
@@ -307,13 +322,13 @@ func withNested() Result[Data, error] {
 }
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 1 {
-		t.Fatalf("Expected 1 guard let, got %d", len(locs))
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
 	}
 
 	loc := locs[0]
@@ -325,19 +340,72 @@ func withNested() Result[Data, error] {
 	}
 }
 
-func TestFindGuardLetStatements_EmptySource(t *testing.T) {
+func TestFindGuardStatements_EmptySource(t *testing.T) {
 	src := []byte(`package main
 
 func empty() {}
 `)
 
-	locs, err := FindGuardLetStatements(src)
+	locs, err := FindGuardStatements(src)
 	if err != nil {
-		t.Fatalf("FindGuardLetStatements failed: %v", err)
+		t.Fatalf("FindGuardStatements failed: %v", err)
 	}
 
 	if len(locs) != 0 {
-		t.Errorf("Expected 0 guard lets in empty source, got %d", len(locs))
+		t.Errorf("Expected 0 guards in empty source, got %d", len(locs))
+	}
+}
+
+func TestFindGuardStatements_Assignment(t *testing.T) {
+	src := []byte(`package main
+
+func reassign(x int) Result[User, error] {
+    var user User
+    guard user = FindUser(x) else |err| { return Err(err) }
+    return Ok(user)
+}
+`)
+
+	locs, err := FindGuardStatements(src)
+	if err != nil {
+		t.Fatalf("FindGuardStatements failed: %v", err)
+	}
+
+	if len(locs) != 1 {
+		t.Fatalf("Expected 1 guard, got %d", len(locs))
+	}
+
+	loc := locs[0]
+
+	// Check IsDecl is false for =
+	if loc.IsDecl {
+		t.Errorf("Expected IsDecl=false for =")
+	}
+
+	// Check variable name
+	if len(loc.VarNames) != 1 || loc.VarNames[0] != "user" {
+		t.Errorf("Expected VarNames=[user], got %v", loc.VarNames)
+	}
+}
+
+func TestFindGuardStatements_LegacySyntaxError(t *testing.T) {
+	src := []byte(`package main
+
+func legacy() Result[User, error] {
+    guard let user = FindUser(1) else |err| { return Err(err) }
+    return Ok(user)
+}
+`)
+
+	_, err := FindGuardStatements(src)
+	if err == nil {
+		t.Fatalf("Expected error for legacy 'guard let' syntax, got nil")
+	}
+
+	// Check error message (now includes line:col: prefix)
+	expectedMsg := "4:5: guard let syntax removed: use 'guard x :=' instead of 'guard let x ='"
+	if err.Error() != expectedMsg {
+		t.Errorf("Expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }
 

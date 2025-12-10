@@ -1,0 +1,67 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+// Use string Result for simplicity, with structured return
+enum Result {
+	Ok(string)
+	Err(error)
+}
+
+// Returns a comma-separated pair as string
+func GetPair(id int) Result {
+	if id > 0 {
+		return Result::Ok(fmt.Sprintf("%d,%s", id, fmt.Sprintf("Item%d", id)))
+	}
+	return Result::Err(errors.New("invalid id"))
+}
+
+// Guard with simple variable (tuple destructuring requires tuple type support) - NEW SYNTAX with :=
+func ProcessPair(id int) string {
+	guard pair := GetPair(id) else |err| {
+		return fmt.Sprintf("Error: %v", err)
+	}
+	return fmt.Sprintf("Got pair: %s", pair)
+}
+
+// Multiple guards - NEW SYNTAX with :=
+func ProcessMultiple(id1 int, id2 int) string {
+	guard pair1 := GetPair(id1) else |err| {
+		return fmt.Sprintf("Error getting pair1: %v", err)
+	}
+
+	guard pair2 := GetPair(id2) else |err| {
+		return fmt.Sprintf("Error getting pair2: %v", err)
+	}
+
+	return fmt.Sprintf("Pairs: %s and %s", pair1, pair2)
+}
+
+// Guard with tuple-like Result - NEW SYNTAX with :=
+func ExtractPair(id int) (string, string, error) {
+	guard pair := GetPair(id) else |err| {
+		return "", "", err
+	}
+
+	// In real code with tuple support, we'd destructure here
+	// For now, just return the pair string twice
+	return pair, pair, nil
+}
+
+func main() {
+	fmt.Println(ProcessPair(1))
+	fmt.Println(ProcessPair(-1))
+
+	fmt.Println(ProcessMultiple(1, 2))
+	fmt.Println(ProcessMultiple(1, -1))
+
+	a, b, err := ExtractPair(5)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+	} else {
+		fmt.Printf("Extracted: %s, %s\n", a, b)
+	}
+}

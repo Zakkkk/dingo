@@ -7,7 +7,7 @@ import (
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 )
 
-// ExprType represents the detected type of a guard let expression.
+// ExprType represents the detected type of a guard expression.
 type ExprType int
 
 const (
@@ -54,10 +54,10 @@ func InferExprTypeWithBinding(exprText string, hasBinding bool) (ExprType, error
 	return TypeOption, nil
 }
 
-// GuardLetGenerator generates Go code for guard let statements.
+// GuardGenerator generates Go code for guard statements.
 //
 // Transforms:
-//   guard let user = FindUser(id) else |err| { return Err(err) }
+//   guard user := FindUser(id) else |err| { return Err(err) }
 //
 // Into:
 //   tmp := FindUser(id)
@@ -71,24 +71,24 @@ func InferExprTypeWithBinding(exprText string, hasBinding bool) (ExprType, error
 //   - First: tmp, err
 //   - Second: tmp1, err1
 //   - Third: tmp2, err2
-type GuardLetGenerator struct {
+type GuardGenerator struct {
 	*BaseGenerator
-	Location    dingoast.GuardLetLocation
+	Location    dingoast.GuardLocation
 	ExprType    ExprType
 	SourceBytes []byte // Source bytes for extracting else block content
 }
 
-// NewGuardLetGenerator creates a guard let code generator.
-func NewGuardLetGenerator(loc dingoast.GuardLetLocation, exprType ExprType) *GuardLetGenerator {
-	return &GuardLetGenerator{
+// NewGuardGenerator creates a guard code generator.
+func NewGuardGenerator(loc dingoast.GuardLocation, exprType ExprType) *GuardGenerator {
+	return &GuardGenerator{
 		BaseGenerator: NewBaseGenerator(),
 		Location:      loc,
 		ExprType:      exprType,
 	}
 }
 
-// Generate produces Go code for the guard let statement.
-func (g *GuardLetGenerator) Generate() dingoast.CodeGenResult {
+// Generate produces Go code for the guard statement.
+func (g *GuardGenerator) Generate() dingoast.CodeGenResult {
 	// Generate unique temp variable
 	tmpVar := g.TempVar("tmp")
 
@@ -108,7 +108,7 @@ func (g *GuardLetGenerator) Generate() dingoast.CodeGenResult {
 }
 
 // generateCheck generates the if check and else block.
-func (g *GuardLetGenerator) generateCheck(tmpVar string) {
+func (g *GuardGenerator) generateCheck(tmpVar string) {
 	// Generate if condition based on type
 	switch g.ExprType {
 	case TypeResult:
@@ -139,7 +139,7 @@ func (g *GuardLetGenerator) generateCheck(tmpVar string) {
 }
 
 // generateElseBlock generates the else block content.
-func (g *GuardLetGenerator) generateElseBlock() {
+func (g *GuardGenerator) generateElseBlock() {
 	// If we have source bytes, extract the actual else block content
 	if g.SourceBytes != nil && g.Location.ElseStart >= 0 && g.Location.ElseEnd > g.Location.ElseStart {
 		elseContent := string(g.SourceBytes[g.Location.ElseStart:g.Location.ElseEnd])
@@ -161,14 +161,21 @@ func (g *GuardLetGenerator) generateElseBlock() {
 }
 
 // generateBindings generates variable bindings for the success case.
-func (g *GuardLetGenerator) generateBindings(tmpVar string) {
+func (g *GuardGenerator) generateBindings(tmpVar string) {
 	valueField := g.getValueField()
 
+	// Choose := for declaration, = for assignment
+	assignOp := " := "
+	if !g.Location.IsDecl {
+		assignOp = " = "
+	}
+
 	if g.Location.IsTuple {
-		// Tuple destructuring: name := (*tmp.ok).Item1
+		// Tuple destructuring: name := (*tmp.ok).Item1 or name = (*tmp.ok).Item1
 		for i, name := range g.Location.VarNames {
 			g.Write(name)
-			g.Write(" := (*")
+			g.Write(assignOp)
+			g.Write("(*")
 			g.Write(tmpVar)
 			g.Write(".")
 			g.Write(valueField)
@@ -177,9 +184,10 @@ func (g *GuardLetGenerator) generateBindings(tmpVar string) {
 			g.WriteByte('\n')
 		}
 	} else {
-		// Single binding: user := *tmp.ok
+		// Single binding: user := *tmp.ok or user = *tmp.ok
 		g.Write(g.Location.VarNames[0])
-		g.Write(" := *")
+		g.Write(assignOp)
+		g.Write("*")
 		g.Write(tmpVar)
 		g.Write(".")
 		g.Write(valueField)
@@ -188,24 +196,24 @@ func (g *GuardLetGenerator) generateBindings(tmpVar string) {
 }
 
 // getValueField returns the field name based on type (Ok for Result, Some for Option).
-func (g *GuardLetGenerator) getValueField() string {
+func (g *GuardGenerator) getValueField() string {
 	if g.ExprType == TypeResult {
 		return "Ok"
 	}
 	return "Some"
 }
 
-// GenerateGuardLet is the main entry point for guard let code generation.
+// GenerateGuard is the main entry point for guard code generation.
 // Returns generated Go code and source mappings.
-func GenerateGuardLet(loc dingoast.GuardLetLocation, exprType ExprType) dingoast.CodeGenResult {
-	gen := NewGuardLetGenerator(loc, exprType)
+func GenerateGuard(loc dingoast.GuardLocation, exprType ExprType) dingoast.CodeGenResult {
+	gen := NewGuardGenerator(loc, exprType)
 	return gen.Generate()
 }
 
-// GenerateGuardLetWithSource generates guard let code with access to source bytes
+// GenerateGuardWithSource generates guard code with access to source bytes
 // for extracting else block content.
-func GenerateGuardLetWithSource(loc dingoast.GuardLetLocation, exprType ExprType, src []byte) dingoast.CodeGenResult {
-	gen := NewGuardLetGenerator(loc, exprType)
+func GenerateGuardWithSource(loc dingoast.GuardLocation, exprType ExprType, src []byte) dingoast.CodeGenResult {
+	gen := NewGuardGenerator(loc, exprType)
 	gen.SourceBytes = src
 	return gen.Generate()
 }

@@ -1,0 +1,71 @@
+package main
+
+import "fmt"
+
+enum Option {
+	Some(string)
+	None
+}
+
+func FindUserByEmail(email string) Option {
+	if email != "" {
+		return Option::Some("User_" + email)
+	}
+	return Option::None
+}
+
+func GetPreference(userID int) Option {
+	if userID > 0 {
+		return Option::Some("dark_mode")
+	}
+	return Option::None
+}
+
+// Basic guard with Option (no err binding) - NEW SYNTAX with :=
+func ProcessUser(maybeUser Option) string {
+	guard user := maybeUser else {
+		return "no user"
+	}
+	return fmt.Sprintf("Processing: %s", user)
+}
+
+// Chained Option guards - NEW SYNTAX with :=
+func GetUserPreference(email string) string {
+	guard user := FindUserByEmail(email) else {
+		return "default preference"
+	}
+
+	// In real code, userID would come from user lookup
+	guard pref := GetPreference(1) else {
+		return "no preference"
+	}
+
+	return fmt.Sprintf("%s prefers %s", user, pref)
+}
+
+// Option with custom fallback - NEW SYNTAX with :=
+func ProcessWithDefault(maybeValue Option) string {
+	guard value := maybeValue else {
+		fmt.Println("No value, using default")
+		return "default_value"
+	}
+	return value
+}
+
+func main() {
+	// Test with Some
+	opt1 := Option::Some("Alice")
+	fmt.Println(ProcessUser(opt1))
+
+	// Test with None
+	opt2 := Option::None
+	fmt.Println(ProcessUser(opt2))
+
+	// Test chained guards
+	fmt.Println(GetUserPreference("alice@example.com"))
+	fmt.Println(GetUserPreference(""))
+
+	// Test with default
+	fmt.Println(ProcessWithDefault(Option::Some("custom")))
+	fmt.Println(ProcessWithDefault(Option::None))
+}

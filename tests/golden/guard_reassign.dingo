@@ -1,0 +1,92 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+enum Result {
+	Ok(string)
+	Err(error)
+}
+
+func FetchValue(id int) Result {
+	if id > 0 {
+		return Result::Ok(fmt.Sprintf("Value%d", id))
+	}
+	return Result::Err(errors.New("fetch failed"))
+}
+
+// Guard with reassignment (using = instead of :=)
+func UpdateValue(initialValue string) Result {
+	fmt.Printf("Initial: %s\n", initialValue)
+
+	var value string = initialValue
+
+	// Reassign existing variable - NEW SYNTAX with =
+	guard value = FetchValue(1) else |err| {
+		return Result::Err(err)
+	}
+
+	fmt.Printf("Updated: %s\n", value)
+	return Result::Ok(value)
+}
+
+// Multiple reassignments - NEW SYNTAX with =
+func ProcessWithReassign() Result {
+	var status string = "initial"
+	var data string = "empty"
+
+	fmt.Printf("Start: status=%s, data=%s\n", status, data)
+
+	guard status = FetchValue(1) else |err| {
+		return Result::Err(err)
+	}
+
+	guard data = FetchValue(2) else |err| {
+		return Result::Err(err)
+	}
+
+	fmt.Printf("End: status=%s, data=%s\n", status, data)
+	return Result::Ok(fmt.Sprintf("%s:%s", status, data))
+}
+
+// Mix of declaration (:=) and reassignment (=)
+func MixedAssignment() Result {
+	var existing string = "old_value"
+
+	// Declaration - NEW SYNTAX with :=
+	guard newValue := FetchValue(5) else |err| {
+		return Result::Err(err)
+	}
+
+	fmt.Printf("New: %s, Existing: %s\n", newValue, existing)
+
+	// Reassignment - NEW SYNTAX with =
+	guard existing = FetchValue(6) else |err| {
+		return Result::Err(err)
+	}
+
+	fmt.Printf("New: %s, Updated: %s\n", newValue, existing)
+	return Result::Ok(fmt.Sprintf("%s and %s", newValue, existing))
+}
+
+func main() {
+	result1 := UpdateValue("start")
+	match result1 {
+		Ok(v) => fmt.Printf("Result: %s\n", v)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+
+	result2 := ProcessWithReassign()
+	match result2 {
+		Ok(v) => fmt.Printf("Result: %s\n", v)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+
+	result3 := MixedAssignment()
+	match result3 {
+		Ok(v) => fmt.Printf("Result: %s\n", v)
+		Err(e) => fmt.Printf("Error: %v\n", e)
+	}
+}

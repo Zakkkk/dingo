@@ -1,30 +1,47 @@
-# Guard Let Statement
+# Guard Statement
 
-Swift-inspired guard let statement for Result/Option unwrapping with explicit error binding.
+Swift-inspired guard statement for Result/Option unwrapping with explicit error binding.
 
 ## Status
 - **Phase**: 10
 - **Status**: Complete
 - **Date**: 2025-12-04
-- **Breaking Change**: v0.11.0 - Pipe binding syntax
+- **Breaking Change**: v0.12.0 - Removed `guard let` syntax, use `guard :=` instead
+
+## Migration Note (v0.12.0)
+
+⚠️ **Breaking Change**: The `guard let` syntax has been removed. Use Go-style `:=` and `=` operators instead:
+
+```diff
+- guard let x = expr else { ... }
++ guard x := expr else { ... }
+```
+
+This aligns guard syntax with standard Go declaration patterns.
 
 ## Syntax
 
 ```dingo
-// Result type - explicit pipe binding REQUIRED when using error
-guard let <variable> = <result_expr> else |err| {
+// Declare new variable with := (most common)
+guard <variable> := <result_or_option_expr> else |err| {
     // 'err' is explicitly bound from the Result error value
     <early_return_or_action>
 }
 
-// Result type - no binding when error not used
-guard let <variable> = <result_expr> else {
+// Assign to existing variable with =
+guard <variable> = <result_or_option_expr> else |err| {
+    // Updates existing variable instead of declaring new one
+    <early_return_or_action>
+}
+
+// No error binding when error not used
+guard <variable> := <expr> else {
     // No error binding needed
     <early_return_or_action>
 }
 
 // Option type - no binding allowed
-guard let <variable> = <option_expr> else {
+guard <variable> := <option_expr> else {
     // Option types have no error to bind
     <early_return_or_action>
 }
@@ -32,52 +49,67 @@ guard let <variable> = <option_expr> else {
 // <variable> is available here with unwrapped value
 ```
 
+### Declaration vs Assignment
+
+- **`guard x := expr`**: Declares new variable `x` (like Go's `:=`)
+- **`guard x = expr`**: Assigns to existing variable `x` (like Go's `=`)
+
 ## Pipe Binding Rules
 
 ### Result Types
 
 1. **Explicit binding REQUIRED when using error**:
    ```dingo
-   guard let user = FindUser(id) else |err| { return err }  // ✅ Valid
+   guard user := FindUser(id) else |err| { return err }  // ✅ Valid
    ```
 
 2. **Custom binding names supported**:
    ```dingo
-   guard let user = FindUser(id) else |e| { return e }      // ✅ Valid
+   guard user := FindUser(id) else |e| { return e }      // ✅ Valid
    ```
 
 3. **No binding when error not used**:
    ```dingo
-   guard let user = FindUser(id) else { return defaults }   // ✅ Valid
+   guard user := FindUser(id) else { return defaults }   // ✅ Valid
    ```
 
 4. **Implicit error usage is COMPILE ERROR**:
    ```dingo
-   guard let user = FindUser(id) else { return err }        // ❌ COMPILE ERROR
+   guard user := FindUser(id) else { return err }        // ❌ COMPILE ERROR
    ```
 
 ### Option Types
 
 1. **No binding allowed** (Option has no error):
    ```dingo
-   guard let user = maybeUser else { return nil }           // ✅ Valid
+   guard user := maybeUser else { return nil }           // ✅ Valid
    ```
 
 2. **Pipe binding is COMPILE ERROR**:
    ```dingo
-   guard let user = maybeUser else |val| { return nil }     // ❌ COMPILE ERROR
+   guard user := maybeUser else |val| { return nil }     // ❌ COMPILE ERROR
    ```
 
 ## Examples
 
-### Result Type - Explicit Binding
+### Result Type - Explicit Binding (Declaration)
 
 ```dingo
 func GetUserOrder(userID int) Result {
-    guard let user = FindUser(userID) else |err| { return err }
-    guard let order = GetOrder(user.ID) else |err| { return err }
+    guard user := FindUser(userID) else |err| { return err }
+    guard order := GetOrder(user.ID) else |err| { return err }
 
     return ResultOk(fmt.Sprintf("%s: %s", user.Name, order.ID))
+}
+```
+
+### Result Type - Assignment to Existing Variable
+
+```dingo
+func RefreshUser(user User) Result {
+    // Reassign to existing 'user' variable
+    guard user = FindUser(user.ID) else |err| { return err }
+    return ResultOk(user)
 }
 ```
 
@@ -85,11 +117,11 @@ func GetUserOrder(userID int) Result {
 
 ```dingo
 func GetUserOrder(userID int) Result {
-    guard let user = FindUser(userID) else |e| {
+    guard user := FindUser(userID) else |e| {
         log.Error("user lookup failed", e)
         return e
     }
-    guard let order = GetOrder(user.ID) else |e| {
+    guard order := GetOrder(user.ID) else |e| {
         log.Error("order lookup failed", e)
         return e
     }
@@ -103,7 +135,7 @@ func GetUserOrder(userID int) Result {
 ```dingo
 func GetUserOrDefault(userID int) User {
     // Error not needed, using default value
-    guard let user = FindUser(userID) else { return defaultUser }
+    guard user := FindUser(userID) else { return defaultUser }
     return user
 }
 ```
@@ -112,7 +144,7 @@ func GetUserOrDefault(userID int) User {
 
 ```dingo
 func ProcessUser(maybeUser Option) string {
-    guard let user = maybeUser else {
+    guard user := maybeUser else {
         return "no user"  // No pipe binding for Option
     }
     return user.Name
@@ -122,14 +154,14 @@ func ProcessUser(maybeUser Option) string {
 ### Inline Syntax
 
 ```dingo
-guard let from = FindUser(fromID) else |err| { return err }
-guard let to = FindUser(toID) else |err| { return err }
+guard from := FindUser(fromID) else |err| { return err }
+guard to := FindUser(toID) else |err| { return err }
 ```
 
 ### Custom Error Handling with Binding
 
 ```dingo
-guard let user = FindUser(id) else |err| {
+guard user := FindUser(id) else |err| {
     log.Error("Failed to find user", err)
     return ServiceError{Code: "NOT_FOUND", Message: err.Error()}
 }
@@ -137,15 +169,15 @@ guard let user = FindUser(id) else |err| {
 
 ## Generated Code
 
-### Result Type with Explicit Binding - Input
+### Result Type with Declaration (:=) - Input
 ```dingo
-guard let user = userResult else |err| {
+guard user := userResult else |err| {
     return err
 }
 fmt.Println(user.Name)
 ```
 
-### Result Type with Explicit Binding - Output
+### Result Type with Declaration (:=) - Output
 ```go
 tmp := userResult
 // dingo:g:0
@@ -153,13 +185,33 @@ if tmp.IsErr() {
     err := *tmp.err
     return ResultErr(err)
 }
-user := *tmp.ok
+user := *tmp.ok  // Declaration with :=
 fmt.Println(user.Name)
+```
+
+### Result Type with Assignment (=) - Input
+```dingo
+var user User
+guard user = FindUser(id) else |err| {
+    return err
+}
+```
+
+### Result Type with Assignment (=) - Output
+```go
+var user User
+tmp := FindUser(id)
+// dingo:g:0
+if tmp.IsErr() {
+    err := *tmp.err
+    return ResultErr(err)
+}
+user = *tmp.ok  // Assignment with =
 ```
 
 ### Result Type with Custom Binding - Input
 ```dingo
-guard let user = FindUser(id) else |e| {
+guard user := FindUser(id) else |e| {
     log.Error("failed", e)
     return e
 }
@@ -179,7 +231,7 @@ user := *tmp.ok
 
 ### Result Type without Binding - Input
 ```dingo
-guard let config = LoadConfig() else {
+guard config := LoadConfig() else {
     return defaults
 }
 ```
@@ -196,7 +248,7 @@ config := *tmp.ok
 
 ### Option Type Input
 ```dingo
-guard let user = maybeUser else {
+guard user := maybeUser else {
     return "no user"
 }
 ```
@@ -213,7 +265,7 @@ user := *tmp.value
 
 ## Type Detection
 
-Guard let determines the expression type using:
+Guard determines the expression type using:
 
 1. **Function signature scanning** - Parses `func Name() ReturnType` declarations
 2. **TypeRegistry lookup** - Queries registered variables and functions
@@ -226,20 +278,20 @@ Guard let determines the expression type using:
 When you use `err` in the else block without explicit pipe binding:
 
 ```dingo
-guard let user = FindUser(id) else { return err }  // ❌ COMPILE ERROR
+guard user := FindUser(id) else { return err }  // ❌ COMPILE ERROR
 ```
 
 **Error Message**:
 ```
-guard_let.dingo:5:1: error: implicit 'err' not allowed: use explicit binding |err| or |e|
-    guard let user = FindUser(id) else { return err }
-                                         ^^^^^^^^^
+guard.dingo:5:1: error: implicit 'err' not allowed: use explicit binding |err| or |e|
+    guard user := FindUser(id) else { return err }
+                                      ^^^^^^^^^
     hint: Change: else { return err } -> else |err| { return err }
 ```
 
 **Fix**:
 ```dingo
-guard let user = FindUser(id) else |err| { return err }  // ✅ Fixed
+guard user := FindUser(id) else |err| { return err }  // ✅ Fixed
 ```
 
 ### Error: Pipe Binding on Option Type
@@ -247,20 +299,20 @@ guard let user = FindUser(id) else |err| { return err }  // ✅ Fixed
 When you try to use pipe binding with Option types:
 
 ```dingo
-guard let first = items.First() else |val| { return nil }  // ❌ COMPILE ERROR
+guard first := items.First() else |val| { return nil }  // ❌ COMPILE ERROR
 ```
 
 **Error Message**:
 ```
-guard_let.dingo:10:1: error: pipe binding not allowed on Option types (no error to bind)
-    guard let first = items.First() else |val| { return nil }
-                                         ^^^^^
+guard.dingo:10:1: error: pipe binding not allowed on Option types (no error to bind)
+    guard first := items.First() else |val| { return nil }
+                                      ^^^^^
     hint: Option types only have Some/None, not an error value
 ```
 
 **Fix**:
 ```dingo
-guard let first = items.First() else { return nil }  // ✅ Fixed
+guard first := items.First() else { return nil }  // ✅ Fixed
 ```
 
 ## Design Decisions
@@ -280,12 +332,26 @@ guard let first = items.First() else { return nil }  // ✅ Fixed
 2. **No ambiguity**: Code either compiles or it doesn't
 3. **Forces conscious choice**: Users must adopt new explicit syntax
 
+### Go-Style Operators (:= and =)
+
+**Why remove `let` keyword?**
+
+1. **Consistency with Go**: Dingo uses Go's operators everywhere else
+2. **Familiarity**: Go developers already know `:=` (declare) vs `=` (assign)
+3. **Simplicity**: Less new syntax to learn
+4. **Alignment**: Matches Go's philosophy of minimal new keywords
+
+**Benefits**:
+- `guard x := expr` - Clear it's a declaration (like Go's `:=`)
+- `guard x = expr` - Clear it's an assignment (like Go's `=`)
+- No new keyword to remember
+
 ### Custom Error Names with Auto-Wrapping
 
 When you use a custom error name like `|e|`, the return transformation applies:
 
 ```dingo
-guard let user = FindUser(id) else |e| { return e }
+guard user := FindUser(id) else |e| { return e }
 ```
 
 Generates:
@@ -339,8 +405,8 @@ func GetUserOrderTotal(db *sql.DB, userID int) Result {
 ### After (8 lines, 50% reduction)
 ```dingo
 func GetUserOrderTotal(db *sql.DB, userID int) Result {
-    guard let user = FindUser(db, userID) else { return err }
-    guard let orders = FindOrdersByUser(db, user.ID) else { return err }
+    guard user := FindUser(db, userID) else |err| { return err }
+    guard orders := FindOrdersByUser(db, user.ID) else |err| { return err }
 
     var total float64
     for _, order := range orders {
@@ -350,72 +416,69 @@ func GetUserOrderTotal(db *sql.DB, userID int) Result {
 }
 ```
 
-## Migration Guide (Breaking Change in v0.11.0)
+## Migration Guide (Breaking Change in v0.12.0)
 
 ### Overview
 
-Version 0.11.0 introduces **mandatory pipe binding syntax** for guard let statements with Result types. This is a breaking change that removes implicit error binding.
+Version 0.12.0 removes the `guard let` syntax in favor of Go-style `:=` and `=` operators. This makes guard syntax consistent with standard Go.
 
 ### What Changed
 
-**Before (v0.10.x and earlier)** - Implicit `err` binding:
+**Before (v0.11.x and earlier)** - `let` keyword:
 ```dingo
-guard let user = FindUser(id) else { return err }  // ❌ No longer works
+guard let user = FindUser(id) else |err| { return err }  // ❌ No longer works
 ```
 
-**After (v0.11.0+)** - Explicit pipe binding required:
+**After (v0.12.0+)** - Go-style operators:
 ```dingo
-guard let user = FindUser(id) else |err| { return err }  // ✅ Required
+guard user := FindUser(id) else |err| { return err }  // ✅ Declaration
+guard user = FindUser(id) else |err| { return err }   // ✅ Assignment
 ```
 
 ### Migration Steps
 
 #### Step 1: Identify Affected Code
 
-Search your codebase for guard let statements that use `err` in the else block:
+Search your codebase for all guard let statements:
 
 ```bash
-grep -n "guard let.*else.*{.*err" **/*.dingo
+grep -n "guard let" **/*.dingo
 ```
 
-#### Step 2: Add Pipe Binding
+#### Step 2: Replace `let` with `:=`
 
-For each occurrence, add `|err|` after `else`:
+For most cases, simply replace `let` with `:=`:
 
 **Pattern to find**:
 ```dingo
-else { return err }
-else { log.Error(err); return err }
+guard let x = expr else { ... }
+guard let x = expr else |err| { ... }
 ```
 
 **Pattern to replace with**:
 ```dingo
-else |err| { return err }
-else |err| { log.Error(err); return err }
+guard x := expr else { ... }
+guard x := expr else |err| { ... }
 ```
 
-#### Step 3: Optional - Use Custom Names
+#### Step 3: Use `=` for Assignment (Rare)
 
-You can use any valid identifier instead of `err`:
+If you need to assign to an existing variable, use `=` instead:
 
 ```dingo
-// Before
-guard let user = FindUser(id) else { return err }
+// Declare variable first
+var user User
 
-// After - with custom name
-guard let user = FindUser(id) else |e| { return e }
+// Assign to existing variable
+guard user = FindUser(id) else |err| { return err }
 ```
 
-#### Step 4: Handle Cases Without Error Usage
+#### Step 4: Verify Compilation
 
-If your else block doesn't use the error value, you can omit the pipe binding:
+After migration, verify your code compiles:
 
-```dingo
-// Before
-guard let user = FindUser(id) else { return defaultUser }
-
-// After - no change needed!
-guard let user = FindUser(id) else { return defaultUser }
+```bash
+dingo build ./...
 ```
 
 ### Automated Migration
@@ -423,60 +486,53 @@ guard let user = FindUser(id) else { return defaultUser }
 A simple sed command can migrate most cases:
 
 ```bash
-# Migrate simple return err cases
-sed -i 's/else { return err }/else |err| { return err }/g' **/*.dingo
+# Replace 'guard let' with 'guard' and ':='
+sed -i 's/guard let \([a-zA-Z_][a-zA-Z0-9_]*\) =/guard \1 :=/g' **/*.dingo
 
 # For more complex cases, use find + sed
-find . -name "*.dingo" -exec sed -i 's/else { return err }/else |err| { return err }/g' {} +
+find . -name "*.dingo" -exec sed -i 's/guard let \([a-zA-Z_][a-zA-Z0-9_]*\) =/guard \1 :=/g' {} +
 ```
 
-**Warning**: This only handles simple cases. Complex else blocks with error usage require manual review.
+**Warning**: This handles most common cases. Complex patterns may require manual review.
 
 ### Common Migration Patterns
 
-#### Pattern 1: Simple Error Return
+#### Pattern 1: Simple Declaration
 
 ```diff
-- guard let user = FindUser(id) else { return err }
-+ guard let user = FindUser(id) else |err| { return err }
+- guard let user = FindUser(id) else |err| { return err }
++ guard user := FindUser(id) else |err| { return err }
 ```
 
-#### Pattern 2: Error Logging
+#### Pattern 2: Multiple Guards
 
 ```diff
-- guard let user = FindUser(id) else {
--     log.Error("lookup failed", err)
--     return err
-- }
-+ guard let user = FindUser(id) else |err| {
-+     log.Error("lookup failed", err)
-+     return err
-+ }
+- guard let from = FindUser(fromID) else |err| { return err }
+- guard let to = FindUser(toID) else |err| { return err }
++ guard from := FindUser(fromID) else |err| { return err }
++ guard to := FindUser(toID) else |err| { return err }
 ```
 
-#### Pattern 3: Error Wrapping
+#### Pattern 3: No Error Binding
 
 ```diff
-- guard let user = FindUser(id) else {
--     return fmt.Errorf("user not found: %w", err)
-- }
-+ guard let user = FindUser(id) else |err| {
-+     return fmt.Errorf("user not found: %w", err)
-+ }
+- guard let user = FindUser(id) else { return defaultUser }
++ guard user := FindUser(id) else { return defaultUser }
 ```
 
-#### Pattern 4: Default Values (No Change)
+#### Pattern 4: Option Types
 
 ```diff
-  guard let user = FindUser(id) else { return defaultUser }
-  // No change needed - no error usage
+- guard let first = items.First() else { return nil }
++ guard first := items.First() else { return nil }
 ```
 
-#### Pattern 5: Option Types (No Change)
+#### Pattern 5: Assignment (Rare)
 
 ```diff
-  guard let first = items.First() else { return nil }
-  // No change needed - Option types never had error binding
++ var user User  // Declare first
+- guard let user = FindUser(id) else |err| { return err }
++ guard user = FindUser(id) else |err| { return err }  // Note: = not :=
 ```
 
 ### Validation
@@ -488,28 +544,30 @@ dingo build ./...
 ```
 
 The compiler will report any places where:
-1. `err` is used without explicit `|err|` binding
-2. Pipe binding is incorrectly used on Option types
+1. `guard let` syntax is still used
+2. Invalid operator usage (`:=` vs `=`)
 
 ### Why This Change?
 
-1. **Explicit over implicit**: The `err` variable's origin is now clear
-2. **Consistency**: Matches Dingo's lambda syntax (`|x| { ... }`)
-3. **Type safety**: Prevents confusion between Result and Option types
-4. **Better IDE support**: Explicit binding enables better autocomplete and type inference
+1. **Consistency with Go**: Uses familiar `:=` and `=` operators
+2. **Less syntax to learn**: No new `let` keyword needed
+3. **Clearer intent**: Declaration vs assignment is explicit
+4. **Go philosophy**: Minimal new keywords, maximum familiarity
 
 ### Need Help?
 
 If you encounter migration issues:
-1. Check the compile error messages (they include fix hints)
-2. Review the examples above
-3. See the full documentation in `features/guard_let.md`
+1. Use the automated sed script above for bulk migration
+2. Check the compile error messages (they include fix hints)
+3. Review the examples in this document
 
 ## Implementation
 
-- **Processor**: `pkg/preprocessor/guard_let_ast.go` (enhanced with pipe binding parser)
-- **Pipeline Position**: Pass 1 (Structural), position 1 (after DingoPreParser)
-- **Type Info**: Uses TypeRegistry from `pkg/registry/`
+- **Parser**: `pkg/ast/guard_finder.go` - Token-based guard statement parser
+- **Codegen**: `pkg/codegen/guard.go` - AST-to-Go code generator
+- **Pipeline Position**: Pass 1 (Structural), integrated via `pkg/transpiler/ast_transformer.go`
+- **Tests**: `pkg/ast/guard_finder_test.go`, `pkg/codegen/guard_test.go`
+- **Golden Tests**: `tests/golden/guard_*.dingo`
 - **Breaking Change**: v0.11.0
 
 ## Golden Tests
