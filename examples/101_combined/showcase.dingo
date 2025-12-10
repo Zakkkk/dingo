@@ -89,15 +89,15 @@ func getPoint() (int, int) {
 	return 10, 20
 }
 
-// === 11. GUARD LET ===
+// === 11. GUARD ===
 func guardLetDemo() string {
-	// Guard let with Option
-	guard let user = findUser("Bob") else {
+	// Guard with Option
+	guard user := findUser("Bob") else {
 		return "user not found"
 	}
 
-	// Guard let with Result
-	guard let fetched = fetchUser(42) else |err| {
+	// Guard with Result
+	guard fetched := fetchUser(42) else |err| {
 		return fmt.Sprintf("fetch failed: %s", err)
 	}
 

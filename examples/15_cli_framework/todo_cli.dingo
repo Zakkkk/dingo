@@ -103,8 +103,8 @@ func parseAddCommand(args []string) (Command, error) {
 		return nil, errors.New("add requires a task description\nUsage: todo add <description>")
 	}
 
-	// guard let unwraps Result - returns early on Err
-	guard let description = validateDescription(strings.Join(args, " ")) else |err| {
+	// guard unwraps Result - returns early on Err
+	guard description := validateDescription(strings.Join(args, " ")) else |err| {
 		return nil, err
 	}
 

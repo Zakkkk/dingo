@@ -123,15 +123,15 @@ func FindOrdersByUser(db *sql.DB, userID int) Result[[]Order, ServiceError] {
 	return orders
 }
 
-// === Combining patterns with guard let ===
-// guard let also uses explicit |err| binding for consistency
+// === Combining patterns with guard ===
+// guard uses explicit |err| binding for consistency
 
 func GetUserOrderTotal(db *sql.DB, userID int) Result[float64, ServiceError] {
-	// guard let unwraps Result or returns error via explicit |err|
+	// guard unwraps Result or returns error via explicit |err|
 	// Note: Err[float64] explicit type parameter needed for type inference
-	guard let user = FindUser(db, userID) else |err| { return Err[float64](err) }
+	guard user := FindUser(db, userID) else |err| { return Err[float64](err) }
 
-	guard let orders = FindOrdersByUser(db, user.ID) else |err| { return Err[float64](err) }
+	guard orders := FindOrdersByUser(db, user.ID) else |err| { return Err[float64](err) }
 
 	var total float64
 	for _, order := range orders {
@@ -171,7 +171,7 @@ func validateOrder(order Order, user User) (Order, error) {
 func main() {
 	var db *sql.DB // Would be initialized in real code
 
-	// Using Result type with guard let
+	// Using Result type with guard
 	result := GetUserOrderTotal(db, 123)
 
 	if result.IsOk() {
