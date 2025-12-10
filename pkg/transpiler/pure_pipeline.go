@@ -7,6 +7,7 @@ import (
 	"go/printer"
 	"go/token"
 	"sort"
+	"strings"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
@@ -68,6 +69,15 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("tuple type alias error: %w", err)
 	}
 
+	// Step 2a1: Transform tuple destructuring (must run before tuple literals)
+	// Pattern: (x, y) := expr → _ = __tupleDest2__("x:0", "y:1", expr)
+	// This MUST run before transformTupleLiterals to avoid treating the LHS as a tuple literal
+	transformedSource, destMappings, err := transformTupleDestructuring(transformedSource)
+	if err != nil {
+		return TranspileResult{}, fmt.Errorf("tuple destructuring error: %w", err)
+	}
+	typeAliasMappings = append(typeAliasMappings, destMappings...)
+
 	// Step 2a2: Transform tuple literals (must run before Go parser)
 	// Pattern: (a, b) → __tuple2__(a, b)
 	// Run in a loop to handle nested tuples: ((a, b), (c, d)) needs multiple passes
@@ -101,26 +111,27 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
 
-	// Step 2.5: Transform guard let statements (MUST run after error propagation, before expressions)
-	transformedSource, guardLetMappings, err := transformGuardLetStatements(transformedSource)
+	// Step 2.5: Transform guard statements (MUST run after error propagation, before expressions)
+	transformedSource, guardMappings, err := transformGuardStatements(transformedSource)
 	if err != nil {
-		return TranspileResult{}, fmt.Errorf("guard let transform error: %w", err)
+		return TranspileResult{}, fmt.Errorf("guard transform error: %w", err)
 	}
 
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
-	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry)
+	// Also pass original source for accurate position mapping (earlier transforms shift positions)
+	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry, source)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
 
 	// Combine all mappings from the transformation pipeline
 	allMappings := make([]dingoast.SourceMapping, 0,
-		len(tokenMappings)+len(tupleMappings)+len(stmtMappings)+len(guardLetMappings)+len(astMappings))
+		len(tokenMappings)+len(tupleMappings)+len(stmtMappings)+len(guardMappings)+len(astMappings))
 	allMappings = append(allMappings, tokenMappings...)
 	allMappings = append(allMappings, tupleMappings...)
 	allMappings = append(allMappings, stmtMappings...)
-	allMappings = append(allMappings, guardLetMappings...)
+	allMappings = append(allMappings, guardMappings...)
 	allMappings = append(allMappings, astMappings...)
 
 	// Deduplicate and sort mappings by GoStart for efficient lookup
@@ -189,9 +200,11 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		// eligible's type depends on Filter's lambda being correctly typed first.
 		if checker != nil {
 			const maxPasses = 5 // Prevent infinite loops
+			var lastInferrer *typechecker.LambdaTypeInferrer
 			for pass := 0; pass < maxPasses; pass++ {
 				lambdaInferrer := typechecker.NewLambdaTypeInferrer(fset, goFile, checker.Info())
 				changed := lambdaInferrer.Infer()
+				lastInferrer = lambdaInferrer
 				if !changed {
 					break // No more changes, stop iterating
 				}
@@ -203,6 +216,19 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 				checker, err = typechecker.New(fset, goFile, pkgName)
 				if err != nil {
 					break // Type checker failed, stop
+				}
+			}
+
+			// Step 4.1.1: Check for unresolved lambda types (fail-fast)
+			// If any lambdas still have 'any' types after inference, error with helpful message
+			if lastInferrer != nil {
+				unresolved := lastInferrer.FindUnresolvedLambdas()
+				if len(unresolved) > 0 {
+					var errMsgs []string
+					for _, u := range unresolved {
+						errMsgs = append(errMsgs, typechecker.FormatUnresolvedError(u))
+					}
+					return TranspileResult{}, fmt.Errorf("lambda type inference failed:\n%s", strings.Join(errMsgs, "\n\n"))
 				}
 			}
 		}

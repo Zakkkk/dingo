@@ -4,10 +4,11 @@
 package typechecker
 
 import (
-	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/token"
 	"go/types"
+	"strconv"
 	"strings"
 )
 
@@ -561,7 +562,7 @@ func (inf *LambdaTypeInferrer) typeToExpr(t types.Type) ast.Expr {
 			return &ast.ArrayType{
 				Len: &ast.BasicLit{
 					Kind:  token.INT,
-					Value: fmt.Sprintf("%d", typ.Len()),
+					Value: strconv.FormatInt(typ.Len(), 10),
 				},
 				Elt: elem,
 			}
@@ -711,6 +712,65 @@ func (inf *LambdaTypeInferrer) getPackageAlias(pkg *types.Package) string {
 	return pkg.Name()
 }
 
+// resolveExternalFunction resolves a function from an external package.
+// For dgo.Map, it finds the package object for "dgo" and looks up "Map" in its scope.
+//
+// When the gc importer fails to fully load package scopes (which happens when there
+// are type errors in the code being checked), we fall back to using the source importer
+// which can parse and load packages from source files.
+func (inf *LambdaTypeInferrer) resolveExternalFunction(sel *ast.SelectorExpr) types.Object {
+	// Get the package identifier (e.g., "dgo" in dgo.Map)
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	// Resolve the package from info.Uses
+	pkgObj := inf.info.Uses[pkgIdent]
+	if pkgObj == nil {
+		return nil
+	}
+
+	// Check if it's a package name
+	pkgName, ok := pkgObj.(*types.PkgName)
+	if !ok {
+		return nil
+	}
+
+	// Get the imported package
+	pkg := pkgName.Imported()
+	if pkg == nil {
+		return nil
+	}
+
+	// Look up the function in the package's exported scope
+	funcName := sel.Sel.Name
+	result := pkg.Scope().Lookup(funcName)
+
+	// If the scope lookup failed, the package may not have been fully loaded
+	// (this happens when the gc importer encounters type errors).
+	// Fall back to using the source importer which can load packages from source.
+	if result == nil {
+		result = inf.resolveExternalFunctionViaSourceImporter(pkg.Path(), funcName)
+	}
+
+	return result
+}
+
+// resolveExternalFunctionViaSourceImporter uses the source importer as a fallback
+// when the gc importer fails to populate package scopes due to type errors.
+func (inf *LambdaTypeInferrer) resolveExternalFunctionViaSourceImporter(pkgPath, funcName string) types.Object {
+	// Use the source importer which parses Go source files
+	imp := importer.ForCompiler(inf.fset, "source", nil)
+
+	pkg, err := imp.Import(pkgPath)
+	if err != nil {
+		return nil
+	}
+
+	return pkg.Scope().Lookup(funcName)
+}
+
 // getGenericSignature extracts the generic (uninstantiated) signature from a function expression.
 // Returns nil if the function is not generic or if it cannot be resolved.
 func (inf *LambdaTypeInferrer) getGenericSignature(fun ast.Expr) *types.Signature {
@@ -733,8 +793,13 @@ func (inf *LambdaTypeInferrer) getGenericSignature(fun ast.Expr) *types.Signatur
 		if sel := inf.info.Selections[base]; sel != nil {
 			obj = sel.Obj()
 		} else {
-			// Try as package-qualified identifier
+			// Try as package-qualified identifier (works for local package aliases)
 			obj = inf.info.Uses[base.Sel]
+
+			// If that fails, resolve via package scope lookup for external packages
+			if obj == nil {
+				obj = inf.resolveExternalFunction(base)
+			}
 		}
 	}
 
@@ -787,11 +852,26 @@ func (inf *LambdaTypeInferrer) resolveTypeParamsFromArgs(call *ast.CallExpr, gen
 		}
 
 		// Get concrete argument type
-		tv, ok := inf.info.Types[arg]
-		if !ok {
+		// For identifiers (especially range loop variables), also check info.Defs and info.Uses
+		// Go's type checker stores loop iteration variable types in info.Defs, NOT info.Types
+		var argType types.Type
+		if ident, ok := arg.(*ast.Ident); ok {
+			// For identifiers, check Defs (defining uses like range vars) or Uses (referring uses)
+			if obj := inf.info.Defs[ident]; obj != nil {
+				argType = obj.Type()
+			} else if obj := inf.info.Uses[ident]; obj != nil {
+				argType = obj.Type()
+			}
+		}
+		if argType == nil {
+			// Fall back to Types map for expressions (function calls, etc.)
+			if tv, ok := inf.info.Types[arg]; ok {
+				argType = tv.Type
+			}
+		}
+		if argType == nil {
 			continue
 		}
-		argType := tv.Type
 
 		// Match argument type to parameter type to extract type parameter bindings
 		inf.matchTypeToParam(argType, paramType, subst)
@@ -1037,4 +1117,99 @@ func (inf *LambdaTypeInferrer) extractReturnExpression(body *ast.BlockStmt) ast.
 	}
 
 	return nil
+}
+
+// UnresolvedLambda represents a lambda expression that still has unresolved 'any' types
+// after type inference. This is used to generate helpful error messages.
+type UnresolvedLambda struct {
+	Line         int      // 1-indexed line number
+	Column       int      // 1-indexed column number
+	ParamNames   []string // Names of parameters with 'any' type
+	HasAnyReturn bool     // True if return type is still 'any'
+	FuncLit      *ast.FuncLit
+}
+
+// FindUnresolvedLambdas walks the AST and finds all function literals that still have
+// 'any' types in their parameters or return values after type inference.
+// These represent lambdas where type inference failed and the user needs to provide
+// explicit type annotations.
+func (inf *LambdaTypeInferrer) FindUnresolvedLambdas() []UnresolvedLambda {
+	var unresolved []UnresolvedLambda
+
+	ast.Inspect(inf.file, func(n ast.Node) bool {
+		funcLit, ok := n.(*ast.FuncLit)
+		if !ok {
+			return true
+		}
+
+		// Check if this lambda has any unresolved 'any' types
+		var anyParams []string
+		hasAnyReturn := false
+
+		// Check parameters
+		if funcLit.Type.Params != nil {
+			for _, field := range funcLit.Type.Params.List {
+				if inf.isAnyType(field.Type) {
+					// Collect parameter names
+					for _, name := range field.Names {
+						anyParams = append(anyParams, name.Name)
+					}
+				}
+			}
+		}
+
+		// Check return type
+		if funcLit.Type.Results != nil {
+			for _, field := range funcLit.Type.Results.List {
+				if inf.isAnyType(field.Type) {
+					hasAnyReturn = true
+					break
+				}
+			}
+		}
+
+		// If any unresolved types found, record this lambda
+		if len(anyParams) > 0 || hasAnyReturn {
+			pos := inf.fset.Position(funcLit.Pos())
+			unresolved = append(unresolved, UnresolvedLambda{
+				Line:         pos.Line,
+				Column:       pos.Column,
+				ParamNames:   anyParams,
+				HasAnyReturn: hasAnyReturn,
+				FuncLit:      funcLit,
+			})
+		}
+
+		return true
+	})
+
+	return unresolved
+}
+
+// FormatUnresolvedError generates a helpful error message for an unresolved lambda.
+// Suggests typed lambda syntax: |p Product| expr or (p Product) => expr
+func FormatUnresolvedError(u UnresolvedLambda) string {
+	var parts []string
+
+	if len(u.ParamNames) > 0 {
+		parts = append(parts, "parameter types: "+strings.Join(u.ParamNames, ", "))
+	}
+	if u.HasAnyReturn {
+		parts = append(parts, "return type")
+	}
+
+	issue := strings.Join(parts, " and ")
+
+	// Build suggestion based on parameter names
+	paramExample := "x"
+	if len(u.ParamNames) > 0 {
+		paramExample = u.ParamNames[0]
+	}
+
+	return "lambda type inference failed at line " + strconv.Itoa(u.Line) +
+		": could not infer " + issue + "\n" +
+		"  Suggestion: add explicit type annotation\n" +
+		"    Rust style:       |" + paramExample + " Type| expr\n" +
+		"    TypeScript style: (" + paramExample + " Type) => expr\n" +
+		"    Full Go syntax:   func(" + paramExample + " Type) ReturnType { return expr }"
 }

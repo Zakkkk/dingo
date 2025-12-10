@@ -84,17 +84,17 @@ Dingo supports **two primary styles**, configured in `dingo.toml`:
 
 ```dingo
 // Single expression (implicit return)
-let add = |a, b| a + b
+add := |a, b| a + b
 
 // Single parameter (no commas)
-let double = |x| x * 2
+double := |x| x * 2
 
 // No parameters
-let getRandom = || rand.Int()
+getRandom := || rand.Int()
 
 // Block body (explicit return)
-let process = |x| {
-    let result = x * 2
+process := |x| {
+    result := x * 2
     println("Doubling ${x}")
     return result
 }
@@ -105,12 +105,12 @@ users.filter(|u| u.age > 18)
     .forEach(|name| println(name))
 
 // With explicit types
-let parse = |s: string| -> int {
+parse := |s: string| -> int {
     return parseInt(s)
 }
 
 // Type annotations when inference fails
-let standalone = |x: int, y: int| -> bool { x > y }
+standalone := |x: int, y: int| -> bool { x > y }
 ```
 
 **Why Rust pipes:**
@@ -123,17 +123,17 @@ let standalone = |x: int, y: int| -> bool { x > y }
 
 ```dingo
 // Single parameter (no parens needed)
-let double = x => x * 2
+double := x => x * 2
 
 // Multiple parameters (parens required)
-let add = (a, b) => a + b
+add := (a, b) => a + b
 
 // No parameters
-let getRandom = () => rand.Int()
+getRandom := () => rand.Int()
 
 // Block body
-let process = x => {
-    let result = x * 2
+process := x => {
+    result := x * 2
     println("Doubling ${x}")
     return result
 }
@@ -148,12 +148,12 @@ users.filter((u) => u.age > 18)
     .map((u) => u.name)
 
 // With explicit types
-let parse = (s: string): int => {
+parse := (s: string): int => {
     return parseInt(s)
 }
 
 // Type annotations when inference fails
-let standalone = (x: int, y: int): bool => x > y
+standalone := (x: int, y: int): bool => x > y
 ```
 
 **Why TypeScript arrows:**
@@ -228,17 +228,17 @@ let predicate: func(User) bool = |u| u.age > 18
 **Standalone lambdas** (no context):
 ```dingo
 // ❌ Error: Cannot infer type for parameter 'x'
-let standalone = |x| x * 2
+standalone := |x| x * 2
 
 // ✅ Fix: Add explicit type annotation
-let standalone = |x: int| x * 2          // Rust style
-let standalone = (x: int) => x * 2       // TypeScript style
+standalone := |x: int| x * 2          // Rust style
+standalone := (x: int) => x * 2       // TypeScript style
 ```
 
 **Complex expressions** (inference limitations):
 ```dingo
 // Explicit types needed for return type
-let parse = |s: string| -> Result[int, Error] {
+parse := |s: string| -> Result[int, Error] {
     if s == "" {
         return Err("empty string")
     }
@@ -246,7 +246,7 @@ let parse = |s: string| -> Result[int, Error] {
 }
 
 // TypeScript style with explicit return type
-let parse = (s: string): Result[int, Error] => {
+parse := (s: string): Result[int, Error] => {
     if s == "" {
         return Err("empty string")
     }
@@ -254,16 +254,44 @@ let parse = (s: string): Result[int, Error] => {
 }
 ```
 
+### Fail-Fast Type Inference
+
+When type inference fails, Dingo **fails immediately** with a clear error message instead of silently producing `func(x any) any` code that would fail Go compilation.
+
+**Design Decision:** Fail-fast was chosen over silent degradation because:
+1. `any` types produce confusing downstream Go compilation errors
+2. Early failure with actionable suggestions helps users fix issues immediately
+3. The multi-pass inference (5 passes) handles most cases - fail-fast catches edge cases
+
 ### Error Messages
 
 When type inference fails, Dingo provides clear guidance:
 
 ```
-Error at line 42: Cannot infer type for parameter 'x' in lambda
-Help: Add explicit type annotation:
-  Rust style:       |x: int| x * 2  or  |x: int| -> bool { ... }
-  TypeScript style: (x: int) => x * 2  or  (x: int): bool => { ... }
+lambda type inference failed at line 42: could not infer parameter types: x and return type
+  Suggestion: add explicit type annotation
+    Rust style:       |x Type| expr
+    TypeScript style: (x Type) => expr
+    Full Go syntax:   func(x Type) ReturnType { return expr }
 ```
+
+### Typed Lambda Syntax
+
+Both styles support explicit type annotations:
+
+**Rust style:**
+```dingo
+|p Product| p.Name                    // Parameter type only
+|p Product| -> string p.Name          // Parameter + return type
+```
+
+**TypeScript style:**
+```dingo
+(p Product) => p.Name                 // Parameter type only
+(p Product): string => p.Name         // Parameter + return type
+```
+
+**Note:** Space-separated types (Go-style) are used, not colon-separated.
 
 ---
 
@@ -276,27 +304,27 @@ Help: Add explicit type annotation:
 // Both styles work identically (configure in dingo.toml)
 
 // Rust style
-let numbers = []int{1, 2, 3, 4, 5}
-let doubled = numbers.map(|x| x * 2)       // [2, 4, 6, 8, 10]
-let evens = numbers.filter(|x| x % 2 == 0) // [2, 4]
+numbers := []int{1, 2, 3, 4, 5}
+doubled := numbers.map(|x| x * 2)       // [2, 4, 6, 8, 10]
+evens := numbers.filter(|x| x % 2 == 0) // [2, 4]
 
 // TypeScript style
-let numbers = []int{1, 2, 3, 4, 5}
-let doubled = numbers.map(x => x * 2)       // [2, 4, 6, 8, 10]
-let evens = numbers.filter(x => x % 2 == 0) // [2, 4]
+numbers := []int{1, 2, 3, 4, 5}
+doubled := numbers.map(x => x * 2)       // [2, 4, 6, 8, 10]
+evens := numbers.filter(x => x % 2 == 0) // [2, 4]
 ```
 
 **String processing:**
 ```dingo
 // Rust style
-let names = []string{"alice", "bob", "charlie"}
-let upper = names.map(|s| strings.ToUpper(s))
-let long = names.filter(|s| len(s) > 3)
+names := []string{"alice", "bob", "charlie"}
+upper := names.map(|s| strings.ToUpper(s))
+long := names.filter(|s| len(s) > 3)
 
 // TypeScript style
-let names = []string{"alice", "bob", "charlie"}
-let upper = names.map(s => strings.ToUpper(s))
-let long = names.filter(s => len(s) > 3)
+names := []string{"alice", "bob", "charlie"}
+upper := names.map(s => strings.ToUpper(s))
+long := names.filter(s => len(s) > 3)
 ```
 
 ### Functional Pipelines
@@ -319,13 +347,13 @@ users.filter(u => u.age > 18)
 **Complex transformations:**
 ```dingo
 // Rust style
-let result = orders
+result := orders
     .filter(|o| o.status == "complete")
     .map(|o| o.total)
     .reduce(0.0, |acc, x| acc + x)
 
 // TypeScript style
-let result = orders
+result := orders
     .filter(o => o.status == "complete")
     .map(o => o.total)
     .reduce(0.0, (acc, x) => acc + x)
@@ -337,7 +365,7 @@ let result = orders
 ```dingo
 // Rust style
 func processData(items: []string) -> Result[[]int, Error] {
-    let results = items
+    results := items
         .map(|s| parseInt(s))      // []Result[int, Error]
         .collect()?                 // Fail fast on first error
 
@@ -346,7 +374,7 @@ func processData(items: []string) -> Result[[]int, Error] {
 
 // TypeScript style
 func processData(items: []string) -> Result[[]int, Error] {
-    let results = items
+    results := items
         .map(s => parseInt(s))      // []Result[int, Error]
         .collect()?                 // Fail fast on first error
 
@@ -357,7 +385,7 @@ func processData(items: []string) -> Result[[]int, Error] {
 **Custom validation:**
 ```dingo
 // Rust style
-let validate = |input: string| -> Result[int, Error] {
+validate := |input: string| -> Result[int, Error] {
     if len(input) == 0 {
         return Err(Error("empty input"))
     }
@@ -365,7 +393,7 @@ let validate = |input: string| -> Result[int, Error] {
 }
 
 // TypeScript style
-let validate = (input: string): Result[int, Error] => {
+validate := (input: string): Result[int, Error] => {
     if len(input) == 0 {
         return Err(Error("empty input"))
     }
@@ -378,25 +406,25 @@ let validate = (input: string): Result[int, Error] => {
 **Safe transformations:**
 ```dingo
 // Rust style
-let user = findUser("alice@example.com")
-let email = user.map(|u| u.email)           // Option[string]
-let domain = email.map(|e| getDomain(e))    // Option[string]
+user := findUser("alice@example.com")
+email := user.map(|u| u.email)           // Option[string]
+domain := email.map(|e| getDomain(e))    // Option[string]
 
 // TypeScript style
-let user = findUser("alice@example.com")
-let email = user.map(u => u.email)           // Option[string]
-let domain = email.map(e => getDomain(e))    // Option[string]
+user := findUser("alice@example.com")
+email := user.map(u => u.email)           // Option[string]
+domain := email.map(e => getDomain(e))    // Option[string]
 ```
 
 **Filtering with Option:**
 ```dingo
 // Rust style
-let validUsers = users
+validUsers := users
     .map(|u| validateUser(u))   // []Option[User]
     .filterSome()               // []User (only Some values)
 
 // TypeScript style
-let validUsers = users
+validUsers := users
     .map(u => validateUser(u))   // []Option[User]
     .filterSome()               // []User (only Some values)
 ```
@@ -455,15 +483,15 @@ If you need currying-like behavior, use explicit function returns:
 
 ```dingo
 // ❌ Currying NOT SUPPORTED
-let add = |x| |y| x + y
+add := |x| |y| x + y
 
 // ✅ Use explicit closure instead
-let makeAdder = |x| func(y int) int { return x + y }
-let add5 = makeAdder(5)
-let result = add5(10)  // 15
+makeAdder := |x| func(y int) int { return x + y }
+add5 := makeAdder(5)
+result := add5(10)  // 15
 
 // Or TypeScript style
-let makeAdder = x => (y: int) int => x + y
+makeAdder := x => (y: int) int => x + y
 ```
 
 ### Open Discussion
@@ -488,11 +516,11 @@ lambda_style = "rust"
 ```dingo
 // Before (TypeScript)
 users.filter(u => u.age > 18)
-let double = x => x * 2
+double := x => x * 2
 
 // After (Rust)
 users.filter(|u| u.age > 18)
-let double = |x| x * 2
+double := |x| x * 2
 ```
 
 3. Rebuild:
@@ -512,11 +540,11 @@ lambda_style = "typescript"
 ```dingo
 // Before (Rust)
 users.filter(|u| u.age > 18)
-let add = |a, b| a + b
+add := |a, b| a + b
 
 // After (TypeScript)
 users.filter(u => u.age > 18)
-let add = (a, b) => a + b
+add := (a, b) => a + b
 ```
 
 ### When to Use Explicit Types
@@ -525,12 +553,15 @@ let add = (a, b) => a + b
 - Standalone lambda assignments (no context)
 - Complex return types (Result, Option)
 - Type inference fails (compiler error)
+- Range loop variables in generic calls (edge case)
+- Nested generic calls (edge case)
 - Clarity improves readability
 
 **Type inference works when:**
 - Passing to functions with known signatures
 - Method calls on typed collections
 - Variable assignment with declared type
+- Simple direct function calls
 
 **Examples:**
 
@@ -540,14 +571,23 @@ users.filter(|u| u.age > 18)
 users.filter(u => u.age > 18)
 
 // ❌ Inference fails (no context)
-let predicate = |u| u.age > 18
+predicate := |u| u.age > 18
 
-// ✅ Fix with explicit type
-let predicate = |u: User| u.age > 18
-let predicate = (u: User) => u.age > 18
+// ✅ Fix with explicit type (Go-style: Type after param name)
+predicate := |u User| u.age > 18
+predicate := (u User) => u.age > 18
+
+// ✅ Edge case: range loop variables may need explicit types
+for _, prods := range byCategory {
+    // ❌ May fail: prods type not always resolved
+    names := dgo.Map(prods, |p| p.Name)
+
+    // ✅ Fix: add explicit type
+    names := dgo.Map(prods, |p Product| p.Name)
+}
 
 // ✅ Or provide context via variable type
-let predicate: func(User) bool = |u| u.age > 18
+var predicate func(User) bool = |u| u.age > 18
 ```
 
 ### Common Patterns
@@ -573,12 +613,12 @@ pairs.reduce(0, (acc, x) => acc + x)
 **Explicit types for clarity:**
 ```dingo
 // Rust style
-let parser = |input: string| -> Result[int, Error] {
+parser := |input: string| -> Result[int, Error] {
     return parseInt(input)
 }
 
 // TypeScript style
-let parser = (input: string): Result[int, Error] => {
+parser := (input: string): Result[int, Error] => {
     return parseInt(input)
 }
 ```

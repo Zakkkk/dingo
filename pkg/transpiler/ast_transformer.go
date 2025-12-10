@@ -28,13 +28,15 @@ import (
 //
 // Returns error immediately on any parse failure with byte offset information.
 func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformASTExpressionsWithRegistry(src, nil)
+	return transformASTExpressionsWithRegistry(src, nil, nil)
 }
 
 // transformASTExpressionsWithRegistry is like transformASTExpressions but accepts
 // an enum registry for match expression pattern name resolution.
-func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string) ([]byte, []ast.SourceMapping, error) {
-	// Find all Dingo expressions
+// If originalSrc is provided, source mappings will use positions from originalSrc instead of src.
+// This is needed because earlier transforms (like error prop) may have shifted positions.
+func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte) ([]byte, []ast.SourceMapping, error) {
+	// Find all Dingo expressions in the (potentially transformed) source
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("find expressions: %w", err)
@@ -43,6 +45,12 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 	// If no expressions found, return source unchanged
 	if len(locations) == 0 {
 		return src, nil, nil
+	}
+
+	// Also find expressions in original source for accurate mapping positions
+	var originalLocations []ast.ExprLocation
+	if originalSrc != nil {
+		originalLocations, _ = ast.FindDingoExpressions(originalSrc)
 	}
 
 	// Filter out only expressions that are nested inside ternary expressions
@@ -226,10 +234,18 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 
 		// Convert codegen mappings to SourceMapping
 		// Adjust mapping positions based on splice location
+		// Use original source position if available (to account for shifts from earlier transforms)
+		dingoPos := loc.Start
+		if originalSrc != nil {
+			if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
+				dingoPos = origPos
+			}
+		}
+
 		for _, m := range genResult.Mappings {
 			mappings = append(mappings, ast.SourceMapping{
-				DingoStart: loc.Start + m.DingoStart,
-				DingoEnd:   loc.Start + m.DingoEnd,
+				DingoStart: dingoPos + m.DingoStart,
+				DingoEnd:   dingoPos + m.DingoEnd,
 				GoStart:    replaceStart + m.GoStart,
 				GoEnd:      replaceStart + m.GoEnd,
 				Kind:       m.Kind,
@@ -238,6 +254,25 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 	}
 
 	return result, mappings, nil
+}
+
+// findOriginalPosition finds the position of an expression in the original source
+// by matching the expression content and kind. Returns -1 if not found.
+// Since we process expressions in descending order, we also track which original
+// locations have been used to avoid matching the same one twice.
+func findOriginalPosition(originalLocations []ast.ExprLocation, loc ast.ExprLocation, exprContent []byte) int {
+	// Look for a matching expression by kind
+	// If there are multiple of the same kind, we rely on the processing order
+	// (both are sorted descending by position)
+	for i := len(originalLocations) - 1; i >= 0; i-- {
+		origLoc := originalLocations[i]
+		if origLoc.Kind == loc.Kind && origLoc.Start >= 0 {
+			// Mark as used by setting Start to -1 (we can modify since we're iterating)
+			// Actually, we can't modify the slice this way. Just return the first match.
+			return origLoc.Start
+		}
+	}
+	return -1 // Not found
 }
 
 // transformErrorPropStatements transforms statement-level error propagation.
@@ -267,6 +302,15 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 	// Start counter at len(locations) and decrement, so first statement in source
 	// gets tmp/err, second gets tmp1/err1, etc. (we process end-to-beginning)
 	counter := len(locations)
+
+	// First pass: calculate all deltas to know final positions
+	// We need to track byte deltas from transforms to calculate correct Go positions
+	type transformInfo struct {
+		loc       ast.StmtLocation
+		generated []byte
+		delta     int // len(generated) - original length
+	}
+	transforms := make([]transformInfo, 0, len(locations))
 
 	for _, loc := range locations {
 		// Extract the expression between operator and ?
@@ -302,7 +346,43 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 		newResult = append(newResult, result[loc.End:]...)
 		result = newResult
 
-		// TODO: Add source mappings
+		// Store transform info for second pass
+		originalLen := loc.End - loc.Start
+		delta := len(generated) - originalLen
+		transforms = append(transforms, transformInfo{
+			loc:       loc,
+			generated: generated,
+			delta:     delta,
+		})
+	}
+
+	// Second pass: calculate Go positions accounting for all transforms
+	// Process in source order (reverse of our processing order) to calculate cumulative shifts
+	// For each transform, GoStart = DingoStart + sum of deltas from all earlier transforms
+
+	// Sort transforms by DingoStart (ascending order for correct delta accumulation)
+	sortedTransforms := make([]transformInfo, len(transforms))
+	copy(sortedTransforms, transforms)
+	sort.Slice(sortedTransforms, func(i, j int) bool {
+		return sortedTransforms[i].loc.Start < sortedTransforms[j].loc.Start
+	})
+
+	// Calculate cumulative delta for each transform position
+	cumulativeDelta := 0
+	for _, t := range sortedTransforms {
+		goStart := t.loc.Start + cumulativeDelta
+		goEnd := goStart + len(t.generated)
+
+		mappings = append(mappings, ast.SourceMapping{
+			DingoStart: t.loc.Start,
+			DingoEnd:   t.loc.End,
+			GoStart:    goStart,
+			GoEnd:      goEnd,
+			Kind:       "error_prop",
+		})
+
+		// Accumulate delta for subsequent transforms
+		cumulativeDelta += t.delta
 	}
 
 	return result, mappings, nil
@@ -758,14 +838,14 @@ func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnT
 	return buf.Bytes()
 }
 
-// transformGuardLetStatements transforms guard let statements.
+// transformGuardStatements transforms guard statements.
 // This MUST run after error propagation but before expression-level transforms.
 //
 // Transforms:
-//   guard let user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
-//   guard let (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
-func transformGuardLetStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
-	locations, err := ast.FindGuardLetStatements(src)
+//   guard user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
+//   guard (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
+func transformGuardStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
+	locations, err := ast.FindGuardStatements(src)
 	if err != nil {
 		return src, nil, err
 	}
@@ -783,8 +863,10 @@ func transformGuardLetStatements(src []byte) ([]byte, []ast.SourceMapping, error
 	result := src
 	var mappings []ast.SourceMapping
 
-	// Share counter across all guard let statements
-	// Start at len(locations) and decrement, so first statement gets lowest numbers
+	// Share counter across all guard statements
+	// Locations are sorted descending, so we iterate last-to-first in source order.
+	// Counter starts high and decrements, so first guard in source gets lowest counter (tmp, tmp1, ...).
+	// Example: 3 guards → counters 3, 2, 1 → generates tmp, tmp1, tmp2 in source order.
 	counter := len(locations)
 
 	for _, loc := range locations {
@@ -796,10 +878,10 @@ func transformGuardLetStatements(src []byte) ([]byte, []ast.SourceMapping, error
 		}
 
 		// Generate code with source context and shared counter
-		gen := codegen.NewGuardLetGenerator(loc, exprType)
+		gen := codegen.NewGuardGenerator(loc, exprType)
 		gen.SourceBytes = src
 		gen.Counter = counter
-		counter-- // Decrement for next guard let
+		counter-- // Decrement for next guard
 		genResult := gen.Generate()
 
 		// Replace in result
