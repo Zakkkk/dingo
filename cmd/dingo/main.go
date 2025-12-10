@@ -37,23 +37,25 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 		},
 	}
 
-	// Override help flag to use our custom help
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		ui.PrintDingoHelp(version)
-	})
+	// Store default help function before overriding
+	defaultHelpFunc := rootCmd.HelpFunc()
 
-	// Set custom help command
-	rootCmd.SetHelpCommand(&cobra.Command{
-		Use:   "help [command]",
-		Short: "Help about any command",
-		Run: func(cmd *cobra.Command, args []string) {
+	// Override help flag to use our custom help ONLY for root command
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		// Only use custom help for root command, not subcommands
+		if cmd == rootCmd {
 			ui.PrintDingoHelp(version)
-		},
+		} else {
+			// Use default help for subcommands
+			defaultHelpFunc(cmd, args)
+		}
 	})
 
 	rootCmd.AddCommand(goBuildCmd())  // dingo build - transpile + go build
 	rootCmd.AddCommand(goRunCmd())    // dingo run - transpile + go run
 	rootCmd.AddCommand(goCmd())       // dingo go - transpile only
+	rootCmd.AddCommand(lintCmd())     // dingo lint - run linter
+	rootCmd.AddCommand(fmtCmd())      // dingo fmt - format files
 	rootCmd.AddCommand(versionCmd())
 	rootCmd.AddCommand(mascotCmd())
 
@@ -254,14 +256,22 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
-	// Write .dmap file next to .dingo source
-	dmapPath := strings.TrimSuffix(inputPath, ".dingo") + ".dmap"
-	// Get actual mappings from transpiler
+	// Write .dmap file to project root .dmap/ folder
+	dmapPath, dmapErr := calculateDmapPath(inputPath)
+	if dmapErr != nil {
+		buildUI.PrintStep(ui.Step{
+			Name:     "Write",
+			Status:   ui.StepSuccess,
+			Duration: time.Since(writeStart),
+			Message:  fmt.Sprintf("%d bytes written (source map warning: %v)", len(goSource), dmapErr),
+		})
+		return nil
+	}
+
 	mappings := transpileResult.Mappings
 	writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
 
 	if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
-		// .dmap write failure is non-fatal - warn but don't fail build
 		buildUI.PrintStep(ui.Step{
 			Name:     "Write",
 			Status:   ui.StepSuccess,
@@ -358,11 +368,17 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 			return err
 		}
 
-		// Write .dmap file next to .dingo source
-		// Path: foo.dingo -> foo.dmap (NOT foo.go.dmap)
-		dmapPath := strings.TrimSuffix(inputPath, ".dingo") + ".dmap"
-		writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
+		// Write .dmap file to project root .dmap/ folder
+		// This keeps source directories clean from generated files
+		// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
+		dmapPath, dmapErr := calculateDmapPath(inputPath)
+		if dmapErr != nil {
+			fmt.Printf("\n  ⚠ Warning: Failed to calculate source map path: %v\n", dmapErr)
+			writeDuration = time.Since(start)
+			return nil
+		}
 
+		writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
 		mappings := transpileResult.Mappings
 
 		if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
@@ -513,6 +529,45 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%.2fs", d.Seconds())
 	}
+}
+
+// calculateDmapPath calculates the .dmap file path in the project root .dmap/ folder.
+// This keeps generated source maps separate from source files.
+// Example: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
+func calculateDmapPath(inputPath string) (string, error) {
+	// Convert to absolute path
+	absInput, err := filepath.Abs(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Find workspace root (go.mod, go.work, or dingo.toml)
+	inputDir := filepath.Dir(absInput)
+	workspaceRoot, err := DetectWorkspaceRoot(inputDir)
+	if err != nil {
+		// Fall back to current directory if no workspace marker found
+		workspaceRoot, _ = os.Getwd()
+	}
+
+	// Calculate relative path from workspace root
+	relPath, err := filepath.Rel(workspaceRoot, absInput)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+
+	// Replace .dingo extension with .dmap
+	relDmap := strings.TrimSuffix(relPath, ".dingo") + ".dmap"
+
+	// Build final path: workspaceRoot/.dmap/relPath
+	dmapPath := filepath.Join(workspaceRoot, ".dmap", relDmap)
+
+	// Ensure parent directory exists
+	dmapDir := filepath.Dir(dmapPath)
+	if err := os.MkdirAll(dmapDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create .dmap directory: %w", err)
+	}
+
+	return dmapPath, nil
 }
 
 // expandWorkspacePatterns expands workspace patterns like ./... to actual .dingo files

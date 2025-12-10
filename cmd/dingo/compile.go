@@ -429,13 +429,15 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 					return err
 				}
 
-				// Write .dmap file next to .dingo source with actual mappings
-				dmapPath := strings.TrimSuffix(dingoFile, ".dingo") + ".dmap"
-				writer := dmap.NewWriter(src, goSource)
-
-				if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
-					// .dmap write failure is non-fatal - warn but don't fail build
-					fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+				// Write .dmap file to project root .dmap/ folder
+				// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
+				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
+				if dmapPathErr == nil {
+					writer := dmap.NewWriter(src, goSource)
+					if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+						// .dmap write failure is non-fatal - warn but don't fail build
+						fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+					}
 				}
 
 				writeDuration = time.Since(start)
@@ -447,13 +449,15 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 			// Write .go file
 			writeErr = os.WriteFile(goFile, goSource, 0644)
 			if writeErr == nil {
-				// Write .dmap file next to .dingo source with actual mappings
-				dmapPath := strings.TrimSuffix(dingoFile, ".dingo") + ".dmap"
-				writer := dmap.NewWriter(src, goSource)
-
-				if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
-					// .dmap write failure is non-fatal - warn but don't fail build
-					fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+				// Write .dmap file to project root .dmap/ folder
+				// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
+				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
+				if dmapPathErr == nil {
+					writer := dmap.NewWriter(src, goSource)
+					if dmapErr := writer.WriteFile(dmapPath, mappings); dmapErr != nil {
+						// .dmap write failure is non-fatal - warn but don't fail build
+						fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
+					}
 				}
 			}
 

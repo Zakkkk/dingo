@@ -429,6 +429,8 @@ func PrintDingoHelp(version string) {
 		{"build", "Compile Dingo sources to binary (like go build)"},
 		{"run", "Compile and run Dingo program (like go run)"},
 		{"go", "Transpile Dingo to Go only (no compilation)"},
+		{"lint", "Run Dingo linter on source files"},
+		{"fmt", "Format Dingo source files"},
 		{"version", "Print the version number of Dingo"},
 		{"help", "Help about any command"},
 	}

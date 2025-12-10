@@ -123,6 +123,8 @@ func (s *Server) handleRequest(ctx context.Context, reply jsonrpc2.Replier, req 
 		return s.handleDefinition(ctx, reply, req)
 	case "textDocument/hover":
 		return s.handleHover(ctx, reply, req)
+	case "textDocument/codeAction":
+		return s.handleCodeAction(ctx, reply, req)
 	default:
 		// Unknown method - try forwarding to gopls
 		s.config.Logger.Debugf("Forwarding unknown method to gopls: %s", req.Method())
@@ -181,6 +183,13 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 			},
 			HoverProvider:      goplsResult.Capabilities.HoverProvider,
 			DefinitionProvider: goplsResult.Capabilities.DefinitionProvider,
+			CodeActionProvider: &protocol.CodeActionOptions{
+				CodeActionKinds: []protocol.CodeActionKind{
+					protocol.QuickFix,
+					protocol.Refactor,
+					protocol.RefactorRewrite,
+				},
+			},
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "dingo-lsp",
@@ -338,13 +347,20 @@ func (s *Server) handleDidSave(ctx context.Context, reply jsonrpc2.Replier, req 
 		return reply(ctx, nil, err)
 	}
 
-	// Auto-transpile if enabled and this is a .dingo file
-	if s.config.AutoTranspile && isDingoFile(params.TextDocument.URI) {
+	// Handle .dingo file save
+	if isDingoFile(params.TextDocument.URI) {
 		dingoPath := params.TextDocument.URI.Filename()
-		s.config.Logger.Debugf("Auto-transpile on save: %s", dingoPath)
 
-		// Trigger transpilation (AutoTranspiler will notify gopls after completion)
-		go s.transpiler.OnFileChange(ctx, dingoPath)
+		// Run linter on save (always, regardless of auto-transpile setting)
+		go s.runLintOnSave(ctx, params.TextDocument.URI)
+
+		// Auto-transpile if enabled
+		if s.config.AutoTranspile {
+			s.config.Logger.Debugf("Auto-transpile on save: %s", dingoPath)
+
+			// Trigger transpilation (AutoTranspiler will notify gopls after completion)
+			go s.transpiler.OnFileChange(ctx, dingoPath)
+		}
 
 		// Don't forward to gopls - transpiler handles it after successful transpilation
 		return reply(ctx, nil, nil)
