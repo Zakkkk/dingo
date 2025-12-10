@@ -133,9 +133,9 @@ func demo() string {
 
 	// === 7. TUPLES (destructuring) ===
 	// BUG: Mishandles Go multiple returns as tuple struct - See BUGS.md Bug 3
-	let (x, y) = getPoint()
+	(x, y) := getPoint()
 
-	// === 12. LET binding ===
+	// Build result string
 	result := fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
 		greeting, user.Name, displayLang, statusMsg, x, y)
 
