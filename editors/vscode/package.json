@@ -80,11 +80,6 @@
           "default": true,
           "description": "Automatically transpile .dingo files on save"
         },
-        "dingo.showTranspileNotifications": {
-          "type": "boolean",
-          "default": false,
-          "description": "Show notifications when transpilation succeeds/fails"
-        },
         "dingo.lsp.logLevel": {
           "type": "string",
           "enum": [
@@ -96,47 +91,25 @@
           "default": "info",
           "description": "LSP server log level"
         },
-        "dingo.highlightGeneratedCode": {
+        "dingo.lsp.logToFile": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable highlighting of generated code sections in .go files"
+          "default": false,
+          "description": "Enable logging to file for debugging"
         },
-        "dingo.generatedCodeStyle": {
+        "dingo.lsp.logFile": {
           "type": "string",
-          "enum": [
-            "subtle",
-            "bold",
-            "outline",
-            "disabled"
-          ],
-          "default": "subtle",
-          "enumDescriptions": [
-            "Light background color only (recommended)",
-            "Background color with border",
-            "Border outline only",
-            "Disable highlighting"
-          ],
-          "description": "Visual style for generated code highlighting"
+          "default": "/tmp/dingo-lsp.log",
+          "description": "Path to LSP log file (used when 'Log To File' is enabled)"
         },
-        "dingo.generatedCodeColor": {
-          "type": "string",
-          "default": "#3b82f610",
-          "description": "Background color for generated code (hex with alpha channel, default: ~6% opacity - very subtle)"
-        },
-        "dingo.generatedCodeBorderColor": {
-          "type": "string",
-          "default": "#3b82f630",
-          "description": "Border color for bold/outline styles (default: ~19% opacity)"
-        },
-        "dingo.hideGeneratedMarkers": {
+        "dingo.lsp.sqliteLogging": {
           "type": "boolean",
-          "default": true,
-          "description": "Hide dingo:s:N/dingo:e:N comment markers in the editor (makes them transparent/gray)"
+          "default": false,
+          "description": "Enable SQLite structured logging for debugging (creates database file)"
         },
-        "dingo.highlightGeneratedVariables": {
-          "type": "boolean",
-          "default": true,
-          "description": "Suppress generated variables (__err0, __tmp0, err, etc.) by making them fade into background"
+        "dingo.lsp.sqliteLogPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to SQLite log database. If empty, uses system temp directory (`$TMPDIR/dingo-lsp.db` on macOS/Linux, `%TEMP%\\dingo-lsp.db` on Windows)"
         }
       }
     },
@@ -152,10 +125,6 @@
       {
         "command": "dingo.restartLSP",
         "title": "Dingo: Restart Language Server"
-      },
-      {
-        "command": "dingo.toggleGeneratedCodeHighlighting",
-        "title": "Dingo: Toggle Generated Code Highlighting"
       },
       {
         "command": "dingo.compareWithSource",

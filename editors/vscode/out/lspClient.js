@@ -44,19 +44,26 @@ async function activateLSPClient(context) {
     // Check if LSP is enabled (could add opt-out setting later)
     const lspPath = config.get('lsp.path', 'dingo-lsp');
     const logLevel = config.get('lsp.logLevel', 'info');
+    const logToFile = config.get('lsp.logToFile', false);
+    const logFile = config.get('lsp.logFile', '/tmp/dingo-lsp.log');
     const transpileOnSave = config.get('transpileOnSave', true);
+    // Build environment variables
+    const env = {
+        ...process.env,
+        DINGO_LSP_LOG: logLevel,
+        DINGO_AUTO_TRANSPILE: transpileOnSave.toString(),
+    };
+    // Add log file path if file logging is enabled
+    if (logToFile && logFile) {
+        env.DINGO_LSP_LOGFILE = logFile;
+        console.log(`Dingo LSP logging to file: ${logFile}`);
+    }
     // Server options - start dingo-lsp binary
     const serverOptions = {
         command: lspPath,
         args: [],
         transport: node_1.TransportKind.stdio,
-        options: {
-            env: {
-                ...process.env,
-                DINGO_LSP_LOG: logLevel,
-                DINGO_AUTO_TRANSPILE: transpileOnSave.toString(),
-            }
-        }
+        options: { env }
     };
     // Client options - document selector and synchronization
     const clientOptions = {

@@ -10,6 +10,8 @@ import (
 	"go.lsp.dev/jsonrpc2"
 )
 
+const maxLogSize = 5 * 1024 * 1024 // 5MB max log file size
+
 var logger lsp.Logger
 
 func main() {
@@ -18,7 +20,44 @@ func main() {
 	if logLevel == "" {
 		logLevel = "info"
 	}
-	logger = lsp.NewLogger(logLevel, os.Stderr)
+
+	// Configure log output - stderr by default, optionally to file
+	var logOutput io.Writer = os.Stderr
+	logFile := os.Getenv("DINGO_LSP_LOGFILE")
+	if logFile != "" {
+		// Rotate log file if too large
+		rotateLogFile(logFile)
+
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err == nil {
+			// Write to both stderr and file for debugging
+			logOutput = io.MultiWriter(os.Stderr, f)
+			defer f.Close()
+		}
+	}
+
+	logger = lsp.NewLogger(logLevel, logOutput)
+
+	// Add SQLite logger if enabled via environment variable
+	sqliteLogPath := os.Getenv("DINGO_LSP_SQLITE")
+	if sqliteLogPath != "" {
+		sqliteLogger, err := lsp.NewSQLiteLogger(sqliteLogPath, logLevel)
+		if err != nil {
+			// Fall back to standard logger only - log error but don't fail
+			logger.Warnf("SQLite logging initialization failed: %v", err)
+		} else {
+			// Combine text and SQLite loggers
+			multiLogger := lsp.NewMultiLogger(logger, sqliteLogger)
+			logger = multiLogger
+			// Ensure cleanup on shutdown
+			defer func() {
+				if err := sqliteLogger.Close(); err != nil {
+					logger.Warnf("Failed to close SQLite logger: %v", err)
+				}
+			}()
+			logger.Infof("SQLite logging enabled: %s", sqliteLogPath)
+		}
+	}
 
 	logger.Infof("Starting dingo-lsp server (log level: %s)", logLevel)
 
@@ -105,4 +144,22 @@ func (s *stdinoutCloser) Close() error {
 }
 
 var _ io.ReadWriteCloser = (*stdinoutCloser)(nil)
+
+// rotateLogFile checks if log file exceeds maxLogSize and rotates it
+// Keeps one backup (.old) for reference
+func rotateLogFile(logFile string) {
+	info, err := os.Stat(logFile)
+	if err != nil {
+		return // File doesn't exist, nothing to rotate
+	}
+
+	if info.Size() < maxLogSize {
+		return // File is small enough
+	}
+
+	// Rotate: delete .old, rename current to .old
+	oldFile := logFile + ".old"
+	_ = os.Remove(oldFile)          // Ignore error if doesn't exist
+	_ = os.Rename(logFile, oldFile) // Ignore error, will just append
+}
 

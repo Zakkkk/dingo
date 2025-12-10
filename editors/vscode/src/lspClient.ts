@@ -15,20 +15,40 @@ export async function activateLSPClient(context: vscode.ExtensionContext): Promi
     // Check if LSP is enabled (could add opt-out setting later)
     const lspPath = config.get<string>('lsp.path', 'dingo-lsp');
     const logLevel = config.get<string>('lsp.logLevel', 'info');
+    const logToFile = config.get<boolean>('lsp.logToFile', false);
+    const logFile = config.get<string>('lsp.logFile', '/tmp/dingo-lsp.log');
     const transpileOnSave = config.get<boolean>('transpileOnSave', true);
+    const sqliteLogging = config.get<boolean>('lsp.sqliteLogging', false);
+    const sqliteLogPath = config.get<string>('lsp.sqliteLogPath', '');
+
+    // Build environment variables
+    const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        DINGO_LSP_LOG: logLevel,
+        DINGO_AUTO_TRANSPILE: transpileOnSave.toString(),
+    };
+
+    // Add log file path if file logging is enabled
+    if (logToFile && logFile) {
+        env.DINGO_LSP_LOGFILE = logFile;
+        console.log(`Dingo LSP logging to file: ${logFile}`);
+    }
+
+    // Add SQLite logging path if enabled
+    if (sqliteLogging) {
+        // Use provided path or default to temp directory
+        const os = require('os');
+        const dbPath = sqliteLogPath || path.join(os.tmpdir(), 'dingo-lsp.db');
+        env.DINGO_LSP_SQLITE = dbPath;
+        console.log(`Dingo LSP SQLite logging to: ${dbPath}`);
+    }
 
     // Server options - start dingo-lsp binary
     const serverOptions: ServerOptions = {
         command: lspPath,
         args: [],
         transport: TransportKind.stdio,
-        options: {
-            env: {
-                ...process.env,
-                DINGO_LSP_LOG: logLevel,
-                DINGO_AUTO_TRANSPILE: transpileOnSave.toString(),
-            }
-        }
+        options: { env }
     };
 
     // Client options - document selector and synchronization
