@@ -11,10 +11,19 @@ import (
 )
 
 // runLintOnSave runs the Dingo linter when a .dingo file is saved
-// and publishes diagnostics to the IDE
 func (s *Server) runLintOnSave(ctx context.Context, uri protocol.DocumentURI) {
+	s.runLint(uri, "save")
+}
+
+// runLintOnOpen runs the Dingo linter when a .dingo file is opened
+func (s *Server) runLintOnOpen(ctx context.Context, uri protocol.DocumentURI) {
+	s.runLint(uri, "open")
+}
+
+// runLint is the shared implementation for linting on open/save
+func (s *Server) runLint(uri protocol.DocumentURI, trigger string) {
 	dingoPath := uri.Filename()
-	s.config.Logger.Debugf("[Lint] Running linter on saved file: %s", dingoPath)
+	s.config.Logger.Debugf("[Lint] Running linter on %s (%s)", dingoPath, trigger)
 
 	// Read file contents
 	src, err := os.ReadFile(dingoPath)
@@ -122,44 +131,8 @@ func convertToLSPDiagnostic(d analyzer.Diagnostic) protocol.Diagnostic {
 }
 
 // publishLintDiagnostics publishes lint diagnostics to the IDE
-// This is separate from publishDingoDiagnostics (transpiler errors) and
-// handlePublishDiagnostics (gopls diagnostics)
+// Uses the unified diagnostic cache to merge with gopls/transpiler diagnostics
 func (s *Server) publishLintDiagnostics(uri protocol.DocumentURI, diagnostics []protocol.Diagnostic) {
-	// Get IDE connection (thread-safe)
-	ideConn, serverCtx := s.GetConn()
-	if ideConn == nil {
-		s.config.Logger.Warnf("[Lint] No IDE connection available, cannot publish diagnostics")
-		return
-	}
-
-	// Prepare params
-	params := protocol.PublishDiagnosticsParams{
-		URI:         uri,
-		Diagnostics: diagnostics,
-	}
-
-	// Use server context if available, otherwise background
-	publishCtx := serverCtx
-	if publishCtx == nil {
-		publishCtx = context.Background()
-	}
-
-	// Double-check connection before notify (prevent TOCTOU race)
-	if ideConn == nil {
-		s.config.Logger.Warnf("[Lint] Connection became nil before publish")
-		return
-	}
-
-	// Publish to IDE
-	err := ideConn.Notify(publishCtx, "textDocument/publishDiagnostics", params)
-	if err != nil {
-		s.config.Logger.Errorf("[Lint] Failed to publish diagnostics: %v", err)
-		return
-	}
-
-	if len(diagnostics) > 0 {
-		s.config.Logger.Debugf("[Lint] Published %d lint diagnostic(s) for %s", len(diagnostics), uri)
-	} else {
-		s.config.Logger.Debugf("[Lint] Cleared lint diagnostics for %s", uri)
-	}
+	s.config.Logger.Debugf("[Lint] Updating %d lint diagnostic(s) for %s", len(diagnostics), uri)
+	s.updateAndPublishDiagnostics(uri, "lint", diagnostics)
 }

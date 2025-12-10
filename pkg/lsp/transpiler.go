@@ -66,14 +66,14 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 		// Publish Dingo-specific diagnostic for transpilation error
 		diagnostic := ParseTranspileError(dingoPath, err.Error())
 		if diagnostic != nil && at.server != nil {
-			at.server.publishDingoDiagnostics(uri, []protocol.Diagnostic{*diagnostic})
+			at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
 		}
 		return // Don't proceed to gopls sync
 	}
 
-	// Clear diagnostics on successful transpilation
+	// Clear transpile diagnostics on successful transpilation
 	if at.server != nil {
-		at.server.publishDingoDiagnostics(uri, []protocol.Diagnostic{})
+		at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{})
 	}
 
 	// Invalidate source map cache

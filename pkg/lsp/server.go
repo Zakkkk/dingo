@@ -35,6 +35,12 @@ type Server struct {
 	connMu  sync.RWMutex
 	ideConn jsonrpc2.Conn   // Store IDE connection for diagnostics
 	ctx     context.Context // Store server context
+
+	// Diagnostic cache - stores diagnostics by source to allow merging
+	diagMu        sync.RWMutex
+	lintDiags     map[string][]protocol.Diagnostic // URI -> lint diagnostics
+	goplsDiags    map[string][]protocol.Diagnostic // URI -> gopls diagnostics
+	transpileDiags map[string][]protocol.Diagnostic // URI -> transpiler diagnostics
 }
 
 // NewServer creates a new LSP server instance
@@ -59,11 +65,14 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 	// Create server first (without transpiler)
 	server := &Server{
-		config:     cfg,
-		gopls:      gopls,
-		mapCache:   mapCache,
-		translator: translator,
-		docManager: docManager,
+		config:         cfg,
+		gopls:          gopls,
+		mapCache:       mapCache,
+		translator:     translator,
+		docManager:     docManager,
+		lintDiags:      make(map[string][]protocol.Diagnostic),
+		goplsDiags:     make(map[string][]protocol.Diagnostic),
+		transpileDiags: make(map[string][]protocol.Diagnostic),
 	}
 
 	// Initialize auto-transpiler with server reference
@@ -258,17 +267,18 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 		dingoPath := params.TextDocument.URI.Filename()
 		s.config.Logger.Infof("[didOpen] Opened .dingo file: %s", dingoPath)
 
+		// Run linter on open (provides immediate feedback)
+		go s.runLintOnOpen(ctx, params.TextDocument.URI)
+
 		// Initialize incremental parser for this document
 		if err := s.docManager.OpenDocument(string(params.TextDocument.URI), params.TextDocument.Text); err != nil {
 			s.config.Logger.Warnf("[didOpen] Failed to initialize incremental parser: %v", err)
 		} else {
 			s.config.Logger.Debugf("[didOpen] Incremental parser initialized")
 
-			// Publish initial diagnostics from parser
+			// Publish initial diagnostics from parser (using transpile source since these are parse errors)
 			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-			if len(diagnostics) > 0 {
-				s.publishDingoDiagnostics(params.TextDocument.URI, diagnostics)
-			}
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", diagnostics)
 		}
 
 		// Check if .go file exists, if not auto-transpile
@@ -324,9 +334,9 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 		} else {
 			s.config.Logger.Debugf("[didChange] Incremental parse succeeded")
 
-			// Publish updated diagnostics
+			// Publish updated diagnostics (using transpile source since these are parse errors)
 			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-			s.publishDingoDiagnostics(params.TextDocument.URI, diagnostics)
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", diagnostics)
 		}
 
 		return reply(ctx, nil, nil)
@@ -519,6 +529,61 @@ func (s *Server) publishDingoDiagnostics(uri protocol.DocumentURI, diagnostics [
 	} else {
 		s.config.Logger.Debugf("[Dingo Diagnostics] Cleared diagnostics for %s", uri)
 	}
+}
+
+// updateAndPublishDiagnostics updates cached diagnostics for a source and publishes merged result
+// source can be "lint", "gopls", or "transpile"
+func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source string, diagnostics []protocol.Diagnostic) {
+	s.diagMu.Lock()
+	uriStr := string(uri)
+
+	// Update the appropriate cache
+	switch source {
+	case "lint":
+		s.lintDiags[uriStr] = diagnostics
+	case "gopls":
+		s.goplsDiags[uriStr] = diagnostics
+	case "transpile":
+		s.transpileDiags[uriStr] = diagnostics
+	}
+
+	// Merge all diagnostics for this URI
+	var merged []protocol.Diagnostic
+	merged = append(merged, s.lintDiags[uriStr]...)
+	merged = append(merged, s.goplsDiags[uriStr]...)
+	merged = append(merged, s.transpileDiags[uriStr]...)
+
+	s.diagMu.Unlock()
+
+	// Get IDE connection (thread-safe)
+	ideConn, serverCtx := s.GetConn()
+	if ideConn == nil {
+		s.config.Logger.Warnf("[Diagnostics] No IDE connection, cannot publish")
+		return
+	}
+
+	// Prepare params
+	params := protocol.PublishDiagnosticsParams{
+		URI:         uri,
+		Diagnostics: merged,
+	}
+
+	// Use server context if available
+	publishCtx := serverCtx
+	if publishCtx == nil {
+		publishCtx = context.Background()
+	}
+
+	// Publish merged diagnostics to IDE
+	err := ideConn.Notify(publishCtx, "textDocument/publishDiagnostics", params)
+	if err != nil {
+		s.config.Logger.Errorf("[Diagnostics] Failed to publish: %v", err)
+		return
+	}
+
+	s.config.Logger.Debugf("[Diagnostics] Published %d merged diagnostics for %s (lint=%d, gopls=%d, transpile=%d)",
+		len(merged), uri,
+		len(s.lintDiags[uriStr]), len(s.goplsDiags[uriStr]), len(s.transpileDiags[uriStr]))
 }
 
 // forwardToGopls forwards unknown requests directly to gopls
