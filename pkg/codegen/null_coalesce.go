@@ -357,8 +357,9 @@ func (g *NullCoalesceGenerator) generateIIFE(chain []safeNavSegment, baseReceive
 	defaultValue := g.dingoExprToString(g.expr.Right)
 	g.generateIIFEContent(chain, baseReceiver, defaultValue)
 
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 	outputStart := 0
 	outputEnd := g.Buf.Len()
 
@@ -453,8 +454,9 @@ func (g *NullCoalesceGenerator) generateIIFEContent(chain []safeNavSegment, base
 // generateStandard generates a standard null coalesce IIFE.
 // Handles pointer-to-value coalescing: *string ?? "default" → string
 func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 	outputStart := g.Buf.Len()
 
 	// Infer return type from operands (use right side type for pointer ?? value case)

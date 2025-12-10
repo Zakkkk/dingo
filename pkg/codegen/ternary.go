@@ -72,8 +72,9 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 // Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
 // the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 
 	// Mark this as statement-level output (not expression replacement)
 	var stmt []byte
@@ -152,8 +153,9 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 // Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
 // the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 
 	var stmt []byte
 
@@ -236,8 +238,9 @@ func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
 //       return falseVal
 //   }()
 func (g *TernaryCodeGen) generateIIFE() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 	outputStart := g.Buf.Len()
 
 	// func()

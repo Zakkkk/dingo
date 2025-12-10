@@ -39,9 +39,10 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 		return ast.CodeGenResult{}
 	}
 
-	// Track start position
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Track start position - use relative positions (0 to exprLen)
+	// Transformer will add loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 	outputStart := g.Buf.Len()
 
 	// func(

@@ -67,8 +67,9 @@ func (g *BuiltinCallCodeGen) Generate() ast.CodeGenResult {
 //   - HoistedCode: var tmp int\nif env != nil && env.Region != nil {\n\ttmp = len(*env.Region)\n}\n
 //   - Output: tmp
 func (g *BuiltinCallCodeGen) generateHoisted() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 
 	// Generate unique temp variable name
 	var tmpName string
@@ -167,8 +168,9 @@ func (g *BuiltinCallCodeGen) generateArgHoisting(buf *bytes.Buffer, tmpName stri
 
 // generateIIFE generates an IIFE for contexts where hoisting isn't possible.
 func (g *BuiltinCallCodeGen) generateIIFE() ast.CodeGenResult {
-	dingoStart := int(g.expr.Pos())
-	dingoEnd := int(g.expr.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(g.expr.End() - g.expr.Pos())
 	outputStart := g.Buf.Len()
 
 	// Determine return type

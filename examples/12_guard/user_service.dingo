@@ -96,7 +96,7 @@ func getUserWithTheme(id int) Result[string, string] {
 }
 
 func main() {
-	fmt.Println("=== Guard Demo ===\n")
+	fmt.Println("=== Guard Demo ===")
 
 	// Result with error binding
 	fmt.Println("1. Result type (|err| binding):")

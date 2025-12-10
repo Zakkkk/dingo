@@ -182,13 +182,15 @@ func (g *SafeNavCodeGen) generateArgsFrom(args []ast.Expr) {
 // This uses temporaries to avoid duplicate receiver evaluation and method call side effects.
 func (g *SafeNavCodeGen) generateHumanLikeReturn(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
 	// Track Dingo source positions for LSP
+	// Use relative positions (0 to exprLen) - transformer will add loc.Start offset
 	var dingoStart, dingoEnd int
 	if g.expr != nil {
-		dingoStart = int(g.expr.Pos())
-		dingoEnd = int(g.expr.End())
+		// Normalize: AST positions are 1-indexed, convert to 0-indexed relative
+		dingoStart = 0
+		dingoEnd = int(g.expr.End() - g.expr.Pos())
 	} else {
-		dingoStart = int(g.callExpr.Pos())
-		dingoEnd = int(g.callExpr.End())
+		dingoStart = 0
+		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
 	}
 
 	var output bytes.Buffer
@@ -284,13 +286,14 @@ func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseR
 	}
 
 	// Track Dingo source positions for LSP
+	// Use relative positions (0 to exprLen) - transformer will add loc.Start offset
 	var dingoStart, dingoEnd int
 	if g.expr != nil {
-		dingoStart = int(g.expr.Pos())
-		dingoEnd = int(g.expr.End())
+		dingoStart = 0
+		dingoEnd = int(g.expr.End() - g.expr.Pos())
 	} else {
-		dingoStart = int(g.callExpr.Pos())
-		dingoEnd = int(g.callExpr.End())
+		dingoStart = 0
+		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
 	}
 
 	var output bytes.Buffer
@@ -364,14 +367,14 @@ func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseR
 
 // generateIIFE generates an IIFE for contexts where statement-level replacement isn't possible.
 func (g *SafeNavCodeGen) generateIIFE(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Track start position
+	// Track start position - use relative positions (0 to exprLen)
 	var dingoStart, dingoEnd int
 	if g.expr != nil {
-		dingoStart = int(g.expr.Pos())
-		dingoEnd = int(g.expr.End())
+		dingoStart = 0
+		dingoEnd = int(g.expr.End() - g.expr.Pos())
 	} else {
-		dingoStart = int(g.callExpr.Pos())
-		dingoEnd = int(g.callExpr.End())
+		dingoStart = 0
+		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
 	}
 	outputStart := g.Buf.Len()
 
