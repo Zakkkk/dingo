@@ -3,6 +3,7 @@ package lsp
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -35,11 +36,16 @@ func NewSourceMapCache(logger Logger) (*SourceMapCache, error) {
 }
 
 // Get retrieves a source map from cache or loads it from disk.
-// Path translation: goFilePath (.go) → dingoPath (.dingo) → dmapPath (.dmap)
+// Path translation: goFilePath (.go) → dingoPath (.dingo) → .dmap/<relPath>.dmap
 func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
-	// Translate: foo.go -> foo.dingo -> foo.dmap
+	// Translate: foo.go -> foo.dingo
 	dingoPath := strings.TrimSuffix(goFilePath, ".go") + ".dingo"
-	dmapPath := strings.TrimSuffix(dingoPath, ".dingo") + ".dmap"
+
+	// Calculate .dmap path in project root .dmap/ folder
+	dmapPath, err := calculateDmapPath(dingoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate dmap path: %w", err)
+	}
 
 	// CRITICAL FIX C3: Simplified locking (correctness over optimization)
 	// Hold write lock during entire operation to avoid memory model issues
@@ -105,4 +111,63 @@ func (c *SourceMapCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return len(c.maps)
+}
+
+// calculateDmapPath calculates the .dmap file path in the project root .dmap/ folder.
+// Example: /project/examples/03_option/user.dingo -> /project/.dmap/examples/03_option/user.dmap
+func calculateDmapPath(dingoPath string) (string, error) {
+	// Convert to absolute path
+	absPath, err := filepath.Abs(dingoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// Find workspace root (go.mod, go.work, or dingo.toml)
+	inputDir := filepath.Dir(absPath)
+	workspaceRoot, err := detectWorkspaceRoot(inputDir)
+	if err != nil {
+		// Fall back to parent directory traversal
+		workspaceRoot = inputDir
+	}
+
+	// Calculate relative path from workspace root
+	relPath, err := filepath.Rel(workspaceRoot, absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to calculate relative path: %w", err)
+	}
+
+	// Replace .dingo extension with .dmap
+	relDmap := strings.TrimSuffix(relPath, ".dingo") + ".dmap"
+
+	// Build final path: workspaceRoot/.dmap/relPath
+	return filepath.Join(workspaceRoot, ".dmap", relDmap), nil
+}
+
+// detectWorkspaceRoot finds the workspace root by looking for dingo.toml, go.work, or go.mod
+func detectWorkspaceRoot(startPath string) (string, error) {
+	current := startPath
+	for {
+		// Check for dingo.toml
+		if _, err := os.Stat(filepath.Join(current, "dingo.toml")); err == nil {
+			return current, nil
+		}
+
+		// Check for go.work
+		if _, err := os.Stat(filepath.Join(current, "go.work")); err == nil {
+			return current, nil
+		}
+
+		// Check for go.mod
+		if _, err := os.Stat(filepath.Join(current, "go.mod")); err == nil {
+			return current, nil
+		}
+
+		// Move to parent directory
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached filesystem root
+			return startPath, fmt.Errorf("no workspace root found")
+		}
+		current = parent
+	}
 }
