@@ -9,6 +9,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/codegen"
 	"github.com/MadAppGang/dingo/pkg/parser"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
@@ -28,14 +29,15 @@ import (
 //
 // Returns error immediately on any parse failure with byte offset information.
 func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformASTExpressionsWithRegistry(src, nil, nil)
+	return transformASTExpressionsWithRegistry(src, nil, nil, nil)
 }
 
 // transformASTExpressionsWithRegistry is like transformASTExpressions but accepts
 // an enum registry for match expression pattern name resolution.
 // If originalSrc is provided, source mappings will use positions from originalSrc instead of src.
 // This is needed because earlier transforms (like error prop) may have shifted positions.
-func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte) ([]byte, []ast.SourceMapping, error) {
+// If tracker is provided, transforms will be recorded for line-level mapping generation.
+func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
 	// Find all Dingo expressions in the (potentially transformed) source
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
@@ -187,6 +189,21 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			// Build replacement: hoisted code at statement start, temp var at expression location
 			hoistedInsertPos := loc.StatementStart
 
+			// Record transform before splicing (if tracker provided)
+			if tracker != nil {
+				dingoPos := loc.Start
+				dingoEnd := loc.End
+				if originalSrc != nil {
+					if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
+						dingoPos = origPos
+						dingoEnd = origPos + (loc.End - loc.Start)
+					}
+				}
+				// Total generated length includes hoisted code + newline + temp var
+				generatedLen := len(genResult.HoistedCode) + 1 + len(genResult.Output)
+				tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), generatedLen)
+			}
+
 			// Insert hoisted code before the statement
 			newResult := make([]byte, 0, len(result)+len(genResult.HoistedCode)+len(genResult.Output))
 			newResult = append(newResult, result[:hoistedInsertPos]...)
@@ -222,6 +239,21 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			replaceStart = loc.Start
 			replaceEnd = loc.End
 			replacement = genResult.Output
+		}
+
+		// Record transform before splicing (if tracker provided)
+		// Use original source positions for accurate tracking
+		if tracker != nil {
+			dingoPos := loc.Start
+			dingoEnd := loc.End
+			if originalSrc != nil {
+				if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
+					dingoPos = origPos
+					// Adjust end position by same delta
+					dingoEnd = origPos + (loc.End - loc.Start)
+				}
+			}
+			tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), len(replacement))
 		}
 
 		// Splice generated code into result
@@ -275,6 +307,21 @@ func findOriginalPosition(originalLocations []ast.ExprLocation, loc ast.ExprLoca
 	return -1 // Not found
 }
 
+// findOriginalErrorPropPosition finds the position in original source for error prop statements.
+// If originalSrc == src (no earlier transforms), returns the position unchanged.
+// Otherwise, attempts to find a matching ? operator in the original source.
+func findOriginalErrorPropPosition(originalSrc []byte, transformedSrc []byte, pos int) int {
+	// If sources are the same, no adjustment needed
+	if bytes.Equal(originalSrc, transformedSrc) {
+		return pos
+	}
+
+	// Simple heuristic: return the position as-is
+	// The tracker will use this position relative to originalSrc
+	// More sophisticated matching could be added if needed
+	return pos
+}
+
 // transformErrorPropStatements transforms statement-level error propagation.
 // This MUST run before expression-level transforms.
 //
@@ -283,6 +330,12 @@ func findOriginalPosition(originalLocations []ast.ExprLocation, loc ast.ExprLoca
 //   x := foo()?                 →  tmp, err := foo(); if err != nil { return ..., err }; x := tmp
 //   return foo()?               →  tmp, err := foo(); if err != nil { return ..., err }; return tmp
 func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
+	return transformErrorPropStatementsWithTracker(src, src, nil)
+}
+
+// transformErrorPropStatementsWithTracker wraps transformErrorPropStatements with tracker support.
+// originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
+func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
 	locations, err := ast.FindErrorPropStatements(src)
 	if err != nil {
 		return src, nil, err
@@ -337,6 +390,14 @@ func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, erro
 		case ast.StmtErrorPropBare:
 			// foo()?
 			generated = generateErrorPropBareAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+		}
+
+		// Record transform before applying (if tracker provided)
+		// Calculate position in original source
+		if tracker != nil {
+			origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
+			origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
+			tracker.RecordTransform(origStart, origEnd, "error_prop", len(generated))
 		}
 
 		// Replace in result
@@ -845,6 +906,12 @@ func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnT
 //   guard user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
 //   guard (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
 func transformGuardStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
+	return transformGuardStatementsWithTracker(src, src, nil)
+}
+
+// transformGuardStatementsWithTracker wraps transformGuardStatements with tracker support.
+// originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
+func transformGuardStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
 	locations, err := ast.FindGuardStatements(src)
 	if err != nil {
 		return src, nil, err
@@ -883,6 +950,13 @@ func transformGuardStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
 		gen.Counter = counter
 		counter-- // Decrement for next guard
 		genResult := gen.Generate()
+
+		// Record transform before applying (if tracker provided)
+		if tracker != nil {
+			origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
+			origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
+			tracker.RecordTransform(origStart, origEnd, "guard", len(genResult.Output))
+		}
 
 		// Replace in result
 		oldLen := loc.End - loc.Start

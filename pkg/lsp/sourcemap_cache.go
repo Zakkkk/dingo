@@ -41,11 +41,15 @@ func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
 	// Translate: foo.go -> foo.dingo
 	dingoPath := strings.TrimSuffix(goFilePath, ".go") + ".dingo"
 
+	c.logger.Debugf("[SourceMapCache] Get called: goFilePath=%s -> dingoPath=%s", goFilePath, dingoPath)
+
 	// Calculate .dmap path in project root .dmap/ folder
 	dmapPath, err := calculateDmapPath(dingoPath)
 	if err != nil {
+		c.logger.Debugf("[SourceMapCache] Failed to calculate dmap path: %v", err)
 		return nil, fmt.Errorf("failed to calculate dmap path: %w", err)
 	}
+	c.logger.Debugf("[SourceMapCache] Calculated dmapPath=%s", dmapPath)
 
 	// CRITICAL FIX C3: Simplified locking (correctness over optimization)
 	// Hold write lock during entire operation to avoid memory model issues
@@ -59,13 +63,17 @@ func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
 	}
 
 	// Load binary .dmap file (still holding lock)
+	c.logger.Debugf("[SourceMapCache] Opening dmap file: %s", dmapPath)
 	reader, err := dmap.Open(dmapPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			c.logger.Debugf("[SourceMapCache] File does not exist: %s", dmapPath)
 			return nil, fmt.Errorf("source map not found: %s (transpile .dingo file first: dingo build)", dmapPath)
 		}
+		c.logger.Debugf("[SourceMapCache] Failed to open dmap: %v", err)
 		return nil, fmt.Errorf("failed to read source map %s: %w", dmapPath, err)
 	}
+	c.logger.Debugf("[SourceMapCache] Successfully opened dmap with %d entries", reader.EntryCount())
 
 	// Store with consistent key (dingoPath)
 	c.maps[dingoPath] = reader

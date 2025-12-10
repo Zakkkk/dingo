@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
 // Writer generates binary .dmap files from source mappings
@@ -241,4 +242,130 @@ func writeKindStrings(buf []byte, kinds []string) int {
 	}
 
 	return offset
+}
+
+// WriteWithLineMappings generates .dmap v2 bytes with line-level mappings.
+// This is the v2 format that includes line mapping section for efficient line-level lookups.
+func (w *Writer) WriteWithLineMappings(lineMappings []sourcemap.LineMapping) ([]byte, error) {
+	// Build kind string table from line mappings (deduplicated)
+	kindMap := make(map[string]uint16)
+	kinds := []string{}
+	for _, m := range lineMappings {
+		if _, exists := kindMap[m.Kind]; !exists {
+			kindMap[m.Kind] = uint16(len(kinds))
+			kinds = append(kinds, m.Kind)
+		}
+	}
+
+	// Convert LineMapping to LineMappingEntry
+	lineEntries := make([]LineMappingEntry, len(lineMappings))
+	for i, m := range lineMappings {
+		lineEntries[i] = LineMappingEntry{
+			DingoLine:   uint32(m.DingoLine),
+			GoLineStart: uint32(m.GoLineStart),
+			GoLineEnd:   uint32(m.GoLineEnd),
+			KindIdx:     kindMap[m.Kind],
+			Reserved:    0,
+		}
+	}
+
+	// Build line offsets for Dingo and Go sources
+	dingoLines := buildLineOffsets(w.dingoSrc)
+	goLines := buildLineOffsets(w.goSrc)
+
+	// Calculate section offsets for v2 format
+	// v2 has NO token-level entries (Go/Dingo indexes), only line mappings
+	lineIdxOff := uint32(HeaderSize)
+	lineIdxSize := 8 + uint32(len(dingoLines))*4 + uint32(len(goLines))*4
+	lineMappingOff := lineIdxOff + lineIdxSize
+	lineMappingSize := uint32(len(lineEntries)) * LineMappingEntrySize
+	kindStrOff := lineMappingOff + lineMappingSize
+
+	// Build v2 header
+	header := Header{
+		Magic:          Magic,
+		Version:        Version,
+		Flags:          0,
+		EntryCount:     0, // v2 has no token-level entries
+		DingoLen:       uint32(len(w.dingoSrc)),
+		GoLen:          uint32(len(w.goSrc)),
+		GoIdxOff:       0, // No Go index in v2
+		DingoIdxOff:    0, // No Dingo index in v2
+		LineIdxOff:     lineIdxOff,
+		KindStrOff:     kindStrOff,
+		LineMappingOff: lineMappingOff,
+		LineMappingCnt: uint32(len(lineEntries)),
+	}
+
+	// Estimate total size
+	kindStrSize := estimateKindStrSize(kinds)
+	totalSize := int(kindStrOff) + kindStrSize
+
+	// Allocate output buffer
+	buf := make([]byte, totalSize)
+
+	// Write header
+	writeHeaderV2(buf, header)
+
+	// Write line index section
+	offset := int(lineIdxOff)
+	binary.LittleEndian.PutUint32(buf[offset:], uint32(len(dingoLines)))
+	offset += 4
+	binary.LittleEndian.PutUint32(buf[offset:], uint32(len(goLines)))
+	offset += 4
+	for _, lineOff := range dingoLines {
+		binary.LittleEndian.PutUint32(buf[offset:], lineOff)
+		offset += 4
+	}
+	for _, lineOff := range goLines {
+		binary.LittleEndian.PutUint32(buf[offset:], lineOff)
+		offset += 4
+	}
+
+	// Verify we're at the expected line mapping offset
+	if offset != int(lineMappingOff) {
+		return nil, fmt.Errorf("internal error: writer offset mismatch at line index (expected %d, got %d)", lineMappingOff, offset)
+	}
+
+	// Write line mapping entries
+	for _, entry := range lineEntries {
+		writeLineMappingEntry(buf[offset:], entry)
+		offset += LineMappingEntrySize
+	}
+
+	// Verify we're at the expected kind strings offset
+	if offset != int(kindStrOff) {
+		return nil, fmt.Errorf("internal error: writer offset mismatch at line mapping (expected %d, got %d)", kindStrOff, offset)
+	}
+
+	// Write kind strings
+	finalOffset := writeKindStrings(buf[offset:], kinds)
+
+	// Return exact buffer
+	return buf[:offset+finalOffset], nil
+}
+
+// writeHeaderV2 writes the v2 Header with line mapping fields to the buffer
+func writeHeaderV2(buf []byte, h Header) {
+	copy(buf[0:4], h.Magic[:])
+	binary.LittleEndian.PutUint16(buf[4:6], h.Version)
+	binary.LittleEndian.PutUint16(buf[6:8], h.Flags)
+	binary.LittleEndian.PutUint32(buf[8:12], h.EntryCount)
+	binary.LittleEndian.PutUint32(buf[12:16], h.DingoLen)
+	binary.LittleEndian.PutUint32(buf[16:20], h.GoLen)
+	binary.LittleEndian.PutUint32(buf[20:24], h.GoIdxOff)
+	binary.LittleEndian.PutUint32(buf[24:28], h.DingoIdxOff)
+	binary.LittleEndian.PutUint32(buf[28:32], h.LineIdxOff)
+	binary.LittleEndian.PutUint32(buf[32:36], h.KindStrOff)
+	binary.LittleEndian.PutUint32(buf[36:40], h.LineMappingOff)
+	binary.LittleEndian.PutUint32(buf[40:44], h.LineMappingCnt)
+}
+
+// writeLineMappingEntry writes a LineMappingEntry to the buffer
+func writeLineMappingEntry(buf []byte, e LineMappingEntry) {
+	binary.LittleEndian.PutUint32(buf[0:4], e.DingoLine)
+	binary.LittleEndian.PutUint32(buf[4:8], e.GoLineStart)
+	binary.LittleEndian.PutUint32(buf[8:12], e.GoLineEnd)
+	binary.LittleEndian.PutUint16(buf[12:14], e.KindIdx)
+	binary.LittleEndian.PutUint16(buf[14:16], e.Reserved)
 }

@@ -74,70 +74,26 @@ func (t *Translator) TranslatePosition(
 	var newURI protocol.DocumentURI
 
 	if dir == DingoToGo {
-		// Convert Dingo line:col → byte offset
-		dingoByteOffset := reader.DingoLineToByteOffset(line)
-		if dingoByteOffset < 0 {
-			// Line out of range - return identity mapping
-			log.Printf("[LSP Translator] Dingo line %d out of range, using identity mapping", line)
-			newLine, newCol = line, col
-		} else {
-			// Calculate line shift from transforms that occur BEFORE this position
-			// Each transform may add or remove lines, affecting subsequent line numbers
-			lineShift := reader.CalculateLineShift(dingoByteOffset)
+		// V2 line-based mapping: Calculate line shift and apply
+		lineShift := reader.CalculateLineShift(line)
 
-			// Add column offset (col is 1-based, so subtract 1)
-			fullDingoOffset := dingoByteOffset + (col - 1)
+		// Add line shift to get Go line number (column stays the same)
+		newLine = line + lineShift
+		newCol = col
 
-			// Look up mapping: Dingo byte offset → Go byte range
-			_, _, kind := reader.FindByDingoPos(fullDingoOffset)
-
-			// Apply line shift to get the Go line number
-			newLine = line + lineShift
-			newCol = col
-
-			if kind != "" {
-				log.Printf("[LSP Translator] Position in mapped region (kind=%s), lineShift=%d", kind, lineShift)
-			} else {
-				log.Printf("[LSP Translator] No mapping for Dingo position, lineShift=%d", lineShift)
-			}
-		}
-
+		log.Printf("[LSP Translator] DingoToGo: dingoLine=%d, lineShift=%d, goLine=%d", line, lineShift, newLine)
 		log.Printf("[LSP Translator] AFTER DingoToGo: newLine=%d, newCol=%d", newLine, newCol)
 		newURI = lspuri.File(goPath)
 	} else {
-		// Go → Dingo translation
-		// Convert Go line:col → byte offset
-		goByteOffset := reader.GoLineToByteOffset(line)
-		if goByteOffset < 0 {
-			// Line out of range - return identity mapping
-			log.Printf("[LSP Translator] Go line %d out of range, using identity mapping", line)
-			newLine, newCol = line, col
+		// Go → Dingo translation using V2 line mappings
+		var kind string
+		newLine, kind = reader.GoLineToDingoLine(line)
+		newCol = col // Column stays the same (identity mapping within lines)
+
+		if kind != "" {
+			log.Printf("[LSP Translator] GoToDingo: goLine=%d -> dingoLine=%d (kind=%s)", line, newLine, kind)
 		} else {
-			// Add column offset (col is 1-based, so subtract 1)
-			goByteOffset += (col - 1)
-
-			// Look up mapping: Go byte offset → Dingo byte range
-			dingoStart, dingoEnd, kind := reader.FindByGoPos(goByteOffset)
-
-			// If no mapping found (identity), dingoStart == goByteOffset
-			if kind == "" {
-				// Identity mapping - translate coordinates directly
-				log.Printf("[LSP Translator] No mapping for Go position, using identity")
-				newLine, newCol = line, col
-			} else {
-				// Proportional mapping within the range
-				log.Printf("[LSP Translator] Mapped Go byte %d to Dingo byte range [%d, %d), kind=%s",
-					goByteOffset, dingoStart, dingoEnd, kind)
-
-				// Convert Dingo byte offset → line:column
-				newLine = reader.DingoByteToLine(dingoStart)
-				lineStartOffset := reader.DingoLineToByteOffset(newLine)
-				if lineStartOffset >= 0 {
-					newCol = dingoStart - lineStartOffset + 1 // +1 for 1-based
-				} else {
-					newCol = 1
-				}
-			}
+			log.Printf("[LSP Translator] GoToDingo: goLine=%d -> dingoLine=%d (identity)", line, newLine)
 		}
 
 		dingoPath := goToDingoPath(goPath)

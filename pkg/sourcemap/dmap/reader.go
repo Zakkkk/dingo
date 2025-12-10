@@ -27,6 +27,9 @@ type Reader struct {
 
 	// Decoded kind strings
 	kinds []string // Kind strings indexed by KindIdx
+
+	// Line-level mappings (v2 format)
+	lineMappings []LineMappingEntry // Line mappings for v2 format
 }
 
 // Open reads and parses a .dmap file from disk.
@@ -60,6 +63,11 @@ func OpenBytes(data []byte) (*Reader, error) {
 		return nil, err
 	}
 
+	// Parse line mappings if v2 format
+	if err := r.parseLineMappings(); err != nil {
+		return nil, err
+	}
+
 	return r, nil
 }
 
@@ -73,10 +81,11 @@ func (r *Reader) Close() error {
 	r.dingoLines = nil
 	r.goLines = nil
 	r.kinds = nil
+	r.lineMappings = nil
 	return nil
 }
 
-// parseHeader reads and validates the 36-byte file header.
+// parseHeader reads and validates the file header (36 bytes for v1, 44 bytes for v2).
 func (r *Reader) parseHeader() error {
 	if len(r.data) < HeaderSize {
 		return ErrCorruptedFile
@@ -92,7 +101,7 @@ func (r *Reader) parseHeader() error {
 
 	// Read version
 	r.hdr.Version = binary.LittleEndian.Uint16(data[4:6])
-	if r.hdr.Version != Version {
+	if r.hdr.Version > Version {
 		return ErrUnsupportedVer
 	}
 
@@ -106,11 +115,24 @@ func (r *Reader) parseHeader() error {
 	r.hdr.LineIdxOff = binary.LittleEndian.Uint32(data[28:32])
 	r.hdr.KindStrOff = binary.LittleEndian.Uint32(data[32:36])
 
+	// Read v2-specific fields if version >= 2
+	if r.hdr.Version >= 2 {
+		r.hdr.LineMappingOff = binary.LittleEndian.Uint32(data[36:40])
+		r.hdr.LineMappingCnt = binary.LittleEndian.Uint32(data[40:44])
+	}
+
 	return nil
 }
 
 // parseIndexes reads both the Go index and Dingo index sections.
 func (r *Reader) parseIndexes() error {
+	// v2 format has no token-level indexes (EntryCount = 0)
+	if r.hdr.Version >= 2 && r.hdr.EntryCount == 0 {
+		r.goEntries = []Entry{}
+		r.dingoEntries = []Entry{}
+		return nil
+	}
+
 	entryCount := int(r.hdr.EntryCount)
 
 	// Parse Go index (sorted by GoStart)
@@ -259,6 +281,47 @@ func (r *Reader) parseKindStrings() error {
 	return nil
 }
 
+// parseLineMappings reads the line mapping section (v2 format only).
+// Returns nil if version < 2 or no line mappings exist.
+func (r *Reader) parseLineMappings() error {
+	// Skip if not v2 or no line mappings
+	if r.hdr.Version < 2 || r.hdr.LineMappingCnt == 0 {
+		return nil
+	}
+
+	lineMappingStart := int(r.hdr.LineMappingOff)
+	entryCount := int(r.hdr.LineMappingCnt)
+	lineMappingEnd := lineMappingStart + entryCount*LineMappingEntrySize
+
+	if lineMappingEnd > len(r.data) {
+		return ErrCorruptedFile
+	}
+
+	// Allocate and parse line mapping entries
+	r.lineMappings = make([]LineMappingEntry, entryCount)
+	data := r.data[lineMappingStart:lineMappingEnd]
+
+	for i := range r.lineMappings {
+		offset := i * LineMappingEntrySize
+		if offset+LineMappingEntrySize > len(data) {
+			return ErrCorruptedFile
+		}
+
+		r.lineMappings[i].DingoLine = binary.LittleEndian.Uint32(data[offset : offset+4])
+		r.lineMappings[i].GoLineStart = binary.LittleEndian.Uint32(data[offset+4 : offset+8])
+		r.lineMappings[i].GoLineEnd = binary.LittleEndian.Uint32(data[offset+8 : offset+12])
+		r.lineMappings[i].KindIdx = binary.LittleEndian.Uint16(data[offset+12 : offset+14])
+		r.lineMappings[i].Reserved = binary.LittleEndian.Uint16(data[offset+14 : offset+16])
+	}
+
+	// Sort by GoLineStart for efficient Go→Dingo lookups
+	sort.Slice(r.lineMappings, func(i, j int) bool {
+		return r.lineMappings[i].GoLineStart < r.lineMappings[j].GoLineStart
+	})
+
+	return nil
+}
+
 // FindByGoPos finds the mapping containing the given Go byte offset.
 // Returns (dingoStart, dingoEnd, kind) if found, or identity mapping if not found.
 // Uses binary search on the Go index for O(log N) lookup.
@@ -388,6 +451,42 @@ func (r *Reader) DingoLineToByteOffset(line int) int {
 	return int(r.dingoLines[line-1])
 }
 
+// GoLineToDingoLine converts a Go line to Dingo line using v2 line mappings.
+// Returns the Dingo line and kind string if a mapping is found.
+// Returns (goLine, "") as identity mapping if no mapping found or v1 format.
+// Uses binary search for O(log N) performance instead of O(N) linear search.
+func (r *Reader) GoLineToDingoLine(goLine int) (dingoLine int, kind string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Return identity if no v2 mappings available
+	if len(r.lineMappings) == 0 {
+		return goLine, ""
+	}
+
+	// Binary search for mapping containing goLine
+	// Mappings are sorted by GoLineStart in parseLineMappings
+	idx := sort.Search(len(r.lineMappings), func(i int) bool {
+		return r.lineMappings[i].GoLineEnd >= uint32(goLine)
+	})
+
+	// Check if we found a valid mapping
+	if idx < len(r.lineMappings) {
+		entry := &r.lineMappings[idx]
+		if uint32(goLine) >= entry.GoLineStart && uint32(goLine) <= entry.GoLineEnd {
+			// Found mapping - return Dingo line and kind
+			dingoLine = int(entry.DingoLine)
+			if entry.KindIdx < uint16(len(r.kinds)) {
+				kind = r.kinds[entry.KindIdx]
+			}
+			return dingoLine, kind
+		}
+	}
+
+	// No mapping found - return identity
+	return goLine, ""
+}
+
 // Header returns a copy of the file header.
 func (r *Reader) Header() Header {
 	r.mu.RLock()
@@ -409,19 +508,40 @@ func (r *Reader) KindCount() int {
 	return len(r.kinds)
 }
 
-// CalculateLineShift calculates the cumulative line shift at a given Dingo byte position.
-// This accounts for transforms that add or remove lines (e.g., error propagation adds 4 lines).
+// CalculateLineShift calculates the cumulative line shift at a given Dingo line.
+// For v2 format: Uses line mappings to compute shift efficiently.
+// For v1 format: Falls back to byte-level computation (legacy).
 // Returns the number of lines to ADD to the Dingo line number to get the Go line number.
-func (r *Reader) CalculateLineShift(dingoByteOffset int) int {
+func (r *Reader) CalculateLineShift(dingoLine int) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	totalShift := 0
+	// V2 format: Use line mappings for efficient calculation
+	if len(r.lineMappings) > 0 {
+		totalShift := 0
+		for _, m := range r.lineMappings {
+			// Only count mappings BEFORE the target line
+			if int(m.DingoLine) < dingoLine {
+				// Each mapping spans (GoLineEnd - GoLineStart + 1) Go lines
+				// but represents 1 Dingo line
+				goLines := int(m.GoLineEnd - m.GoLineStart + 1)
+				dingoLines := 1
+				totalShift += (goLines - dingoLines)
+			}
+		}
+		return totalShift
+	}
 
-	// Iterate through all mappings
+	// V1 format fallback: Convert line to byte offset and use legacy algorithm
+	dingoByteOffset := r.DingoLineToByteOffset(dingoLine)
+	if dingoByteOffset < 0 {
+		return 0
+	}
+
+	totalShift := 0
+	// Iterate through all byte-level mappings
 	for _, entry := range r.dingoEntries {
 		// Only consider mappings that END before our position
-		// (transforms that have completed before this point)
 		if int(entry.DingoEnd) <= dingoByteOffset {
 			// Count lines in the Dingo range
 			dingoLineCount := r.countLinesInRangeUint32(r.dingoLines, int(entry.DingoStart), int(entry.DingoEnd))

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
@@ -52,6 +53,9 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 // PureASTTranspileWithMappings transpiles and returns source mappings for LSP integration.
 // This is the full-featured version that returns all transformation metadata.
 func PureASTTranspileWithMappings(source []byte, filename string, inferTypes bool) (TranspileResult, error) {
+	// Create TransformTracker to record all transformations
+	tracker := sourcemap.NewTransformTracker(source)
+
 	// Extract enum registry from ORIGINAL source (before transformation)
 	// This is used by match expressions to prefix variant names correctly
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
@@ -106,7 +110,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	tupleMappings = append(tupleMappings, typeAliasMappings...)
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
-	transformedSource, stmtMappings, err := transformErrorPropStatements(transformedSource)
+	transformedSource, stmtMappings, err := transformErrorPropStatementsWithTracker(transformedSource, source, tracker)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
@@ -120,7 +124,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	// Also pass original source for accurate position mapping (earlier transforms shift positions)
-	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry, source)
+	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry, source, tracker)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
@@ -255,12 +259,19 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("print error: %w", err)
 	}
 
+	// Finalize tracker with final Go output to compute line mappings
+	finalGoCode := buf.Bytes()
+	if err := tracker.Finalize(finalGoCode); err != nil {
+		return TranspileResult{}, fmt.Errorf("tracker finalize error: %w", err)
+	}
+
 	// Return complete transpilation result with mappings
 	return TranspileResult{
-		GoCode:      buf.Bytes(),
-		Mappings:    allMappings,
-		DingoSource: source,
-		GoAST:       goFile,
+		GoCode:       finalGoCode,
+		Mappings:     allMappings,
+		LineMappings: tracker.LineMappings(),
+		DingoSource:  source,
+		GoAST:        goFile,
 		Metadata: &TranspileMetadata{
 			OriginalFile: filename,
 		},
