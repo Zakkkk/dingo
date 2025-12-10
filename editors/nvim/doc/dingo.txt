@@ -1,0 +1,526 @@
+*dingo.txt*  Neovim plugin for the Dingo programming language
+
+==============================================================================
+CONTENTS                                                      *dingo-contents*
+
+    1. Introduction .......................... |dingo-introduction|
+    2. Installation .......................... |dingo-installation|
+    3. Configuration ......................... |dingo-configuration|
+    4. Commands .............................. |dingo-commands|
+    5. LSP ................................... |dingo-lsp|
+    6. Formatting ............................ |dingo-formatting|
+    7. Linting ............................... |dingo-linting|
+    8. Tree-sitter ........................... |dingo-treesitter|
+    9. Troubleshooting ....................... |dingo-troubleshooting|
+   10. About ................................. |dingo-about|
+
+==============================================================================
+1. INTRODUCTION                                           *dingo-introduction*
+
+dingo.nvim is a Neovim plugin for the Dingo programming language - a
+meta-language for Go that adds enhanced type safety and modern syntax while
+maintaining 100% Go ecosystem compatibility.
+
+Features:
+  - LSP integration via dingo-lsp (wraps gopls)
+  - Tree-sitter syntax highlighting
+  - Format on save with dingo fmt
+  - Real-time linting with dingo lint
+  - Build and run commands
+  - Health checks
+
+==============================================================================
+2. INSTALLATION                                           *dingo-installation*
+
+Prerequisites:~
+
+Install the Dingo toolchain before using this plugin:
+>
+    # Install dingo CLI
+    go install github.com/MadAppGang/dingo/cmd/dingo@latest
+
+    # Install dingo-lsp
+    go install github.com/MadAppGang/dingo/cmd/dingo-lsp@latest
+
+    # Install gopls (required by dingo-lsp)
+    go install golang.org/x/tools/gopls@latest
+    # Or via Mason: :MasonInstall gopls
+<
+Ensure $GOPATH/bin is in your $PATH.
+
+Using lazy.nvim (recommended):~                         *dingo-install-lazy*
+>
+    {
+      "MadAppGang/dingo",
+      ft = "dingo",
+      config = function()
+        require("dingo").setup()
+      end,
+    }
+<
+Using lazy.nvim with Mason:~                       *dingo-install-lazy-mason*
+>
+    -- Mason for gopls
+    { "williamboman/mason.nvim", opts = {} },
+    {
+      "williamboman/mason-lspconfig.nvim",
+      opts = { ensure_installed = { "gopls" } },
+    },
+    -- Dingo plugin
+    {
+      "MadAppGang/dingo",
+      ft = "dingo",
+      dependencies = { "williamboman/mason.nvim" },
+      config = function()
+        require("dingo").setup()
+      end,
+    }
+<
+Using lazy.nvim plugin spec:~                        *dingo-install-lazy-spec*
+
+Import the bundled lazy.nvim spec for full configuration:
+>
+    -- In your lazy.nvim setup
+    require("lazy").setup({
+      { import = "dingo.lazy" },  -- Full spec with keybindings
+      -- your other plugins...
+    })
+<
+Using packer.nvim:~
+>
+    use {
+      "MadAppGang/dingo",
+      ft = "dingo",
+      config = function()
+        require("dingo").setup()
+      end,
+    }
+<
+Using vim-plug:~
+>
+    Plug 'MadAppGang/dingo', { 'for': 'dingo' }
+
+    lua << EOF
+    require("dingo").setup()
+    EOF
+<
+Manual installation:~
+>
+    git clone https://github.com/MadAppGang/dingo \
+      ~/.config/nvim/pack/plugins/start/dingo
+<
+
+==============================================================================
+2.1 MASON INTEGRATION                                  *dingo-mason-integration*
+
+Mason can automatically install gopls, which is required by dingo-lsp:
+>
+    require("mason").setup()
+    require("mason-lspconfig").setup({
+      ensure_installed = { "gopls" },
+      automatic_installation = true,
+    })
+<
+Note: dingo and dingo-lsp need manual Go installation. Mason registry
+support is planned for future releases.
+
+Custom tool paths with Mason:~
+>
+    require("dingo").setup({
+      lsp = {
+        cmd = { vim.fn.stdpath("data") .. "/mason/bin/dingo-lsp" },
+      },
+    })
+<
+
+==============================================================================
+3. CONFIGURATION                                         *dingo-configuration*
+
+                                                               *dingo.setup()*
+dingo.setup({opts})
+    Configure the dingo.nvim plugin.
+
+    Parameters: ~
+        {opts}  (table) Configuration options
+
+    Default configuration: ~
+>
+    require("dingo").setup({
+      lsp = {
+        enabled = true,
+        cmd = { "dingo-lsp" },
+        filetypes = { "dingo" },
+        root_patterns = { "go.mod", ".git" },
+        settings = {},
+        log_level = "info",
+      },
+
+      format = {
+        enabled = true,
+        on_save = true,
+        timeout_ms = 2000,
+        cmd = { "dingo", "fmt", "-w" },
+      },
+
+      lint = {
+        enabled = true,
+        on_save = true,
+        on_insert_leave = false,
+        cmd = { "dingo", "lint", "--json" },
+        virtual_text = true,
+        signs = true,
+      },
+
+      build = {
+        cmd = { "dingo", "build", "--no-mascot" },
+        run_cmd = { "dingo", "run" },
+      },
+    })
+<
+
+Configuration options:~
+
+lsp.enabled                                           *dingo-config-lsp-enabled*
+    Type: boolean
+    Default: true
+    Enable LSP client for Dingo files.
+
+lsp.cmd                                                   *dingo-config-lsp-cmd*
+    Type: table
+    Default: { "dingo-lsp" }
+    Command to start the language server.
+
+lsp.log_level                                       *dingo-config-lsp-log-level*
+    Type: string
+    Default: "info"
+    LSP log level: "trace", "debug", "info", "warn", "error"
+    Sets the DINGO_LSP_LOG environment variable.
+
+format.enabled                                     *dingo-config-format-enabled*
+    Type: boolean
+    Default: true
+    Enable formatter integration.
+
+format.on_save                                     *dingo-config-format-on-save*
+    Type: boolean
+    Default: true
+    Format files automatically on save.
+
+format.timeout_ms                               *dingo-config-format-timeout-ms*
+    Type: number
+    Default: 2000
+    Timeout in milliseconds for format operations.
+
+lint.enabled                                         *dingo-config-lint-enabled*
+    Type: boolean
+    Default: true
+    Enable linter integration.
+
+lint.on_save                                         *dingo-config-lint-on-save*
+    Type: boolean
+    Default: true
+    Lint files automatically on save.
+
+build.cmd                                               *dingo-config-build-cmd*
+    Type: table
+    Default: { "dingo", "build", "--no-mascot" }
+    Command for |:DingoBuild|.
+
+build.run_cmd                                       *dingo-config-build-run-cmd*
+    Type: table
+    Default: { "dingo", "run" }
+    Command for |:DingoRun|.
+
+Examples:~
+
+Disable format on save:
+>
+    require("dingo").setup({
+      format = { on_save = false }
+    })
+<
+Custom LSP log level:
+>
+    require("dingo").setup({
+      lsp = { log_level = "debug" }
+    })
+<
+Disable linting:
+>
+    require("dingo").setup({
+      lint = { enabled = false }
+    })
+<
+
+==============================================================================
+4. COMMANDS                                                   *dingo-commands*
+
+:DingoBuild[!]                                                   *:DingoBuild*
+    Build the current Dingo project.
+    With !, build only the current file.
+    Output is shown in a terminal split.
+
+:DingoRun [args]                                                   *:DingoRun*
+    Run the current Dingo file.
+    Optional arguments are passed to the program.
+    Output is shown in a terminal split.
+
+:DingoTranspile                                               *:DingoTranspile*
+    Transpile the current file to Go and open the generated .go file
+    in a vertical split.
+
+:DingoFormat                                                     *:DingoFormat*
+    Format the current buffer using dingo fmt.
+    Automatically runs on save if |dingo-config-format-on-save| is true.
+
+:DingoLint                                                         *:DingoLint*
+    Lint the current buffer using dingo lint.
+    Automatically runs on save if |dingo-config-lint-on-save| is true.
+
+:DingoLintClear                                               *:DingoLintClear*
+    Clear lint diagnostics for the current buffer.
+
+==============================================================================
+5. LSP                                                               *dingo-lsp*
+
+The plugin integrates with dingo-lsp, which wraps gopls and translates
+positions between .dingo and .go files using source maps.
+
+LSP features:~
+  - Go to definition (gd)
+  - Hover documentation (K)
+  - Code completion
+  - Real-time diagnostics
+  - Rename refactoring
+  - Find references
+  - Signature help
+
+The LSP client starts automatically when opening .dingo files, assuming
+|dingo-config-lsp-enabled| is true.
+
+LSP logging:~
+
+View LSP client logs:
+>
+    :lua vim.cmd('e ' .. vim.lsp.get_log_path())
+<
+Enable debug logging:
+>
+    require("dingo").setup({
+      lsp = { log_level = "debug" }
+    })
+<
+Check LSP server logs:
+>
+    :lua vim.cmd('e ~/.cache/dingo-lsp.log')
+<
+(Path depends on DINGO_LSP_LOG environment variable)
+
+Troubleshooting:~
+
+If LSP isn't working:
+  1. Verify dingo-lsp is installed: :!which dingo-lsp
+  2. Verify gopls is installed: :!which gopls
+  3. Check LSP client status: :LspInfo
+  4. Run health check: :checkhealth dingo
+
+==============================================================================
+6. FORMATTING                                               *dingo-formatting*
+
+The plugin integrates with `dingo fmt` for automatic code formatting.
+
+Automatic formatting:~
+
+Files are formatted automatically on save when
+|dingo-config-format-on-save| is true (default).
+
+Manual formatting:~
+
+Use |:DingoFormat| to format the current buffer manually.
+
+Disabling auto-format:~
+>
+    require("dingo").setup({
+      format = { on_save = false }
+    })
+<
+Custom format command:~
+>
+    require("dingo").setup({
+      format = {
+        cmd = { "dingo", "fmt", "-w", "--custom-flag" }
+      }
+    })
+<
+
+==============================================================================
+7. LINTING                                                     *dingo-linting*
+
+The plugin integrates with `dingo lint` for real-time diagnostics.
+
+Automatic linting:~
+
+Files are linted automatically on save when |dingo-config-lint-on-save|
+is true (default).
+
+Manual linting:~
+
+Use |:DingoLint| to lint the current buffer manually.
+Use |:DingoLintClear| to clear diagnostics.
+
+Disabling auto-lint:~
+>
+    require("dingo").setup({
+      lint = { on_save = false }
+    })
+<
+Lint output format:~
+
+The linter expects JSON output from `dingo lint --json`:
+>
+    [
+      {
+        "file": "/path/to/file.dingo",
+        "line": 10,
+        "column": 5,
+        "severity": "error",
+        "message": "undefined variable",
+        "code": "E001"
+      }
+    ]
+<
+
+==============================================================================
+8. TREE-SITTER                                             *dingo-treesitter*
+
+The plugin includes a tree-sitter grammar for Dingo, providing:
+  - Syntax highlighting for Dingo-specific features
+  - Code folding
+  - Indentation
+  - Text objects (future)
+
+Installing the parser:~
+
+If you use nvim-treesitter:
+>
+    require("nvim-treesitter.configs").setup({
+      ensure_installed = { "dingo" },
+    })
+<
+For local development:
+>
+    cd /path/to/dingo/editors/nvim/tree-sitter-dingo
+    npm install
+    npm run generate
+<
+Then in Neovim:
+>
+    :TSInstallFromGrammar dingo
+<
+Inspecting parsed trees:~
+>
+    :InspectTree
+<
+Dingo-specific highlights:~
+
+The grammar recognizes and highlights:
+  - `enum` keyword and variant names
+  - `match` expressions and patterns
+  - `let` bindings
+  - `?` operator (error propagation)
+  - `?.` operator (safe navigation)
+  - `??` operator (null coalescing)
+  - Lambda syntax: |x| expr and x => expr
+
+==============================================================================
+9. TROUBLESHOOTING                                     *dingo-troubleshooting*
+
+Health check:~
+>
+    :checkhealth dingo
+<
+This verifies:
+  - Neovim version (0.8+ required)
+  - dingo executable is in PATH
+  - dingo-lsp executable is in PATH
+  - gopls is installed
+  - Tree-sitter parser is available
+
+LSP not starting:~
+
+1. Check dingo-lsp is installed:
+>
+    :!which dingo-lsp
+    :!dingo-lsp --version
+<
+2. Check gopls is installed (required by dingo-lsp):
+>
+    :!which gopls
+<
+3. View LSP logs:
+>
+    :lua vim.cmd('e ' .. vim.lsp.get_log_path())
+<
+4. Enable debug logging:
+>
+    require("dingo").setup({
+      lsp = { log_level = "debug" }
+    })
+<
+
+Format not working:~
+
+1. Verify dingo fmt works from command line:
+>
+    :!dingo fmt -w %
+<
+2. Check file has a name:
+>
+    :echo expand('%:p')
+<
+3. Run manually:
+>
+    :DingoFormat
+<
+
+Lint not showing diagnostics:~
+
+1. Verify dingo lint works:
+>
+    :!dingo lint --json %
+<
+2. Check lint is enabled in config
+
+3. Run manually:
+>
+    :DingoLint
+<
+
+Tree-sitter highlighting not working:~
+
+1. Check parser is installed:
+>
+    :TSInstallInfo dingo
+<
+2. Verify tree-sitter is loaded:
+>
+    :lua =vim.treesitter.language.require_language("dingo", true)
+<
+3. Inspect parsed tree:
+>
+    :InspectTree
+<
+
+==============================================================================
+10. ABOUT                                                       *dingo-about*
+
+dingo.nvim is developed as part of the Dingo language project.
+
+Repository:         https://github.com/MadAppGang/dingo
+Dingo Documentation: https://github.com/MadAppGang/dingo#readme
+License:            MIT
+
+Bug reports and feature requests:
+  https://github.com/MadAppGang/dingo/issues
+
+vim:tw=78:ts=8:ft=help:norl:

@@ -1,0 +1,52 @@
+{
+  "name": "tree-sitter-dingo",
+  "version": "0.1.0",
+  "description": "Dingo grammar for tree-sitter",
+  "keywords": [
+    "tree-sitter",
+    "dingo",
+    "parser",
+    "syntax"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MadAppGang/dingo"
+  },
+  "license": "MIT",
+  "main": "bindings/node",
+  "types": "bindings/node",
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "bindings/node/*",
+    "queries/*",
+    "src/*"
+  ],
+  "scripts": {
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip",
+    "build": "tree-sitter generate && node-gyp configure && node-gyp build",
+    "test": "tree-sitter test && tree-sitter parse examples/**/*.dingo --quiet --time",
+    "parse": "tree-sitter parse"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.6",
+    "prebuildify": "^6.0.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.dingo",
+      "file-types": [
+        "dingo"
+      ],
+      "injection-regex": "dingo",
+      "highlights": "queries/highlights.scm",
+      "folds": "queries/folds.scm",
+      "indents": "queries/indents.scm"
+    }
+  ]
+}
