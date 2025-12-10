@@ -156,10 +156,10 @@ func main() {
 				}
 			}
 
-			// Should have tmp variable only if there are non-wildcard bindings
+			// Should have tpl variable only if there are non-wildcard bindings
 			if len(tt.wantVars) > 0 {
-				if !strings.Contains(output, "tmp :=") {
-					t.Errorf("Expected 'tmp :=' in destructuring output")
+				if !strings.Contains(output, "tpl :=") {
+					t.Errorf("Expected 'tpl :=' in destructuring output")
 				}
 			}
 		})

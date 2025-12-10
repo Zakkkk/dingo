@@ -320,9 +320,9 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 			}
 
 			// After collecting elements, check if this is actually a lambda parameter list
-			// by looking ahead for => (TypeScript-style lambda)
+			// or a tuple destructuring pattern by looking ahead
 			if hasCommaAtDepth1 && len(elements) >= 2 {
-				// Peek at the next token to see if it's => (lambda indicator)
+				// Peek at the next token to see if it's => (lambda indicator) or := (destructuring)
 				nextTok := tok.NextToken()
 				if nextTok.Kind == tokenizer.ARROW {
 					// This is a lambda parameter list (acc, u) => ..., not a tuple
@@ -331,7 +331,15 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 					prevToken = nextTok
 					continue
 				}
-				// Not a lambda, it's a tuple literal - add to locs
+				if nextTok.Kind == tokenizer.DEFINE {
+					// This is tuple DESTRUCTURING: (x, y) := expr
+					// Don't treat as tuple literal - will be handled by transformTupleDestructuring
+					// which runs separately and generates proper Go code: x, y := expr
+					prevPrevToken = prevToken
+					prevToken = nextTok
+					continue
+				}
+				// Not a lambda or destructuring, it's a tuple literal - add to locs
 				locs = append(locs, tupleLiteralLoc{
 					start:    startPos,
 					end:      rparenEnd,
@@ -386,6 +394,255 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 	}
 
 	return result, mappings, nil
+}
+
+// tupleDestructureLoc holds location and bindings for a tuple destructure pattern
+type tupleDestructureLoc struct {
+	start    int      // start position of '('
+	end      int      // end position after ':='
+	rhsStart int      // start position of RHS expression
+	bindings []string // encoded bindings: "name:path" format (supports nesting)
+}
+
+// tupleFieldName returns the struct field name for a given tuple element index.
+// This follows the naming convention in runtime/tuples package.
+var tupleFieldNames = []string{"First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"}
+
+// parseNestedDestructurePattern parses a potentially nested destructure pattern.
+// Returns encoded bindings ("name:path" format) and whether parsing succeeded.
+// Handles patterns like: (x, y), ((a, b), c), ((_, b), (c, _))
+// Wildcards (_) are skipped - no binding generated for them.
+// pathPrefix is the path accumulated so far (empty at top level).
+func parseNestedDestructurePattern(tok *tokenizer.Tokenizer, pathPrefix string) ([]string, bool) {
+	var bindings []string
+	elemIndex := 0
+
+	for {
+		t := tok.NextToken()
+		if t.Kind == tokenizer.EOF {
+			return nil, false
+		}
+
+		// Build path for current element
+		currentPath := pathPrefix
+		if currentPath != "" {
+			currentPath += "."
+		}
+		currentPath += fmt.Sprintf("%d", elemIndex)
+
+		switch t.Kind {
+		case tokenizer.IDENT:
+			// Simple variable binding
+			bindings = append(bindings, fmt.Sprintf("%s:%s", t.Lit, currentPath))
+			elemIndex++
+
+		case tokenizer.UNDERSCORE:
+			// Wildcard - skip binding but count element
+			elemIndex++
+
+		case tokenizer.LPAREN:
+			// Nested pattern - recurse
+			nestedBindings, ok := parseNestedDestructurePattern(tok, currentPath)
+			if !ok {
+				return nil, false
+			}
+			bindings = append(bindings, nestedBindings...)
+			elemIndex++
+
+		case tokenizer.RPAREN:
+			// End of this pattern level
+			return bindings, true
+
+		case tokenizer.COMMA:
+			// Continue to next element
+			continue
+
+		default:
+			// Unexpected token - not a destructure pattern
+			return nil, false
+		}
+	}
+}
+
+// transformTupleDestructuring transforms tuple destructuring patterns to markers.
+// This handles both flat and nested syntax: (x, y) := expr, ((a, b), c) := expr
+//
+// Input:  (x, y) := p
+// Output: _ = __tupleDest2__("x:0", "y:1", p)
+//
+// Input:  ((a, b), c) := bbox
+// Output: _ = __tupleDest3__("a:0.0", "b:0.1", "c:1", bbox)
+//
+// The marker is then resolved in Pass 2 (TupleTypeResolver) which uses go/types
+// to determine whether the RHS is:
+// - A tuple struct (e.g., Point2D = tuples.Tuple2[...]) → tmp := p; x := tmp.First; y := tmp.Second
+// - A Go multiple return call (e.g., getPoint()) → x, y := getPoint()
+//
+// This transform MUST run before transformTupleLiterals and before the Go parser.
+func transformTupleDestructuring(src []byte) ([]byte, []ast.SourceMapping, error) {
+	tok := tokenizer.New(src)
+	result := src
+	var mappings []ast.SourceMapping
+	var locs []tupleDestructureLoc
+
+	for {
+		t := tok.NextToken()
+		if t.Kind == tokenizer.EOF {
+			break
+		}
+
+		// Look for LPAREN that could start a destructure pattern
+		if t.Kind == tokenizer.LPAREN {
+			startPos := int(t.Pos) - 1 // 1-based to 0-based
+
+			// Save position so we can restore if this isn't a destructure pattern
+			savedPos := tok.SavePos()
+
+			// Try to parse a potentially nested destructure pattern
+			// Uses recursive parser to handle: (x, y), ((a, b), c), (((a, b), c), d), etc.
+			bindings, ok := parseNestedDestructurePattern(tok, "")
+			if !ok {
+				tok.RestorePos(savedPos)
+				continue
+			}
+
+			// Check for := after the pattern
+			nextTok := tok.NextToken()
+			if nextTok.Kind != tokenizer.DEFINE {
+				tok.RestorePos(savedPos)
+				continue
+			}
+
+			// This is a tuple destructure!
+			// The RHS starts right after :=
+			rhsStart := int(nextTok.End) - 1
+
+			// Now find the end of the RHS expression
+			rhsEnd := findExpressionEnd(src, rhsStart)
+
+			locs = append(locs, tupleDestructureLoc{
+				start:    startPos,
+				end:      rhsEnd,
+				rhsStart: rhsStart,
+				bindings: bindings,
+			})
+			// Continue from here, don't restore
+		}
+	}
+
+	// Transform from end to beginning (reverse order to preserve positions)
+	for i := len(locs) - 1; i >= 0; i-- {
+		loc := locs[i]
+
+		// Extract the RHS expression from source
+		rhsSrc := string(result[loc.rhsStart:loc.end])
+		// Trim leading/trailing whitespace from RHS
+		rhsSrc = trimExprWhitespace(rhsSrc)
+
+		// Generate replacement code
+		// Special case: all wildcards (zero bindings)
+		// For patterns like (_, _) := pair, generate "_ = pair" to evaluate RHS for side effects
+		var replacement []byte
+		if len(loc.bindings) == 0 {
+			replacement = []byte("_ = " + rhsSrc)
+		} else {
+			// Generate marker: _ = __tupleDest{N}__("var1:0", "var2:1.0", expr)
+			// The marker format is: _ = __tupleDest{N}__("name:path", ..., expr)
+			// where path is dot-separated indices for nested access.
+			//
+			// Pass 2 (TupleTypeResolver) will use go/types to determine whether the
+			// RHS expression is a tuple struct or a Go multiple return, and generate
+			// the appropriate code:
+			// - Tuple struct: tpl := expr; var1 := tpl.First; var2 := tpl.Second.First
+			// - Go multi-return: var1, var2 := expr (only for flat patterns)
+			var buf bytes.Buffer
+			buf.WriteString(fmt.Sprintf("_ = __tupleDest%d__(", len(loc.bindings)))
+			for j, binding := range loc.bindings {
+				if j > 0 {
+					buf.WriteString(", ")
+				}
+				// Binding is already in "name:path" format
+				buf.WriteString(fmt.Sprintf("\"%s\"", binding))
+			}
+			buf.WriteString(", ")
+			buf.WriteString(rhsSrc)
+			buf.WriteString(")")
+			replacement = buf.Bytes()
+		}
+
+		// Replace "((a, b), c) := expr" with "_ = __tupleDest3__("a:0.0", "b:0.1", "c:1", expr)"
+		newResult := make([]byte, 0, len(result)-(loc.end-loc.start)+len(replacement))
+		newResult = append(newResult, result[:loc.start]...)
+		newResult = append(newResult, replacement...)
+		newResult = append(newResult, result[loc.end:]...)
+		result = newResult
+
+		mappings = append(mappings, ast.SourceMapping{
+			DingoStart: loc.start,
+			DingoEnd:   loc.end,
+			GoStart:    loc.start,
+			GoEnd:      loc.start + len(replacement),
+			Kind:       "tuple_destructure",
+		})
+	}
+
+	return result, mappings, nil
+}
+
+// findExpressionEnd finds the end position of an expression starting at startPos.
+// It handles balanced parentheses, brackets, and braces, and stops at newline or EOF.
+func findExpressionEnd(src []byte, startPos int) int {
+	depth := 0
+	pos := startPos
+
+	// Skip leading whitespace
+	for pos < len(src) && (src[pos] == ' ' || src[pos] == '\t') {
+		pos++
+	}
+
+	for pos < len(src) {
+		ch := src[pos]
+
+		switch ch {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			if depth > 0 {
+				depth--
+			} else {
+				// Unmatched closing delimiter - stop before it
+				return pos
+			}
+		case '\n':
+			// End of line - if we're not inside balanced delimiters, we're done
+			if depth == 0 {
+				return pos
+			}
+		case '/':
+			// Check for comment start
+			if pos+1 < len(src) && (src[pos+1] == '/' || src[pos+1] == '*') {
+				if depth == 0 {
+					return pos
+				}
+			}
+		}
+		pos++
+	}
+
+	return pos
+}
+
+// trimExprWhitespace removes leading and trailing whitespace from an expression string
+func trimExprWhitespace(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
 }
 
 // transformTuplePass1 transforms all tuple syntax using parser-produced AST nodes.

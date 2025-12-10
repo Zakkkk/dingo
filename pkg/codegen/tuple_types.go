@@ -36,7 +36,7 @@ type TupleTypeResolver struct {
 	info        *types.Info
 	fset        *token.FileSet
 	typeAliases map[string]string // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
-	tmpCounter  int               // Counter for unique tmp variable names per scope
+	tplCounter  int               // Counter for unique tpl variable names per scope
 	needsImport bool              // Whether runtime/tuples import is needed
 }
 
@@ -452,27 +452,27 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 		return r.generateGoMultiReturnReplacement(start, end, bindings, valueSrc)
 	}
 
-	// Generate Dingo tuple destructuring: tmp := expr; x := tmp.First; y := tmp.Second
+	// Generate Dingo tuple destructuring: tpl := expr; x := tpl.First; y := tpl.Second
 	var buf strings.Builder
 
-	// Generate unique tmp variable name
-	r.tmpCounter++
-	tmpName := "tmp"
-	if r.tmpCounter > 1 {
-		tmpName = fmt.Sprintf("tmp%d", r.tmpCounter-1)
+	// Generate unique tpl variable name
+	r.tplCounter++
+	tplName := "tpl"
+	if r.tplCounter > 1 {
+		tplName = fmt.Sprintf("tpl%d", r.tplCounter-1)
 	}
 
-	// Statement 1: tmp := expr
-	buf.WriteString(tmpName)
+	// Statement 1: tpl := expr
+	buf.WriteString(tplName)
 	buf.WriteString(" := ")
 	buf.WriteString(valueSrc)
 	buf.WriteByte('\n')
 
-	// Statements 2+: varName := tmp.First.Second...
+	// Statements 2+: varName := tpl.First.Second...
 	for _, b := range bindings {
 		buf.WriteString(b.name)
 		buf.WriteString(" := ")
-		buf.WriteString(tmpName)
+		buf.WriteString(tplName)
 		for _, idx := range b.path {
 			buf.WriteByte('.')
 			buf.WriteString(TupleFieldNames[idx])
@@ -740,25 +740,25 @@ func (r *TupleTypeResolver) expandDestructureMarker(call *goast.CallExpr) []goas
 
 	var stmts []goast.Stmt
 
-	// Generate unique tmp variable name following CLAUDE.md naming convention:
-	// First tmp is "tmp", subsequent are "tmp1", "tmp2", etc.
-	r.tmpCounter++
-	tmpName := "tmp"
-	if r.tmpCounter > 1 {
-		tmpName = fmt.Sprintf("tmp%d", r.tmpCounter-1)
+	// Generate unique tpl variable name following CLAUDE.md naming convention:
+	// First tpl is "tpl", subsequent are "tpl1", "tpl2", etc.
+	r.tplCounter++
+	tplName := "tpl"
+	if r.tplCounter > 1 {
+		tplName = fmt.Sprintf("tpl%d", r.tplCounter-1)
 	}
 
-	// Statement 1: tmp := expr (or tmp1 := expr, etc.)
-	tmpAssign := &goast.AssignStmt{
-		Lhs: []goast.Expr{goast.NewIdent(tmpName)},
+	// Statement 1: tpl := expr (or tpl1 := expr, etc.)
+	tplAssign := &goast.AssignStmt{
+		Lhs: []goast.Expr{goast.NewIdent(tplName)},
 		Tok: token.DEFINE,
 		Rhs: []goast.Expr{valueExpr},
 	}
-	stmts = append(stmts, tmpAssign)
+	stmts = append(stmts, tplAssign)
 
-	// Statements 2+: varName := tmp._0._1... (using the unique tmp name)
+	// Statements 2+: varName := tpl._0._1... (using the unique tpl name)
 	for _, b := range bindings {
-		fieldAccess := buildFieldAccess(tmpName, b.path)
+		fieldAccess := buildFieldAccess(tplName, b.path)
 		varAssign := &goast.AssignStmt{
 			Lhs: []goast.Expr{goast.NewIdent(b.name)},
 			Tok: token.DEFINE,
