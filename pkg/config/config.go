@@ -113,7 +113,6 @@ type FeatureMatrix struct {
 
 	// Token-level features (transform after tokenization)
 	Generics        *bool `toml:"generics"`         // <T> syntax
-	LetBinding      *bool `toml:"let_binding"`      // let x = expr
 }
 
 // ToEnabledFeatures converts the FeatureMatrix to a map[string]bool
@@ -141,7 +140,6 @@ func (fm *FeatureMatrix) ToEnabledFeatures() map[string]bool {
 
 	// Token-level features
 	addIfSet("generics", fm.Generics)
-	addIfSet("let_binding", fm.LetBinding)
 
 	return result
 }
@@ -170,8 +168,6 @@ func (fm *FeatureMatrix) IsFeatureEnabled(name string) bool {
 		return fm.Lambdas == nil || *fm.Lambdas
 	case "generics":
 		return fm.Generics == nil || *fm.Generics
-	case "let_binding":
-		return fm.LetBinding == nil || *fm.LetBinding
 	default:
 		return true // Unknown features enabled by default
 	}

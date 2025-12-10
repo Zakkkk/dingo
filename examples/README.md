@@ -44,8 +44,8 @@ func GetUser(id int) (*User, error) {
 ### After (Dingo)
 ```dingo
 func GetUser(id: int) (*User, error) {
-    let data = db.Query(id)?
-    let user = parseUser(data)?
+    data := db.Query(id)?
+    user := parseUser(data)?
     return user, nil
 }
 ```

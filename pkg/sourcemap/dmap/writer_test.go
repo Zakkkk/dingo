@@ -13,8 +13,8 @@ func TestWriterBasic(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
@@ -90,9 +90,9 @@ func TestWriterKindDeduplication(t *testing.T) {
 
 	// All mappings have the same kind
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
-		{DingoStart: 22, DingoEnd: 32, GoStart: 16, GoEnd: 23, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
+		{DingoStart: 22, DingoEnd: 32, GoStart: 16, GoEnd: 23, Kind: "identifier"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)

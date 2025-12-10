@@ -26,7 +26,7 @@ func TestIntegrationPhase2EndToEnd(t *testing.T) {
 import "fmt"
 
 func processNumber(s string) (int, error) {
-	let num = parseInt(s)?
+	num := parseInt(s)?
 	return num * 2, nil
 }
 

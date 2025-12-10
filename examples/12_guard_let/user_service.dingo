@@ -34,11 +34,11 @@ type Settings struct {
 // Simulates DB lookup - returns Result
 func fetchUser(id int) Result[User, string] {
 	if id == 1 {
-		let u = User{ID: 1, Name: "Alice", Email: "alice@example.com"}
+		u := User{ID: 1, Name: "Alice", Email: "alice@example.com"}
 		return Ok[User, string](u)
 	}
 	if id == 2 {
-		let u = User{ID: 2, Name: "Bob", Email: ""}
+		u := User{ID: 2, Name: "Bob", Email: ""}
 		return Ok[User, string](u)
 	}
 	return Err[User]("user not found")
@@ -47,7 +47,7 @@ func fetchUser(id int) Result[User, string] {
 // Simulates settings lookup - returns Result
 func loadSettings(userId int) Result[Settings, string] {
 	if userId == 1 {
-		let s = Settings{Theme: "dark", Language: "en"}
+		s := Settings{Theme: "dark", Language: "en"}
 		return Ok[Settings, string](s)
 	}
 	return Err[Settings]("settings not found")
@@ -91,19 +91,19 @@ func fetchUserWithPermissions(id int) Result[User, string] {
 
 // WITHOUT guard let (nested pyramid of doom):
 func getUserThemeNested(userId int) Result[string, string] {
-	let userResult = fetchUser(userId)
+	userResult := fetchUser(userId)
 	if userResult.IsErr() {
 		return Err[string](userResult.UnwrapErr())
 	}
-	let user = userResult.Unwrap()
+	user := userResult.Unwrap()
 
-	let settingsResult = loadSettings(user.ID)
+	settingsResult := loadSettings(user.ID)
 	if settingsResult.IsErr() {
 		return Err[string](settingsResult.UnwrapErr())
 	}
-	let settings = settingsResult.Unwrap()
+	settings := settingsResult.Unwrap()
 
-	let themeOpt = getPreference(settings, "theme")
+	themeOpt := getPreference(settings, "theme")
 	if themeOpt.IsNone() {
 		return Ok[string, string]("default")
 	}
@@ -147,7 +147,7 @@ func processUserProfile(userId int) Result[string, string] {
 		return Err[string](err)
 	}
 
-	let profile = fmt.Sprintf("%s (%s) - theme: %s", user.Name, user.Email, settings.Theme)
+	profile := fmt.Sprintf("%s (%s) - theme: %s", user.Name, user.Email, settings.Theme)
 	return Ok[string, string](profile)
 }
 
@@ -156,45 +156,45 @@ func main() {
 
 	// Test with valid user
 	fmt.Println("User 1 (Alice with settings):")
-	let r1 = getUserTheme(1)
+	r1 := getUserTheme(1)
 	if r1.IsOk() {
 		fmt.Printf("  Theme: %s\n", r1.Unwrap())
 	}
 
 	// Test with user missing settings
 	fmt.Println("\nUser 2 (Bob, no settings):")
-	let r2 = getUserTheme(2)
+	r2 := getUserTheme(2)
 	if r2.IsErr() {
 		fmt.Printf("  Error: %s\n", r2.UnwrapErr())
 	}
 
 	// Test with non-existent user
 	fmt.Println("\nUser 99 (not found):")
-	let r3 = getUserTheme(99)
+	r3 := getUserTheme(99)
 	if r3.IsErr() {
 		fmt.Printf("  Error: %s\n", r3.UnwrapErr())
 	}
 
 	// Test profile processing
 	fmt.Println("\n--- Profile Processing ---")
-	let p1 = processUserProfile(1)
+	p1 := processUserProfile(1)
 	if p1.IsOk() {
 		fmt.Printf("Profile: %s\n", p1.Unwrap())
 	}
 
-	let p2 = processUserProfile(2)
+	p2 := processUserProfile(2)
 	if p2.IsErr() {
 		fmt.Printf("Error: %s\n", p2.UnwrapErr())
 	}
 
 	// Test fetchUserWithPermissions (guard let in producer)
 	fmt.Println("\n--- Guard Let in Producer ---")
-	let u1 = fetchUserWithPermissions(1)
+	u1 := fetchUserWithPermissions(1)
 	if u1.IsOk() {
 		fmt.Printf("User with permissions: %s\n", u1.Unwrap().Name)
 	}
 
-	let u2 = fetchUserWithPermissions(2)
+	u2 := fetchUserWithPermissions(2)
 	if u2.IsErr() {
 		fmt.Printf("Error: %s\n", u2.UnwrapErr())
 	}

@@ -21,5 +21,4 @@ func init() {
 
 	// Token-level plugins
 	feature.Register(&GenericsPlugin{})        // 110
-	feature.Register(&LetBindingPlugin{})      // 120
 }

@@ -105,7 +105,8 @@ func TestLexerOperators(t *testing.T) {
 	}
 }
 
-func TestLexerLetDeclarations(t *testing.T) {
+func TestLexerReservedKeywords(t *testing.T) {
+	// Test that 'let' is tokenized as a reserved keyword (for future use)
 	input := `let x: int = 5
 let a, b = getValues()`
 

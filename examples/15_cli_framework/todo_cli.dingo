@@ -75,8 +75,8 @@ func parseArgs(args []string) (Command, error) {
 		return Command.Help(), nil
 	}
 
-	let cmd = args[0]
-	let rest = args[1:]
+	cmd := args[0]
+	rest := args[1:]
 
 	// Route to subcommand parsers
 	if cmd == "add" {
@@ -156,7 +156,7 @@ func dispatch(cmd Command) error {
 // =============================================================================
 
 func handleAdd(description string) error {
-	let task = Task{
+	task := Task{
 		ID:          nextID,
 		Description: description,
 		Completed:   false,
@@ -177,7 +177,7 @@ func handleList() error {
 
 	fmt.Printf("Tasks (%d total):\n", len(tasks))
 	for _, task := range tasks {
-		let status = " "
+		status := " "
 		if task.Completed {
 			status = "x"
 		}
@@ -188,7 +188,7 @@ func handleList() error {
 }
 
 func handleDone(id int) error {
-	let idx = findTaskIndex(id)
+	idx := findTaskIndex(id)
 	if idx < 0 {
 		return fmt.Errorf("task #%d not found", id)
 	}
@@ -203,12 +203,12 @@ func handleDone(id int) error {
 }
 
 func handleRemove(id int) error {
-	let idx = findTaskIndex(id)
+	idx := findTaskIndex(id)
 	if idx < 0 {
 		return fmt.Errorf("task #%d not found", id)
 	}
 
-	let desc = tasks[idx].Description
+	desc := tasks[idx].Description
 	tasks = removeAt(tasks, idx)
 	fmt.Printf("Removed task #%d: %s\n", id, desc)
 	return nil

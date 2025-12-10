@@ -5,7 +5,7 @@ package main
 // Complexity: basic
 
 func filter(arr []int, predicate func(int) bool) []int {
-	let result = []int{}
+	result := []int{}
 	for _, v := range arr {
 		if predicate(v) {
 			result = append(result, v)
@@ -15,11 +15,11 @@ func filter(arr []int, predicate func(int) bool) []int {
 }
 
 func main() {
-	let numbers = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
 	// Filter with lambda
-	let evens = filter(numbers, |x| x%2 == 0)
-	let greaterThanFive = filter(numbers, |x| x > 5)
+	evens := filter(numbers, |x| x%2 == 0)
+	greaterThanFive := filter(numbers, |x| x > 5)
 
 	println("Evens:", evens)
 	println("Greater than 5:", greaterThanFive)

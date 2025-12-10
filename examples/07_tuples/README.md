@@ -64,9 +64,9 @@ type Pair[T] = (T, T)
 
 ### Destructuring
 ```dingo
-let (x, y) = point              // Both values
-let (first, _) = pair           // Ignore second
-let ((minX, minY), (maxX, maxY)) = bbox  // Nested
+(x, y) := point              // Both values
+(first, _) := pair           // Ignore second
+((minX, minY), (maxX, maxY)) := bbox  // Nested
 ```
 
 ### Returning Tuples

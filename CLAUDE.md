@@ -61,19 +61,18 @@ examples/           # Example .dingo files
 
 **Key insight**: Dingo is syntax sugar, NOT a new type system. We use gopls for all type checking.
 
-## Features (11 plugins in pkg/feature/builtin/)
+## Features (10 plugins in pkg/feature/builtin/)
 
 | Feature | Priority | Syntax |
 |---------|----------|--------|
 | enum | 10 | `enum Name { Variant }` |
 | match | 20 | `match expr { Pat => val }` |
 | error_prop | 40 | `expr?` |
-| tuples | 50 | `let (a, b) = func()` |
+| tuples | 50 | `(a, b) := func()` |
 | safe_nav | 60 | `x?.y` |
 | null_coalesce | 70 | `a ?? b` |
 | lambdas | 80 | `\|x\| expr` or `x => expr` |
 | generics | 110 | Uses Go's native `[T]` syntax directly |
-| let_binding | 120 | `let x =` → `x :=` |
 
 ## Option/Result API (dgo package)
 

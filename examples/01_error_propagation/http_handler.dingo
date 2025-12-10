@@ -52,19 +52,19 @@ type User struct {
 func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 	// Pattern 1: Basic ? - propagate error as-is
 	// Use when the error is already descriptive enough
-	let userID = extractUserID(r)?
+	userID := extractUserID(r)?
 
 	// Pattern 2: String context ? "message" - add context with fmt.Errorf
 	// Use for simple context wrapping without custom error types
-	let user = loadUserFromDB(userID) ? "database lookup failed"
+	user := loadUserFromDB(userID) ? "database lookup failed"
 
 	// Pattern 3: Rust-style lambda ? |err| transform(err)
 	// Use for custom error types or complex transformations
-	let _ = checkPermissions(r, user) ? |err| NewAppError(403, "permission denied", err)
+	_ := checkPermissions(r, user) ? |err| NewAppError(403, "permission denied", err)
 
 	// Pattern 4: TypeScript-style lambda ? (e) => transform(e)
 	// Same as Pattern 3, just different syntax preference
-	let response = json.Marshal(user) ? (e) => NewAppError(500, "serialization error", e)
+	response := json.Marshal(user) ? (e) => NewAppError(500, "serialization error", e)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(response)
@@ -74,16 +74,16 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 // AdvancedHandler demonstrates more complex error handling scenarios
 func AdvancedHandler(userID string, orderID string) (Order, error) {
 	// Pattern 1: Basic - error is already descriptive
-	let user = getUser(userID)?
+	user := getUser(userID)?
 
 	// Pattern 2: String context - simple message wrapping
-	let order = getOrder(orderID) ? "failed to fetch order"
+	order := getOrder(orderID) ? "failed to fetch order"
 
 	// Pattern 3: Rust lambda with captured variables
-	let validated = validateOrder(order, user) ? |e| fmt.Errorf("validation failed for user %s: %w", userID, e)
+	validated := validateOrder(order, user) ? |e| fmt.Errorf("validation failed for user %s: %w", userID, e)
 
 	// Pattern 4: TypeScript lambda (single param, no parens)
-	let processed = processOrder(validated) ? err => fmt.Errorf("processing error: %w", err)
+	processed := processOrder(validated) ? err => fmt.Errorf("processing error: %w", err)
 
 	return processed, nil
 }

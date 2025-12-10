@@ -146,13 +146,13 @@ func GetUserOrderTotal(db *sql.DB, userID int) Result[float64, ServiceError] {
 
 func ProcessUserOrder(db *sql.DB, userID int, orderID int) (string, error) {
 	// Pattern 1: Basic ? - error is descriptive enough
-	let user = GetUserBasic(db, userID)?
+	user := GetUserBasic(db, userID)?
 
 	// Pattern 2: String context - add simple context
-	let order = getOrderByID(db, orderID) ? "order lookup failed"
+	order := getOrderByID(db, orderID) ? "order lookup failed"
 
 	// Pattern 3: Lambda - custom error transformation
-	let validated = validateOrder(order, user)?
+	validated := validateOrder(order, user)?
 		|e| fmt.Errorf("validation failed for user %d: %w", userID, e)
 
 	return fmt.Sprintf("Processed order %d for %s", validated.ID, user.Name), nil

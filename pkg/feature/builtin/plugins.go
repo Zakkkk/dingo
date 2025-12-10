@@ -252,19 +252,3 @@ func (p *GenericsPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, er
 	return src, nil
 }
 
-// LetBindingPlugin transforms `let x =` to `x :=`
-type LetBindingPlugin struct{}
-
-func (p *LetBindingPlugin) Name() string               { return "let_binding" }
-func (p *LetBindingPlugin) Version() string            { return "1.0.0" }
-func (p *LetBindingPlugin) Type() feature.PluginType   { return feature.TokenLevel }
-func (p *LetBindingPlugin) Priority() int              { return 120 }
-func (p *LetBindingPlugin) Dependencies() []string     { return nil }
-func (p *LetBindingPlugin) Conflicts() []string        { return nil }
-func (p *LetBindingPlugin) Detect(src []byte) []feature.SyntaxLocation {
-	return nil // Detection removed: compile errors suffice for disabled features
-}
-func (p *LetBindingPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
-	// Transforms handled by AST pipeline (pkg/ast.TransformSource)
-	return src, nil
-}

@@ -21,7 +21,6 @@ type tokenInfo struct {
 // Currently handles:
 // - Enums: enum Name { Variant } → Go interface pattern
 // - Type annotations: param: Type → param Type
-// - Let declarations: let x = → x :=
 //
 // NOTE: Generic syntax uses Go's native [T] syntax directly. No transformation needed.
 //
@@ -149,55 +148,6 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 			}
 		}
 
-		// Handle 'let' keyword
-		// Skip transformation if preceded by 'guard' (guard let is handled separately)
-		if t.tok == gotoken.IDENT && t.lit == "let" {
-			// Check if previous token is 'guard' - if so, skip let transformation
-			isGuardLet := i > 0 && tokens[i-1].tok == gotoken.IDENT && tokens[i-1].lit == "guard"
-			if !isGuardLet && i+2 < len(tokens) {
-				next := tokens[i+1]
-				afterNext := tokens[i+2]
-				if next.tok == gotoken.IDENT && afterNext.tok == gotoken.ASSIGN {
-					result = append(result, src[lastCopied:offset]...)
-					lastCopied = offset + len("let")
-
-					for lastCopied < len(src) && (src[lastCopied] == ' ' || src[lastCopied] == '\t') {
-						lastCopied++
-					}
-
-					mappings = append(mappings, SourceMapping{
-						DingoStart: offset,
-						DingoEnd:   offset + len("let"),
-						GoStart:    len(result),
-						GoEnd:      len(result),
-						Kind:       "let_keyword",
-					})
-				}
-			}
-		}
-
-		// Handle = after 'let varname' -> change to :=
-		// Skip transformation if it's a guard let (guard let x = ...)
-		if t.tok == gotoken.ASSIGN {
-			if i >= 2 && tokens[i-2].tok == gotoken.IDENT && tokens[i-2].lit == "let" {
-				// Check if this is a guard let (i-3 is 'guard')
-				isGuardLet := i >= 3 && tokens[i-3].tok == gotoken.IDENT && tokens[i-3].lit == "guard"
-				if !isGuardLet {
-					result = append(result, src[lastCopied:offset]...)
-					result = append(result, ':', '=')
-					lastCopied = offset + 1
-
-					mappings = append(mappings, SourceMapping{
-						DingoStart: offset,
-						DingoEnd:   offset + 1,
-						GoStart:    len(result) - 2,
-						GoEnd:      len(result),
-						Kind:       "let_assign",
-					})
-					continue
-				}
-			}
-		}
 	}
 
 	// Copy remaining bytes

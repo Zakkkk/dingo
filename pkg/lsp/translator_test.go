@@ -57,17 +57,17 @@ func TestNewTranslator(t *testing.T) {
 func TestTranslatePositionDingoToGo(t *testing.T) {
 	// Create source files
 	// Dingo:
-	//   Line 1: "let x = 10\n"  (bytes 0-10)
-	//   Line 2: "let y = 20\n"  (bytes 11-21)
+	//   Line 1: "x := 10\n"  (bytes 0-7)
+	//   Line 2: "y := 20\n"  (bytes 8-15)
 	// Go:
 	//   Line 1: "x := 10\n"  (bytes 0-7)
 	//   Line 2: "y := 20\n"  (bytes 8-15)
-	dingoSrc := "let x = 10\nlet y = 20\n"
+	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+		{DingoStart: 8, DingoEnd: 15, GoStart: 8, GoEnd: 15, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -107,12 +107,12 @@ func TestTranslatePositionDingoToGo(t *testing.T) {
 }
 
 func TestTranslatePositionGoToDingo(t *testing.T) {
-	dingoSrc := "let x = 10\nlet y = 20\n"
+	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+		{DingoStart: 8, DingoEnd: 15, GoStart: 8, GoEnd: 15, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -214,11 +214,11 @@ func TestTranslatePositionDingoToGoNoSourceMap(t *testing.T) {
 }
 
 func TestTranslateRange(t *testing.T) {
-	dingoSrc := "let x = 10\nlet y = 20\n"
+	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -259,11 +259,11 @@ func TestTranslateRange(t *testing.T) {
 }
 
 func TestTranslateLocation(t *testing.T) {
-	dingoSrc := "let x = 10\n"
+	dingoSrc := "x := 10\n"
 	goSrc := "x := 10\n"
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -357,12 +357,12 @@ func TestPathConversion(t *testing.T) {
 
 func TestTranslatePositionIdentityMapping(t *testing.T) {
 	// Test that positions outside of mapped ranges use identity mapping
-	dingoSrc := "package main\n\nlet x = 10\n"
+	dingoSrc := "package main\n\nx := 10\n"
 	goSrc := "package main\n\nx := 10\n"
 
-	// Only map the let statement (lines 3)
+	// Only map line 3
 	mappings := []ast.SourceMapping{
-		{DingoStart: 14, DingoEnd: 24, GoStart: 14, GoEnd: 21, Kind: "let_binding"},
+		{DingoStart: 14, DingoEnd: 21, GoStart: 14, GoEnd: 21, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -421,10 +421,10 @@ func TestTranslatorWithRealWorkspace(t *testing.T) {
 		t.Fatalf("Failed to create .dmap dir: %v", err)
 	}
 
-	dingoSrc := "let x = 10\n"
+	dingoSrc := "x := 10\n"
 	goSrc := "x := 10\n"
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
 	}
 
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))

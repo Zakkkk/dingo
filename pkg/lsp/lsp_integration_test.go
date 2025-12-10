@@ -95,26 +95,20 @@ func TestLSPHover(t *testing.T) {
 		{
 			Name:      "safe_navigation",
 			File:      "examples/101_combined/showcase.dingo",
-			Line:      116, // Line 117: let userLang = user.Settings?.Language
+			Line:      116, // Line 117: userLang := user.Settings?.Language
 			Character: 5,   // Position of "userLang" identifier
 		},
 		{
 			Name:      "null_coalesce",
 			File:      "examples/101_combined/showcase.dingo",
-			Line:      119, // Line 120: let displayLang = userLang ?? "default"
+			Line:      119, // Line 120: displayLang := userLang ?? "default"
 			Character: 5,   // Position of "displayLang" identifier
 		},
 		{
 			Name:      "match_expression",
 			File:      "examples/101_combined/showcase.dingo",
-			Line:      127, // Line 128: let statusMsg = match status {
+			Line:      127, // Line 128: statusMsg := match status {
 			Character: 5,   // Position of "statusMsg" identifier
-		},
-		{
-			Name:      "let_binding",
-			File:      "examples/101_combined/showcase.dingo",
-			Line:      138, // Line 139: let result = ...
-			Character: 5,   // Position of "result" identifier
 		},
 	}
 

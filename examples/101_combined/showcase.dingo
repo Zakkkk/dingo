@@ -60,13 +60,13 @@ func loadConfig() (string, error) {
 
 func processConfig() (string, error) {
 	// Pattern 1: Basic ?
-	let cfg = loadConfig()?
+	cfg := loadConfig()?
 
 	// Pattern 2: String context
-	let cfg2 = loadConfig() ? "config load failed"
+	cfg2 := loadConfig() ? "config load failed"
 
 	// Pattern 3: Lambda transform
-	let cfg3 = loadConfig()? |e| fmt.Errorf("wrapped: %w", e)
+	cfg3 := loadConfig()? |e| fmt.Errorf("wrapped: %w", e)
 
 	return fmt.Sprintf("%s|%s|%s", cfg, cfg2, cfg3), nil
 }
@@ -114,18 +114,18 @@ func demo() string {
 	}
 
 	// === 8. SAFE NAVIGATION ===
-	let userLang = user.Settings?.Language
+	userLang := user.Settings?.Language
 
 	// === 10. NULL COALESCE ===
-	let displayLang = userLang ?? "default"
+	displayLang := userLang ?? "default"
 
 	// === 9. TERNARY ===
 	// BUG: Generates assignment without declaration - See BUGS.md Bug 2
-	let greeting = user.ID > 0 ? "Welcome" : "Hello"
+	greeting := user.ID > 0 ? "Welcome" : "Hello"
 
 	// === 2. MATCH ===
-	let status = NewStatusActive("working")
-	let statusMsg = match status {
+	status := NewStatusActive("working")
+	statusMsg := match status {
 		StatusPending => "pending",
 		StatusActive { message } => message,
 		StatusDone { code } => fmt.Sprintf("done:%d", code),
@@ -136,7 +136,7 @@ func demo() string {
 	let (x, y) = getPoint()
 
 	// === 12. LET binding ===
-	let result = fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
+	result := fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
 		greeting, user.Name, displayLang, statusMsg, x, y)
 
 	return result

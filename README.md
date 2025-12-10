@@ -1214,6 +1214,30 @@ You get autocomplete, go-to-definition, diagnostics, hover info — everything g
 
 Your editor thinks it's editing Go. Your terminal thinks it's compiling Go. Only you know you're actually writing Dingo.
 
+### Editor Support
+
+#### Neovim — [dingo.nvim](https://github.com/MadAppGang/dingo.nvim)
+
+Full-featured Neovim plugin with:
+- **LSP Integration** — Full language server support via `dingo-lsp`
+- **Tree-sitter Syntax** — Superior highlighting for Dingo-specific features (enum, match, `?` operator, lambdas)
+- **Format on Save** — Automatic formatting with `dingo fmt`
+- **Lint Integration** — Real-time diagnostics with `dingo lint`
+- **Build Commands** — `:DingoBuild` and `:DingoRun`
+
+```lua
+-- lazy.nvim installation
+{
+  "MadAppGang/dingo.nvim",
+  ft = "dingo",
+  config = function()
+    require("dingo").setup()
+  end,
+}
+```
+
+See the [dingo.nvim README](https://github.com/MadAppGang/dingo.nvim) for full installation instructions including Mason integration.
+
 ---
 
 ## What the generated code looks like

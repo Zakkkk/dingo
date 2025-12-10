@@ -62,7 +62,6 @@ lambdas = true           # |x| and => syntax
 
 # Token-level features
 generics = true          # <T> syntax
-let_binding = true       # let keyword
 ```
 
 ### Plugin Priority Order
@@ -81,7 +80,6 @@ Features execute in a fixed priority order to ensure correct transformation:
 | 70 | `null_coalesce` | Character | `safe_nav` |
 | 80 | `lambdas` | Character | - |
 | 110 | `generics` | Token | - |
-| 120 | `let_binding` | Token | - |
 
 ### Disabled Feature Errors
 

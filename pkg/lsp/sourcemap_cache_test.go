@@ -81,11 +81,11 @@ func setupTestWorkspace(t *testing.T) (string, func()) {
 func createTestDmapFile(t *testing.T, workspaceRoot, relPath string) {
 	t.Helper()
 
-	dingoSrc := []byte("let x = 10\n")
+	dingoSrc := []byte("x := 10\n")
 	goSrc := []byte("x := 10\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
 	}
 
 	writer := dmap.NewWriter(dingoSrc, goSrc)
@@ -427,17 +427,17 @@ func TestSourceMapCacheReaderLookups(t *testing.T) {
 
 	// Test FindByGoPos
 	dingoStart, dingoEnd, kind := reader.FindByGoPos(3)
-	if kind != "let_binding" {
-		t.Errorf("FindByGoPos: got kind %q, want %q", kind, "let_binding")
+	if kind != "identity" {
+		t.Errorf("FindByGoPos: got kind %q, want %q", kind, "identity")
 	}
-	if dingoStart != 0 || dingoEnd != 10 {
-		t.Errorf("FindByGoPos: got (%d, %d), want (0, 10)", dingoStart, dingoEnd)
+	if dingoStart != 0 || dingoEnd != 7 {
+		t.Errorf("FindByGoPos: got (%d, %d), want (0, 7)", dingoStart, dingoEnd)
 	}
 
 	// Test FindByDingoPos
-	goStart, goEnd, kind2 := reader.FindByDingoPos(5)
-	if kind2 != "let_binding" {
-		t.Errorf("FindByDingoPos: got kind %q, want %q", kind2, "let_binding")
+	goStart, goEnd, kind2 := reader.FindByDingoPos(3)
+	if kind2 != "identity" {
+		t.Errorf("FindByDingoPos: got kind %q, want %q", kind2, "identity")
 	}
 	if goStart != 0 || goEnd != 7 {
 		t.Errorf("FindByDingoPos: got (%d, %d), want (0, 7)", goStart, goEnd)

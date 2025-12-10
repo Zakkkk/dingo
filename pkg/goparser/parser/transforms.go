@@ -21,7 +21,6 @@ type TokenMapping struct {
 // This is a minimal transformer that:
 // 1. Converts ? to markers (?, ??, ?. → comments for now)
 // 2. Handles generic syntax (Result[T,E] → Result[T,E])
-// 3. Handles let declarations (let x = → x :=)
 //
 // More complex transformations (enum, match, lambda) are handled by pkg/parser/
 // and pkg/codegen/ in the full AST pipeline.
@@ -142,56 +141,6 @@ func TransformToGo(src []byte) ([]byte, []TokenMapping, error) {
 				Kind:       "generic_close",
 			})
 			continue
-		}
-
-		// Handle 'let' keyword
-		if t.tok == gotoken.IDENT && t.lit == "let" {
-			// Check if next significant token is identifier, then =
-			// let x = expr -> x := expr
-			if i+2 < len(tokens) {
-				next := tokens[i+1]
-				afterNext := tokens[i+2]
-				if next.tok == gotoken.IDENT && afterNext.tok == gotoken.ASSIGN {
-					// Copy up to 'let'
-					result = append(result, src[lastCopied:offset]...)
-					// Skip 'let ' - we'll let the identifier be copied normally
-					// but we need to change = to :=
-					lastCopied = offset + len("let") // Skip "let" but keep the space after
-
-					// Skip any whitespace after 'let'
-					for lastCopied < len(src) && (src[lastCopied] == ' ' || src[lastCopied] == '\t') {
-						lastCopied++
-					}
-
-					mappings = append(mappings, TokenMapping{
-						DingoStart: offset,
-						DingoEnd:   offset + len("let"),
-						GoStart:    len(result),
-						GoEnd:      len(result),
-						Kind:       "let_keyword",
-					})
-				}
-			}
-		}
-
-		// Handle = after 'let varname' -> change to :=
-		if t.tok == gotoken.ASSIGN {
-			if i >= 2 && tokens[i-2].tok == gotoken.IDENT && tokens[i-2].lit == "let" {
-				// Copy up to =
-				result = append(result, src[lastCopied:offset]...)
-				// Write :=
-				result = append(result, ':', '=')
-				lastCopied = offset + 1 // Skip the original =
-
-				mappings = append(mappings, TokenMapping{
-					DingoStart: offset,
-					DingoEnd:   offset + 1,
-					GoStart:    len(result) - 2,
-					GoEnd:      len(result),
-					Kind:       "let_assign",
-				})
-				continue
-			}
 		}
 	}
 

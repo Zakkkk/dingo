@@ -16,8 +16,8 @@ func TestWriterStandalone(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
@@ -126,7 +126,7 @@ func TestWriterMultipleKinds(t *testing.T) {
 	goSrc := []byte("var x = func() { switch ... }()\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 5, GoStart: 0, GoEnd: 5, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 5, GoStart: 0, GoEnd: 5, Kind: "identifier"},
 		{DingoStart: 8, DingoEnd: 30, GoStart: 8, GoEnd: 25, Kind: "match_expr"},
 		{DingoStart: 14, DingoEnd: 22, GoStart: 14, GoEnd: 20, Kind: "pattern"},
 	}

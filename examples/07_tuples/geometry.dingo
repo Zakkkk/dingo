@@ -37,8 +37,8 @@ func ParseCoordinates(input string) (Point2D, error) {
 // Distance calculates distance between two points
 func Distance(p1 Point2D, p2 Point2D) float64 {
 	// Tuple destructuring
-	let (x1, y1) = p1
-	let (x2, y2) = p2
+	(x1, y1) := p1
+	(x2, y2) := p2
 
 	dx := x2 - x1
 	dy := y2 - y1
@@ -47,8 +47,8 @@ func Distance(p1 Point2D, p2 Point2D) float64 {
 
 // Midpoint returns the point between two points
 func Midpoint(p1 Point2D, p2 Point2D) Point2D {
-	let (x1, y1) = p1
-	let (x2, y2) = p2
+	(x1, y1) := p1
+	(x2, y2) := p2
 	return ((x1 + x2) / 2, (y1 + y2) / 2)
 }
 
@@ -58,11 +58,11 @@ func CalculateBoundingBox(points []Point2D) BoundingBox {
 		return ((0.0, 0.0), (0.0, 0.0))
 	}
 
-	let (minX, minY) = points[0]
-	let (maxX, maxY) = points[0]
+	(minX, minY) := points[0]
+	(maxX, maxY) := points[0]
 
 	for _, point := range points {
-		let (x, y) = point
+		(x, y) := point
 		if x < minX {
 			minX = x
 		}
@@ -100,7 +100,7 @@ func main() {
 
 	fmt.Println("=== Points ===")
 	for i, p := range points {
-		let (x, y) = p
+		(x, y) := p
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 
@@ -110,27 +110,27 @@ func main() {
 
 	// Find midpoint
 	mid := Midpoint(points[0], points[2])
-	let (mx, my) = mid
+	(mx, my) := mid
 	fmt.Printf("Midpoint P0-P2: (%.1f, %.1f)\n", mx, my)
 
 	// Calculate bounding box
 	bbox := CalculateBoundingBox(points)
 	// Note: nested tuple destructuring ((a, b), (c, d)) not yet supported
 	// Using two-step destructuring instead
-	let (minPt, maxPt) = bbox
-	let (minX, minY) = minPt
-	let (maxX, maxY) = maxPt
+	(minPt, maxPt) := bbox
+	(minX, minY) := minPt
+	(maxX, maxY) := maxPt
 	fmt.Printf("\nBounding Box: (%.1f, %.1f) to (%.1f, %.1f)\n", minX, minY, maxX, maxY)
 
 	// Transform all points (scale by 2)
 	scaled := TransformPoints(points, |p| {
-		let (x, y) = p
+		(x, y) := p
 		return (x * 2, y * 2)
 	})
 
 	fmt.Println("\n=== Scaled Points (2x) ===")
 	for i, p := range scaled {
-		let (x, y) = p
+		(x, y) := p
 		fmt.Printf("P%d: (%.1f, %.1f)\n", i, x, y)
 	}
 }

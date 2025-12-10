@@ -22,8 +22,8 @@ func TestReaderOpenBytes(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -103,8 +103,8 @@ func TestReaderFindByGoPos(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -122,11 +122,11 @@ func TestReaderFindByGoPos(t *testing.T) {
 		wantKind   string
 		wantFound  bool
 	}{
-		{"first mapping start", 0, 0, 10, "let_binding", true},
-		{"first mapping middle", 3, 0, 10, "let_binding", true},
-		{"first mapping end-1", 6, 0, 10, "let_binding", true},
-		{"second mapping start", 8, 11, 21, "let_binding", true},
-		{"second mapping middle", 10, 11, 21, "let_binding", true},
+		{"first mapping start", 0, 0, 10, "identifier", true},
+		{"first mapping middle", 3, 0, 10, "identifier", true},
+		{"first mapping end-1", 6, 0, 10, "identifier", true},
+		{"second mapping start", 8, 11, 21, "identifier", true},
+		{"second mapping middle", 10, 11, 21, "identifier", true},
 		{"gap between mappings", 7, 7, 7, "", false},
 		{"after all mappings", 100, 100, 100, "", false},
 		{"before all mappings (negative)", -1, -1, -1, "", false},
@@ -158,8 +158,8 @@ func TestReaderFindByDingoPos(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -177,9 +177,9 @@ func TestReaderFindByDingoPos(t *testing.T) {
 		wantKind    string
 		wantFound   bool
 	}{
-		{"first mapping start", 0, 0, 7, "let_binding", true},
-		{"first mapping middle", 5, 0, 7, "let_binding", true},
-		{"second mapping start", 11, 8, 15, "let_binding", true},
+		{"first mapping start", 0, 0, 7, "identifier", true},
+		{"first mapping middle", 5, 0, 7, "identifier", true},
+		{"second mapping start", 11, 8, 15, "identifier", true},
 		{"gap between mappings", 10, 10, 10, "", false},
 		{"after all mappings", 100, 100, 100, "", false},
 	}
@@ -335,7 +335,7 @@ func TestReaderMultipleKinds(t *testing.T) {
 	goSrc := []byte("x := 10\nswitch y { case A: return 1 }\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
 		{DingoStart: 11, DingoEnd: 30, GoStart: 8, GoEnd: 35, Kind: "match_expr"},
 	}
 
@@ -352,8 +352,8 @@ func TestReaderMultipleKinds(t *testing.T) {
 
 	// Verify first kind
 	_, _, kind1 := reader.FindByGoPos(3)
-	if kind1 != "let_binding" {
-		t.Errorf("First mapping kind: got %q, want %q", kind1, "let_binding")
+	if kind1 != "identifier" {
+		t.Errorf("First mapping kind: got %q, want %q", kind1, "identifier")
 	}
 
 	// Verify second kind
@@ -383,14 +383,14 @@ func TestReaderClose(t *testing.T) {
 }
 
 func TestReaderZeroLengthGoRange(t *testing.T) {
-	// Test the case where GoStart == GoEnd (removed syntax like 'let')
-	dingoSrc := []byte("let x = 10\n")
+	// Test the case where GoStart == GoEnd (removed syntax)
+	dingoSrc := []byte("foo x = 10\n")
 	goSrc := []byte("x := 10\n")
 
-	// Simulate 'let' keyword being removed (zero-length Go range)
+	// Simulate keyword being removed (zero-length Go range)
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 3, GoStart: 0, GoEnd: 0, Kind: "let_keyword"},
-		{DingoStart: 4, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_assign"},
+		{DingoStart: 0, DingoEnd: 3, GoStart: 0, GoEnd: 0, Kind: "removed_keyword"},
+		{DingoStart: 4, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "assignment"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -400,13 +400,13 @@ func TestReaderZeroLengthGoRange(t *testing.T) {
 	}
 	defer reader.Close()
 
-	// Looking up Go position 0 should NOT find the zero-length 'let_keyword' mapping
+	// Looking up Go position 0 should NOT find the zero-length 'removed_keyword' mapping
 	// because the range check is GoStart <= offset < GoEnd, and 0 < 0 is false
 	dingoStart, dingoEnd, kind := reader.FindByGoPos(0)
 
-	// Should find the let_assign mapping (0-7)
-	if kind != "let_assign" {
-		t.Errorf("FindByGoPos(0) with zero-length range: got kind %q, want %q", kind, "let_assign")
+	// Should find the assignment mapping (0-7)
+	if kind != "assignment" {
+		t.Errorf("FindByGoPos(0) with zero-length range: got kind %q, want %q", kind, "assignment")
 	}
 	if dingoStart != 4 || dingoEnd != 10 {
 		t.Errorf("FindByGoPos(0): got (%d, %d), want (4, 10)", dingoStart, dingoEnd)
@@ -414,8 +414,8 @@ func TestReaderZeroLengthGoRange(t *testing.T) {
 
 	// Looking up Dingo position 0 (in the zero-length range) should find it
 	goStart, goEnd, kind2 := reader.FindByDingoPos(0)
-	if kind2 != "let_keyword" {
-		t.Errorf("FindByDingoPos(0) for let_keyword: got kind %q, want %q", kind2, "let_keyword")
+	if kind2 != "removed_keyword" {
+		t.Errorf("FindByDingoPos(0) for removed_keyword: got kind %q, want %q", kind2, "removed_keyword")
 	}
 	if goStart != 0 || goEnd != 0 {
 		t.Errorf("FindByDingoPos(0): got (%d, %d), want (0, 0)", goStart, goEnd)
@@ -423,11 +423,11 @@ func TestReaderZeroLengthGoRange(t *testing.T) {
 }
 
 func TestReaderConcurrentAccess(t *testing.T) {
-	dingoSrc := []byte("let x = 10\nlet y = 20\n")
+	dingoSrc := []byte("foo x = 10\nbar y = 20\n")
 	goSrc := []byte("x := 10\ny := 20\n")
 
 	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "let_binding"},
+		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)

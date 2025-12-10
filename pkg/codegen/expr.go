@@ -87,7 +87,6 @@ func GenerateExprWithContext(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 //   - MatchExpr: Pattern matching
 //   - LambdaExpr: Lambda expressions
 //   - ErrorPropExpr: Error propagation (?)
-//   - LetDecl: Let declarations
 //   - TernaryExpr: Ternary operator
 //   - NullCoalesceExpr: Null coalescing (??)
 //   - SafeNavExpr: Safe navigation (?.)
