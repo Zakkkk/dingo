@@ -43,8 +43,9 @@ func (g *TupleCodeGen) GenerateLiteral(lit *ast.TupleLiteral) ast.CodeGenResult 
 		return ast.CodeGenResult{}
 	}
 
-	dingoStart := int(lit.Pos())
-	dingoEnd := int(lit.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(lit.End() - lit.Pos())
 	outputStart := g.Buf.Len()
 
 	// Marker function: __tuple{N}__
@@ -86,59 +87,75 @@ func (g *TupleCodeGen) GenerateLiteral(lit *ast.TupleLiteral) ast.CodeGenResult 
 	return result
 }
 
+// collectBindings recursively collects variable bindings with path encoding.
+// Path is dot-separated indices: "0.0" means First.First
+// Wildcards (_) are skipped entirely - no binding generated.
+func collectBindings(pattern []ast.DestructureElement, pathPrefix string) []string {
+	var bindings []string
+	for i, elem := range pattern {
+		path := pathPrefix
+		if path != "" {
+			path += "."
+		}
+		path += strconv.Itoa(i)
+
+		if elem.IsNested() {
+			// Recursively collect nested bindings
+			bindings = append(bindings, collectBindings(elem.Nested, path)...)
+		} else if elem.Name != "_" {
+			// Skip wildcards - only add named bindings
+			bindings = append(bindings, fmt.Sprintf(`"%s:%s"`, elem.Name, path))
+		}
+	}
+	return bindings
+}
+
 // GenerateDestructure generates marker for tuple destructuring.
 //
 // Input: TupleDestructure AST node
-// Output: __tupleDest{N}__("name1", "name2", ..., expr)
+// Output: __tupleDest{N}__("name1:path1", "name2:path2", ..., expr)
 //
-// Wildcards are represented as "_" string literals.
+// Wildcards are skipped entirely (no binding generated).
+// Nested patterns are flattened with dot-separated paths.
 //
 // Example:
-//   let (x, y) = point → __tupleDest2__("x", "y", point)
-//   let (x, _) = pair → __tupleDest2__("x", "_", pair)
-//   let (x, _, z) = triple → __tupleDest3__("x", "_", "z", triple)
+//   let (x, y) = point → __tupleDest2__("x:0", "y:1", point)
+//   let (x, _) = pair → __tupleDest1__("x:0", pair)
+//   let ((a, b), c) = nested → __tupleDest3__("a:0.0", "b:0.1", "c:1", nested)
+//   let ((_, b), _) = nested → __tupleDest1__("b:0.1", nested)
 func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeGenResult {
 	if dest == nil {
 		return ast.CodeGenResult{}
 	}
 
-	// Validate: nested destructure patterns are not yet supported
-	// e.g., let ((a, b), c) = tuple would have elem.IsNested() == true
-	for _, elem := range dest.Pattern {
-		if elem.IsNested() {
-			// Return empty result - nested destructure not supported
-			// TODO: Implement nested destructure support in Pass 2
-			g.Write("/* ERROR: nested tuple destructure not yet supported */")
-			return g.Result()
-		}
-	}
-
-	dingoStart := int(dest.Pos())
-	dingoEnd := int(dest.End())
+	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
+	dingoStart := 0
+	dingoEnd := int(dest.End() - dest.Pos())
 	outputStart := g.Buf.Len()
 
-	// Marker function: __tupleDest{N}__
-	elemCount := len(dest.Pattern)
-	markerName := fmt.Sprintf("__tupleDest%d__", elemCount)
+	// Collect all bindings with path encoding (handles nesting and skips wildcards)
+	bindings := collectBindings(dest.Pattern, "")
+
+	if len(bindings) == 0 {
+		// All wildcards - generate minimal statement
+		g.Write("_ = ")
+		if dest.Value != nil {
+			g.Write(g.exprToGoCode(dest.Value))
+		}
+		return g.Result()
+	}
+
+	// Marker function: __tupleDest{N}__ where N is number of actual bindings
+	markerName := fmt.Sprintf("__tupleDest%d__", len(bindings))
 	g.Write(markerName)
 	g.WriteByte('(')
 
-	// Generate pattern as string literals with path encoding
-	// Format: "name:path" where path is dot-separated indices
-	// Example: "x:0" for first element, "y:1" for second element
-	for i, elem := range dest.Pattern {
+	// Write all bindings
+	for i, binding := range bindings {
 		if i > 0 {
 			g.Write(", ")
 		}
-
-		// Quote the identifier name with its path index
-		// At this point, we know elem.IsNested() is false, so Name is valid
-		// The path is just the index for flat patterns (e.g., "x:0", "y:1")
-		g.WriteByte('"')
-		g.Write(elem.Name)
-		g.WriteByte(':')
-		g.Write(strconv.Itoa(i))
-		g.WriteByte('"')
+		g.Write(binding)
 	}
 
 	// Add the value expression
@@ -278,11 +295,11 @@ func (g *TupleCodeGen) exprToGoCode(expr ast.Expr) string {
 	}
 }
 
-// formatTmpVar formats temporary variable name following CLAUDE.md naming convention.
-// First tmp is unnumbered, subsequent are tmp1, tmp2, etc.
-func formatTmpVar(counter int) string {
+// formatTplVar formats tuple variable name following CLAUDE.md naming convention.
+// First tpl is unnumbered, subsequent are tpl1, tpl2, etc.
+func formatTplVar(counter int) string {
 	if counter == 1 {
-		return "tmp"
+		return "tpl"
 	}
-	return "tmp" + strconv.Itoa(counter-1)
+	return "tpl" + strconv.Itoa(counter-1)
 }
