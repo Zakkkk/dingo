@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -86,14 +87,35 @@ type BuildConfig struct {
 	TranspileMode string `toml:"transpile_mode"`
 }
 
+// TypeInferenceConfig controls lambda type inference behavior
+type TypeInferenceConfig struct {
+	// GoplsEnabled controls whether to use gopls as a fallback for complex type inference
+	// When true: Launch gopls subprocess for Layer 4 fallback (highest coverage, highest cost)
+	// When false: Use only Layers 1-3 (local inference, dgo registry, generic unification)
+	// Default: false (disabled in CI, suitable for most cases)
+	GoplsEnabled bool `toml:"gopls_enabled"`
+
+	// GoplsTimeout specifies how long to wait for gopls responses
+	// Valid format: duration string (e.g., "5s", "10s", "500ms")
+	// Default: "5s"
+	GoplsTimeout string `toml:"gopls_timeout"`
+
+	// GoplsPath specifies an explicit path to the gopls binary
+	// When empty: Use gopls from PATH
+	// When set: Use the specified path (useful for testing or specific versions)
+	// Default: "" (use PATH)
+	GoplsPath string `toml:"gopls_path"`
+}
+
 // Config represents the complete Dingo project configuration
 type Config struct {
-	Features      FeatureConfig   `toml:"features"`
-	FeatureMatrix FeatureMatrix   `toml:"feature_matrix"`
-	Match         MatchConfig     `toml:"match"`
-	SourceMap     SourceMapConfig `toml:"sourcemaps"`
-	Debug         DebugConfig     `toml:"debug"`
-	Build         BuildConfig     `toml:"build"`
+	Features       FeatureConfig        `toml:"features"`
+	FeatureMatrix  FeatureMatrix        `toml:"feature_matrix"`
+	Match          MatchConfig          `toml:"match"`
+	SourceMap      SourceMapConfig      `toml:"sourcemaps"`
+	Debug          DebugConfig          `toml:"debug"`
+	Build          BuildConfig          `toml:"build"`
+	TypeInference  TypeInferenceConfig  `toml:"type_inference"`
 }
 
 // FeatureMatrix controls which language features are enabled/disabled.
@@ -105,7 +127,7 @@ type FeatureMatrix struct {
 	Match            *bool `toml:"match"`             // match expressions
 	EnumConstructors *bool `toml:"enum_constructors"` // Variant() -> NewVariant()
 	ErrorProp        *bool `toml:"error_prop"`        // ? operator for error propagation
-	GuardLet         *bool `toml:"guard_let"`         // guard let expressions
+	Guard         *bool `toml:"guard"`         // guard expressions
 	SafeNavStatements *bool `toml:"safe_nav_statements"` // ?. in statements
 	SafeNav          *bool `toml:"safe_nav"`          // ?. operator
 	NullCoalesce     *bool `toml:"null_coalesce"`     // ?? operator
@@ -132,7 +154,7 @@ func (fm *FeatureMatrix) ToEnabledFeatures() map[string]bool {
 	addIfSet("match", fm.Match)
 	addIfSet("enum_constructors", fm.EnumConstructors)
 	addIfSet("error_prop", fm.ErrorProp)
-	addIfSet("guard_let", fm.GuardLet)
+	addIfSet("guard", fm.Guard)
 	addIfSet("safe_nav_statements", fm.SafeNavStatements)
 	addIfSet("safe_nav", fm.SafeNav)
 	addIfSet("null_coalesce", fm.NullCoalesce)
@@ -156,8 +178,8 @@ func (fm *FeatureMatrix) IsFeatureEnabled(name string) bool {
 		return fm.EnumConstructors == nil || *fm.EnumConstructors
 	case "error_prop":
 		return fm.ErrorProp == nil || *fm.ErrorProp
-	case "guard_let":
-		return fm.GuardLet == nil || *fm.GuardLet
+	case "guard":
+		return fm.Guard == nil || *fm.Guard
 	case "safe_nav_statements":
 		return fm.SafeNavStatements == nil || *fm.SafeNavStatements
 	case "safe_nav":
@@ -301,6 +323,11 @@ func DefaultConfig() *Config {
 		Build: BuildConfig{
 			OutDir:        "",       // Default to placing output alongside source
 			TranspileMode: "legacy", // Default to legacy mode for stability
+		},
+		TypeInference: TypeInferenceConfig{
+			GoplsEnabled: false, // Default to disabled for CI compatibility
+			GoplsTimeout: "5s",  // Default to 5 second timeout
+			GoplsPath:    "",    // Default to using PATH
 		},
 	}
 }
@@ -503,6 +530,15 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate gopls timeout format
+	if c.TypeInference.GoplsTimeout != "" {
+		// Use time.ParseDuration to validate format
+		if _, err := time.ParseDuration(c.TypeInference.GoplsTimeout); err != nil {
+			return fmt.Errorf("invalid type_inference.gopls_timeout: %q (must be valid duration like '5s', '10s', '500ms')",
+				c.TypeInference.GoplsTimeout)
+		}
+	}
+
 	return nil
 }
 
@@ -518,4 +554,13 @@ func (c *Config) GetNilSafetyMode() NilSafetyMode {
 	default:
 		return NilSafetyOn // Default to safe mode
 	}
+}
+
+// GetGoplsTimeout parses the gopls_timeout string into time.Duration
+// Returns the parsed duration and any parsing error
+func (c *Config) GetGoplsTimeout() (time.Duration, error) {
+	if c.TypeInference.GoplsTimeout == "" {
+		return 5 * time.Second, nil // Default to 5 seconds
+	}
+	return time.ParseDuration(c.TypeInference.GoplsTimeout)
 }

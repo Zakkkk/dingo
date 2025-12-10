@@ -4,12 +4,15 @@
 package typechecker
 
 import (
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/token"
 	"go/types"
 	"strconv"
 	"strings"
+
+	"github.com/MadAppGang/dingo/pkg/config"
 )
 
 // untypedToTypedName converts untyped basic type kinds to their typed equivalents.
@@ -41,19 +44,41 @@ func untypedToTypedName(kind types.BasicKind) string {
 // It walks the AST looking for CallExpr nodes with FuncLit arguments,
 // then uses go/types to look up the expected function signature and
 // rewrites the FuncLit types accordingly.
+//
+// Uses a four-layer inference approach:
+// Layer 1: Local inference via go/types (existing)
+// Layer 2: dgo signature registry (hardcoded dgo.* functions)
+// Layer 3: Generic unification (third-party generic functions)
+// Layer 4: gopls fallback (optional, configurable via dingo.toml)
 type LambdaTypeInferrer struct {
-	fset    *token.FileSet
-	info    *types.Info
-	file    *ast.File
-	changed bool
+	fset         *token.FileSet
+	info         *types.Info
+	file         *ast.File
+	changed      bool
+	config       *config.TypeInferenceConfig
+	goplsClient  *GoplsClient // Lazy-initialized when needed
 }
 
 // NewLambdaTypeInferrer creates a new inferrer.
 func NewLambdaTypeInferrer(fset *token.FileSet, file *ast.File, info *types.Info) *LambdaTypeInferrer {
+	return NewLambdaTypeInferrerWithConfig(fset, file, info, nil)
+}
+
+// NewLambdaTypeInferrerWithConfig creates a new inferrer with custom configuration.
+// If cfg is nil, uses default configuration (gopls disabled).
+func NewLambdaTypeInferrerWithConfig(fset *token.FileSet, file *ast.File, info *types.Info, cfg *config.TypeInferenceConfig) *LambdaTypeInferrer {
+	if cfg == nil {
+		cfg = &config.TypeInferenceConfig{
+			GoplsEnabled: false,
+			GoplsTimeout: "5s",
+			GoplsPath:    "",
+		}
+	}
 	return &LambdaTypeInferrer{
-		fset: fset,
-		info: info,
-		file: file,
+		fset:   fset,
+		info:   info,
+		file:   file,
+		config: cfg,
 	}
 }
 
@@ -171,9 +196,44 @@ func (inf *LambdaTypeInferrer) getFunctionType(fun ast.Expr) *types.Signature {
 }
 
 // getInstantiatedSignature extracts the instantiated signature for a generic function call.
-// Prefers manual resolution over go/types' inference when lambdas with typed parameters are present,
-// as this allows us to infer return types from lambda bodies.
+// Uses a four-layer approach:
+// Layer 1: Local inference via go/types (existing behavior)
+// Layer 2: dgo signature registry (hardcoded signatures for dgo.* functions)
+// Layer 3: Generic unification (structural type matching for third-party generics)
+// Layer 4: gopls fallback (optional, only if configured)
+//
+// Returns error if all layers fail (strict mode - no fallback to func(any) any).
 func (inf *LambdaTypeInferrer) getInstantiatedSignature(call *ast.CallExpr) *types.Signature {
+	// Layer 1: Try go/types local inference
+	if sig := inf.tryLayer1GoTypes(call); sig != nil {
+		return sig
+	}
+
+	// Layer 2: Try dgo signature registry
+	if sig := inf.tryLayer2DgoRegistry(call); sig != nil {
+		return sig
+	}
+
+	// Layer 3: Try generic unification
+	if sig := inf.tryLayer3GenericUnification(call); sig != nil {
+		return sig
+	}
+
+	// Layer 4: Try gopls fallback (only if enabled)
+	if inf.config.GoplsEnabled {
+		if sig := inf.tryLayer4GoplsFallback(call); sig != nil {
+			return sig
+		}
+	}
+
+	// All layers failed - return nil to indicate failure
+	// The caller should handle this by reporting an error
+	return nil
+}
+
+// tryLayer1GoTypes attempts local inference via go/types.
+// This is the existing behavior - checks Info.Instances and manual type param resolution.
+func (inf *LambdaTypeInferrer) tryLayer1GoTypes(call *ast.CallExpr) *types.Signature {
 	// Extract the function identifier from various call forms
 	var id *ast.Ident
 	switch fn := call.Fun.(type) {
@@ -267,6 +327,115 @@ func (inf *LambdaTypeInferrer) getInstantiatedSignature(call *ast.CallExpr) *typ
 	}
 
 	return nil
+}
+
+// tryLayer2DgoRegistry attempts inference using hardcoded dgo function signatures.
+// This handles the common case of dgo.Map/Filter/etc. without external dependencies.
+func (inf *LambdaTypeInferrer) tryLayer2DgoRegistry(call *ast.CallExpr) *types.Signature {
+	// Check if this is a dgo.* call
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return nil
+	}
+
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	if !ok || pkgIdent.Name != "dgo" {
+		return nil
+	}
+
+	// Look up synthetic signature from registry
+	genericSig := GetDgoSignature(sel.Sel.Name)
+	if genericSig == nil {
+		return nil
+	}
+
+	// Use Layer 3 unification to instantiate with concrete types
+	unifier := NewTypeUnifier(inf.fset, inf.info)
+	bindings := unifier.InferTypeParams(call, genericSig)
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	// Instantiate signature with resolved types
+	return unifier.InstantiateSignature(genericSig, bindings)
+}
+
+// tryLayer3GenericUnification attempts inference using structural type matching.
+// This handles third-party generic functions (not just dgo.*).
+func (inf *LambdaTypeInferrer) tryLayer3GenericUnification(call *ast.CallExpr) *types.Signature {
+	// Get the generic signature from the function definition
+	genericSig := inf.getGenericSignature(call.Fun)
+	if genericSig == nil || genericSig.TypeParams() == nil {
+		return nil
+	}
+
+	// Use unifier to extract type bindings from non-lambda arguments
+	unifier := NewTypeUnifier(inf.fset, inf.info)
+	bindings := unifier.InferTypeParams(call, genericSig)
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	// Instantiate signature with resolved types
+	return unifier.InstantiateSignature(genericSig, bindings)
+}
+
+// tryLayer4GoplsFallback attempts inference using gopls subprocess.
+// Only called if config.GoplsEnabled is true.
+func (inf *LambdaTypeInferrer) tryLayer4GoplsFallback(call *ast.CallExpr) *types.Signature {
+	// Lazy-initialize gopls client
+	if inf.goplsClient == nil {
+		client, err := NewGoplsClient(inf.config)
+		if err != nil {
+			// gopls initialization failed - log and skip this layer
+			// (In production, we might want to log this properly)
+			return nil
+		}
+		inf.goplsClient = client
+	}
+
+	// Query gopls for the type at this position
+	pos := inf.fset.Position(call.Pos())
+	typeInfo, err := inf.goplsClient.QueryType(pos.Filename, pos.Line, pos.Column)
+	if err != nil {
+		return nil
+	}
+
+	// Parse the type info string into a types.Signature
+	// This is a simplified implementation - production version would need
+	// more robust parsing of gopls output
+	_ = typeInfo // TODO: Parse gopls response into types.Signature
+
+	return nil
+}
+
+// LambdaInferenceError represents a failure to infer lambda types after trying all layers.
+type LambdaInferenceError struct {
+	Pos     token.Position
+	Call    string
+	Message string
+	Hint    string
+}
+
+func (e *LambdaInferenceError) Error() string {
+	return fmt.Sprintf("%s: %s in call %s\n  hint: %s",
+		e.Pos, e.Message, e.Call, e.Hint)
+}
+
+// formatCall converts a call expression to a string for error messages.
+func (inf *LambdaTypeInferrer) formatCall(call *ast.CallExpr) string {
+	// Simple formatting - just extract the function name
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name + "(...)"
+	case *ast.SelectorExpr:
+		if sel, ok := fn.X.(*ast.Ident); ok {
+			return sel.Name + "." + fn.Sel.Name + "(...)"
+		}
+		return fn.Sel.Name + "(...)"
+	default:
+		return "function(...)"
+	}
 }
 
 // rewriteFuncLit updates a function literal's parameter and return types

@@ -32,11 +32,13 @@ func New(fset *token.FileSet, file *ast.File, pkgPath string) (*Checker, error) 
 	}
 
 	// Configure the type checker
-	// Use "gc" mode to read pre-compiled package data from Go's build cache.
-	// This is much faster than "source" mode which re-parses source files.
-	// The lookup function handles module-aware imports.
+	// Use "source" mode to parse Go source files directly.
+	// While slower than "gc" mode (which reads pre-compiled .a files),
+	// "source" mode works correctly with Go modules and can find packages
+	// like dgo that are part of the dingo module without needing them to be
+	// pre-compiled in GOROOT/GOPATH.
 	conf := types.Config{
-		Importer: importer.ForCompiler(fset, "gc", nil),
+		Importer: importer.ForCompiler(fset, "source", nil),
 		Error: func(err error) {
 			// Ignore type errors - we want partial type info even with errors
 			// This is important because the transformed code may have interface{}
