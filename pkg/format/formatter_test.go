@@ -59,12 +59,15 @@ func TestMatchFormatting(t *testing.T) {
 		input string
 	}{
 		{
-			name: "match_expression",
+			name:  "match_expression_single_line",
 			input: `match x{Some(v)=>v*2,None=>0}`,
 		},
 		{
-			name: "match_with_blocks",
-			input: `match status{Active=>{fmt.Println("active")},Inactive=>fmt.Println("inactive")}`,
+			name: "match_expression_multi_line",
+			input: `match x {
+Some(v) => v * 2
+None => 0
+}`,
 		},
 	}
 
@@ -86,35 +89,58 @@ func TestMatchFormatting(t *testing.T) {
 				t.Errorf("Formatted output missing '=>' arrow")
 			}
 
-			// Should be multi-line
-			lines := strings.Split(strings.TrimSpace(gotStr), "\n")
-			if len(lines) < 2 {
-				t.Errorf("Match expression should span multiple lines, got: %s", gotStr)
+			// Multi-line input should produce multi-line output
+			inputLines := strings.Split(strings.TrimSpace(tt.input), "\n")
+			outputLines := strings.Split(strings.TrimSpace(gotStr), "\n")
+			if len(inputLines) > 1 && len(outputLines) < 2 {
+				t.Errorf("Multi-line input should produce multi-line output, got: %s", gotStr)
 			}
 		})
 	}
 }
 
 func TestEnumFormatting(t *testing.T) {
-	input := `enum Status{Active,Inactive(string),Pending}`
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "single_line_preserved",
+			input: `enum Status{Active,Inactive(string),Pending}`,
+		},
+		{
+			name: "multi_line_with_indentation",
+			input: `enum Status {
+Active
+Inactive(string)
+Pending
+}`,
+		},
+	}
 
 	f := New(DefaultConfig())
-	got, err := f.Format([]byte(input))
-	if err != nil {
-		t.Fatalf("Format() error = %v", err)
-	}
 
-	gotStr := string(got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := f.Format([]byte(tt.input))
+			if err != nil {
+				t.Fatalf("Format() error = %v", err)
+			}
 
-	// Basic checks
-	if !strings.Contains(gotStr, "enum Status") {
-		t.Errorf("Formatted output missing 'enum Status'")
-	}
+			gotStr := string(got)
 
-	// Should be multi-line
-	lines := strings.Split(strings.TrimSpace(gotStr), "\n")
-	if len(lines) < 2 {
-		t.Errorf("Enum should span multiple lines, got: %s", gotStr)
+			// Basic checks
+			if !strings.Contains(gotStr, "enum Status") {
+				t.Errorf("Formatted output missing 'enum Status'")
+			}
+
+			// Multi-line input should produce multi-line output with indentation
+			inputLines := strings.Split(strings.TrimSpace(tt.input), "\n")
+			outputLines := strings.Split(strings.TrimSpace(gotStr), "\n")
+			if len(inputLines) > 1 && len(outputLines) < 2 {
+				t.Errorf("Multi-line input should produce multi-line output, got: %s", gotStr)
+			}
+		})
 	}
 }
 

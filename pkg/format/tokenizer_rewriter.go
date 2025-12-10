@@ -14,11 +14,11 @@ type Writer struct {
 	src    []byte // Original source for extracting text
 
 	// State
-	indent         int  // Current indentation level
-	atLineStart    bool // True if we're at the beginning of a line
-	lastTokenKind  tokenizer.TokenKind
-	needSpace      bool // True if we need to emit a space before next token
-	pendingNewline bool // True if we need to emit a newline before next token
+	indent            int  // Current indentation level
+	atLineStart       bool // True if we're at the beginning of a line
+	lastTokenKind     tokenizer.TokenKind
+	needSpace         bool   // True if we need to emit a space before next token
+	consecutiveNewlines int  // Count of consecutive newlines (for suppressing excessive blank lines)
 }
 
 // newWriter creates a new token writer
@@ -58,6 +58,14 @@ func (w *Writer) writeTokens(tokens []tokenizer.Token) error {
 			} else {
 				w.writeToken(tok)
 			}
+		case tokenizer.LBRACE:
+			// Opening brace - increase indent for next line
+			w.writeToken(tok)
+			w.increaseIndent()
+		case tokenizer.RBRACE:
+			// Closing brace - decrease indent before writing
+			w.decreaseIndent()
+			w.writeToken(tok)
 		default:
 			w.writeToken(tok)
 		}
@@ -75,22 +83,23 @@ func (w *Writer) writeTokens(tokens []tokenizer.Token) error {
 func (w *Writer) writeToken(tok tokenizer.Token) {
 	// Handle comments specially
 	if tok.Kind == tokenizer.COMMENT {
+		w.consecutiveNewlines = 0 // Comments break newline sequences
 		w.writeComment(tok)
 		return
 	}
 
-	// Skip NEWLINE tokens - we manage newlines ourselves
+	// Handle NEWLINE tokens - preserve them immediately
 	if tok.Kind == tokenizer.NEWLINE {
-		// Track that we saw a newline but don't emit yet
-		w.pendingNewline = true
+		// Limit to max 2 blank lines (3 consecutive newlines)
+		if w.consecutiveNewlines < 3 {
+			w.writeNewline()
+			w.consecutiveNewlines++
+		}
 		return
 	}
 
-	// Emit pending newline if needed
-	if w.pendingNewline && w.needsNewlineBefore(tok) {
-		w.writeNewline()
-		w.pendingNewline = false
-	}
+	// Reset consecutive newlines counter for non-newline tokens
+	w.consecutiveNewlines = 0
 
 	// Emit indentation if at line start
 	if w.atLineStart {
@@ -115,15 +124,18 @@ func (w *Writer) writeToken(tok tokenizer.Token) {
 func (w *Writer) writeComment(tok tokenizer.Token) {
 	if w.atLineStart {
 		w.writeIndent()
+		w.atLineStart = false
 	} else if w.needSpace {
 		w.out.WriteByte(' ')
 	}
 
 	w.out.WriteString(tok.Lit)
 
-	// Line comments force newline
+	// Line comments: the source will have a NEWLINE token after this
+	// so we just mark that we don't need space - the NEWLINE will handle it
 	if strings.HasPrefix(tok.Lit, "//") {
-		w.writeNewline()
+		w.needSpace = false
+		// Don't call writeNewline() here - let the source NEWLINE token do it
 	} else {
 		w.needSpace = true
 	}
@@ -203,7 +215,7 @@ func (w *Writer) tokenText(tok tokenizer.Token) string {
 func (w *Writer) needsSpaceBefore(tok tokenizer.Token) bool {
 	// Never space before certain tokens
 	switch tok.Kind {
-	case tokenizer.COMMA, tokenizer.SEMICOLON, tokenizer.RPAREN,
+	case tokenizer.COMMA, tokenizer.SEMICOLON, tokenizer.COLON, tokenizer.RPAREN,
 		tokenizer.RBRACE, tokenizer.RBRACKET, tokenizer.DOT, tokenizer.QUESTION_DOT:
 		return false
 	case tokenizer.QUESTION:
@@ -280,66 +292,29 @@ func (w *Writer) writeMatch(tokens []tokenizer.Token, startIdx int) int {
 		return idx - 1
 	}
 
-	// Write opening {
+	// Write opening { and let source newlines handle formatting
 	w.writeToken(tokens[idx])
-	w.writeNewline()
 	w.increaseIndent()
 	idx++
 
-	// Write match arms
-	for idx < len(tokens) && tokens[idx].Kind != tokenizer.RBRACE {
+	// Write all tokens until closing }, preserving source formatting
+	depth := 0
+	for idx < len(tokens) && (tokens[idx].Kind != tokenizer.RBRACE || depth > 0) {
 		tok := tokens[idx]
 
-		// Skip newlines - we control newline placement
-		if tok.Kind == tokenizer.NEWLINE {
-			idx++
-			continue
-		}
-
-		// Write pattern until =>
-		for idx < len(tokens) && tokens[idx].Kind != tokenizer.ARROW && tokens[idx].Kind != tokenizer.RBRACE {
-			if tokens[idx].Kind != tokenizer.NEWLINE {
-				w.writeToken(tokens[idx])
+		// Track brace depth for nested blocks
+		if tok.Kind == tokenizer.LBRACE {
+			depth++
+		} else if tok.Kind == tokenizer.RBRACE {
+			if depth == 0 {
+				break // End of match
 			}
-			idx++
+			depth--
 		}
 
-		if idx >= len(tokens) || tokens[idx].Kind == tokenizer.RBRACE {
-			break
-		}
-
-		// Write =>
-		w.writeToken(tokens[idx])
+		// Write all tokens including newlines
+		w.writeToken(tok)
 		idx++
-
-		// Write expression until comma or } (for next arm)
-		depth := 0
-		for idx < len(tokens) {
-			tok := tokens[idx]
-			if tok.Kind == tokenizer.NEWLINE {
-				idx++
-				continue
-			}
-			if tok.Kind == tokenizer.LBRACE {
-				depth++
-			} else if tok.Kind == tokenizer.RBRACE {
-				if depth == 0 {
-					break // End of match
-				}
-				depth--
-			} else if tok.Kind == tokenizer.COMMA && depth == 0 {
-				// End of this arm, skip comma
-				idx++
-				break
-			}
-			w.writeToken(tok)
-			idx++
-		}
-
-		// Emit newline after arm (unless we're at closing brace)
-		if idx < len(tokens) && tokens[idx].Kind != tokenizer.RBRACE {
-			w.writeNewline()
-		}
 	}
 
 	// Write closing }
@@ -377,43 +352,26 @@ func (w *Writer) writeEnum(tokens []tokenizer.Token, startIdx int) int {
 		return idx - 1
 	}
 
-	// Write opening {
+	// Write opening { and increase indent
 	w.writeToken(tokens[idx])
-	w.writeNewline()
 	w.increaseIndent()
 	idx++
 
-	// Write variants
-	for idx < len(tokens) && tokens[idx].Kind != tokenizer.RBRACE {
+	// Write all tokens until matching closing }, tracking brace depth
+	// for nested braces in variant fields like: Active { id: int }
+	braceDepth := 1
+	for idx < len(tokens) && braceDepth > 0 {
 		tok := tokens[idx]
-
-		if tok.Kind == tokenizer.NEWLINE {
-			idx++
-			continue
-		}
-
-		if tok.Kind == tokenizer.COMMA {
-			w.writeToken(tok)
-			w.writeNewline()
-			idx++
-			continue
-		}
-
-		// Write variant (name + optional type)
-		for idx < len(tokens) && tokens[idx].Kind != tokenizer.COMMA && tokens[idx].Kind != tokenizer.RBRACE && tokens[idx].Kind != tokenizer.NEWLINE {
-			w.writeToken(tokens[idx])
-			idx++
-		}
-
-		// Emit newline after variant
-		if idx < len(tokens) && (tokens[idx].Kind == tokenizer.COMMA || tokens[idx].Kind == tokenizer.NEWLINE) {
-			if tokens[idx].Kind == tokenizer.COMMA {
-				idx++ // Skip comma
-			} else {
-				idx++ // Skip newline
+		if tok.Kind == tokenizer.LBRACE {
+			braceDepth++
+		} else if tok.Kind == tokenizer.RBRACE {
+			braceDepth--
+			if braceDepth == 0 {
+				break // Don't write the closing } yet
 			}
-			w.writeNewline()
 		}
+		w.writeToken(tok)
+		idx++
 	}
 
 	// Write closing }
@@ -451,13 +409,12 @@ func (w *Writer) writeGuard(tokens []tokenizer.Token, startIdx int) int {
 
 	// Write block
 	if idx < len(tokens) && tokens[idx].Kind == tokenizer.LBRACE {
-		// Write opening {
+		// Write opening { and let source newlines handle formatting
 		w.writeToken(tokens[idx])
-		w.writeNewline()
 		w.increaseIndent()
 		idx++
 
-		// Write statements until }
+		// Write all tokens until closing }
 		depth := 1
 		for idx < len(tokens) && depth > 0 {
 			tok := tokens[idx]
