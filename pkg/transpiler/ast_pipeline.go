@@ -8,6 +8,7 @@ import (
 	"go/token"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
 // TranspileResult holds the result of AST-based transpilation
@@ -26,6 +27,9 @@ type TranspileResult struct {
 
 	// Mappings contains source mappings from Dingo to Go (for .dmap generation)
 	Mappings []dingoast.SourceMapping
+
+	// LineMappings contains line-level mappings for .dmap v2 format
+	LineMappings []sourcemap.LineMapping
 
 	// DingoSource is the original Dingo source (for line index in .dmap)
 	DingoSource []byte
