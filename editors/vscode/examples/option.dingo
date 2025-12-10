@@ -18,7 +18,7 @@ func findUserByEmail(email string) -> Option[User] {
 
 // Using null coalescing operator
 func getUserName(email string) -> string {
-    let user = findUserByEmail(email)
+    user := findUserByEmail(email)
     return user.name ?? "Guest"
 }
 
@@ -36,7 +36,7 @@ func displayUser(email string) {
 
 // Chaining with error propagation
 func getVerifiedUser(email string) -> Result[User, error] {
-    let user = findUserByEmail(email)?
+    user := findUserByEmail(email)?
 
     if !user.verified {
         return Err(errors.New("user not verified"))

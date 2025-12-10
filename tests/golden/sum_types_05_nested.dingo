@@ -27,7 +27,7 @@ func parseInt(s string) Result {
 }
 
 func main() {
-	let result = parseInt("hello")
+	result := parseInt("hello")
 	switch r := result.(type) {
 	case ResultOk:
 		switch v := r.Value.(type) {

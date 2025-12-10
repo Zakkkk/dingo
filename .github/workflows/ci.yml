@@ -48,8 +48,7 @@ jobs:
         # Exclude examples with known limitations:
         # - 07_tuples: tuple destructuring with Go multiple returns not supported
         # - 14_functional: lambda type inference requires gopls context
-        # - 101_combined: uses tuple destructuring (same bug as 07_tuples)
-        for dingo_file in $(find examples -name "*.dingo" | grep -v /07_tuples/ | grep -v /14_functional/ | grep -v /101_combined/); do
+        for dingo_file in $(find examples -name "*.dingo" | grep -v /07_tuples/ | grep -v /14_functional/); do
           echo "Transpiling $dingo_file"
           ./dingo build "$dingo_file"
         done
@@ -59,8 +58,7 @@ jobs:
         # Build all examples except those with known limitations:
         # - 07_tuples: nested destructure not yet supported
         # - 14_functional: lambda type inference requires gopls context
-        # - 101_combined: uses tuple destructuring (same bug as 07_tuples)
-        go build $(go list ./examples/... | grep -v /07_tuples | grep -v /14_functional | grep -v /101_combined)
+        go build $(go list ./examples/... | grep -v /07_tuples | grep -v /14_functional)
 
     - name: Run unit tests
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts | grep -v /07_tuples)

@@ -56,9 +56,9 @@ impl Color {
 }
 
 func main() {
-    let msg1 = Move { x: 10, y: 20 }
-    let msg2 = Write("Hello, Dingo!")
-    let msg3 = ChangeColor(RGB(255, 128, 0))
+    msg1 := Move { x: 10, y: 20 }
+    msg2 := Write("Hello, Dingo!")
+    msg3 := ChangeColor(RGB(255, 128, 0))
 
     processMessage(msg1)
     processMessage(msg2)

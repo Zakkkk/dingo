@@ -19,7 +19,7 @@ func getStatusMessage(s Status) string {
 }
 
 func main() {
-	let status = Status.Active()
-	let msg = getStatusMessage(status)
+	status := Status.Active()
+	msg := getStatusMessage(status)
 	println(msg)
 }

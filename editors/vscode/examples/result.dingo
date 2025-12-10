@@ -20,7 +20,7 @@ func fetchUser(id string) -> Result[User, error] {
 
 // Using error propagation operator
 func processUser(id string) -> Result[User, error] {
-    let user = fetchUser(id)?
+    user := fetchUser(id)?
 
     if user.age < 18 {
         return Err(errors.New("user too young"))
