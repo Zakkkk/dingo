@@ -13,7 +13,7 @@ func init() {
 	feature.Register(&MatchPlugin{})          // 20
 	feature.Register(&EnumConstructorsPlugin{}) // 30
 	feature.Register(&ErrorPropPlugin{})      // 40
-	feature.Register(&GuardLetPlugin{})       // 50
+	feature.Register(&GuardPlugin{})       // 50
 	feature.Register(&SafeNavStatementsPlugin{}) // 55
 	feature.Register(&SafeNavPlugin{})        // 60
 	feature.Register(&NullCoalescePlugin{})   // 70

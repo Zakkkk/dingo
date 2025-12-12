@@ -19,7 +19,7 @@ The Dingo language server is underlining the WRONG part of code when there's an 
 package main
 
 func readConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 ```

@@ -46,7 +46,7 @@ go test ./tests -run TestGoldenFiles/pattern_match -v
 
 ```dingo
 func doubleIfPresent(opt: Option[int]) -> Option[int] {
-    let result = match opt {
+    result := match opt {
         Some(x) => Some(x * 2),
         None => Option_int_None()
     }

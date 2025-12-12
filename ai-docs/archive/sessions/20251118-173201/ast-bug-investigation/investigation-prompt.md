@@ -12,7 +12,7 @@ The Pattern Match Plugin in `pkg/plugin/builtin/pattern_match.go` has a statemen
 
 When transforming this pattern match:
 ```dingo
-let result = fetchData()
+result := fetchData()
 match result {
     Ok(x) => process(x),
     Err(e) => handleError(e)

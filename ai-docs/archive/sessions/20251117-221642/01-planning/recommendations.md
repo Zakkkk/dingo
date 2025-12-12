@@ -80,7 +80,7 @@ func foo() (int, string, error) {
 func ReadFile(path string) error { ... }
 
 // Uses it:
-let err = ReadFile(path)?
+err := ReadFile(path)?
 
 // Import tracker WRONGLY injects:
 import "os"  // ← Unused import! Compile error!

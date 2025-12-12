@@ -38,8 +38,8 @@ This becomes repetitive in functions with multiple error-prone operations. Dingo
 
 ```dingo
 func processUser(id: int) (User, error) {
-    let user = fetchUser(id)?      // Propagate error if non-nil
-    let profile = fetchProfile(user.ID)?
+    user := fetchUser(id)?      // Propagate error if non-nil
+    profile := fetchProfile(user.ID)?
     return profile, nil
 }
 ```
@@ -48,8 +48,8 @@ func processUser(id: int) (User, error) {
 
 ```dingo
 func processUser(id: int) (User, error) {
-    let user = fetchUser(id)!      // Propagate error if non-nil
-    let profile = fetchProfile(user.ID)!
+    user := fetchUser(id)!      // Propagate error if non-nil
+    profile := fetchProfile(user.ID)!
     return profile, nil
 }
 ```
@@ -58,8 +58,8 @@ func processUser(id: int) (User, error) {
 
 ```dingo
 func processUser(id: int) (User, error) {
-    let user = try fetchUser(id)   // Propagate error if non-nil
-    let profile = try fetchProfile(user.ID)
+    user := try fetchUser(id)   // Propagate error if non-nil
+    profile := try fetchProfile(user.ID)
     return profile, nil
 }
 ```
@@ -107,13 +107,13 @@ The error propagation operator can only be used with expressions that return `(T
 
 ```dingo
 // ✅ Valid: returns (string, error)
-let user = fetchUser(id)?
+user := fetchUser(id)?
 
 // ❌ Invalid: returns only string (no error)
-let name = getName()?  // Compile error
+name := getName()?  // Compile error
 
 // ❌ Invalid: returns (string, string) (not error)
-let result = getSomething()?  // Compile error
+result := getSomething()?  // Compile error
 ```
 
 ## Real-World Examples
@@ -125,10 +125,10 @@ import "net/http"
 import "io"
 
 func fetchURL(url: string) (string, error) {
-    let resp = http.Get(url)?
+    resp := http.Get(url)?
     defer resp.Body.Close()
 
-    let body = io.ReadAll(resp.Body)?
+    body := io.ReadAll(resp.Body)?
     return string(body), nil
 }
 ```
@@ -140,10 +140,10 @@ import "os"
 import "encoding/json"
 
 func loadConfig(path: string) (*Config, error) {
-    let data = os.ReadFile(path)?
+    data := os.ReadFile(path)?
 
     var config Config
-    let err = json.Unmarshal(data, &config)?
+    err := json.Unmarshal(data, &config)?
     return &config, nil
 }
 ```
@@ -154,10 +154,10 @@ func loadConfig(path: string) (*Config, error) {
 import "database/sql"
 
 func queryUser(db: *sql.DB, id: int) (*User, error) {
-    let row = db.QueryRow("SELECT name, email FROM users WHERE id = ?", id)
+    row := db.QueryRow("SELECT name, email FROM users WHERE id = ?", id)
 
     var user User
-    let err = row.Scan(&user.Name, &user.Email)?
+    err := row.Scan(&user.Name, &user.Email)?
     return &user, nil
 }
 ```
@@ -196,10 +196,10 @@ func processTransaction(userID int, amount float64) error {
 
 ```dingo
 func processTransaction(userID: int, amount: float64) error {
-    let user = fetchUser(userID)?
-    let account = getAccount(user.AccountID)?
-    let _ = validateBalance(account, amount)?
-    let _ = deductAmount(account, amount)?
+    user := fetchUser(userID)?
+    account := getAccount(user.AccountID)?
+    _ := validateBalance(account, amount)?
+    _ := deductAmount(account, amount)?
     return nil
 }
 ```
@@ -213,8 +213,8 @@ func processTransaction(userID: int, amount: float64) error {
 
 ```dingo
 // ✅ Good: Simple error propagation
-let data = fetchData()?
-let processed = processData(data)?
+data := fetchData()?
+processed := processData(data)?
 ```
 
 ### 2. Add Context When Needed
@@ -222,7 +222,7 @@ let processed = processData(data)?
 For errors that need additional context, use traditional Go error wrapping:
 
 ```dingo
-let user = fetchUser(id)?  // Simple propagation
+user := fetchUser(id)?  // Simple propagation
 // vs
 user, err := fetchUser(id)
 if err != nil {
@@ -236,7 +236,7 @@ You can mix both styles in the same function:
 
 ```dingo
 func process(id: int) error {
-    let data = fetchData(id)?  // Simple propagation
+    data := fetchData(id)?  // Simple propagation
 
     result, err := complexOperation(data)
     if err != nil {
@@ -244,7 +244,7 @@ func process(id: int) error {
         return fmt.Errorf("operation failed: %w", err)
     }
 
-    let _ = saveResult(result)?  // Back to simple propagation
+    _ := saveResult(result)?  // Back to simple propagation
     return nil
 }
 ```

@@ -25,7 +25,7 @@ The current implementation appears to follow a conservative approach by:
 
 Potential areas for ambiguity or incorrect inference:
 - **Nested `None` expressions**: `foo(None).unwrap()` or `if x == None { ... }`. The current parent walking might not correctly identify the most relevant context for the inner `None`.
-- **Untyped assignments**: `let x = None`. Without any explicit type hint, the inference must rely entirely on subsequent usage, which `go/types` would handle. The `NoneContext` may need a mechanism to mark these as `Option[any]` or trigger a later inference pass.
+- **Untyped assignments**: `x := None`. Without any explicit type hint, the inference must rely entirely on subsequent usage, which `go/types` would handle. The `NoneContext` may need a mechanism to mark these as `Option[any]` or trigger a later inference pass.
 - **Generic functions**: Passing `None` to a generic function argument. How does the `NoneContext` interact with generic type parameters? This might require deeper `go/types` integration.
 
 ## Parent Walking for Context
@@ -52,7 +52,7 @@ Correct parent walking involves:
     - `foo.bar?(None)`: Is `None` an argument to `bar` or is `bar?` ultimately returning `None`? Need to correctly differentiate.
     - `return Some(None)`: The inner `None` should derive its context from the `Some` call, not the `return` statement.
 2.  **Implicitly Typed Variables**:
-    - `let myVar = None`: Initial assignment gives `myVar` type `Option[any]`. Subsequent assignment `myVar = Some("hello")` or `myVar = Some(42)` could lead to type mismatches if `Option[T]` cannot be correctly inferred and refined. This is more of a `go/types` issue, but `NoneContext` might need to handle the initial `Option[any]` gracefully.
+    - `myVar := None`: Initial assignment gives `myVar` type `Option[any]`. Subsequent assignment `myVar = Some("hello")` or `myVar = Some(42)` could lead to type mismatches if `Option[T]` cannot be correctly inferred and refined. This is more of a `go/types` issue, but `NoneContext` might need to handle the initial `Option[any]` gracefully.
 3.  **Type Assertion/Conversion Context**:
     - `val := None.(Option[MyType])`: Although `None` is literal, its context is directly `Option[MyType]`. The `NoneContext` must not override this explicit type.
 4. **Interface Return Types**: If a function returns `(interface{}, error)` and we return `None`, the inference should typically deduce `Option[any]`.

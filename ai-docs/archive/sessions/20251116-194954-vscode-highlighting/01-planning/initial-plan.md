@@ -489,11 +489,11 @@ export class GeneratedCodeHighlighter {
 
     private findGeneratedMarkers(document: vscode.TextDocument): MarkerRange[] {
         const markers: MarkerRange[] = [];
-        let inBlock = false;
+        inBlock := false;
         let blockStart: number | null = null;
-        let blockType = 'unknown';
+        blockType := 'unknown';
 
-        for (let i = 0; i < document.lineCount; i++) {
+        for (i := 0; i < document.lineCount; i++) {
             const line = document.lineAt(i);
             const text = line.text;
 
@@ -510,7 +510,7 @@ export class GeneratedCodeHighlighter {
             if (inBlock && text.match(this.blockEndPattern)) {
                 if (blockStart !== null) {
                     // Add all lines from blockStart to current line
-                    for (let j = blockStart; j <= i; j++) {
+                    for (j := blockStart; j <= i; j++) {
                         markers.push({
                             range: document.lineAt(j).range,
                             type: blockType
@@ -651,13 +651,13 @@ export class GoldenFileSupport {
 
 **Before (Current):**
 ```dingo
-let data = ReadFile(path)? "failed to read user config"
+data := ReadFile(path)? "failed to read user config"
            ^(basic operator color)
 ```
 
 **After (Enhanced):**
 ```dingo
-let data = ReadFile(path)? "failed to read user config"
+data := ReadFile(path)? "failed to read user config"
            ^(bright keyword) ^(special error message color)
 ```
 

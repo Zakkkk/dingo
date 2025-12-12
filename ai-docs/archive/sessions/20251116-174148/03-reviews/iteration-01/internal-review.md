@@ -150,7 +150,7 @@ func (p *ErrorPropagationPlugin) Transform(ctx *plugin.Context, node ast.Node) (
 **Impact**:
 - Generated Go code will be syntactically invalid
 - Cannot use error propagation in expression contexts
-- Example: `let x = fetchUser()?` cannot be transformed correctly
+- Example: `x := fetchUser()?` cannot be transformed correctly
 
 **Recommendation**: The transformation needs to be context-aware:
 1. In statement context: Insert assignment + if check as separate statements

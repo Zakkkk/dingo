@@ -103,7 +103,7 @@ package main
 import "fmt"
 
 func main() {
-    let message = "Hello from Dingo!"
+    message := "Hello from Dingo!"
     fmt.Println(message)
 }
 ```
@@ -138,7 +138,7 @@ func divide(a: int, b: int) Result {
     return Ok(a / b)
 }
 
-let result = divide(10, 2)
+result := divide(10, 2)
 match result {
     Ok(value) => fmt.Printf("Success: %d\n", value),
     Error(msg) => fmt.Printf("Error: %s\n", msg)
@@ -149,25 +149,25 @@ match result {
 
 ```go
 // Property access with safe navigation
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 
 // Method calls with safe navigation
-let email = user?.getProfile()?.email ?? "noreply@example.com"
+email := user?.getProfile()?.email ?? "noreply@example.com"
 
 // Works with Go pointers too!
-let timeout = config?.database?.timeout ?? 30
+timeout := config?.database?.timeout ?? 30
 
 // Chained defaults
-let theme = user?.theme ?? project?.theme ?? global?.theme ?? "light"
+theme := user?.theme ?? project?.theme ?? global?.theme ?? "light"
 ```
 
 **Functional Utilities:**
 
 ```go
-let numbers = []int{1, 2, 3, 4, 5}
-let doubled = numbers.map(func(x int) int { return x * 2 })
-let evens = numbers.filter(func(x int) bool { return x % 2 == 0 })
-let sum = numbers.reduce(0, func(acc int, x int) int { return acc + x })
+numbers := []int{1, 2, 3, 4, 5}
+doubled := numbers.map(func(x int) int { return x * 2 })
+evens := numbers.filter(func(x int) bool { return x % 2 == 0 })
+sum := numbers.reduce(0, func(acc int, x int) int { return acc + x })
 ```
 
 See [examples/](#) and [docs/features/](docs/features/) for more working code.
@@ -394,9 +394,9 @@ func processOrder(orderID string) (*Order, error) {
 
 ```go
 func processOrder(orderID: string) -> Result<Order, Error> {
-    let order = fetchOrder(orderID)?
-    let validated = validateOrder(order)?
-    let payment = processPayment(validated)?
+    order := fetchOrder(orderID)?
+    validated := validateOrder(order)?
+    payment := processPayment(validated)?
     return Ok(payment)
 }
 ```
@@ -580,7 +580,7 @@ func (e Shape) IsRectangle() bool {
 package main
 
 func main() {
-    let message = "Hello, Dingo!"
+    message := "Hello, Dingo!"
     println(message)
     return
 }
@@ -599,7 +599,7 @@ func add(a: int, b: int) int {
 package main
 
 func main() {
-    var message = "Hello, Dingo!"
+    message := "Hello, Dingo!"
     println(message)
     return
 }
@@ -720,22 +720,22 @@ func ProcessUserDataPipeline(userID string, options *ProcessOptions) (*UserRepor
 
 ```go
 func ProcessUserDataPipeline(userID: string, options: ProcessOptions) -> Result<UserReport, Error> {
-    let user = db.GetUser(userID)?.okOr("user not found")?
+    user := db.GetUser(userID)?.okOr("user not found")?
 
-    let orders = db.GetOrdersForUser(user.ID)?
-    let validOrders = orders.filter(|o| o.status != "cancelled" && o.total > 0)
-    let totalSpent = validOrders.map(|o| o.total).sum()
+    orders := db.GetOrdersForUser(user.ID)?
+    validOrders := orders.filter(|o| o.status != "cancelled" && o.total > 0)
+    totalSpent := validOrders.map(|o| o.total).sum()
 
-    let prefs = db.GetPreferences(user.ID)?
-    let discount = prefs.isPremium ? totalSpent * 0.1 : 0.0
+    prefs := db.GetPreferences(user.ID)?
+    discount := prefs.isPremium ? totalSpent * 0.1 : 0.0
 
-    let address = db.GetShippingAddress(user.ID)?
-    let cityName = address?.city?.name ?? "Unknown"
+    address := db.GetShippingAddress(user.ID)?
+    cityName := address?.city?.name ?? "Unknown"
 
-    let payments = db.GetPaymentMethods(user.ID)?
-    let defaultPayment = payments.find(|p| p.isDefault)
+    payments := db.GetPaymentMethods(user.ID)?
+    defaultPayment := payments.find(|p| p.isDefault)
 
-    let score = analytics.GetRecommendationScore(user.ID).unwrapOr(0.0)
+    score := analytics.GetRecommendationScore(user.ID).unwrapOr(0.0)
 
     return Ok(UserReport{
         userID: user.id,
@@ -798,7 +798,7 @@ func fetchUser(id: string) -> Result<User, DatabaseError> {
         return Err(DatabaseError.invalidID(id))
     }
 
-    let user = database.query(id)
+    user := database.query(id)
     return Ok(user)
 }
 
@@ -817,9 +817,9 @@ This one's from Rust, and it's honestly genius.
 
 ```go
 func getUserProfile(userID: string) -> Result<Profile, Error> {
-    let user = fetchUser(userID)?          // Returns error if this fails
-    let posts = fetchPosts(user.ID)?       // Or this
-    let comments = fetchComments(user.ID)? // Or this
+    user := fetchUser(userID)?          // Returns error if this fails
+    posts := fetchPosts(user.ID)?       // Or this
+    comments := fetchComments(user.ID)? // Or this
 
     return Ok(Profile{user, posts, comments})
 }
@@ -837,7 +837,7 @@ We don't have to keep living with that mistake.
 
 ```go
 func findUser(email: string) -> Option<User> {
-    let users = db.query("SELECT * FROM users WHERE email = ?", email)
+    users := db.query("SELECT * FROM users WHERE email = ?", email)
     if users.isEmpty() {
         return None
     }
@@ -845,7 +845,7 @@ func findUser(email: string) -> Option<User> {
 }
 
 // Safe navigation like it's 2024
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 
 // Compiler won't let you forget to check
 match findUser("test@example.com") {
@@ -929,7 +929,7 @@ users.filter(u => u.age > 18)
 numbers.reduce((acc, x) => acc + x)
 
 // With explicit types when needed
-let parser = (s: string): int => parseInt(s)
+parser := (s: string): int => parseInt(s)
 ```
 
 **Rust style with pipes:**
@@ -942,7 +942,7 @@ users.filter(|u| u.age > 18)
 numbers.reduce(|acc, x| acc + x)
 
 // With explicit types when needed
-let parser = |s: string| -> int { parseInt(s) }
+parser := |s: string| -> int { parseInt(s) }
 ```
 
 **Configuration** (`dingo.toml`):
@@ -958,11 +958,11 @@ lambda_style = "typescript"  # or "rust"
 users.filter(u => u.age > 18)
 
 // ❌ No context - inference fails
-let standalone = x => x * 2
+standalone := x => x * 2
 
 // ✅ Fix with explicit type
-let standalone = (x: int) => x * 2       // TypeScript style
-let standalone = |x: int| x * 2          // Rust style
+standalone := (x: int) => x * 2       // TypeScript style
+standalone := |x: int| x * 2          // Rust style
 ```
 
 Compare that to Go's verbose function literals:
@@ -1006,7 +1006,7 @@ if user != nil && user.Address != nil && user.Address.City != nil {
 
 **The Dingo way:**
 ```go
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 One line. Same safety. Your eyes will thank you.
@@ -1028,8 +1028,8 @@ One line. Same safety. Your eyes will thank you.
 Go rejected this. We're adding it anyway.
 
 ```go
-let max = a > b ? a : b
-let status = isActive ? "online" : "offline"
+max := a > b ? a : b
+status := isActive ? "online" : "offline"
 println("You have ${count} item${count == 1 ? "" : "s"}")
 ```
 
@@ -1097,7 +1097,7 @@ func HandleUserUpdate(w http.ResponseWriter, r *http.Request) {
 
 ```go
 func HandleUserUpdate(w: http.ResponseWriter, r: http.Request) {
-    let result = processUpdate(r)
+    result := processUpdate(r)
 
     match result {
         Ok(user) => json.NewEncoder(w).Encode(user),
@@ -1108,9 +1108,9 @@ func HandleUserUpdate(w: http.ResponseWriter, r: http.Request) {
 }
 
 func processUpdate(r: http.Request) -> Result<User, ApiError> {
-    let userID = r.URL.Query().Get("id").filter(|s| !s.isEmpty()).okOr(ApiError.BadRequest("missing user ID"))?
-    let updateReq = json.NewDecoder(r.Body).Decode::<UpdateRequest>().mapErr(|_| ApiError.BadRequest("invalid JSON"))?
-    let user = db.GetUser(userID)?.okOr(ApiError.NotFound("user not found"))?
+    userID := r.URL.Query().Get("id").filter(|s| !s.isEmpty()).okOr(ApiError.BadRequest("missing user ID"))?
+    updateReq := json.NewDecoder(r.Body).Decode::<UpdateRequest>().mapErr(|_| ApiError.BadRequest("invalid JSON"))?
+    user := db.GetUser(userID)?.okOr(ApiError.NotFound("user not found"))?
 
     validateUpdate(updateReq)?
     db.UpdateUser(user.id, updateReq)?
@@ -1161,7 +1161,7 @@ func ProcessDataBatch(items []Item) ([]ProcessedItem, error) {
 
 ```go
 func ProcessDataBatch(items: []Item) -> Result<[]ProcessedItem, Error> {
-    let processed = items
+    processed := items
         .filter { it.isValid() }
         .mapWithLog { enrichItem(it) }
         .mapWithLog { validateItem(it) }
@@ -1248,7 +1248,7 @@ Let's see what actually comes out of the transpiler.
 
 ```go
 func findUser(email: string) -> Option<User> {
-    let users = db.query("SELECT * FROM users WHERE email = ?", email)
+    users := db.query("SELECT * FROM users WHERE email = ?", email)
     if users.isEmpty() {
         return None
     }

@@ -5,7 +5,7 @@
 This document provides the comprehensive, final implementation plan for Phase 1.6 of the Dingo project: complete error propagation operator (`?`) integration with full feature set. Based on user clarifications, this plan encompasses all major features in a single phase while maintaining the existing plugin architecture.
 
 **Scope:** ALL features implemented in Phase 1.6
-- Statement context (`let x = expr?`)
+- Statement context (`x := expr?`)
 - Expression context (`return expr?`) with statement lifting
 - Error wrapping syntax (`expr? "message"`)
 - Full go/types integration for accurate type inference
@@ -87,7 +87,7 @@ The enhanced `ErrorPropagationPlugin` will implement sophisticated multi-pass tr
 
 ```dingo
 // STATEMENT CONTEXT - Simple replacement
-let user = fetchUser(id)?
+user := fetchUser(id)?
 // Becomes multiple statements in place
 
 // EXPRESSION CONTEXT - Requires lifting
@@ -147,7 +147,7 @@ type ErrorPropContext struct {
 
 type ContextType int
 const (
-    ContextStatement ContextType = iota  // let x = expr?
+    ContextStatement ContextType = iota  // x := expr?
     ContextExpression                     // return expr?, fn(expr?)
 )
 
@@ -575,9 +575,9 @@ func (p *ErrorPropagationPlugin) recordMapping(
 
 **Test Cases:**
 ```dingo
-let x = fetch()?              // No message
-let y = fetch()? "failed"     // With message
-let z = fetch()?
+x := fetch()?              // No message
+y := fetch()? "failed"     // With message
+z := fetch()?
   "multi-line message"        // Message on next line
 ```
 
@@ -696,7 +696,7 @@ For expression context:
 **Transformation:**
 ```dingo
 // Input
-let user = fetchUser(id)? "failed to fetch user"
+user := fetchUser(id)? "failed to fetch user"
 
 // Generated
 __tmp0, __err0 := fetchUser(id)
@@ -983,7 +983,7 @@ func (g *Generator) Generate(file *dingoast.File) ([]byte, error) {
 ```dingo
 // Input: simple.dingo
 func fetchUser(id: int) (User, error) {
-    let data = fetch(id)?
+    data := fetch(id)?
     return User{data}, nil
 }
 ```
@@ -1000,8 +1000,8 @@ func process(id: int) (User, error) {
 ```dingo
 // Input: wrapping.dingo
 func getUser(id: int) (User, error) {
-    let user = fetchUser(id)? "failed to fetch user"
-    let validated = validateUser(user)? "validation failed"
+    user := fetchUser(id)? "failed to fetch user"
+    validated := validateUser(user)? "validation failed"
     return validated, nil
 }
 ```
@@ -1010,9 +1010,9 @@ func getUser(id: int) (User, error) {
 ```dingo
 // Input: chained.dingo
 func pipeline(id: int) (Result, error) {
-    let a = stepA(id)?
-    let b = stepB(a)?
-    let c = stepC(b)?
+    a := stepA(id)?
+    b := stepB(a)?
+    c := stepC(b)?
     return c, nil
 }
 ```
@@ -1021,9 +1021,9 @@ func pipeline(id: int) (Result, error) {
 ```dingo
 // Input: complex_types.dingo
 func process() (*User, error) {
-    let ptr = fetchPtr()?
-    let slice = fetchSlice()?
-    let mapping = fetchMap()?
+    ptr := fetchPtr()?
+    slice := fetchSlice()?
+    mapping := fetchMap()?
     return combine(ptr, slice, mapping)
 }
 ```
@@ -1032,10 +1032,10 @@ func process() (*User, error) {
 ```dingo
 // Input: multiple.dingo
 func multiStep() (Order, error) {
-    let user = fetchUser()?
-    let product = fetchProduct()?
-    let payment = processPayment(user, product)?
-    let order = createOrder(payment)?
+    user := fetchUser()?
+    product := fetchProduct()?
+    payment := processPayment(user, product)?
+    order := createOrder(payment)?
     return order, nil
 }
 ```
@@ -1432,7 +1432,7 @@ If development proceeds smoothly without major blockers: **6-7 days**
 **Input (Dingo):**
 ```dingo
 func fetchUser(id: int) (User, error) {
-    let data = fetch(id)? "failed to fetch"
+    data := fetch(id)? "failed to fetch"
     return User{data}, nil
 }
 ```
@@ -1484,9 +1484,9 @@ func process(id int) (User, error) {
 **Input (Dingo):**
 ```dingo
 func pipeline(id: int) (Result, error) {
-    let a = stepA(id)? "step A failed"
-    let b = stepB(a)? "step B failed"
-    let c = stepC(b)? "step C failed"
+    a := stepA(id)? "step A failed"
+    b := stepB(a)? "step B failed"
+    c := stepC(b)? "step C failed"
     return c, nil
 }
 ```

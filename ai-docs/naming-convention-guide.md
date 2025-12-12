@@ -90,7 +90,7 @@ ctx.TempVarCounter = 0  // Wrong! Initialize to 1
 **Variables**: `tmp`, `err` (first), then `tmp1`, `err1`, `tmp2`, `err2`, etc.
 
 ```go
-// Input: let user = fetchUser(id)?
+// Input: user := fetchUser(id)?
 // Output:
 tmp, err := fetchUser(id)
 if err != nil {
@@ -165,7 +165,7 @@ All tests must expect the new naming convention:
 ```go
 // Test expectations
 func TestErrorPropagation(t *testing.T) {
-    result := transpile("let x = foo()?")
+    result := transpile("x := foo()?")
 
     // ✅ Correct assertions
     assert.Contains(result, "tmp, err :=")

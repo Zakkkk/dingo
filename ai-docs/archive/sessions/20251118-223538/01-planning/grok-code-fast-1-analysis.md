@@ -16,7 +16,7 @@ The bug is in the source map lookup algorithm in `pkg/preprocessor/sourcemap.go`
 
 **Dingo source (line 4):**
 ```
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	           ^13      ^19 ^20
 ```
 
@@ -144,7 +144,7 @@ The Dingo file uses a **tab character** for indentation. LSP positions are typic
 
 **Dingo line 4 (with tab):**
 ```
-[TAB]let data = ReadFile(path)?
+[TAB]data := ReadFile(path)?
 0    1  2   3    45       ...
 ```
 
@@ -290,17 +290,17 @@ func (sm *SourceMap) Validate() []string {
 **Actual After Fix**: Should underline `ReadFile`
 
 ### Test 2: Type Mismatch Error
-**Dingo**: `let x = ReadFile(path)?` where `ReadFile` returns wrong type
+**Dingo**: `x := ReadFile(path)?` where `ReadFile` returns wrong type
 **Expected**: Error underlines `ReadFile` or the whole expression
 **Verify**: Not the `?` operator
 
 ### Test 3: Multiple Operators on Same Line
-**Dingo**: `let a = Foo()?, let b = Bar()?`
+**Dingo**: `a := Foo()?, b := Bar()?`
 **Expected**: Each error underlines correct function call
 **Verify**: First error on `Foo`, second on `Bar`, not mixed
 
 ### Test 4: Nested Error Propagation
-**Dingo**: `let x = Outer(Inner()?)?`
+**Dingo**: `x := Outer(Inner()?)?`
 **Expected**: Inner error on `Inner`, outer error on `Outer`
 **Verify**: Correct mapping for nested expressions
 

@@ -32,7 +32,7 @@ if match.switchStmt.Init != nil {
 
 **File**: `pkg/preprocessor/preprocessor.go` (processor order)
 
-**Issue**: Pattern matching preprocessor was running BEFORE keyword processor, causing `let result = match` to fail.
+**Issue**: Pattern matching preprocessor was running BEFORE keyword processor, causing `result := match` to fail.
 
 **Fix**: Moved KeywordProcessor BEFORE RustMatchProcessor in the processor pipeline (lines 90-96).
 

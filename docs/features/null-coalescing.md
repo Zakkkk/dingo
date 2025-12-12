@@ -51,7 +51,7 @@ if settings != nil {
 
 ```go
 // Dingo - Clear and concise
-let theme = settings?.theme ?? "light"
+theme := settings?.theme ?? "light"
 ```
 
 Same behavior. Same safety. 75% less code.
@@ -72,7 +72,7 @@ func main() {
     let name: StringOption = StringOption_None()
 
     // Provide default for None
-    let displayName = name ?? "Guest"
+    displayName := name ?? "Guest"
     println(displayName)  // Prints: Guest
 }
 ```
@@ -82,7 +82,7 @@ func main() {
 ```go
 func getTheme(config: *Config) string {
     // config might be nil
-    let theme = config?.theme ?? "light"
+    theme := config?.theme ?? "light"
     return theme
 }
 ```
@@ -91,7 +91,7 @@ func getTheme(config: *Config) string {
 
 ```go
 // Try primary, then fallback1, then fallback2
-let value = primary ?? fallback1 ?? fallback2 ?? "default"
+value := primary ?? fallback1 ?? fallback2 ?? "default"
 ```
 
 Each `??` is checked left-to-right. The first non-None/non-nil value is used.
@@ -102,13 +102,13 @@ The real power comes from combining `?.` and `??`:
 
 ```go
 // Navigate safely, provide default at the end
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 
 // Method calls with defaults
-let timeout = config?.getDatabase()?.timeout ?? 30
+timeout := config?.getDatabase()?.timeout ?? 30
 
 // Complex chains
-let theme = user?.getSettings()?.theme ?? config?.defaultTheme ?? "light"
+theme := user?.getSettings()?.theme ?? config?.defaultTheme ?? "light"
 ```
 
 **Why this matters:**
@@ -117,7 +117,7 @@ Without null coalescing, you'd need:
 
 ```go
 // Verbose Option unwrapping
-let cityOpt = user?.address?.city?.name
+cityOpt := user?.address?.city?.name
 var city string
 if cityOpt.IsSome() {
     city = *cityOpt.some
@@ -129,7 +129,7 @@ if cityOpt.IsSome() {
 With null coalescing, it's one line:
 
 ```go
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 ## Real-World Examples
@@ -143,8 +143,8 @@ type Config struct {
 
 func getPort(config: *Config) int {
     // Try config, then environment, then default
-    let configPort = config?.port
-    let envPort = os.Getenv("PORT")?.parseInt()
+    configPort := config?.port
+    envPort := os.Getenv("PORT")?.parseInt()
     return configPort ?? envPort ?? 8080
 }
 ```
@@ -163,7 +163,7 @@ type ResponseData struct {
 
 func processResponse(resp: *ApiResponse) string {
     // Extract user name with multiple fallbacks
-    let username = resp?.data?.user?.name ?? "Anonymous"
+    username := resp?.data?.user?.name ?? "Anonymous"
     return fmt.Sprintf("Hello, %s!", username)
 }
 ```
@@ -174,7 +174,7 @@ func processResponse(resp: *ApiResponse) string {
 import "database/sql"
 
 func getUserEmail(db: *sql.DB, userID: int) string {
-    let user = queryUser(db, userID)
+    user := queryUser(db, userID)
 
     // Default to placeholder if user not found
     return user?.email ?? "noreply@example.com"
@@ -333,7 +333,7 @@ enum IntOption {
 }
 
 let value: IntOption = IntOption_None()
-let result = value ?? 42  // result is int (unwrapped)
+result := value ?? 42  // result is int (unwrapped)
 ```
 
 **Unwrapping:**
@@ -345,7 +345,7 @@ let result = value ?? 42  // result is int (unwrapped)
 
 ```go
 let ptr: *string = nil
-let result = ptr ?? "default"  // result is string (dereferenced)
+result := ptr ?? "default"  // result is string (dereferenced)
 ```
 
 **Dereferencing:**
@@ -359,16 +359,16 @@ let result = ptr ?? "default"  // result is string (dereferenced)
 // Option → Option → value
 let a: IntOption = IntOption_None()
 let b: IntOption = IntOption_Some(10)
-let result = a ?? b ?? 0
+result := a ?? b ?? 0
 
 // Pointer → Pointer → value
 let p1: *string = nil
 let p2: *string = &someString
-let result = p1 ?? p2 ?? "default"
+result := p1 ?? p2 ?? "default"
 
 // Option → value (simple)
 let opt: IntOption = IntOption_Some(42)
-let result = opt ?? 0  // result is 42 (unwrapped)
+result := opt ?? 0  // result is 42 (unwrapped)
 ```
 
 ## Optimization: Inline vs IIFE
@@ -461,7 +461,7 @@ user?.address?.city ?? "Unknown"
 ```go
 // ❌ Invalid - type mismatch
 let value: IntOption = IntOption_Some(42)
-let result = value ?? "string"  // Error: expected int, got string
+result := value ?? "string"  // Error: expected int, got string
 ```
 
 **Error message:**
@@ -476,7 +476,7 @@ Error: type mismatch in null coalescing
 
 ```go
 // ❌ Complex expression - use IIFE mode
-let result = value ?? computeDefault(x, y, z)
+result := value ?? computeDefault(x, y, z)
 
 // ✅ Generates IIFE with intermediate variable
 // (safe evaluation, computeDefault called only if needed)
@@ -499,12 +499,12 @@ a ?? (b ?? c)
 
 ```go
 // ❌ Not supported in Phase 7
-let result = value
+result := value
     ?? fallback1
     ?? fallback2
 
 // ✅ Workaround: Keep on one line
-let result = value ?? fallback1 ?? fallback2
+result := value ?? fallback1 ?? fallback2
 ```
 
 ## Performance Considerations
@@ -538,7 +538,7 @@ Each `??` adds:
 
 ```go
 // expensiveCompute() ONLY called if value is None
-let result = value ?? expensiveCompute()
+result := value ?? expensiveCompute()
 
 // Generated Go ensures lazy evaluation:
 if value.IsSome() {
@@ -553,30 +553,30 @@ return expensiveCompute()  // Only called if needed
 
 ```go
 // Good: Guaranteed non-null result
-let city = user?.address?.city ?? "Unknown"
+city := user?.address?.city ?? "Unknown"
 
 // Bad: Result might still be None
-let city = user?.address?.city
+city := user?.address?.city
 ```
 
 ### 2. Order Fallbacks by Priority
 
 ```go
 // Good: Try specific, then general, then hardcoded
-let theme = userPreference ?? appConfig ?? "light"
+theme := userPreference ?? appConfig ?? "light"
 
 // Bad: Hardcoded before user preference
-let theme = "light" ?? userPreference  // Always "light"!
+theme := "light" ?? userPreference  // Always "light"!
 ```
 
 ### 3. Use for Simple Defaults, Not Complex Logic
 
 ```go
 // Good: Simple defaults
-let port = config?.port ?? 8080
+port := config?.port ?? 8080
 
 // Bad: Complex computation (use if-else)
-let port = config?.port ?? computeOptimalPort(system, env, load)
+port := config?.port ?? computeOptimalPort(system, env, load)
 // Consider: Explicit if-else for readability
 ```
 
@@ -584,10 +584,10 @@ let port = config?.port ?? computeOptimalPort(system, env, load)
 
 ```go
 // Good: Clean pipeline
-let email = user?.getProfile()?.email ?? "noreply@example.com"
+email := user?.getProfile()?.email ?? "noreply@example.com"
 
 // Less ideal: Separate operations
-let profile = user?.getProfile()
+profile := user?.getProfile()
 var email string
 if profile.IsSome() {
     email = (*profile.some).email
@@ -612,32 +612,32 @@ func getPort(config: *Config) int {
 
 ```go
 // User setting → Project setting → Global setting → Default
-let timeout = user?.timeout ?? project?.timeout ?? global?.timeout ?? 30
+timeout := user?.timeout ?? project?.timeout ?? global?.timeout ?? 30
 ```
 
 ### API Response Fallback
 
 ```go
-let message = response?.data?.message ?? response?.error?.message ?? "Unknown error"
+message := response?.data?.message ?? response?.error?.message ?? "Unknown error"
 ```
 
 ### Optional Transformation
 
 ```go
-let displayName = user?.name ?? user?.email ?? "Guest"
+displayName := user?.name ?? user?.email ?? "Guest"
 ```
 
 ### Form Validation
 
 ```go
-let age = form?.age ?? 0
-let valid = age >= 18
+age := form?.age ?? 0
+valid := age >= 18
 ```
 
 ### Database Query Default
 
 ```go
-let user = db.query(id) ?? User{id: id, name: "Unknown"}
+user := db.query(id) ?? User{id: id, name: "Unknown"}
 ```
 
 ## Migration from Go
@@ -675,7 +675,7 @@ func getUserTheme(user: *User, config: *Config) string {
 ### With Pattern Matching
 
 ```go
-let role = user?.role ?? "guest"
+role := user?.role ?? "guest"
 
 match role {
     "admin" => grantAdminAccess(),
@@ -689,8 +689,8 @@ match role {
 
 ```go
 func processUser(id: int) -> Result[User, Error] {
-    let user = getUser(id)?
-    let theme = user?.settings?.theme ?? "light"
+    user := getUser(id)?
+    theme := user?.settings?.theme ?? "light"
     return Ok(user)
 }
 ```
@@ -699,14 +699,14 @@ func processUser(id: int) -> Result[User, Error] {
 
 ```go
 // Covered extensively in this doc
-let value = user?.address?.city?.name ?? "Unknown"
+value := user?.address?.city?.name ?? "Unknown"
 ```
 
 ### With Ternary Operator (Future)
 
 ```go
 // When ternary is implemented (Phase 9)
-let status = user?.isActive() ?? false ? "online" : "offline"
+status := user?.isActive() ?? false ? "online" : "offline"
 ```
 
 ## Comparison with Other Languages
@@ -720,19 +720,19 @@ const theme = user?.settings?.theme ?? "light";
 
 **Dingo is identical:**
 ```go
-let theme = user?.settings?.theme ?? "light"
+theme := user?.settings?.theme ?? "light"
 ```
 
 ### Swift
 
 ```swift
 // Swift
-let theme = user?.settings?.theme ?? "light"
+theme := user?.settings?.theme ?? "light"
 ```
 
 **Dingo is identical:**
 ```go
-let theme = user?.settings?.theme ?? "light"
+theme := user?.settings?.theme ?? "light"
 ```
 
 ### Kotlin
@@ -744,7 +744,7 @@ val theme = user?.settings?.theme ?: "light"
 
 **Dingo uses `??` instead of `?:`:**
 ```go
-let theme = user?.settings?.theme ?? "light"
+theme := user?.settings?.theme ?? "light"
 ```
 
 ### C#
@@ -756,7 +756,7 @@ string theme = user?.Settings?.Theme ?? "light";
 
 **Dingo is nearly identical:**
 ```go
-let theme = user?.settings?.theme ?? "light"
+theme := user?.settings?.theme ?? "light"
 ```
 
 ## See Also

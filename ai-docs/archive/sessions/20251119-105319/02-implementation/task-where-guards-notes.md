@@ -258,7 +258,7 @@ case ResultTag_Ok:
 Guards work correctly with Variable Hoisting (assignment context):
 
 ```dingo
-let status = match result {
+status := match result {
     Result_Ok(x) where x > 0 => "positive",
     Result_Ok(x) => "non-positive",
     Result_Err(_) => "error",

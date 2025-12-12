@@ -5,16 +5,16 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
 func TestWriterBasic(t *testing.T) {
 	dingoSrc := []byte("let x = 10\nlet y = 20\n")
 	goSrc := []byte("x := 10\ny := 20\n")
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identifier"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
@@ -39,10 +39,10 @@ func TestWriterBasic(t *testing.T) {
 		t.Errorf("Invalid version: got %d, want %d", version, Version)
 	}
 
-	// Check entry count
+	// v2 format has EntryCount = 0 (no token-level entries)
 	entryCount := binary.LittleEndian.Uint32(data[8:12])
-	if entryCount != 2 {
-		t.Errorf("Invalid entry count: got %d, want 2", entryCount)
+	if entryCount != 0 {
+		t.Errorf("Invalid entry count: got %d, want 0 (v2 format)", entryCount)
 	}
 
 	// Check source lengths
@@ -56,10 +56,10 @@ func TestWriterBasic(t *testing.T) {
 		t.Errorf("Invalid GoLen: got %d, want %d", goLen, len(goSrc))
 	}
 
-	// Check that GoIdxOff is HeaderSize
-	goIdxOff := binary.LittleEndian.Uint32(data[20:24])
-	if goIdxOff != HeaderSize {
-		t.Errorf("Invalid GoIdxOff: got %d, want %d", goIdxOff, HeaderSize)
+	// Check line mapping count
+	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	if lineMappingCnt != 2 {
+		t.Errorf("Invalid LineMappingCnt: got %d, want 2", lineMappingCnt)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestWriterEmptyMappings(t *testing.T) {
 	goSrc := []byte("package main\n")
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write([]ast.SourceMapping{})
+	data, err := writer.Write([]sourcemap.LineMapping{})
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -78,9 +78,16 @@ func TestWriterEmptyMappings(t *testing.T) {
 		t.Fatalf("Output too short: got %d bytes", len(data))
 	}
 
+	// v2 format has EntryCount = 0 (no token-level entries)
 	entryCount := binary.LittleEndian.Uint32(data[8:12])
 	if entryCount != 0 {
 		t.Errorf("Invalid entry count: got %d, want 0", entryCount)
+	}
+
+	// Line mapping count should also be 0
+	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	if lineMappingCnt != 0 {
+		t.Errorf("Invalid LineMappingCnt: got %d, want 0", lineMappingCnt)
 	}
 }
 
@@ -89,10 +96,10 @@ func TestWriterKindDeduplication(t *testing.T) {
 	goSrc := []byte("x := 10\ny := 20\nz := 30\n")
 
 	// All mappings have the same kind
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
-		{DingoStart: 22, DingoEnd: 32, GoStart: 16, GoEnd: 23, Kind: "identifier"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identifier"},
+		{DingoLine: 3, GoLineStart: 3, GoLineEnd: 3, Kind: "identifier"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
@@ -116,7 +123,7 @@ func TestWriterLineOffsets(t *testing.T) {
 	goSrc := []byte("a\nb\nc\nd")
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write([]ast.SourceMapping{})
+	data, err := writer.Write([]sourcemap.LineMapping{})
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -149,15 +156,15 @@ func TestWriterLineOffsets(t *testing.T) {
 	}
 }
 
-func TestWriterSorting(t *testing.T) {
-	dingoSrc := []byte("a\nb\nc\n")
-	goSrc := []byte("x\ny\nz\n")
+func TestWriterLineMappingEntries(t *testing.T) {
+	dingoSrc := []byte("line1\nline2\nline3\n")
+	goSrc := []byte("a\nb\nc\nd\n")
 
-	// Add mappings in random order
-	mappings := []ast.SourceMapping{
-		{DingoStart: 4, DingoEnd: 6, GoStart: 4, GoEnd: 6, Kind: "c"},
-		{DingoStart: 0, DingoEnd: 2, GoStart: 0, GoEnd: 2, Kind: "a"},
-		{DingoStart: 2, DingoEnd: 4, GoStart: 2, GoEnd: 4, Kind: "b"},
+	// Add mappings in order
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 2, Kind: "multi"},
+		{DingoLine: 2, GoLineStart: 3, GoLineEnd: 3, Kind: "single"},
+		{DingoLine: 3, GoLineStart: 4, GoLineEnd: 4, Kind: "single"},
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
@@ -166,25 +173,27 @@ func TestWriterSorting(t *testing.T) {
 		t.Fatalf("Write failed: %v", err)
 	}
 
-	// Read Go index (should be sorted by GoStart)
-	goIdxOff := binary.LittleEndian.Uint32(data[20:24])
-	entry0GoStart := binary.LittleEndian.Uint32(data[goIdxOff+8 : goIdxOff+12])
-	entry1GoStart := binary.LittleEndian.Uint32(data[goIdxOff+28 : goIdxOff+32])
-	entry2GoStart := binary.LittleEndian.Uint32(data[goIdxOff+48 : goIdxOff+52])
+	// Read line mapping section
+	lineMappingOff := binary.LittleEndian.Uint32(data[36:40])
+	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
 
-	if entry0GoStart != 0 || entry1GoStart != 2 || entry2GoStart != 4 {
-		t.Errorf("Go index not sorted: got [%d, %d, %d], want [0, 2, 4]",
-			entry0GoStart, entry1GoStart, entry2GoStart)
+	if lineMappingCnt != 3 {
+		t.Errorf("LineMappingCnt: got %d, want 3", lineMappingCnt)
 	}
 
-	// Read Dingo index (should be sorted by DingoStart)
-	dingoIdxOff := binary.LittleEndian.Uint32(data[24:28])
-	entry0DingoStart := binary.LittleEndian.Uint32(data[dingoIdxOff : dingoIdxOff+4])
-	entry1DingoStart := binary.LittleEndian.Uint32(data[dingoIdxOff+20 : dingoIdxOff+24])
-	entry2DingoStart := binary.LittleEndian.Uint32(data[dingoIdxOff+40 : dingoIdxOff+44])
+	// Verify first entry (DingoLine=1, GoLineStart=1, GoLineEnd=2)
+	entry0Off := lineMappingOff
+	entry0DingoLine := binary.LittleEndian.Uint32(data[entry0Off : entry0Off+4])
+	entry0GoLineStart := binary.LittleEndian.Uint32(data[entry0Off+4 : entry0Off+8])
+	entry0GoLineEnd := binary.LittleEndian.Uint32(data[entry0Off+8 : entry0Off+12])
 
-	if entry0DingoStart != 0 || entry1DingoStart != 2 || entry2DingoStart != 4 {
-		t.Errorf("Dingo index not sorted: got [%d, %d, %d], want [0, 2, 4]",
-			entry0DingoStart, entry1DingoStart, entry2DingoStart)
+	if entry0DingoLine != 1 {
+		t.Errorf("Entry0 DingoLine: got %d, want 1", entry0DingoLine)
+	}
+	if entry0GoLineStart != 1 {
+		t.Errorf("Entry0 GoLineStart: got %d, want 1", entry0GoLineStart)
+	}
+	if entry0GoLineEnd != 2 {
+		t.Errorf("Entry0 GoLineEnd: got %d, want 2", entry0GoLineEnd)
 	}
 }

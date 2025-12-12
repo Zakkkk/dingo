@@ -174,7 +174,7 @@ func TestErrorPropagation_StatementContext(t *testing.T) {
     input := `
 package main
 func test() (int, error) {
-    let x = fetch()?
+    x := fetch()?
     return x, nil
 }
 `
@@ -654,7 +654,7 @@ However, the **CRITICAL** nature of the statement injection bug was not recogniz
 func TestErrorPropagation_FullPipeline(t *testing.T) {
     input := `package main
 func fetch(id int) (User, error) {
-    let data = getUser(id)? "failed to fetch user"
+    data := getUser(id)? "failed to fetch user"
     return data, nil
 }`
 

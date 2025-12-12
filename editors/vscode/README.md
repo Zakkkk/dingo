@@ -145,7 +145,7 @@ func fetchUser(id: string) -> Result<User, error> {
 ### Error Propagation
 ```dingo
 func processUser(id: string) -> Result<User, error> {
-    let user = fetchUser(id)?  // Automatically unwrap or return error
+    user := fetchUser(id)?  // Automatically unwrap or return error
     return Ok(user)
 }
 ```
@@ -160,9 +160,9 @@ match fetchUser(id) {
 
 ### Lambdas
 ```dingo
-let numbers = []int{1, 2, 3, 4, 5}
-let evens = numbers.filter(|n| n % 2 == 0)
-let doubled = evens.map(|n| n * 2)
+numbers := []int{1, 2, 3, 4, 5}
+evens := numbers.filter(|n| n % 2 == 0)
+doubled := evens.map(|n| n * 2)
 ```
 
 ## Configuration

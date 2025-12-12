@@ -103,7 +103,7 @@ type Function struct {
 ### What Should Stay as Preprocessor
 ✅ **Simple, context-free transformations**:
 - Type annotations: `param: Type` → `param Type`
-- Let bindings: `let x = 5` → `x := 5`
+- Let bindings: `x := 5` → `x := 5`
 - Simple keywords: `fn` → `func`
 
 ### What Needs Full Parser

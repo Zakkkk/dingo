@@ -54,7 +54,7 @@ Source mappings must be shifted DOWN by the number of import lines added:
 **Example:**
 ```
 Input (line 4):
-    let data = ReadFile(path)?
+    data := ReadFile(path)?
 
 Output BEFORE imports:
     Line 1: package main

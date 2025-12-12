@@ -13,6 +13,7 @@ type TransformTracker struct {
 	transforms     []TransformRecord // Recorded transforms in source order
 	finalized      bool              // True after Finalize() called
 	lineMappings   []LineMapping     // Computed after finalization
+	finalLineDelta int               // Total line difference: len(goLines) - len(dingoLines)
 }
 
 // TransformRecord captures metadata about a single transformation.
@@ -137,6 +138,11 @@ func (t *TransformTracker) Finalize(goSource []byte) error {
 		goBytePos += tr.GeneratedLen    // Move past transform in Go
 	}
 
+	// Compute final line delta by counting lines in both sources
+	dingoLineCount := countNewlines(t.originalSource) + 1
+	goLineCount := countNewlines(goSource) + 1
+	t.finalLineDelta = goLineCount - dingoLineCount
+
 	t.finalized = true
 	return nil
 }
@@ -145,6 +151,13 @@ func (t *TransformTracker) Finalize(goSource []byte) error {
 // Returns empty slice if not yet finalized.
 func (t *TransformTracker) LineMappings() []LineMapping {
 	return t.lineMappings
+}
+
+// FinalLineDelta returns the total line difference between Go and Dingo sources.
+// Positive means Go has more lines than Dingo.
+// Returns 0 if not yet finalized.
+func (t *TransformTracker) FinalLineDelta() int {
+	return t.finalLineDelta
 }
 
 // Helper functions
@@ -196,4 +209,163 @@ func countNewlines(b []byte) int {
 		}
 	}
 	return count
+}
+
+// ByteMapping represents a byte-level source mapping from v1 format.
+// Used to convert existing byte mappings to line mappings.
+type ByteMapping struct {
+	DingoStart int    // Start byte offset in original Dingo source
+	DingoEnd   int    // End byte offset in original Dingo source
+	GoStart    int    // Start byte offset in Go output (may be stale after go/printer)
+	GoEnd      int    // End byte offset in Go output (may be stale after go/printer)
+	Kind       string // Transform type
+}
+
+// ComputeLineMappingsFromByteMappings generates line mappings by:
+// 1. Using Dingo byte positions from v1 mappings (which are in ORIGINAL source)
+// 2. Computing Go line positions using cumulative delta from line-expanding transforms
+//
+// Algorithm:
+// - Most transforms (tuple_literal, tuple_type_alias) don't add lines - they transform
+//   content on the same line. For these, Go line = Dingo line + cumulative delta.
+// - Line-expanding transforms (tuple_destructure) add lines: 1 line → 3 lines.
+// - We track cumulative delta from all previous line-expanding transforms.
+//
+// This approach is more accurate than proportional distribution because transforms
+// don't expand evenly - most expansion happens in specific locations (tuple destructuring).
+func ComputeLineMappingsFromByteMappings(byteMappings []ByteMapping, dingoSource, goSource []byte) []LineMapping {
+	if len(byteMappings) == 0 {
+		return nil
+	}
+
+	// Build line offset tables
+	dingoLineOffsets := buildLineOffsets(dingoSource)
+	goLineCount := countNewlines(goSource) + 1
+
+	// Sort mappings by DingoStart to process in order
+	sorted := make([]ByteMapping, len(byteMappings))
+	copy(sorted, byteMappings)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].DingoStart < sorted[j].DingoStart
+	})
+
+	// Calculate initial delta from import changes (before any transforms)
+	// This handles tuples import being added (+1 line typically)
+	// We estimate this by looking at where the first non-import transform occurs
+	// and comparing line counts up to that point
+	initialDelta := estimateImportDelta(sorted, dingoLineOffsets, dingoSource, goSource)
+
+	// Track cumulative line delta from line-expanding transforms
+	cumulativeDelta := initialDelta
+
+	// Track which Dingo lines we've processed (to avoid double-counting delta)
+	lastProcessedLine := 0
+
+	result := make([]LineMapping, 0, len(sorted))
+
+	for _, bm := range sorted {
+		// Skip invalid mappings
+		if bm.DingoStart < 0 || bm.DingoStart > len(dingoSource) {
+			continue
+		}
+
+		// Get Dingo line from byte position
+		dingoLine := byteToLine(dingoLineOffsets, bm.DingoStart)
+		dingoEndLine := byteToLine(dingoLineOffsets, bm.DingoEnd)
+
+		// Calculate Go line position = Dingo line + cumulative delta from previous transforms
+		goLineStart := dingoLine + cumulativeDelta
+		if goLineStart < 1 {
+			goLineStart = 1
+		}
+
+		// Determine expansion for this transform
+		dingoLinesSpanned := dingoEndLine - dingoLine + 1
+		goLinesSpanned := dingoLinesSpanned // Default: same line count (no expansion)
+
+		// Tuple destructuring expands 1 line to 3 lines
+		if bm.Kind == "tuple_destructure" {
+			goLinesSpanned = dingoLinesSpanned * 3
+		}
+
+		goLineEnd := goLineStart + goLinesSpanned - 1
+		if goLineEnd > goLineCount {
+			goLineEnd = goLineCount
+		}
+
+		result = append(result, LineMapping{
+			DingoLine:   dingoLine,
+			GoLineStart: goLineStart,
+			GoLineEnd:   goLineEnd,
+			Kind:        bm.Kind,
+		})
+
+		// Update cumulative delta if this transform expanded lines
+		// Only add delta once per Dingo line to avoid double-counting
+		if bm.Kind == "tuple_destructure" && dingoLine > lastProcessedLine {
+			cumulativeDelta += goLinesSpanned - dingoLinesSpanned
+			lastProcessedLine = dingoEndLine
+		}
+	}
+
+	return result
+}
+
+// estimateImportDelta calculates the line delta from import changes.
+// This handles cases where tuples import is added (typically +1 line).
+// Returns the delta to apply before the first transform.
+func estimateImportDelta(sorted []ByteMapping, dingoLineOffsets []int, dingoSource, goSource []byte) int {
+	if len(sorted) == 0 {
+		return 0
+	}
+
+	// Find the first transform that's not in the import section (typically line > 20)
+	firstTransformLine := 0
+	for _, bm := range sorted {
+		if bm.DingoStart >= 0 && bm.DingoStart < len(dingoSource) {
+			line := byteToLine(dingoLineOffsets, bm.DingoStart)
+			// Look for transforms past the typical import section
+			if line > 15 {
+				firstTransformLine = line
+				break
+			}
+		}
+	}
+
+	// If no transform found past imports, use a small default delta
+	if firstTransformLine == 0 {
+		return 1 // Default: assume tuples import adds 1 line
+	}
+
+	// Check if tuples import was added (not present in Dingo, present in Go)
+	// This typically adds +1 line to the output
+	goStr := string(goSource)
+	if containsTuplesImport(goStr) && !containsTuplesImport(string(dingoSource)) {
+		return 1 // Tuples import was added
+	}
+
+	return 0
+}
+
+// containsTuplesImport checks if source contains the tuples import statement
+func containsTuplesImport(src string) bool {
+	// Look for actual import statement, not just comments that mention the path
+	// The import must be quoted to distinguish from documentation comments
+	return len(src) > 0 &&
+		stringContains(src, "\"github.com/MadAppGang/dingo/runtime/tuples\"")
+}
+
+// stringContains is a simple substring check (avoiding bytes.Contains for strings)
+func stringContains(s, substr string) bool {
+	return len(s) >= len(substr) && findSubstring(s, substr) >= 0
+}
+
+// findSubstring finds substr in s, returns index or -1
+func findSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }

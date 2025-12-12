@@ -170,7 +170,7 @@ func (s Slice[T]) Filter(predicate func(T) bool) Slice[T]
 **Transformation Strategy:**
 ```dingo
 // INPUT (Dingo syntax)
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 
 // INTERMEDIATE (AST representation)
 MethodCallExpr{
@@ -482,7 +482,7 @@ Since lambda syntax is not yet implemented, we need a strategy:
 **Option A: Use Go Function Literals**
 ```dingo
 // Dingo source (temporary syntax)
-let doubled = numbers.map(func(x int) int { return x * 2 })
+doubled := numbers.map(func(x int) int { return x * 2 })
 ```
 - Pros: Works immediately, no parser changes
 - Cons: Verbose, defeats the purpose
@@ -490,7 +490,7 @@ let doubled = numbers.map(func(x int) int { return x * 2 })
 **Option B: String Placeholder**
 ```dingo
 // NOT RECOMMENDED - just documenting
-let doubled = numbers.map("x => x * 2")
+doubled := numbers.map("x => x * 2")
 ```
 - Pros: Placeholder for syntax
 - Cons: Not type-safe, terrible DX
@@ -498,7 +498,7 @@ let doubled = numbers.map("x => x * 2")
 **Option C: Wait for Lambda Implementation**
 ```dingo
 // Target syntax (requires lambda feature)
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 ```
 - Pros: Proper syntax, type-safe
 - Cons: Blocks functional utilities
@@ -516,7 +516,7 @@ doubled := stdlib.Map(numbers, func(x int) int {
 When lambda syntax is added, it will transpile to the same Go code:
 ```dingo
 // Dingo with lambda (future)
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 
 // Transpiles to same Go code
 doubled := stdlib.Map(numbers, func(x int) int {
@@ -587,8 +587,8 @@ func TestTransformMap(t *testing.T) {
 package main
 
 func main() {
-    let numbers = []int{1, 2, 3, 4, 5}
-    let doubled = numbers.map(func(x int) int { return x * 2 })
+    numbers := []int{1, 2, 3, 4, 5}
+    doubled := numbers.map(func(x int) int { return x * 2 })
     println(doubled)
 }
 ```
@@ -681,7 +681,7 @@ doubled := stdlib.NewSlice(numbers).Map(func(x int) int { return x*2 }).Unwrap()
 **Approach:** Inline map/filter/reduce as direct loops.
 
 ```dingo
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 
 // Transpiles to fully inlined loop
 var doubled []int
@@ -1019,8 +1019,8 @@ func FilterNone[T any](slice []Option[T]) []Option[T]
 package main
 
 func main() {
-    let numbers = []int{1, 2, 3, 4, 5}
-    let doubled = numbers.map(func(x int) int { return x * 2 })
+    numbers := []int{1, 2, 3, 4, 5}
+    doubled := numbers.map(func(x int) int { return x * 2 })
     println(doubled)
 }
 ```

@@ -214,7 +214,7 @@ The implementation generates **two distinct mapping types** for error propagatio
 
 **Example**:
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
            ^-------------^
            This is the expression
 ```
@@ -231,7 +231,7 @@ let data = ReadFile(path)?
 
 **Example**:
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
                          ^
                          This is the ? operator
 ```

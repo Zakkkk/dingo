@@ -2,6 +2,7 @@ package refactor
 
 import (
 	"go/ast"
+	goparser "go/parser"
 	"go/token"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
@@ -30,10 +31,16 @@ func (d *ResultTypeDetector) Doc() string {
 }
 
 func (d *ResultTypeDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the AST looking for function declarations
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		funcDecl, ok := n.(*ast.FuncDecl)
 		if !ok {
 			return true
@@ -106,10 +113,16 @@ func (d *OptionTypeDetector) Doc() string {
 }
 
 func (d *OptionTypeDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the AST looking for function declarations
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		funcDecl, ok := n.(*ast.FuncDecl)
 		if !ok {
 			return true

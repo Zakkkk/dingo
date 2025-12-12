@@ -3,6 +3,7 @@ package refactor
 import (
 	"bytes"
 	"go/ast"
+	goparser "go/parser"
 	"go/token"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
@@ -36,10 +37,16 @@ func (d *OkPatternDetector) Doc() string {
 }
 
 func (d *OkPatternDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the AST looking for assignment followed by if !ok
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		// Look for assignment statements
 		assignStmt, ok := n.(*ast.AssignStmt)
 		if !ok {
@@ -72,7 +79,7 @@ func (d *OkPatternDetector) Detect(fset *token.FileSet, file *dingoast.File, src
 		rhsExpr := assignStmt.Rhs[0]
 
 		// Check if the next statement is if !ok
-		nextStmt := findNextStatement(file.File, assignStmt)
+		nextStmt := findNextStatement(goFile, assignStmt)
 		ifStmt, isIfStmt := nextStmt.(*ast.IfStmt)
 		if !isIfStmt {
 			return true

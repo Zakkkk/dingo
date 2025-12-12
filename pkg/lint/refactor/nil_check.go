@@ -3,6 +3,7 @@ package refactor
 import (
 	"bytes"
 	"go/ast"
+	goparser "go/parser"
 	"go/token"
 	"strings"
 
@@ -35,10 +36,16 @@ func (d *NilCheckDetector) Doc() string {
 }
 
 func (d *NilCheckDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the Go AST looking for if statements with nil checks
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		ifStmt, ok := n.(*ast.IfStmt)
 		if !ok {
 			return true
@@ -114,7 +121,7 @@ func (d *NilCheckDetector) Detect(fset *token.FileSet, file *dingoast.File, src 
 	return diagnostics
 }
 
-// GuardLetDetector implements R004: prefer-guard-let
+// GuardDetector implements R004: prefer-guard
 //
 // Detects early-return nil check patterns like:
 //
@@ -123,24 +130,30 @@ func (d *NilCheckDetector) Detect(fset *token.FileSet, file *dingoast.File, src 
 //	}
 //	// config used here
 //
-// Suggests using guard let:
+// Suggests using guard:
 //
-//	guard let cfg = config else {
+//	guard cfg = config else {
 //	    return errors.New("config required")
 //	}
-type GuardLetDetector struct{}
+type GuardDetector struct{}
 
-func (d *GuardLetDetector) Code() string { return "R004" }
-func (d *GuardLetDetector) Name() string { return "prefer-guard-let" }
-func (d *GuardLetDetector) Doc() string {
-	return "Suggests using guard let for early-return nil checks"
+func (d *GuardDetector) Code() string { return "R004" }
+func (d *GuardDetector) Name() string { return "prefer-guard" }
+func (d *GuardDetector) Doc() string {
+	return "Suggests using guard for early-return nil checks"
 }
 
-func (d *GuardLetDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+func (d *GuardDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the Go AST looking for if statements with early returns
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		ifStmt, ok := n.(*ast.IfStmt)
 		if !ok {
 			return true
@@ -177,7 +190,7 @@ func (d *GuardLetDetector) Detect(fset *token.FileSet, file *dingoast.File, src 
 
 		// Build the guard-let expression
 		var guardCode strings.Builder
-		guardCode.WriteString("guard let ")
+		guardCode.WriteString("guard ")
 		guardCode.WriteString(varName)
 		guardCode.WriteString(" = ")
 		guardCode.WriteString(varName)
@@ -187,12 +200,12 @@ func (d *GuardLetDetector) Detect(fset *token.FileSet, file *dingoast.File, src 
 		diagnostics = append(diagnostics, analyzer.Diagnostic{
 			Pos:      pos,
 			End:      end,
-			Message:  "Consider using guard let for early-return nil check",
+			Message:  "Consider using guard for early-return nil check",
 			Severity: analyzer.SeverityHint,
 			Code:     "R004",
 			Category: "refactor",
 			Fixes: []analyzer.Fix{{
-				Title:       "Replace with guard let",
+				Title:       "Replace with guard",
 				IsPreferred: true,
 				Edits: []analyzer.TextEdit{{
 					Pos:     pos,

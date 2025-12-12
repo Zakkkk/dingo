@@ -17,7 +17,7 @@ The Dingo language server is underlining the WRONG part of code when reporting e
 package main
 
 func readConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 ```

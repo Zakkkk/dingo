@@ -370,7 +370,7 @@ git checkout <commit> -- pkg/plugin/builtin/error_propagation.go
 func TestErrorPropagationPlugin_BasicTransform(t *testing.T) {
     input := `
     fn getUser() -> Result[User, error] {
-        let id = getId()?  // Should transform
+        id := getId()?  // Should transform
         return Ok(loadUser(id))
     }
     `

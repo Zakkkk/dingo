@@ -31,7 +31,7 @@ Tuples are **fixed-size collections of heterogeneous values** that don't require
 
 ```dingo
 // Create a tuple
-let point = (10, 20)
+point := (10, 20)
 
 // Destructure it
 let (x, y) = point
@@ -57,7 +57,7 @@ y := point.Y
 
 **With tuples (Dingo):**
 ```dingo
-let point = (10, 20)
+point := (10, 20)
 let (x, y) = point
 ```
 
@@ -71,20 +71,20 @@ let (x, y) = point
 
 ```dingo
 // Basic literals
-let pair = (1, 2)
-let triple = (1, 2, 3)
-let colors = (255, 128, 64)
+pair := (1, 2)
+triple := (1, 2, 3)
+colors := (255, 128, 64)
 
 // Mixed types
-let mixed = (42, "hello", true)
-let user = ("Alice", 30, "alice@example.com")
+mixed := (42, "hello", true)
+user := ("Alice", 30, "alice@example.com")
 
 // Nested tuples
-let grid = ((0, 0), (100, 100))
-let matrix = (((1, 2), (3, 4)), ((5, 6), (7, 8)))
+grid := ((0, 0), (100, 100))
+matrix := (((1, 2), (3, 4)), ((5, 6), (7, 8)))
 
 // With complex types
-let data = (Some(10), Ok("success"), []int{1, 2, 3})
+data := (Some(10), Ok("success"), []int{1, 2, 3})
 ```
 
 ### Destructuring Tuples
@@ -149,8 +149,8 @@ func swap(x int, y int) (int, int) {
     return (y, x)
 }
 
-let a = 10
-let b = 20
+a := 10
+b := 20
 let (a, b) = swap(a, b)  // a=20, b=10
 ```
 
@@ -173,8 +173,8 @@ func translate(pos Position, dx int, dy int) Position {
     return (x + dx, y + dy)
 }
 
-let start = (100, 200)
-let moved = translate(start, 10, -5)
+start := (100, 200)
+moved := translate(start, 10, -5)
 let (finalX, finalY) = moved
 ```
 
@@ -192,22 +192,22 @@ func lighten(color Color, amount int) Color {
     )
 }
 
-let red = (255, 0, 0)
-let lightRed = lighten(red, 50)
+red := (255, 0, 0)
+lightRed := lighten(red, 50)
 ```
 
 ### Partial Application
 
 ```dingo
 // Store configuration as tuple
-let config = ("localhost", 8080, true)
+config := ("localhost", 8080, true)
 
 func connect(config (string, int, bool)) Result[Connection, string] {
     let (host, port, useTLS) = config
     // Connection logic...
 }
 
-let result = connect(config)
+result := connect(config)
 ```
 
 ---
@@ -219,10 +219,10 @@ let result = connect(config)
 Dingo generates **human-readable struct names** using CamelCase:
 
 ```dingo
-let x = (10, "hello")
+x := (10, "hello")
 // Generates: Tuple2IntString
 
-let y = (User{}, error(nil), true)
+y := (User{}, error(nil), true)
 // Generates: Tuple3UserErrorBool
 ```
 
@@ -238,12 +238,12 @@ Dingo infers tuple types from context:
 
 ```dingo
 // Inferred from literals
-let point = (10, 20)
+point := (10, 20)
 // Type: Tuple2IntInt
 
 // Inferred from function return
 func getCoords() (int, int) { ... }
-let coords = getCoords()
+coords := getCoords()
 // Type: Tuple2IntInt
 
 // Explicit annotation
@@ -256,16 +256,16 @@ let data: (string, int) = getData()
 **Supported:** 2 to 12 elements
 
 ```dingo
-let valid2 = (1, 2)                                  // ✅ 2 elements
-let valid12 = (1,2,3,4,5,6,7,8,9,10,11,12)          // ✅ 12 elements
+valid2 := (1, 2)                                  // ✅ 2 elements
+valid12 := (1,2,3,4,5,6,7,8,9,10,11,12)          // ✅ 12 elements
 ```
 
 **Not supported:**
 
 ```dingo
-let empty = ()                                       // ❌ Error
-let single = (42,)                                   // ❌ Error
-let tooBig = (1,2,3,4,5,6,7,8,9,10,11,12,13)        // ❌ Error
+empty := ()                                       // ❌ Error
+single := (42,)                                   // ❌ Error
+tooBig := (1,2,3,4,5,6,7,8,9,10,11,12,13)        // ❌ Error
 ```
 
 **Why 12?**
@@ -285,7 +285,7 @@ let tooBig = (1,2,3,4,5,6,7,8,9,10,11,12,13)        // ❌ Error
 func divmod(a int, b int) (int, int)
 
 // Coordinate pairs
-let position = (x, y)
+position := (x, y)
 
 // Temporary pattern matching
 match getStatus() {
@@ -294,13 +294,13 @@ match getStatus() {
 }
 
 // Key-value pairs
-let entry = ("user_id", 42)
+entry := ("user_id", 42)
 ```
 
 ❌ **Bad:**
 ```dingo
 // Too many elements (use struct)
-let user = (name, age, email, phone, address, city, zip, country)
+user := (name, age, email, phone, address, city, zip, country)
 
 // Named fields needed (use struct)
 type Point = (int, int)  // What's X? What's Y?
@@ -382,8 +382,8 @@ match parseCoords("10,20") {
 **Pattern 2: Tuple of Results**
 ```dingo
 func batchFetch(urls []string) (Result[Data, Error], Result[Data, Error]) {
-    let r1 = fetch(urls[0])
-    let r2 = fetch(urls[1])
+    r1 := fetch(urls[0])
+    r2 := fetch(urls[1])
     return (r1, r2)
 }
 
@@ -415,7 +415,7 @@ enum Status {
     Failed(error),
 }
 
-let status = getStatus()
+status := getStatus()
 
 match status {
     Status::Success(code, msg) => {
@@ -438,8 +438,8 @@ enum Point {
     ThreeD(int, int, int),
 }
 
-let point2d = Point::TwoD(10, 20)
-let point3d = Point::ThreeD(10, 20, 30)
+point2d := Point::TwoD(10, 20)
+point3d := Point::ThreeD(10, 20, 30)
 
 match point2d {
     Point::TwoD(x, y) => println("2D:", x, y),
@@ -455,7 +455,7 @@ match point2d {
 
 **Error: Empty tuple**
 ```dingo
-let empty = ()
+empty := ()
 ```
 ```
 Error: empty tuples are not supported (line 1). Use 'struct{}' if you need a zero-size type
@@ -464,16 +464,16 @@ Error: empty tuples are not supported (line 1). Use 'struct{}' if you need a zer
 
 **Error: Single element**
 ```dingo
-let single = (42,)
+single := (42,)
 ```
 ```
 Error: single-element tuples are not supported (line 1). Remove parentheses
 ```
-**Fix:** Remove parentheses: `let single = 42`
+**Fix:** Remove parentheses: `single := 42`
 
 **Error: Too many elements**
 ```dingo
-let huge = (1,2,3,4,5,6,7,8,9,10,11,12,13)
+huge := (1,2,3,4,5,6,7,8,9,10,11,12,13)
 ```
 ```
 Error: tuple has 13 elements, maximum is 12 (line 1). Consider using a struct instead
@@ -491,16 +491,16 @@ type Data struct {
 
 **Problem: Grouping vs Tuple**
 ```dingo
-let x = (10 + 20)      // Grouping (no comma)
-let y = (10 + 20,)     // Error (single-element tuple)
-let z = (10, 20)       // Tuple (has comma)
+x := (10 + 20)      // Grouping (no comma)
+y := (10 + 20,)     // Error (single-element tuple)
+z := (10, 20)       // Tuple (has comma)
 ```
 
 **Problem: Function call vs Tuple**
 ```dingo
 foo(a, b)       // Function call
 (a, b)          // Tuple literal
-let x = (a, b)  // Clearly a tuple (assignment)
+x := (a, b)  // Clearly a tuple (assignment)
 ```
 
 ### Type Inference Issues
@@ -556,8 +556,8 @@ func swap(p Pair) Pair {
     return Pair{First: p.Second, Second: p.First}
 }
 
-let p = Pair{First: 10, Second: 20}
-let swapped = swap(p)
+p := Pair{First: 10, Second: 20}
+swapped := swap(p)
 ```
 
 **After (concise):**
@@ -567,8 +567,8 @@ func swap(p (int, int)) (int, int) {
     return (b, a)
 }
 
-let p = (10, 20)
-let swapped = swap(p)
+p := (10, 20)
+swapped := swap(p)
 ```
 
 **Change:** Replace struct with tuple type, use destructuring instead of field access.
@@ -581,9 +581,9 @@ func getCoords() []int {
     return []int{10, 20}
 }
 
-let coords = getCoords()
-let x = coords[0]
-let y = coords[1]
+coords := getCoords()
+x := coords[0]
+y := coords[1]
 ```
 
 **After (tuple):**
@@ -608,7 +608,7 @@ let (x, y) = getCoords()
 
 ```dingo
 // Creation
-let tuple = (expr1, expr2, ...)
+tuple := (expr1, expr2, ...)
 
 // Destructuring
 let (var1, var2, ...) = tuple

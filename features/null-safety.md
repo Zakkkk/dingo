@@ -37,26 +37,26 @@ city := user.Address.City.Name  // PANIC if any is nil
 
 ```dingo
 // Returns Option[T] - None if any is nil
-let city = user?.address?.city?.name
+city := user?.address?.city?.name
 
 // With unwrap
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 
 // Method calls
-let email = user?.getEmail()?.lowercase()
+email := user?.getEmail()?.lowercase()
 ```
 
 ### Null Coalescing (`??`)
 
 ```dingo
 // Provide default for None/nil
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 
 // Chain multiple fallbacks
-let name = user?.name ?? settings.defaultName ?? "Guest"
+name := user?.name ?? settings.defaultName ?? "Guest"
 
 // With expressions
-let port = env.get("PORT")?.parseInt() ?? 8080
+port := env.get("PORT")?.parseInt() ?? 8080
 ```
 
 ---
@@ -65,7 +65,7 @@ let port = env.get("PORT")?.parseInt() ?? 8080
 
 ```dingo
 // Dingo
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 ```go
@@ -85,7 +85,7 @@ if user != nil && user.Address != nil && user.Address.City != nil && user.Addres
 ### Swift
 
 ```swift
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 ### Kotlin

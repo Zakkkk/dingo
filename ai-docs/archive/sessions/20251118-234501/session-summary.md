@@ -347,7 +347,7 @@ Created hybrid "best-of-all" architecture combining:
 **Before:**
 ```dingo
 func readConfig(path string) ([]byte, error) {
-    let data = ReadFile(path)?  // ❌ Undefined: ReadFile
+    data := ReadFile(path)?  // ❌ Undefined: ReadFile
     return data, nil
 }
 ```

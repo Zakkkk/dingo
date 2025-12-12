@@ -79,7 +79,7 @@ func fetchUser(id: string) -> Result[User, Error] {
 
 // Consuming Result
 func processUser(id: string) -> Result[User, Error] {
-    let result = fetchUser(id)
+    result := fetchUser(id)
 
     match result {
         Ok(user) => {
@@ -98,9 +98,9 @@ func processUser(id: string) -> Result[User, Error] {
 
 ```dingo
 func processUser(id: string) -> Result[User, Error] {
-    let user = fetchUser(id)?           // Auto-return on Err
-    let validated = validateUser(user)? // Chain safely
-    let saved = saveUser(validated)?    // No boilerplate
+    user := fetchUser(id)?           // Auto-return on Err
+    validated := validateUser(user)? // Chain safely
+    saved := saveUser(validated)?    // No boilerplate
 
     return Ok(saved)
 }
@@ -233,9 +233,9 @@ enum Result[T, E] {
 
 // Usage with ? operator
 fn process_user(id: &str) -> Result[User, Error] {
-    let user = fetch_user(id)?;      // Early return on Err
-    let validated = validate(user)?;  // Chains elegantly
-    let saved = save(validated)?;     // No boilerplate
+    user := fetch_user(id)?;      // Early return on Err
+    validated := validate(user)?;  // Chains elegantly
+    saved := save(validated)?;     // No boilerplate
     Ok(saved)
 }
 ```
@@ -340,16 +340,16 @@ impl Result[T, E] {
 
 ```dingo
 // Automatic conversion from Go (value, error) tuples
-let goFunc = import("some/package").GoFunction
+goFunc := import("some/package").GoFunction
 
 // Dingo wraps automatically
 let result: Result[string, error] = goFunc.call("arg")
 
 // Or explicit conversion
-let result = Result.fromGo(goFunc("arg"))
+result := Result.fromGo(goFunc("arg"))
 
 // Convert back to Go tuple
-let (value, err) = result.toGo()
+(value, err) = result.toGo()
 ```
 
 ### Error Type Constraints
@@ -406,7 +406,7 @@ func fetch(id: string) -> Result[User, UserError]
 - ❓ Learning curve (but familiar from Rust/Swift)
 
 ### Mitigation Strategies
-- Type inference reduces verbosity: `let result = fetch(id)` not `let result: Result[User, Error] = ...`
+- Type inference reduces verbosity: `result := fetch(id)` not `let result: Result[User, Error] = ...`
 - Compiler optimizations can eliminate wrapper overhead
 - Excellent documentation and examples
 - Gradual adoption path (mix with Go error handling)
@@ -450,7 +450,7 @@ func fetch(id: string) -> Result[User, UserError]
 
 ```dingo
 func fetchJSON(url: string) -> Result[Response, HttpError] {
-    let resp = http.Get(url)?
+    resp := http.Get(url)?
 
     if resp.StatusCode != 200 {
         return Err(HttpError{
@@ -474,13 +474,13 @@ func main() {
 
 ```dingo
 func readConfig(path: string) -> Result[Config, IOError] {
-    let data = os.ReadFile(path)?
-    let config = json.Unmarshal(data)?
+    data := os.ReadFile(path)?
+    config := json.Unmarshal(data)?
     return Ok(config)
 }
 
 func main() {
-    let config = readConfig("config.json")
+    config := readConfig("config.json")
         .unwrapOr(Config.default())
 
     println("Config loaded: ${config}")
@@ -491,9 +491,9 @@ func main() {
 
 ```dingo
 func getUser(db: Database, id: int) -> Result[User, DbError] {
-    let row = db.QueryRow("SELECT * FROM users WHERE id = ?", id)?
+    row := db.QueryRow("SELECT * FROM users WHERE id = ?", id)?
 
-    let user = User{}
+    user := User{}
     row.Scan(&user.ID, &user.Name, &user.Email)?
 
     return Ok(user)
@@ -501,8 +501,8 @@ func getUser(db: Database, id: int) -> Result[User, DbError] {
 
 // Chain multiple operations
 func getUserWithPosts(db: Database, id: int) -> Result[UserWithPosts, DbError] {
-    let user = getUser(db, id)?
-    let posts = getPosts(db, user.ID)?
+    user := getUser(db, id)?
+    posts := getPosts(db, user.ID)?
 
     return Ok(UserWithPosts{user, posts})
 }

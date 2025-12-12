@@ -427,13 +427,13 @@ func (p *Pipeline) injectDeclarations(transformed *ast.File, g *generator.Genera
 **Test 1: Simple injection**
 ```dingo
 // User comment
-let x = Ok(42)
+x := Ok(42)
 ```
 Expected: User comment preserved, no DINGO comments in Result type
 
 **Test 2: Nested generics**
 ```dingo
-let x = Ok(Some(42)) // Should work
+x := Ok(Some(42)) // Should work
 ```
 Expected: Both Result and Option types injected, no comment pollution
 

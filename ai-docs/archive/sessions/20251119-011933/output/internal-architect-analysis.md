@@ -107,7 +107,7 @@ When plugins transform the AST:
 **Use case**:
 ```
 Dingo source (line 4):
-  let data = ReadFile(path)?
+  data := ReadFile(path)?
 
 Transpiled Go (lines 8-14):
   __tmp0, __err0 := os.ReadFile(path)  // line 8

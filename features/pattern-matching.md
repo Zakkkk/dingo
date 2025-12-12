@@ -429,7 +429,7 @@ if result.err != nil {
 
 ```dingo
 // Complex matching in concise syntax
-let status = match (isLoggedIn, hasPermission, isAdmin) {
+status := match (isLoggedIn, hasPermission, isAdmin) {
     (false, _, _) => "Please log in",
     (true, false, false) => "No permission",
     (true, true, _) => "Access granted",

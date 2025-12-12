@@ -293,7 +293,7 @@ Reason: Syntax error in test input (inline comments after code)
 **Root Cause:**
 Test input contained inline comments after statements:
 ```dingo
-let _ = ReadFile(path)?           // user-defined, no import
+_ := ReadFile(path)?           // user-defined, no import
 ```
 
 The preprocessor parses this and gets confused by the `//` inside the line.
@@ -301,8 +301,8 @@ The preprocessor parses this and gets confused by the `//` inside the line.
 **Fix Applied:**
 Removed inline comments, used simple variable assignments:
 ```dingo
-let err = ReadFile(path)?
-let data = os.ReadFile(path)?
+err := ReadFile(path)?
+data := os.ReadFile(path)?
 ```
 
 ### Run 2 (After Fix - All Pass)

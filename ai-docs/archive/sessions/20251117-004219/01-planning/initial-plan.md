@@ -22,13 +22,13 @@ The null safety operator provides safe navigation through potentially nil values
 
 ```dingo
 // Basic chaining
-let city = user?.address?.city?.name
+city := user?.address?.city?.name
 
 // With method calls
-let email = user?.getEmail()?.lowercase()
+email := user?.getEmail()?.lowercase()
 
 // Combined with null coalescing
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 ### 1.3 AST Representation
@@ -82,7 +82,7 @@ type SafeNavigation struct {
 
 ```dingo
 // Dingo source
-let city = user?.address?.city?.name
+city := user?.address?.city?.name
 ```
 
 ```go
@@ -158,13 +158,13 @@ Provides default values for `Option[T]` or nullable values. Syntactic sugar for 
 
 ```dingo
 // Basic usage
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 
 // Chaining multiple fallbacks
-let value = primary ?? secondary ?? tertiary ?? "default"
+value := primary ?? secondary ?? tertiary ?? "default"
 
 // With expressions
-let port = env.get("PORT")?.parseInt() ?? 8080
+port := env.get("PORT")?.parseInt() ?? 8080
 ```
 
 ### 2.3 AST Representation
@@ -216,7 +216,7 @@ type TernaryExpression struct {
 
 ```dingo
 // Dingo source
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 ```
 
 ```go
@@ -234,7 +234,7 @@ name := __opt0.UnwrapOr("Anonymous")
 
 **For chaining:**
 ```dingo
-let value = a ?? b ?? c ?? "default"
+value := a ?? b ?? c ?? "default"
 ```
 
 ```go
@@ -279,7 +279,7 @@ let name: string = optionalName ?? "default"  // Option[string] ?? string -> str
 let user: User = optionalUser ?? User{}       // Option[User] ?? User -> User
 
 // Invalid
-let x = someOption ?? 42  // ERROR if someOption is Option[string]
+x := someOption ?? 42  // ERROR if someOption is Option[string]
 ```
 
 ---
@@ -294,14 +294,14 @@ Concise conditional expressions. Not to be confused with error propagation `?` o
 
 ```dingo
 // Basic
-let max = a > b ? a : b
-let status = isActive ? "active" : "inactive"
+max := a > b ? a : b
+status := isActive ? "active" : "inactive"
 
 // In expressions
 println("You have ${count} friend${count == 1 ? "" : "s"}")
 
 // Chaining (discouraged but allowed)
-let grade = score >= 90 ? "A" : score >= 80 ? "B" : "C"
+grade := score >= 90 ? "A" : score >= 80 ? "B" : "C"
 ```
 
 ### 3.3 AST Representation
@@ -368,7 +368,7 @@ type TernaryExpression struct {
 
 ```dingo
 // Dingo source (simple)
-let max = a > b ? a : b
+max := a > b ? a : b
 ```
 
 ```go
@@ -399,7 +399,7 @@ println(__ternary0)
 
 **For chaining:**
 ```dingo
-let grade = score >= 90 ? "A" : score >= 80 ? "B" : "C"
+grade := score >= 90 ? "A" : score >= 80 ? "B" : "C"
 ```
 
 ```go
@@ -477,16 +477,16 @@ Concise function literals supporting multiple syntactic styles. Most complex fea
 #### Style 1: Rust/Closure Style (Primary)
 ```dingo
 // Basic
-let add = |a, b| a + b
+add := |a, b| a + b
 
 // With types
-let parse = |s: string| -> int { parseInt(s) }
+parse := |s: string| -> int { parseInt(s) }
 
 // No parameters
-let getRandom = || rand.Int()
+getRandom := || rand.Int()
 
 // Block body
-let process = |x| {
+process := |x| {
     println("Processing ${x}")
     return x * 2
 }
@@ -495,16 +495,16 @@ let process = |x| {
 #### Style 2: Arrow Function Style (Secondary)
 ```dingo
 // Basic
-let add = (a, b) => a + b
+add := (a, b) => a + b
 
 // Single parameter (no parens)
-let double = x => x * 2
+double := x => x * 2
 
 // With types
-let parse = (s: string): int => parseInt(s)
+parse := (s: string): int => parseInt(s)
 
 // Block body
-let process = (x) => {
+process := (x) => {
     println("Processing ${x}")
     return x * 2
 }
@@ -604,7 +604,7 @@ type LambdaBody struct {
 
 ```dingo
 // Dingo source
-let add = |a, b| a + b
+add := |a, b| a + b
 users.filter(|u| u.age > 18)
 ```
 
@@ -622,7 +622,7 @@ users.filter(func(u User) bool {
 **With type inference:**
 ```dingo
 // Dingo (types inferred from context)
-let numbers = strings.map(|s| parseInt(s))
+numbers := strings.map(|s| parseInt(s))
 ```
 
 ```go
@@ -634,9 +634,9 @@ var numbers []int = strings.map(func(s string) int {
 
 **Block bodies:**
 ```dingo
-let process = |x| {
+process := |x| {
     println("Processing ${x}")
-    let result = x * 2
+    result := x * 2
     return result
 }
 ```
@@ -770,24 +770,24 @@ func makeMultiplier(factor int) func(int) int {
 
 ```dingo
 // Example 1: All features together
-let result = user?.address?.city?.name ??
+result := user?.address?.city?.name ??
              config?.defaultCity ??
              "Unknown"
 
 // Example 2: Ternary with null coalescing
-let status = user?.isActive ?? false ? "active" : "inactive"
+status := user?.isActive ?? false ? "active" : "inactive"
 
 // Example 3: Lambda with safe navigation
 users.map(|u| u?.address?.city ?? "No city")
 
 // Example 4: Everything combined
-let processUser = |u: User| -> string {
-    let city = u?.address?.city?.name ?? "Unknown"
+processUser := |u: User| -> string {
+    city := u?.address?.city?.name ?? "Unknown"
     return city.length > 0 ? city : "N/A"
 }
 
 // Example 5: Error propagation with null coalescing
-let user = fetchUser(id)? ?? User.guest()
+user := fetchUser(id)? ?? User.guest()
 ```
 
 ### 5.3 Plugin Execution Order
@@ -952,13 +952,13 @@ package main
 
 func processUser(user: User?) -> string {
     // Safe nav + null coalescing
-    let city = user?.address?.city?.name ?? "Unknown"
+    city := user?.address?.city?.name ?? "Unknown"
 
     // Ternary
-    let status = user?.isActive ?? false ? "active" : "inactive"
+    status := user?.isActive ?? false ? "active" : "inactive"
 
     // Lambda
-    let formatter = |s: string| -> string {
+    formatter := |s: string| -> string {
         return s.length > 0 ? s : "N/A"
     }
 
@@ -971,13 +971,13 @@ func processUser(user: User?) -> string {
 **Critical: Verify operator precedence**
 ```dingo
 // Test: ternary vs null coalescing
-let x = a ? b : c ?? d  // Should parse as: a ? b : (c ?? d)
+x := a ? b : c ?? d  // Should parse as: a ? b : (c ?? d)
 
 // Test: safe nav vs error prop
-let y = user?.fetch()? "error"  // Should parse as: (user?.fetch())? "error"
+y := user?.fetch()? "error"  // Should parse as: (user?.fetch())? "error"
 
 // Test: complex chaining
-let z = a?.b?.c ?? d?.e?.f ?? g
+z := a?.b?.c ?? d?.e?.f ?? g
 ```
 
 ---
@@ -1055,10 +1055,10 @@ let name: string = user.Name ?? "default"  // user.Name is *string
 users.filter(|u| u.age > 18)  // u inferred as User
 
 // Less clear
-let fn = |x| x + 1  // What is x? int? float64?
+fn := |x| x + 1  // What is x? int? float64?
 
 // No context
-let process = |data| { ... }  // Error or default to 'any'?
+process := |data| { ... }  // Error or default to 'any'?
 ```
 
 **Questions:**
@@ -1072,7 +1072,7 @@ let process = |data| { ... }  // Error or default to 'any'?
 
 ```dingo
 // How does this parse?
-let x = a ?? b ? c : d
+x := a ?? b ? c : d
 
 // Option 1: (a ?? b) ? c : d
 // Option 2: a ?? (b ? c : d)
@@ -1087,7 +1087,7 @@ let x = a ?? b ? c : d
 **Gap:** How do these combine?
 
 ```dingo
-let data = user?.fetchData()? "error"
+data := user?.fetchData()? "error"
 ```
 
 **Parse options:**

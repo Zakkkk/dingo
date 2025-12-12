@@ -50,7 +50,7 @@ type Config struct {
 }
 
 func load(path string) ([]byte, error) {
-    let data = os.ReadFile(path)?
+    data := os.ReadFile(path)?
     return data, nil
 }
 ```
@@ -80,7 +80,7 @@ func ReadFile(path string) error {
 }
 
 func main() {
-    let err = ReadFile("/tmp/test")?
+    err := ReadFile("/tmp/test")?
 }
 ```
 **Expected:** NO `import "os"` (user-defined function)
@@ -90,7 +90,7 @@ func main() {
 package main
 
 func main() {
-    let data = os.ReadFile("/tmp/test")?
+    data := os.ReadFile("/tmp/test")?
 }
 ```
 **Expected:** YES `import "os"` (stdlib function)
@@ -104,9 +104,9 @@ func Marshal(v any) error { return nil }
 func Atoi(s string) error { return nil }
 
 func main() {
-    let _ = ReadFile("/tmp")?
-    let _ = Marshal("test")?
-    let _ = Atoi("42")?
+    _ := ReadFile("/tmp")?
+    _ := Marshal("test")?
+    _ := Atoi("42")?
 }
 ```
 **Expected:** NO imports injected (all user-defined)
@@ -118,9 +118,9 @@ package main
 func ReadFile(path string) error { return nil }
 
 func main() {
-    let _ = ReadFile("/tmp")?        // user-defined
-    let _ = os.ReadFile("/tmp")?     // stdlib
-    let _ = strconv.Atoi("42")?      // stdlib
+    _ := ReadFile("/tmp")?        // user-defined
+    _ := os.ReadFile("/tmp")?     // stdlib
+    _ := strconv.Atoi("42")?      // stdlib
 }
 ```
 **Expected:** ONLY `import "os"` and `import "strconv"` (not a duplicate os)

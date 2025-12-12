@@ -77,10 +77,10 @@ Total: 46 golden tests across 11 feature categories
 **Example Transformation**:
 ```dingo
 // Input
-let data = ReadFile(path)?
+data := ReadFile(path)?
 
 // Preprocessed
-let data = __dingo_try_1__(ReadFile(path))
+data := __dingo_try_1__(ReadFile(path))
 ```
 
 **Test Strategy**: Unit test with simple expressions first
@@ -94,7 +94,7 @@ let data = __dingo_try_1__(ReadFile(path))
 **Tasks**:
 1. Detect `__dingo_try_N__` calls in AST
 2. Analyze context:
-   - Assignment statement: `let x = expr?`
+   - Assignment statement: `x := expr?`
    - Return statement: `return expr?`
    - If condition: `if validate(x)? { ... }`
    - Expression: `len(data?) + 1`
@@ -103,7 +103,7 @@ let data = __dingo_try_1__(ReadFile(path))
 
 **Assignment Context**:
 ```go
-// Input: let data = ReadFile(path)?
+// Input: data := ReadFile(path)?
 // Generate:
 __tmp_1, __err_1 := ReadFile(path)
 if __err_1 != nil {
@@ -191,10 +191,10 @@ count := len(__tmp_1) + 1
 **Example**:
 ```dingo
 // Input
-let add = |a, b| a + b
+add := |a, b| a + b
 
 // Preprocessed
-let add = __dingo_lambda_1__([]string{"a", "b"}, func() interface{} { return a + b })
+add := __dingo_lambda_1__([]string{"a", "b"}, func() interface{} { return a + b })
 ```
 
 #### 3.2: Implement Lambda Transformer with Type Inference (1.5 hours)
@@ -466,12 +466,12 @@ default:
 
 **Input**:
 ```dingo
-let status = age >= 18 ? "adult" : "minor"
+status := age >= 18 ? "adult" : "minor"
 ```
 
 **Preprocessed Output**:
 ```go
-let status = func() string {
+status := func() string {
     if age >= 18 {
         return "adult"
     } else {
@@ -494,12 +494,12 @@ let status = func() string {
 
 **Input**:
 ```dingo
-let value = maybeNil ?? defaultValue
+value := maybeNil ?? defaultValue
 ```
 
 **Preprocessed Output**:
 ```go
-let value = func() T {
+value := func() T {
     if __tmp := maybeNil; __tmp != nil {
         return __tmp
     } else {
@@ -517,12 +517,12 @@ let value = func() T {
 
 **Input**:
 ```dingo
-let name = user?.profile?.name
+name := user?.profile?.name
 ```
 
 **Preprocessed Output**:
 ```go
-let name = __dingo_safe_nav_1__(user, "profile", "name")
+name := __dingo_safe_nav_1__(user, "profile", "name")
 ```
 
 **Transformer**: Generate nil checks
@@ -611,7 +611,7 @@ enum Option {
 
 **Input**:
 ```dingo
-let pair = (42, "hello")
+pair := (42, "hello")
 let (x, y) = pair
 ```
 

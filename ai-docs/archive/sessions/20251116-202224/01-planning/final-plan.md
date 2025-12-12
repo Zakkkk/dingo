@@ -50,7 +50,7 @@ enum Option[T] {
 
 ```dingo
 // Match as expression (can assign result)
-let area = match shape {
+area := match shape {
     Circle { radius } => 3.14 * radius * radius,
     Rectangle { width, height } => width * height,
     Point => 0.0,  // Trailing comma OK

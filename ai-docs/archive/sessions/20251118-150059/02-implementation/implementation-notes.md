@@ -30,7 +30,7 @@
 - Struct fields (from field type)
 - Match arms (from other arms in expression mode)
 
-**Error case**: Bare `let x = None` → ERROR with suggestion
+**Error case**: Bare `x := None` → ERROR with suggestion
 
 ### 4. Marker-Based Communication
 **Problem**: Preprocessor runs before parsing, plugin runs after parsing - how to communicate?
@@ -87,7 +87,7 @@ case ResultTagOk:
 **Solution**: Position-based matching using line numbers.
 
 ### Challenge 3: None Without Context
-**Problem**: `let x = None` has no type information.
+**Problem**: `x := None` has no type information.
 
 **Solution**: Error and require explicit type. Clear error message with fix suggestion.
 

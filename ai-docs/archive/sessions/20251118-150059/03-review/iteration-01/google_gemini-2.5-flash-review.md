@@ -85,11 +85,11 @@
 
 #### 3. None Context Inference - Ambiguities in Nested/Untyped Expressions
 
-- **Issue**: While conservative, `pkg/plugin/builtin/none_context.go` acknowledges potential ambiguities in nested `None` expressions, untyped assignments (`let x = None`), and generic contexts. The current parent walking might not always pinpoint the most specific `Option[T]` type.
+- **Issue**: While conservative, `pkg/plugin/builtin/none_context.go` acknowledges potential ambiguities in nested `None` expressions, untyped assignments (`x := None`), and generic contexts. The current parent walking might not always pinpoint the most specific `Option[T]` type.
 
 - **Impact**: Could lead to `Option[any]` in cases where a more specific type could be inferred, or even incorrect type inference in complex scenarios, requiring manual type annotations from the user.
 
-- **Recommendation**: Strengthen the `NoneContext` by tightening its integration with `go/types` to resolve types from actual Go AST nodes rather than just parent walk. Focus on comprehensive unit tests covering these ambiguous cases. For `let x = None`, consider if the system can track subsequent assignments to `x` to refine its type, similar to how Go's type inference works for untyped constants.
+- **Recommendation**: Strengthen the `NoneContext` by tightening its integration with `go/types` to resolve types from actual Go AST nodes rather than just parent walk. Focus on comprehensive unit tests covering these ambiguous cases. For `x := None`, consider if the system can track subsequent assignments to `x` to refine its type, similar to how Go's type inference works for untyped constants.
 
 ---
 

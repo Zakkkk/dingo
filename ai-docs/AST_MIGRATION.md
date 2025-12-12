@@ -22,7 +22,6 @@ The current preprocessor stage uses regex-based text transformations, which are 
 
 | File | Feature | Priority | Complexity | Status |
 |------|---------|----------|------------|--------|
-| `keywords.go` | `let` declarations | P0 | Medium | TODO |
 | `type_annot.go` | Type annotations (`: Type`) | P0 | Medium | TODO |
 | `error_prop.go` | Error propagation (`?`) | P1 | High | TODO |
 | `enum.go` | Enum/Sum types | P1 | High | TODO |
@@ -64,10 +63,10 @@ The current preprocessor stage uses regex-based text transformations, which are 
 │         v                  v                  v             │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
 │  │ Tokenizer/   │   │ DingoNodes:  │   │ go/printer   │    │
-│  │ Lexer        │   │ - LetDecl    │   │ + source map │    │
-│  │              │   │ - EnumDecl   │   │              │    │
+│  │ Lexer        │   │ - EnumDecl   │   │ + source map │    │
 │  │              │   │ - MatchExpr  │   │              │    │
 │  │              │   │ - LambdaExpr │   │              │    │
+│  │              │   │ - TupleExpr  │   │              │    │
 │  └──────────────┘   └──────────────┘   └──────────────┘    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -75,22 +74,7 @@ The current preprocessor stage uses regex-based text transformations, which are 
 
 ## Required AST Nodes
 
-### Phase 1: Core Declarations
-
-```go
-// pkg/ast/let.go
-type LetDecl struct {
-    Let      token.Pos     // position of "let" keyword
-    Name     *ast.Ident    // variable name
-    Type     ast.Expr      // type (nil for inference)
-    Value    ast.Expr      // initial value
-    Mutable  bool          // false for let, true for var
-}
-
-func (d *LetDecl) Node() {} // implements DingoNode
-```
-
-### Phase 2: Sum Types
+### Phase 1: Sum Types
 
 ```go
 // pkg/ast/enum.go
@@ -115,7 +99,7 @@ const (
 )
 ```
 
-### Phase 3: Pattern Matching
+### Phase 2: Pattern Matching
 
 ```go
 // pkg/ast/match.go
@@ -139,7 +123,7 @@ type Pattern struct {
 }
 ```
 
-### Phase 4: Lambda Expressions
+### Phase 3: Lambda Expressions
 
 ```go
 // pkg/ast/lambda.go
@@ -164,7 +148,6 @@ type File struct {
 ### Step 2: Create Dingo Tokenizer
 
 Simple tokenizer that recognizes:
-- `let`, `var` keywords
 - `enum` keyword
 - `match` keyword
 - `=>` arrow

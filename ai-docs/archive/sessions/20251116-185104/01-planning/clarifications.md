@@ -7,7 +7,7 @@
 **Full go/types integration** - Implement comprehensive type inference using Go's standard `go/types` package for accurate zero value generation across all types.
 
 ## Phase 1.6 Scope (All Features Included)
-1. ✅ **Statement context** (`let x = expr?`)
+1. ✅ **Statement context** (`x := expr?`)
 2. ✅ **Expression context** (`return expr?`) - includes statement lifting
 3. ✅ **Error wrapping** (`expr? "message"`) - string parsing and fmt.Errorf generation
 4. ✅ **VLQ source map encoding** - proper IDE integration with go-sourcemap library

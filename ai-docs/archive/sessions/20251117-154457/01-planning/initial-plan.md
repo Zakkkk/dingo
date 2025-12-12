@@ -486,7 +486,7 @@ func divide(a: int, b: int) Result {
 }
 
 func calculate() (int, error) {
-    let result = divide(10, 2)?  // Unwraps Result to (int, error)
+    result := divide(10, 2)?  // Unwraps Result to (int, error)
     return result, nil
 }
 ```
@@ -696,7 +696,7 @@ Before finalizing implementation, verify:
    ```dingo
    // Go: func ReadFile(path string) ([]byte, error)
    // Dingo: Automatically wraps to Result[[]byte, error]
-   let content = ReadFile("file.txt")?  // No manual wrapping
+   content := ReadFile("file.txt")?  // No manual wrapping
    ```
    - Requires go/types integration
    - Function call interception
@@ -704,9 +704,9 @@ Before finalizing implementation, verify:
 
 3. **Try Blocks** (Rust-style):
    ```dingo
-   let result = try {
-       let a = operation1()?;
-       let b = operation2(a)?;
+   result := try {
+       a := operation1()?;
+       b := operation2(a)?;
        b * 2
    }  // Returns Result[int, error]
    ```

@@ -14,7 +14,7 @@
         }
 ```
 
-- `matches[0]` = full original line (e.g., `"let data = ReadFile(path)?"`).
+- `matches[0]` = full original line (e.g., `"data := ReadFile(path)?"`).
 - `strings.Index(matches[0], "?")` = absolute byte offset from line start.
 - `qPos + 1` = correct 1-based column of ?.
 

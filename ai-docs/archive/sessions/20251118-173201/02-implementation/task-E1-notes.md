@@ -204,7 +204,7 @@ case ResultTagOk:
    - Can tests override config programmatically?
 
 3. **Expression context matching:**
-   - `let result = switch opt { ... }` - is this supported?
+   - `result := switch opt { ... }` - is this supported?
    - Rust allows expression context, Go doesn't
    - How should this be handled? (IIFE conversion?)
 

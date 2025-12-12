@@ -273,7 +273,7 @@ match result {
 **Mode 1: opt-in (default)**
 Require explicit wrapping:
 ```dingo
-let user = Result.FromGo(fetchUser(id))  // fetchUser returns (User, error)
+user := Result.FromGo(fetchUser(id))  // fetchUser returns (User, error)
 ```
 
 Transforms to:
@@ -288,7 +288,7 @@ user := func() Result_User_error {
 **Mode 2: auto**
 Automatically wrap Go function returns:
 ```dingo
-let user = fetchUser(id)  // Automatically wrapped to Result
+user := fetchUser(id)  // Automatically wrapped to Result
 ```
 
 Same generated code as above, but triggered automatically.
@@ -377,7 +377,7 @@ const (
 Error: Cannot infer type for None
   --> file.dingo:12:15
    |
-12 |     let x = None
+12 |     x := None
    |             ^^^^ type cannot be determined
    |
 Help: Add explicit type annotation:
@@ -473,12 +473,12 @@ match option {
 
 **Mode 1: opt-in (default)**
 ```dingo
-let user = Option.FromPtr(findUser(id))  // findUser returns *User
+user := Option.FromPtr(findUser(id))  // findUser returns *User
 ```
 
 **Mode 2: auto**
 ```dingo
-let user = findUser(id)  // Automatically wrapped to Option[User]
+user := findUser(id)  // Automatically wrapped to Option[User]
 ```
 
 **Mode 3: disabled**
@@ -531,7 +531,7 @@ case "disabled":
 Make `?` operator work with Result types:
 ```dingo
 func processUser(id: string) -> Result[User, Error] {
-    let user = fetchUser(id)?  // Propagate Err variant
+    user := fetchUser(id)?  // Propagate Err variant
     return Ok(user)
 }
 ```
@@ -564,7 +564,7 @@ func processUser(id string) Result_User_Error {
 **Implementation:**
 Make `?.` operator work with Option types:
 ```dingo
-let name = user?.name  // Returns Option[string]
+name := user?.name  // Returns Option[string]
 ```
 
 Transform to:
@@ -895,8 +895,8 @@ go_interop = "opt-in"
 **Usage:**
 ```dingo
 // Requires explicit wrapping
-let user = Result.FromGo(fetchUser(id))
-let data = Option.FromPtr(findData(key))
+user := Result.FromGo(fetchUser(id))
+data := Option.FromPtr(findData(key))
 ```
 
 ### Example 2: Automatic Wrapping
@@ -913,8 +913,8 @@ go_interop = "auto"
 **Usage:**
 ```dingo
 // Automatically wrapped
-let user = fetchUser(id)  // → Result[User, error]
-let data = findData(key)  // → Option[Data]
+user := fetchUser(id)  // → Result[User, error]
+data := findData(key)  // → Option[Data]
 ```
 
 ### Example 3: Pure Dingo (disabled)
@@ -932,7 +932,7 @@ go_interop = "disabled"
 ```dingo
 // No wrapping available, pure Dingo types only
 // Must use Dingo functions that return Result/Option
-let user = dingoFetchUser(id)  // Already returns Result
+user := dingoFetchUser(id)  // Already returns Result
 ```
 
 ---
@@ -941,7 +941,7 @@ let user = dingoFetchUser(id)  // Already returns Result
 
 ### Error Case 1: No Context
 ```dingo
-let x = None  // ERROR
+x := None  // ERROR
 ```
 
 **Error Message:**
@@ -949,7 +949,7 @@ let x = None  // ERROR
 Error: Cannot infer type for None
   --> example.dingo:3:9
    |
- 3 | let x = None
+ 3 | x := None
    |         ^^^^ type cannot be determined
    |
 Help: Add explicit type annotation:

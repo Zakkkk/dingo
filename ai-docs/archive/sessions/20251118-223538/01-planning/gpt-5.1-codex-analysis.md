@@ -102,7 +102,7 @@ func TestLSP_UndefinedFunctionError(t *testing.T) {
     // Given: .dingo file with undefined function
     dingoCode := `
     func readConfig(path string) ([]byte, error) {
-        let data = UndefinedFunc(path)?  // UndefinedFunc doesn't exist
+        data := UndefinedFunc(path)?  // UndefinedFunc doesn't exist
         return data, nil
     }
     `

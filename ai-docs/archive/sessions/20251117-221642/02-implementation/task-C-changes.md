@@ -54,7 +54,7 @@ ok  	github.com/MadAppGang/dingo/pkg/preprocessor	0.474s
 ## Breaking Change Notice
 
 Users must now use fully-qualified stdlib function names in Dingo code:
-- WRONG: `let data = ReadFile(path)?`
-- CORRECT: `let data = os.ReadFile(path)?`
+- WRONG: `data := ReadFile(path)?`
+- CORRECT: `data := os.ReadFile(path)?`
 
 This is the expected behavior and prevents false positive imports.

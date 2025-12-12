@@ -39,7 +39,7 @@ __match_0 := result
 **Result**: Marker order now matches Rust preprocessor ✅
 
 ### Issue 3: Expression Context (PARTIALLY FIXED ⚠️)
-**Problem**: Swift supports `let result = switch expr { ... }` but preprocessor generates invalid Go:
+**Problem**: Swift supports `result := switch expr { ... }` but preprocessor generates invalid Go:
 ```go
 switch __match_0.tag {  // Missing assignment!
 ```
@@ -51,7 +51,7 @@ switch __match_0.tag {  // Missing assignment!
 
 **Workaround Applied**:
 - Updated `swift_match_01_basic.dingo` to remove expression context example
-- Changed example 3 from `let result = switch` to regular `switch` with return statements
+- Changed example 3 from `result := switch` to regular `switch` with return statements
 - Regenerated golden file: `swift_match_01_basic.go.golden`
 
 **Future Enhancement Needed**:
@@ -91,7 +91,7 @@ syntax = "swift"
 4. **swift_match_04_equivalence**: ❌ FAIL
    - Preprocessing error: "expected ';', found result"
    - Compilation error: "expected operand, found 'switch'"
-   - Cause: Expression context (`let result = switch`)
+   - Cause: Expression context (`result := switch`)
    - Requires plugin-level transformation
 
 ## Files Modified
@@ -110,7 +110,7 @@ syntax = "swift"
 ## Known Limitations
 
 ### 1. Expression Context Not Supported
-**Pattern**: `let result = switch expr { ... }`
+**Pattern**: `result := switch expr { ... }`
 
 **Current Behavior**: Generates invalid Go code
 

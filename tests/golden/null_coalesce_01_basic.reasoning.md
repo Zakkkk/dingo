@@ -7,7 +7,7 @@ Test basic null coalescing (`??`) operator with simple cases that trigger inline
 
 ### 1. Simple Option ?? Literal
 ```dingo
-let displayName = name ?? "Guest"
+displayName := name ?? "Guest"
 ```
 **Expected:** Inline IIFE (simple operands, no nesting)
 - Left: single identifier (`name`)
@@ -16,7 +16,7 @@ let displayName = name ?? "Guest"
 
 ### 2. Simple Option ?? Option
 ```dingo
-let result = name ?? fallback
+result := name ?? fallback
 ```
 **Expected:** Inline IIFE
 - Left: single identifier
@@ -25,7 +25,7 @@ let result = name ?? fallback
 
 ### 3. Option<int> ?? Literal
 ```dingo
-let finalCount = count ?? 0
+finalCount := count ?? 0
 ```
 **Expected:** Inline IIFE with int type
 - Demonstrates type inference works for numeric literals
@@ -33,8 +33,8 @@ let finalCount = count ?? 0
 
 ### 4. Multiple separate ?? operations
 ```dingo
-let firstDisplay = firstName ?? "Anonymous"
-let ageDisplay = age ?? 18
+firstDisplay := firstName ?? "Anonymous"
+ageDisplay := age ?? 18
 ```
 **Expected:** Independent IIFE for each
 - Each evaluated separately

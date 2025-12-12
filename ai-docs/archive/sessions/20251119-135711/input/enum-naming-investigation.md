@@ -62,13 +62,13 @@ vs alternatives like:
 Compare constructor clarity:
 ```dingo
 // Current
-let r = Ok(42)
-let e = Err("failed")
+r := Ok(42)
+e := Err("failed")
 
 // Alternatives?
-let r = Result.Ok(42)
-let r = NewOk(42)
-let r = MakeOk(42)
+r := Result.Ok(42)
+r := NewOk(42)
+r := MakeOk(42)
 ```
 
 ### 5. Trade-off Analysis

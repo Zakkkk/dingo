@@ -26,7 +26,7 @@ These are quick wins that unblock multiple features.
 **Impact**: Unblocks ternary operator (100% of usage broken)
 
 **Problem**: KeywordProcessor regex incorrectly parses ternary IIFE output.
-- `let status = func() string {...}` becomes `var statu s = ...`
+- `status := func() string {...}` becomes mangled output
 - Regex captures wrong boundaries
 
 **Files to Modify**:
@@ -37,20 +37,20 @@ These are quick wins that unblock multiple features.
 # Create test file
 echo 'package main
 func main() {
-    let x = true ? "yes" : "no"
+    x := true ? "yes" : "no"
     println(x)
 }' > /tmp/test_ternary.dingo
 
 # Transpile and verify
 dingo build /tmp/test_ternary.dingo
-cat /tmp/test_ternary.go  # Should show: var x = func() string {...}()
+cat /tmp/test_ternary.go  # Should show: x := func() string {...}()
 
 # Compile generated Go
 go build /tmp/test_ternary.go
 ```
 
 **Success Criteria**:
-- [ ] `let x = cond ? a : b` produces valid Go
+- [ ] `x := cond ? a : b` produces valid Go
 - [ ] All 3 ternary golden tests pass
 - [ ] 42/42 unit tests still pass
 
@@ -77,7 +77,7 @@ echo 'package main
 enum Status { Pending, Active, Complete }
 
 func main() {
-    let s = Status_Pending()
+    s := Status_Pending()
     match s {
         Pending => println("waiting"),
         Active => println("running"),
@@ -151,7 +151,7 @@ type User struct {
 
 func main() {
     var user *User = nil
-    let name = user?.name ?? "Guest"
+    name := user?.name ?? "Guest"
     println(name)
 }' > /tmp/test_safe_nav.dingo
 
@@ -189,8 +189,8 @@ go build /tmp/test_safe_nav.go
 echo 'package main
 
 func main() {
-    let pair = (1, "hello")
-    let (x, y) = pair
+    pair := (1, "hello")
+    (x, y) := pair
     println(x, y)
 }' > /tmp/test_tuples.dingo
 
@@ -227,7 +227,7 @@ echo 'package main
 func getName() *string { return nil }
 
 func main() {
-    let name = getName() ?? "default"
+    name := getName() ?? "default"
     println(name)
 }' > /tmp/test_coalesce.dingo
 
@@ -267,10 +267,10 @@ go build /tmp/test_coalesce.go
 echo 'package main
 
 func main() {
-    let nums = []int{1, 2, 3, 4, 5}
-    let doubled = nums.map(x => x * 2)
-    let evens = nums.filter(x => x % 2 == 0)
-    let sum = nums.reduce(0, (acc, x) => acc + x)
+    nums := []int{1, 2, 3, 4, 5}
+    doubled := nums.map(x => x * 2)
+    evens := nums.filter(x => x % 2 == 0)
+    sum := nums.reduce(0, (acc, x) => acc + x)
     println(doubled, evens, sum)
 }' > /tmp/test_functional.dingo
 

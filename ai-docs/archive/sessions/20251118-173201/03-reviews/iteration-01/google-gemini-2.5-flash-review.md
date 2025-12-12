@@ -89,7 +89,7 @@ The rustc-style error formatting significantly improves developer experience:
 ```
 Error: Non-exhaustive match in example.dingo:42:5
 
-  40 |     let result = fetchData()
+  40 |     result := fetchData()
   41 |     match result {
   42 |         Ok(x) => process(x)
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern: Err(_)

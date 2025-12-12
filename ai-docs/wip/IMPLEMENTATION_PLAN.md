@@ -694,7 +694,7 @@ dingo/
 
 **Syntax:**
 ```dingo
-let user = fetchUser(id)?  // Auto-return on error
+user := fetchUser(id)?  // Auto-return on error
 ```
 
 **Transpiles to:**
@@ -717,17 +717,17 @@ user := *__result0.value
 **Test Cases:**
 ```dingo
 // Basic
-let x = foo()?
+x := foo()?
 
 // Chained
-let y = foo()?.bar()?.baz()
+y := foo()?.bar()?.baz()
 
 // In expression
 return processUser(fetchUser(id)?)
 
 // Error: not in Result function
 func main() {
-    let x = foo()?  // ERROR
+    x := foo()?  // ERROR
 }
 ```
 
@@ -739,7 +739,7 @@ func main() {
 
 **Syntax:**
 ```dingo
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 ```
 
 **Transpiles to:**
@@ -768,7 +768,7 @@ if __opt.isSet {
 
 **Syntax:**
 ```dingo
-let max = a > b ? a : b
+max := a > b ? a : b
 ```
 
 **Transpiles to:**
@@ -798,9 +798,9 @@ if a > b {
 
 **Syntax:**
 ```dingo
-let doubled = numbers.map(|x| x * 2)
-let evens = numbers.filter(|x| x % 2 == 0)
-let sum = numbers.reduce(0, |acc, x| acc + x)
+doubled := numbers.map(|x| x * 2)
+evens := numbers.filter(|x| x % 2 == 0)
+sum := numbers.reduce(0, |acc, x| acc + x)
 ```
 
 **Transpiles to:**
@@ -913,7 +913,7 @@ for _, x := range numbers {
 // pkg/plugin/error_propagation/transform_test.go
 
 func TestErrorPropagation_Basic(t *testing.T) {
-    input := `let user = fetchUser(id)?`
+    input := `user := fetchUser(id)?`
 
     expected := &ast.BlockStmt{
         List: []ast.Stmt{
@@ -970,17 +970,17 @@ func TestGoldenFiles(t *testing.T) {
 package main
 
 func fetchUser(id: string) -> Result[User, Error] {
-    let data = db.query(id)?
-    let user = parseUser(data)?
+    data := db.query(id)?
+    user := parseUser(data)?
     return Ok(user)
 }
 
 func main() {
-    let user = fetchUser("123") ?? User.guest()
-    let greeting = user.isActive ? "Welcome!" : "Account inactive"
+    user := fetchUser("123") ?? User.guest()
+    greeting := user.isActive ? "Welcome!" : "Account inactive"
 
-    let numbers = [1, 2, 3, 4, 5]
-    let doubled = numbers.map(|x| x * 2)
+    numbers := [1, 2, 3, 4, 5]
+    doubled := numbers.map(|x| x * 2)
 
     println("${greeting}, ${user.name}")
     println("Doubled: ${doubled}")
@@ -1036,20 +1036,20 @@ package main
 import "net/http"
 
 func fetchUserData(userID: string) -> Result[UserData, Error] {
-    let resp = http.Get("/api/users/" + userID)?
-    let user = parseUser(resp.Body)?
-    let posts = fetchPosts(user.ID)?
+    resp := http.Get("/api/users/" + userID)?
+    user := parseUser(resp.Body)?
+    posts := fetchPosts(user.ID)?
     return Ok(UserData{user, posts})
 }
 
 func handler(w: http.ResponseWriter, r: *http.Request) {
-    let userID = r.URL.Query().Get("id") ?? "default"
+    userID := r.URL.Query().Get("id") ?? "default"
 
-    let data = fetchUserData(userID)
-    let message = data.isOk() ? "Success" : "Error"
+    data := fetchUserData(userID)
+    message := data.isOk() ? "Success" : "Error"
 
-    let statuses = [200, 404, 500]
-    let successCodes = statuses.filter(|code| code < 400)
+    statuses := [200, 404, 500]
+    successCodes := statuses.filter(|code| code < 400)
 
     w.Write([]byte(message))
 }

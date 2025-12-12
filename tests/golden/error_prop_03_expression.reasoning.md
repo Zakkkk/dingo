@@ -75,7 +75,7 @@ func parseInt(s string) (int, error) {
 
 **Statement Context** (test 01):
 ```dingo
-let data = ReadFile(path)?  // Assignment statement
+data := ReadFile(path)?  // Assignment statement
 ```
 Transpiler lifts error check before the assignment.
 

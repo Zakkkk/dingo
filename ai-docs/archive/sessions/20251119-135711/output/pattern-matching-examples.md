@@ -235,16 +235,16 @@ match result {
 
 **Current (Best):**
 ```dingo
-let r = Result_Ok(42)          // Clear it's a constructor
-let e = Result_Err("failed")
-let s = Status_Active()
+r := Result_Ok(42)          // Clear it's a constructor
+e := Result_Err("failed")
+s := Status_Active()
 ```
 
 **Alternatives have issues:**
 ```dingo
-let r = Result_OK(42)          // SHOUTING constructor
-let r = Result_ok(42)          // Not Go-like
-let r = Ok(42)                 // Ambiguous without context
+r := Result_OK(42)          // SHOUTING constructor
+r := Result_ok(42)          // Not Go-like
+r := Ok(42)                 // Ambiguous without context
 ```
 
 ## Go Code Translation Quality

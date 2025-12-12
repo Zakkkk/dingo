@@ -103,8 +103,8 @@ These features are **not yet implemented** in Dingo Phase 4/5. The examples need
 
 **Simplified all examples to use ONLY implemented Dingo features:**
 - ✅ Type annotations on parameters: `func foo(x: int)`
-- ✅ `let` bindings: `let x = value`
-- ✅ Error propagation `?` in assignments/returns: `let x = foo()?`
+- ✅ `let` bindings: `x := value`
+- ✅ Error propagation `?` in assignments/returns: `x := foo()?`
 - ✅ Regular Go error handling: `if err != nil`
 - ✅ Switch statements (not Rust match)
 - ❌ Removed Result[T,E] generic types
@@ -135,8 +135,8 @@ These features are **not yet implemented** in Dingo Phase 4/5. The examples need
 
 Completely rewrote to demonstrate **actual working Dingo features**:
 - Parameter type annotations: `func SafeDivide(a: float64, b: float64)`
-- Error propagation with `?`: `let result = SafeDivide(sqrtA, b)?`
-- `let` bindings: `let sum = 0.0`
+- Error propagation with `?`: `result := SafeDivide(sqrtA, b)?`
+- `let` bindings: `sum := 0.0`
 - Regular `(T, error)` return types
 
 **New API:**
@@ -187,7 +187,7 @@ $ cd examples/library-example && go build .
 + }
 
 - let command := os.Args[1]
-+ let command = os.Args[1]
++ command := os.Args[1]
 
 - match command {
 + switch command {
@@ -390,8 +390,8 @@ $ cd examples/hybrid-example && go build .
 
 **Currently Working:**
 - ✅ Type annotations on parameters: `func foo(x: int, y: string)`
-- ✅ `let` bindings: `let x = value`
-- ✅ Error propagation in assignments: `let x = foo()?`
+- ✅ `let` bindings: `x := value`
+- ✅ Error propagation in assignments: `x := foo()?`
 - ✅ Error propagation in returns: `return bar()?`
 - ✅ All standard Go syntax (structs, interfaces, methods)
 

@@ -14,7 +14,7 @@
     }
   },
   "enabledPlugins": {
-    "orchestration@mag-claude-plugins": false,
+    "orchestration@mag-claude-plugins": true,
     "code-analysis@mag-claude-plugins": true,
     "commit-commands@claude-code-plugins": true,
     "explanatory-output-style@claude-code-plugins": true,

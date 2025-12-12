@@ -388,7 +388,7 @@ func (p *ResultTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 
 **Currently**: `None` without type context fails
 ```dingo
-let x = None  // ERROR: Cannot infer type
+x := None  // ERROR: Cannot infer type
 ```
 
 **Goal**: Infer type from surrounding context
@@ -812,7 +812,7 @@ pkg/
 **Pattern matching integrates seamlessly**:
 ```dingo
 // Existing: Result type works
-let result = Ok(42)
+result := Ok(42)
 
 // NEW: Pattern match on Result
 match result {
@@ -849,7 +849,7 @@ match status {
 **Pattern matching complements `?` operator**:
 ```dingo
 func process(): Result[int, Error] {
-    let data = readFile()?  // ? operator
+    data := readFile()?  // ? operator
 
     match parseData(data) {  // Pattern match
         Ok(value) => Ok(value * 2),
@@ -970,7 +970,7 @@ No conflicts - different concerns:
 
 ### Risk 2: None Inference Ambiguity
 
-**Risk**: Multiple valid contexts (e.g., `let x = None; return x` - is it return or assignment?)
+**Risk**: Multiple valid contexts (e.g., `x := None; return x` - is it return or assignment?)
 
 **Mitigation**:
 - Prefer closest context (assignment over return)

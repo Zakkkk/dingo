@@ -64,9 +64,9 @@ func divide(a: float64, b: float64) Result {
 }
 
 func main() {
-	let result = divide(10.0, 2.0)
+	result := divide(10.0, 2.0)
 	if result.IsOk() {
-		let v = *result.ok_0
+		v := *result.ok_0
 	}
 }
 ```
@@ -233,7 +233,7 @@ fmt.Println(result)  // Prints 0, not an error
 
 **Dingo's solution**:
 ```dingo
-let result = divide(10, 0)
+result := divide(10, 0)
 // Cannot access value without checking
 match result {
 	Ok(v) => println(v),
@@ -256,7 +256,7 @@ match divide(10.0, 2.0) {
 
 ```dingo
 // Automatically wrap Go functions returning (T, error)
-let result = Result::from(os.ReadFile("config.json"))
+result := Result::from(os.ReadFile("config.json"))
 // Returns Result<[]byte, error>
 ```
 

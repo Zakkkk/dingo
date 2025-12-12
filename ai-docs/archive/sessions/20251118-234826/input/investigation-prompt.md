@@ -49,7 +49,7 @@ result := func() interface{} {
 ```dingo
 fn map_option(opt: Option[int]) -> Option[int] {
     // Match in assignment context (THIS IS THE PROBLEM CASE)
-    let result = match opt {
+    result := match opt {
         Some(x) => Some(x * 2),
         None => None,
     }
@@ -104,7 +104,7 @@ if strings.Contains(line, "let") && strings.Contains(line, "=") && strings.Conta
 ### Possible Directions (explore these and MORE):
 
 1. **Statement Sequence Transformation**
-   - Transform `let x = match {}` into sequence of statements
+   - Transform `x := match {}` into sequence of statements
    - Example: Declare var first, then assign in switch
 
 2. **Named Return Values Pattern**

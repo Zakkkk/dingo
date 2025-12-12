@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-**Solution**: Transform `let x = match {}` into variable declaration + assignment-mode switch.
+**Solution**: Transform `x := match {}` into variable declaration + assignment-mode switch.
 
 **Generated Code**:
 ```go
@@ -27,14 +27,14 @@ case OptionTagNone:
 
 **Architecture**:
 1. New preprocessor phase: `LetMatchProcessor` (runs before `RustMatchProcessor`)
-2. Detects `let name = match expr { ... }`
+2. Detects `name := match expr { ... }`
 3. Infers result type from match subject (simple pattern-specific logic)
 4. Transforms to: `var name Type\n` + match-in-assignment-mode
 5. `RustMatchProcessor` sees assignment flag, generates `name = expr` instead of `return expr`
 
 **Pipeline**:
 ```
-let result = match opt { ... }
+result := match opt { ... }
     ↓ LetMatchProcessor
 var result Option_int
 result = match opt { ... }  // Flagged for assignment mode
@@ -124,7 +124,7 @@ TypeAnnotProcessor → ErrorPropProcessor → EnumProcessor → LetMatchProcesso
 
 | Transpiler | Source | Target | Pattern |
 |------------|--------|--------|---------|
-| Rust → C | `let x = match` | `int x; switch` | Variable hoisting |
+| Rust → C | `x := match` | `int x; switch` | Variable hoisting |
 | Scala → Java | `val x = match` | `int x; if` | Variable hoisting |
 | Kotlin → Java | `val x = when` | `int x; if` | Variable hoisting |
 | TypeScript → ES5 | `const x = ternary` | `var x; x = cond ? ...` | Variable hoisting |
@@ -279,7 +279,7 @@ func (c *Context) RegisterVariable(name, typ string) {
 
 // Populate context during preprocessing:
 // - Function parameters: "opt: Option[int]" → ctx.RegisterVariable("opt", "Option_int")
-// - Let bindings: "let x = ..." → track type
+// - Let bindings: "x := ..." → track type
 ```
 
 ---

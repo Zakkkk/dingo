@@ -223,7 +223,7 @@ func (p *SafeNavigationPlugin) transformUnwrapped(ctx *plugin.Context, safeNav *
 
 **Mode: `always_option`**
 ```dingo
-let city = user?.address?.city  // Type: Option[*City]
+city := user?.address?.city  // Type: Option[*City]
 ```
 
 ```go
@@ -358,7 +358,7 @@ if user.Name != nil {
 
 **Chaining mixed types:**
 ```dingo
-let value = optionalValue ?? pointerValue ?? "default"
+value := optionalValue ?? pointerValue ?? "default"
 ```
 
 ```go
@@ -404,18 +404,18 @@ type NullCoalescingExpr struct {
 **Standard Mode:**
 ```dingo
 // These parse without error
-let x = a ?? b ? c : d        // (a ?? b) ? c : d
-let y = cond ? a ?? b : c     // cond ? (a ?? b) : c
+x := a ?? b ? c : d        // (a ?? b) ? c : d
+y := cond ? a ?? b : c     // cond ? (a ?? b) : c
 ```
 
 **Explicit Mode:**
 ```dingo
 // These require parentheses
-let x = a ?? b ? c : d        // ERROR: ambiguous, add ()
-let x = (a ?? b) ? c : d      // OK
+x := a ?? b ? c : d        // ERROR: ambiguous, add ()
+x := (a ?? b) ? c : d      // OK
 
-let y = cond ? a ?? b : c     // ERROR: ambiguous
-let y = cond ? (a ?? b) : c   // OK
+y := cond ? a ?? b : c     // ERROR: ambiguous
+y := cond ? (a ?? b) : c   // OK
 ```
 
 ### 3.3 Parser Implementation
@@ -518,20 +518,20 @@ func (p *Parser) buildBothLambdaGrammar() *participle.Parser[File] {
 
 **Rust Style:**
 ```dingo
-let add = |a, b| a + b
-let double = |x| x * 2
+add := |a, b| a + b
+double := |x| x * 2
 ```
 
 **Arrow Style:**
 ```dingo
-let add = (a, b) => a + b
-let double = x => x * 2  // Single param, no parens
+add := (a, b) => a + b
+double := x => x * 2  // Single param, no parens
 ```
 
 **Both (allowed simultaneously):**
 ```dingo
-let rustStyle = |x| x + 1
-let arrowStyle = (x) => x + 1
+rustStyle := |x| x + 1
+arrowStyle := (x) => x + 1
 // Both valid in same file
 ```
 
@@ -568,10 +568,10 @@ Both styles transpile identically to Go:
 
 ```dingo
 // Rust
-let fn1 = |x| x * 2
+fn1 := |x| x * 2
 
 // Arrow
-let fn2 = (x) => x * 2
+fn2 := (x) => x * 2
 ```
 
 ```go
@@ -672,11 +672,11 @@ func (t *Transpiler) Validate(cfg *config.Config) error {
 // Config: operator_precedence = "standard"
 
 // Allowed: ?? binds tighter than ternary
-let result = value ?? default ? "yes" : "no"
+result := value ?? default ? "yes" : "no"
 // Parses as: (value ?? default) ? "yes" : "no"
 
 // Allowed: Smart unwrap in ternary
-let name = user?.name == "admin" ? "Admin" : "User"
+name := user?.name == "admin" ? "Admin" : "User"
 // user?.name unwraps to string in comparison context
 ```
 
@@ -685,10 +685,10 @@ let name = user?.name == "admin" ? "Admin" : "User"
 // Config: operator_precedence = "explicit"
 
 // ERROR: Requires parentheses
-let result = value ?? default ? "yes" : "no"
+result := value ?? default ? "yes" : "no"
 
 // OK
-let result = (value ?? default) ? "yes" : "no"
+result := (value ?? default) ? "yes" : "no"
 ```
 
 **Pointer Support:**
@@ -699,15 +699,15 @@ type User struct {
     Name *string  // Go pointer
 }
 
-let userName = user.Name ?? "anonymous"  // Works!
+userName := user.Name ?? "anonymous"  // Works!
 ```
 
 **Lambda Style Mixing:**
 ```dingo
 // Config: lambda_syntax = "both"
 
-let rustStyle = users.filter(|u| u.age > 18)
-let arrowStyle = users.map(u => u.name)
+rustStyle := users.filter(|u| u.age > 18)
+arrowStyle := users.map(u => u.name)
 // Both valid!
 ```
 
@@ -932,8 +932,8 @@ Controls which lambda syntax styles are accepted.
 **Example:**
 ```dingo
 // With lambda_syntax = "rust"
-let add = |a, b| a + b  ✓
-let add = (a, b) => a + b  ✗ ERROR
+add := |a, b| a + b  ✓
+add := (a, b) => a + b  ✗ ERROR
 ```
 
 ### language.operator_precedence
@@ -945,8 +945,8 @@ Controls precedence checking strictness.
 **Example:**
 ```dingo
 // With operator_precedence = "explicit"
-let x = a ?? b ? c : d  ✗ ERROR: Use ()
-let x = (a ?? b) ? c : d  ✓
+x := a ?? b ? c : d  ✗ ERROR: Use ()
+x := (a ?? b) ? c : d  ✓
 ```
 
 ### language.safe_navigation_unwrap

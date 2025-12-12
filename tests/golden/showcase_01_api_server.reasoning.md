@@ -60,7 +60,7 @@ This showcase is THE flagship example. It MUST demonstrate **all** working featu
    - 4 lines in Dingo vs 28 lines in Go (85.7% reduction)
    - Type-safe, exhaustive, zero runtime cost
 
-2. **Error Propagation (`?` operator)** - `let email = validateEmail(req.Email)?`
+2. **Error Propagation (`?` operator)** - `email := validateEmail(req.Email)?`
    - Eliminates all `if err != nil { return ..., err }` boilerplate
    - 5 error checks in registerUser() → 0 manual checks
 
@@ -68,7 +68,7 @@ This showcase is THE flagship example. It MUST demonstrate **all** working featu
    - Clear, readable parameter types
    - Familiar to developers from TypeScript, Rust, etc.
 
-4. **`let` Bindings** - `let email = validateEmail(...)?`
+4. **`let` Bindings** - `email := validateEmail(...)?`
    - Immutable by default
    - Prevents accidental reassignment bugs
 
@@ -350,9 +350,9 @@ The generated Go code is:
 ```dingo
 // 27 lines of clean, readable code
 func registerUser(db: *sql.DB, req: RegisterRequest) (User, error) {
-    let email = validateEmail(req.Email)?
-    let password = validatePassword(req.Password)?
-    let username = validateUsername(req.Username)?
+    email := validateEmail(req.Email)?
+    password := validatePassword(req.Password)?
+    username := validateUsername(req.Username)?
     // ... beautiful, focused business logic ...
 }
 ```

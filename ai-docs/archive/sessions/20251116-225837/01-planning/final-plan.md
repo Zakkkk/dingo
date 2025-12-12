@@ -275,7 +275,7 @@ func (p *SumTypesPlugin) generateDestructuring(...) []ast.Stmt {
 
 ```dingo
 // Expression context - needs IIFE wrapping
-let area = match shape {
+area := match shape {
     Circle{radius} => 3.14 * radius * radius,
     Rectangle{width, height} => width * height,
     Point => 0.0,
@@ -316,7 +316,7 @@ func (p *SumTypesPlugin) isExpressionContext(cursor *astutil.Cursor) bool {
 
 ```go
 // Original Dingo code:
-let area = match shape {
+area := match shape {
     Circle{radius} => 3.14 * radius * radius,
     Rectangle{width, height} => width * height,
 }
@@ -1485,7 +1485,7 @@ enum Shape {
     Rectangle { width: float64, height: float64 },
 }
 
-let area = match shape {
+area := match shape {
     Circle{radius} => 3.14 * radius * radius,
     Rectangle{width, height} => width * height,
 }

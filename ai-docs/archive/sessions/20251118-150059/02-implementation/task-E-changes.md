@@ -61,7 +61,7 @@ Returns error if no valid context found.
    - Skipped (requires full go/types integration in production)
 
 4. **TestNoneContextPlugin_NoContext** - Tests error on ambiguous None
-   - Verifies inference fails for `let x = None`
+   - Verifies inference fails for `x := None`
 
 5. **TestNoneContextPlugin_ExplicitTypeAnnotation** - Tests explicit annotation
    - Infers from `var x: Option_int = None`
@@ -94,7 +94,7 @@ SKIP: 1 test (struct field - requires production go/types)
 3. Explicit type annotation
 4. Assignment to typed variable
 5. Struct field context
-6. Error case (commented out): `let x = None`
+6. Error case (commented out): `x := None`
 
 **Expected Behavior**:
 - All valid contexts should transpile successfully
@@ -127,7 +127,7 @@ Add explicit type annotation: let x: Option[T] = None
 
 ### Conservative Approach
 - **Error on ambiguity** rather than guessing
-- Requires explicit annotation for `let x = None`
+- Requires explicit annotation for `x := None`
 - Prevents subtle type errors
 
 ### Precedence Rules

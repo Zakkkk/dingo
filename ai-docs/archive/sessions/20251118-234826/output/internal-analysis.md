@@ -42,12 +42,12 @@ func map_option(opt Option_int) Option_int {
 
 **Cons**:
 - ⚠️ Requires type inference to determine `result` type
-- ⚠️ Requires preprocessing to split `let x = match` into two statements
+- ⚠️ Requires preprocessing to split `x := match` into two statements
 - ⚠️ Must handle exhaustiveness (zero value if non-exhaustive?)
 - ⚠️ Slightly more complex source mapping (two locations: declaration + assignment)
 
 **Implementation Complexity**: Medium
-- Detect assignment context: `let name = match`
+- Detect assignment context: `name := match`
 - Extract variable name (`result`)
 - Infer type from match arms (all arms must return same type)
 - Generate: `var name Type\n` before match
@@ -148,11 +148,11 @@ func map_option(opt Option_int) Option_int {
 
 ### Alternative 4: Multi-Statement Let Binding (Preprocessor Magic)
 
-**Concept**: Transform `let x = match {}` into sequence of statements during preprocessing.
+**Concept**: Transform `x := match {}` into sequence of statements during preprocessing.
 
 **Dingo Input**:
 ```dingo
-let result = match opt {
+result := match opt {
     Some(x) => Some(x * 2),
     None => None,
 }
@@ -194,7 +194,7 @@ case OptionTagNone:
 
 **Implementation Complexity**: Medium
 - Add preprocessor pass before RustMatchProcessor
-- Detect `let name = match` pattern
+- Detect `name := match` pattern
 - Extract variable name and transform to multi-statement
 - Estimated: 4-5 hours
 
@@ -252,10 +252,10 @@ func matchExpr[T any](fn func() T) T {
 **TypeScript** (ternary/conditional):
 ```typescript
 // TypeScript expression:
-let result = condition ? value1 : value2;
+result := condition ? value1 : value2;
 
 // Compiles to JavaScript (still expression):
-let result = condition ? value1 : value2;
+result := condition ? value1 : value2;
 ```
 **Not applicable** - JavaScript supports expression-based conditionals natively.
 
@@ -264,7 +264,7 @@ let result = condition ? value1 : value2;
 **Rust-to-C transpilers** (e.g., mrustc):
 ```rust
 // Rust:
-let result = match opt {
+result := match opt {
     Some(x) => x * 2,
     None => 0,
 };
@@ -417,7 +417,7 @@ func (p *LetBindingProcessor) Process(input string) (string, error) {
 
     for i, line := range lines {
         if isLetMatchAssignment(line) {
-            // "let result = match opt { ... }"
+            // "result := match opt { ... }"
             varName := extractVarName(line)      // "result"
             matchExpr := extractMatchExpr(line)   // "match opt { ... }"
 
@@ -512,7 +512,7 @@ For Dingo's current types (Result, Option), we can infer from the match subject:
 
 ```go
 // Input:
-let result = match opt {  // opt is Option[int]
+result := match opt {  // opt is Option[int]
     Some(x) => Some(x * 2),
     None => None,
 }
@@ -611,7 +611,7 @@ type LetMatchProcessor struct {
 }
 
 func (p *LetMatchProcessor) Process(input string) (string, error) {
-    // 1. Find "let name = match expr" patterns
+    // 1. Find "name := match expr" patterns
     // 2. Infer result type from match subject
     // 3. Transform to: "var name Type\n<match-to-assignment>"
     // 4. Mark match for assignment mode

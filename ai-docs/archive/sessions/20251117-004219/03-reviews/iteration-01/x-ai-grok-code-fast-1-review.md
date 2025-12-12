@@ -143,7 +143,7 @@ Use `go/types` to determine the actual type and generate proper zero values:
 // TODO: Fix Lambda AST to use ast.Node instead of ast.Expr for Body
 ```
 
-Lambdas with block bodies (`|x| { let y = x * 2; y }`) cannot be represented. Only expression bodies work.
+Lambdas with block bodies (`|x| { y := x * 2; y }`) cannot be represented. Only expression bodies work.
 
 **Impact:**
 - Severely limits lambda usefulness
@@ -165,7 +165,7 @@ Every single transformation uses IIFE, even when simple statements would suffice
 **Examples where IIFE is unnecessary:**
 ```go
 // Ternary in statement context
-let x = cond ? a : b
+x := cond ? a : b
 
 // Should generate:
 var x int

@@ -71,7 +71,7 @@
 
 **Capabilities**:
 - Transforms `x?` → full error handling code
-- Supports: assignments (`let x = fn()?`), returns (`return fn()?`), custom messages (`x? "error message"`)
+- Supports: assignments (`x := fn()?`), returns (`return fn()?`), custom messages (`x? "error message"`)
 - Automatic import detection (os, json, strconv, io, net/http, filepath)
 - Smart package qualification (detects when to add package prefix)
 
@@ -343,7 +343,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 **File**: `/Users/jack/mag/dingo/pkg/preprocessor/keywords.go` (37 lines)
 
 **Capabilities**:
-- Converts `let x = value` → `x := value`
+- Converts `x := value` → `x := value`
 - Handles multiple declarations: `let x, y, z = func()`
 - Pattern: `\blet\s+([\w\s,]+?)\s*=`
 
@@ -497,7 +497,7 @@ type Mapping struct {
 **Current Status**:
 - Can match tuples in pattern expressions: `(Ok(x), Err(e))`
 - Cannot declare tuple types: `type Pair = (int, string)` ❌
-- Cannot use tuple literals: `let x = (1, "hello")` ❌
+- Cannot use tuple literals: `x := (1, "hello")` ❌
 
 **Would Require**:
 - Preprocessor for tuple syntax: `(T1, T2)` → Go struct

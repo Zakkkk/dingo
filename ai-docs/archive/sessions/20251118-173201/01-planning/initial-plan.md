@@ -423,7 +423,7 @@ Into rustc-style errors:
 ```
 Error: Non-exhaustive match in file.dingo:42:5
 
-  40 |     let result = fetchData()
+  40 |     result := fetchData()
   41 |     match result {
   42 |         Ok(x) => process(x)
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern: Err(_)
@@ -1017,7 +1017,7 @@ match result {
 ```
 Error: Non-exhaustive match in example.dingo:42:5
 
-  40 |     let result = fetchData()
+  40 |     result := fetchData()
   41 |     match result {
   42 |         Ok(x) => x * 2
      |         ^^^^^^^^^^^^^^ Missing pattern: Err(_)

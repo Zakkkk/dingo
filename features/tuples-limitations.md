@@ -10,8 +10,8 @@ Phase 8 tuples implementation **does not support nested tuples**. Attempting to 
 
 ```dingo
 // ❌ NOT SUPPORTED - Nested tuple literals
-let matrix = ((1, 2), (3, 4))
-let nested = ((user, error), (data, ok))
+matrix := ((1, 2), (3, 4))
+nested := ((user, error), (data, ok))
 
 // ❌ NOT SUPPORTED - Nested tuples in function returns
 func getRange() ((int, int), (int, int)) {
@@ -23,14 +23,14 @@ func getRange() ((int, int), (int, int)) {
 
 ```dingo
 // ✅ SUPPORTED - Single-level tuples
-let point = (1, 2, 3)
-let user = (name, email, age)
+point := (1, 2, 3)
+user := (name, email, age)
 
 // ✅ SUPPORTED - Tuples with function calls (not nested tuples)
-let result = (foo(a), bar(b), baz(c))
+result := (foo(a), bar(b), baz(c))
 
 // ✅ SUPPORTED - Single-level tuple destructuring
-let (x, y, z) = getCoordinates()
+(x, y, z) = getCoordinates()
 ```
 
 ### Technical Reason
@@ -44,11 +44,11 @@ This design decision was made to ship a working subset of tuple functionality ra
 Flatten nested tuples into single-level tuples with more elements:
 
 ```dingo
-// Instead of: let matrix = ((1, 2), (3, 4))
-// Use: let matrix = (1, 2, 3, 4)  // Flatten to 4 elements
+// Instead of: matrix := ((1, 2), (3, 4))
+// Use: matrix := (1, 2, 3, 4)  // Flatten to 4 elements
 
 // Then destructure:
-let (a, b, c, d) = matrix
+(a, b, c, d) = matrix
 // Treat (a,b) as first pair, (c,d) as second pair
 ```
 
@@ -66,7 +66,7 @@ Tuples must be written on a single line. Multi-line tuple formatting is not supp
 
 ```dingo
 // ❌ NOT SUPPORTED - Multi-line tuple literals
-let coordinates = (
+coordinates := (
     latitude: 37.7749,
     longitude: -122.4194,
     altitude: 52.0
@@ -77,7 +77,7 @@ let coordinates = (
 
 ```dingo
 // ✅ SUPPORTED - Single-line tuples
-let coordinates = (37.7749, -122.4194, 52.0)
+coordinates := (37.7749, -122.4194, 52.0)
 ```
 
 ### Technical Reason
@@ -90,7 +90,7 @@ Write all tuple literals on a single line:
 
 ```dingo
 // Format on one line with clear spacing
-let coordinates = (37.7749, -122.4194, 52.0)
+coordinates := (37.7749, -122.4194, 52.0)
 ```
 
 ### Future Plans

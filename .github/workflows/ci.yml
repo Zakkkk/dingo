@@ -45,18 +45,16 @@ jobs:
 
     - name: Transpile examples
       run: |
-        # Exclude examples with known limitations:
-        # - 14_functional: lambda type inference for dgo generic functions requires gopls context
-        for dingo_file in $(find examples -name "*.dingo" | grep -v /14_functional/); do
+        # All examples should now work with dgo signature registry
+        for dingo_file in $(find examples -name "*.dingo"); do
           echo "Transpiling $dingo_file"
           ./dingo build "$dingo_file"
         done
 
     - name: Build examples
       run: |
-        # Build all examples except those with known limitations:
-        # - 14_functional: lambda type inference for dgo generic functions requires gopls context
-        go build $(go list ./examples/... | grep -v /14_functional)
+        # Build all examples - lambda type inference now works via dgo signature registry
+        go build $(go list ./examples/...)
 
     - name: Run unit tests
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts)

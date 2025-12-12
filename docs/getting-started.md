@@ -57,7 +57,7 @@ package main
 import "fmt"
 
 func main() {
-    let message = "Hello from Dingo!"
+    message := "Hello from Dingo!"
     fmt.Println(message)
 }
 ```
@@ -106,7 +106,7 @@ enum Status {
 }
 
 func main() {
-    let status = Status_Pending()
+    status := Status_Pending()
 
     if status.IsPending() {
         fmt.Println("Task is pending")
@@ -146,8 +146,8 @@ func getEmail(user: string) (string, error) {
 }
 
 func getUserEmail(id: int) (string, error) {
-    let user = fetchUser(id)?
-    let email = getEmail(user)?
+    user := fetchUser(id)?
+    email := getEmail(user)?
     return email, nil
 }
 
@@ -191,7 +191,7 @@ func divide(a: float64, b: float64) Result {
 }
 
 func main() {
-    let result = divide(10.0, 2.0)
+    result := divide(10.0, 2.0)
 
     if result.IsOk() {
         println("Result:", *result.ok)
@@ -227,7 +227,7 @@ func handleResponse(resp: Response) string {
 }
 
 func main() {
-    let resp = Response_Success(200)
+    resp := Response_Success(200)
     println(handleResponse(resp))
 }
 ```
@@ -336,7 +336,7 @@ import (
 
 // Use any Go package as normal
 func main() {
-    let data = map[string]string{"hello": "world"}
+    data := map[string]string{"hello": "world"}
     json, _ := json.Marshal(data)
     fmt.Println(string(json))
 }
@@ -370,9 +370,9 @@ go build .
 
 ```go
 func processData(input: string) (Result, error) {
-    let validated = validate(input)?
-    let parsed = parse(validated)?
-    let transformed = transform(parsed)?
+    validated := validate(input)?
+    parsed := parse(validated)?
+    transformed := transform(parsed)?
     return Ok(transformed), nil
 }
 ```

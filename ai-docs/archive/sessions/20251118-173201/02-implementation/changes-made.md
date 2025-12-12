@@ -124,7 +124,7 @@ match (fetchA(), fetchB()) {
 ```
 Error: Non-exhaustive match in file.dingo:42:5
 
-  40 |     let result = fetchData()
+  40 |     result := fetchData()
   41 |     match result {
   42 |         Ok(x) => process(x)
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern: Err(_)

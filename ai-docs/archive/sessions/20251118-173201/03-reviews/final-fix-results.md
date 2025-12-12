@@ -10,7 +10,7 @@
 
 When Dingo code contained:
 ```dingo
-let result = match opt {
+result := match opt {
     Some(x) => x * 2,
     None => 0
 }
@@ -18,7 +18,7 @@ let result = match opt {
 
 The **RustMatchProcessor** (runs 5th) would generate:
 ```go
-let result = __match_3 := opt
+result := __match_3 := opt
 switch __match_3.tag { ... }
 ```
 
@@ -39,7 +39,7 @@ This produced malformed Go code combining `var ... =` with `:=` operator.
 1. **Added `isInAssignmentContext()` method** (lines 192-207):
    - Detects if match expression is in assignment context
    - Checks for `=` operator before `match` keyword
-   - Handles: `let x = match`, `x := match`, `var x = match`
+   - Handles: `x := match`, `x := match`, `var x = match`
 
 2. **Modified `transformMatch()` method** (lines 147-190):
    - Added `isInAssignment` parameter

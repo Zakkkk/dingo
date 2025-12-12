@@ -32,7 +32,7 @@ Enhanced Hybrid with Marker System:
 ```
 Stage 1: Minimal Regex Preprocessor
 ├── Type annotations: param: Type → param Type
-├── Let bindings: let x = → x :=
+├── Let bindings: x := → x :=
 └── Complex markers: ?operator → /*DINGO:ERROR_PROP*/
 
 Stage 2: go/parser (Native)

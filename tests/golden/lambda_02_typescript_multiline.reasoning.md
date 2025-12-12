@@ -420,12 +420,12 @@ Generated Go is **identical** to hand-written:
 
 ```dingo
 // NOT VALID (multiple statements require braces)
-x => let y = x * 2; return y  // Error: Need { ... }
+x => y := x * 2; return y  // Error: Need { ... }
 ```
 
 **Solution**: Use block body:
 ```dingo
-x => { let y = x * 2; return y }
+x => { y := x * 2; return y }
 ```
 
 ### No Automatic Return Type

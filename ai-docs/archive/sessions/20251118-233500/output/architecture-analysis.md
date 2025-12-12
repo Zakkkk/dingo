@@ -156,7 +156,7 @@ format = "inline"                  # inline/separate/both/none
 
 **Example Quality**:
 ```go
-// Dingo: let data = ReadFile("config.json")?
+// Dingo: data := ReadFile("config.json")?
 // Generated (7 lines with source mapping):
 __tmp0, __err0 := ReadFile("config.json")
 // dingo:s:1

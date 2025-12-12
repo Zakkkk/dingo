@@ -56,7 +56,7 @@ This test validates the most fundamental use case of the `?` operator: error pro
 package main
 
 func readConfig(path: string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 ```
@@ -102,7 +102,7 @@ This test directly addresses the core problem statement from the Go community's 
 
 This is the "Hello World" of error propagation. If developers can't understand this example, they won't adopt the feature. The test proves:
 
-1. **Clarity**: `let data = ReadFile(path)?` is self-documenting
+1. **Clarity**: `data := ReadFile(path)?` is self-documenting
 2. **Safety**: Compiler enforces error return type compatibility
 3. **Simplicity**: No new concepts beyond "propagate errors up"
 4. **Familiarity**: Same pattern as Rust, Swift's `try`, Kotlin's `getOrElse`
@@ -167,7 +167,7 @@ This will be critical for Phase 3 (LSP integration).
 
 **This test uses statement context**:
 ```dingo
-let data = ReadFile(path)?  // Statement: error check happens before assignment
+data := ReadFile(path)?  // Statement: error check happens before assignment
 ```
 
 **vs Expression context** (see `error_prop_03_expression`):
@@ -199,7 +199,7 @@ From `error-propagation.md`:
 
 ```rust
 fn read_config(path: &str) -> Result<Vec<u8>, Error> {
-    let data = read_file(path)?;  // Identical to Dingo!
+    data := read_file(path)?;  // Identical to Dingo!
     Ok(data)
 }
 ```
@@ -216,7 +216,7 @@ fn read_config(path: &str) -> Result<Vec<u8>, Error> {
 
 ```swift
 func readConfig(path: String) throws -> [UInt8] {
-    let data = try readFile(path)  // 'try' instead of '?'
+    data := try readFile(path)  // 'try' instead of '?'
     return data
 }
 ```
@@ -277,11 +277,11 @@ But this understates the benefit. Consider a realistic function with 5 error che
 **Dingo (10 lines)**:
 ```dingo
 func process(id: string) (User, error) {
-	let data = fetch(id)?
-	let parsed = parse(data)?
-	let validated = validate(parsed)?
-	let enhanced = enhance(validated)?
-	let saved = save(enhanced)?
+	data := fetch(id)?
+	parsed := parse(data)?
+	validated := validate(parsed)?
+	enhanced := enhance(validated)?
+	saved := save(enhanced)?
 	return saved, nil
 }
 ```
@@ -323,7 +323,7 @@ func process(id string) (*User, error) {
    ```dingo
    // Works:
    func read() ([]byte, error) { ... }
-   let data = read()?
+   data := read()?
 
    // Doesn't work yet (needs Result<T, E>):
    func read() Result<[]byte, IOError> { ... }
@@ -333,7 +333,7 @@ func process(id string) (*User, error) {
 2. **No error wrapping in this test**:
    ```dingo
    // Want:
-   let data = read() ? "failed to read config"
+   data := read() ? "failed to read config"
    ```
    **Fix**: See `error_prop_04_wrapping` test
 

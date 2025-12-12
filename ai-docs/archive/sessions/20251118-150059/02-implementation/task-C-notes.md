@@ -248,7 +248,7 @@ KeywordProcessor     (let → var)
 
 **Pattern:**
 ```dingo
-let result = match opt { ... }
+result := match opt { ... }
 ```
 
 **Challenge:** How to combine `let` keyword with match expression?

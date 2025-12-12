@@ -45,7 +45,7 @@ if !strings.HasPrefix(trimmed, "//") && !strings.HasPrefix(trimmed, "/*") {
 if !strings.HasPrefix(trimmed, "//") && !strings.HasPrefix(trimmed, "/*") {
     // FIX: Only detect match expressions that start with match keyword
     // This prevents reprocessing generated code like panic("unreachable: match is exhaustive")
-    // Valid patterns: "match expr", "let x = match", "var y = match", "return match"
+    // Valid patterns: "match expr", "x := match", "var y = match", "return match"
     if strings.HasPrefix(trimmed, "match ") ||
         strings.HasPrefix(trimmed, "let ") && strings.Contains(trimmed, " match ") ||
         strings.HasPrefix(trimmed, "var ") && strings.Contains(trimmed, " match ") ||
@@ -58,7 +58,7 @@ if !strings.HasPrefix(trimmed, "//") && !strings.HasPrefix(trimmed, "/*") {
 **Key Changes**:
 1. ✅ Only trigger on lines that **start with** valid match contexts
 2. ✅ `match expr` → Direct match expression
-3. ✅ `let x = match` → Assignment with match
+3. ✅ `x := match` → Assignment with match
 4. ✅ `var y = match` → Variable declaration with match
 5. ✅ `return match` → Return with match expression
 6. ❌ `panic("unreachable: match is exhaustive")` → **NO LONGER TRIGGERS**
@@ -125,7 +125,7 @@ These are **separate issues** from different codegen phases.
 
 **Robustness**: Covers all valid Dingo match syntax:
 - Standalone: `match expr { ... }`
-- Assignment: `let x = match expr { ... }`
+- Assignment: `x := match expr { ... }`
 - Declaration: `var y = match expr { ... }`
 - Return: `return match expr { ... }`
 

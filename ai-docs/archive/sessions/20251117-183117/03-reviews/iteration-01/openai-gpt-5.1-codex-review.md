@@ -84,7 +84,7 @@ if strings.Contains(line, "import (") {
 **Category:** IMPORTANT
 
 **Problem:**
-Regular-expression driven detection/expansion only supports single-line `let`/`return` statements. Multi-line expressions or nested constructs (e.g. `let x = foo(\n ...\n)?`) bypass transformation, so `?` silently survives and the compiler later errors.
+Regular-expression driven detection/expansion only supports single-line `let`/`return` statements. Multi-line expressions or nested constructs (e.g. `x := foo(\n ...\n)?`) bypass transformation, so `?` silently survives and the compiler later errors.
 
 **Impact:**
 Code using multi-line function calls with error propagation will silently fail to be transformed, leading to confusing compiler errors about unknown `?` operator.

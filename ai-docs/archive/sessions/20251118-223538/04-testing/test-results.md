@@ -29,7 +29,7 @@ go build -o dingo-test ./cmd/dingo
 ### Input File
 ```dingo
 // tests/golden/error_prop_01_simple.dingo (line 4)
-let data = ReadFile(path)?
+data := ReadFile(path)?
            ^             ^
            col 13        col 27 (? operator)
 ```
@@ -266,7 +266,7 @@ The generated source map shows:
 
 Manual verification:
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
            ^             ^
            col 13        col 27
 ```

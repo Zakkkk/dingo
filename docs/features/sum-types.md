@@ -244,7 +244,7 @@ func StatusActive() Status
 func StatusComplete() Status
 
 // Usage:
-let s = StatusPending()
+s := StatusPending()
 ```
 
 ### With Data
@@ -260,8 +260,8 @@ func ResultOk(ok0 int) Result
 func ResultErr(err0 string) Result
 
 // Usage:
-let success = ResultOk(42)
-let failure = ResultErr("something went wrong")
+success := ResultOk(42)
+failure := ResultErr("something went wrong")
 ```
 
 ### With Named Fields
@@ -277,8 +277,8 @@ func ShapeCircle(radius float64) Shape
 func ShapeRectangle(width, height float64) Shape
 
 // Usage:
-let circle = ShapeCircle(5.0)
-let rect = ShapeRectangle(10.0, 20.0)
+circle := ShapeCircle(5.0)
+rect := ShapeRectangle(10.0, 20.0)
 ```
 
 ## Type Checking Methods
@@ -292,7 +292,7 @@ enum Status {
     Complete,
 }
 
-let status = StatusActive()
+status := StatusActive()
 
 if status.IsActive() {
     println("Status is active!")
@@ -313,15 +313,15 @@ enum Result {
     Err(string),
 }
 
-let result = ResultOk(42)
+result := ResultOk(42)
 
 if result.IsOk() {
-    let value = *result.ok0
+    value := *result.ok0
     println("Value:", value)
 }
 
 if result.IsErr() {
-    let err = *result.err0
+    err := *result.err0
     println("Error:", err)
 }
 ```
@@ -333,10 +333,10 @@ enum Shape {
     Circle { radius: float64 },
 }
 
-let shape = ShapeCircle(5.0)
+shape := ShapeCircle(5.0)
 
 if shape.IsCircle() {
-    let r = *shape.circleRadius
+    r := *shape.circleRadius
     println("Radius:", r)
 }
 ```

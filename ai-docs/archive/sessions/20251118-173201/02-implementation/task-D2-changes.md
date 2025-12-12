@@ -72,7 +72,7 @@ case .None:
 **Features Demonstrated**:
 - Nested switch expressions
 - Bare statement bodies: `case .Some(let x): x * 2`
-- Braced bodies: `case .Some(let x): { let doubled = x * 2; return doubled }`
+- Braced bodies: `case .Some(let x): { doubled := x * 2; return doubled }`
 - Mixed body styles in same switch
 - Deep nesting (triple-nested switches)
 - Result[Result<Option[T], E], E> patterns

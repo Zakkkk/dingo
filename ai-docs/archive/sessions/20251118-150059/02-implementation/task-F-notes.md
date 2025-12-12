@@ -207,7 +207,7 @@ func (p *PatternMatchPlugin) isExpressionMode(switchStmt *ast.SwitchStmt) bool {
     parent := p.ctx.GetParent(switchStmt)
 
     switch parent.(type) {
-    case *ast.AssignStmt:  // let x = match { ... }
+    case *ast.AssignStmt:  // x := match { ... }
         return true
     case *ast.ReturnStmt:  // return match { ... }
         return true
@@ -794,9 +794,9 @@ match result {
 
 **Example:**
 ```dingo
-let result = match status {
+result := match status {
     Active => {
-        let count = getCount()
+        count := getCount()
         count * 2
     },
     Inactive => 0

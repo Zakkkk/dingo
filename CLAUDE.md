@@ -111,6 +111,16 @@ Variable naming:
 - ✅ `tmp`, `tmp1`, `tmp2` (camelCase, no leading number)
 - ❌ `__tmp0`, `_err_0` (no underscores, no zero-based)
 
+## Test Policy
+
+**NEVER exclude tests to hide bugs.** Fix the underlying issue instead.
+
+- If a test is failing, fix the bug - don't exclude the test
+- If an example doesn't compile, fix the transpiler - don't skip the example
+- CI exclusions should only be temporary during active development
+- Document any temporary exclusions with specific bug tracking
+- **Features in `features/` directory have NO limitations** - all documented features must work
+
 ## Agent Selection
 
 | Task | Agent |

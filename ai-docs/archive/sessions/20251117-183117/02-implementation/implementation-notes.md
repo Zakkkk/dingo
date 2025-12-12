@@ -91,9 +91,9 @@ expr, errMsg := extractExpressionAndMessage(line)  // Full line!
 
 This caused issues like:
 ```go
-let data = ReadFile(path)?
-// Extracted: "let data = ReadFile(path)?"
-// Generated: __tmp0, __err0 := let data = ReadFile(path)  ❌
+data := ReadFile(path)?
+// Extracted: "data := ReadFile(path)?"
+// Generated: __tmp0, __err0 := data := ReadFile(path)  ❌
 ```
 
 **Fix:**
@@ -110,7 +110,7 @@ expr, errMsg := extractExpressionAndMessage(rightSide)
 
 **Problem:** Original regex `[^"]*` failed on:
 ```dingo
-let data = ReadFile(path)? "failed to read \"important\" file"
+data := ReadFile(path)? "failed to read \"important\" file"
 ```
 
 Only captured: `"failed to read \"`

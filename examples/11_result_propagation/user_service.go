@@ -126,11 +126,11 @@ func FindOrdersByUser(db *sql.DB, userID int) dgo.Result[[]Order, ServiceError] 
 	return dgo.Ok[[]Order, ServiceError](orders)
 }
 
-// === Combining patterns with guard let ===
-// guard let also uses explicit |err| binding for consistency
+// === Combining patterns with guard ===
+// guard uses explicit |err| binding for consistency
 
 func GetUserOrderTotal(db *sql.DB, userID int) dgo.Result[float64, ServiceError] {
-	// guard let unwraps Result or returns error via explicit |err|
+	// guard unwraps Result or returns error via explicit |err|
 	// Note: Err[float64] explicit type parameter needed for type inference
 	tmp := FindUser(db, userID)
 	if tmp.IsErr() {
@@ -195,7 +195,7 @@ func validateOrder(order Order, user User) (Order, error) {
 func main() {
 	var db *sql.DB // Would be initialized in real code
 
-	// Using Result type with guard let
+	// Using Result type with guard
 	result := GetUserOrderTotal(db, 123)
 
 	if result.IsOk() {

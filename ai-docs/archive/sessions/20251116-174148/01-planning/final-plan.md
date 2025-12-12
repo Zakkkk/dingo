@@ -192,7 +192,7 @@ main.go:15: undefined: fetchUser
 **Example With Source Maps:**
 ```
 main.dingo:8: undefined: fetchUser
-    let user = fetchUser(id)?
+    user := fetchUser(id)?
                ^^^^^^^^^
 ```
 
@@ -377,10 +377,10 @@ import "net/http"
 import "io"
 
 func fetchURL(url: string) (string, error) {
-    let resp = http.Get(url)?              // Question syntax
+    resp := http.Get(url)?              // Question syntax
     defer resp.Body.Close()
 
-    let body = io.ReadAll(resp.Body)?      // Chained error propagation
+    body := io.ReadAll(resp.Body)?      // Chained error propagation
     return string(body), nil
 }
 
@@ -410,10 +410,10 @@ func fetchURL(url string) (string, error) {
 import "database/sql"
 
 func queryUser(db: *sql.DB, id: int) (*User, error) {
-    let row = db.QueryRow("SELECT name, email FROM users WHERE id = ?", id)
+    row := db.QueryRow("SELECT name, email FROM users WHERE id = ?", id)
 
     var user User
-    let err = row.Scan(&user.Name, &user.Email)?
+    err := row.Scan(&user.Name, &user.Email)?
     return &user, nil
 }
 ```
@@ -426,10 +426,10 @@ import "os"
 import "encoding/json"
 
 func loadConfig(path: string) (*Config, error) {
-    let data = os.ReadFile(path)?
+    data := os.ReadFile(path)?
 
     var config Config
-    let err = json.Unmarshal(data, &config)?
+    err := json.Unmarshal(data, &config)?
     return &config, nil
 }
 ```
@@ -450,29 +450,29 @@ func handleCreateUser(
     db: *sql.DB,
 ) {
     // Parse request
-    let body = io.ReadAll(r.Body)?
+    body := io.ReadAll(r.Body)?
     defer r.Body.Close()
 
     var req CreateUserRequest
-    let err = json.Unmarshal(body, &req)?
+    err := json.Unmarshal(body, &req)?
 
     // Validate
-    let validated = validateUser(&req)?
+    validated := validateUser(&req)?
 
     // Database transaction
-    let tx = db.Begin()?
+    tx := db.Begin()?
     defer tx.Rollback()
 
-    let result = tx.Exec(
+    result := tx.Exec(
         "INSERT INTO users (name, email) VALUES (?, ?)",
         validated.Name,
         validated.Email,
     )?
 
-    let err = tx.Commit()?
+    err := tx.Commit()?
 
     // Response
-    let id = result.LastInsertId()?
+    id := result.LastInsertId()?
     json.NewEncoder(w).Encode(map[string]int64{"id": id})
 }
 ```
@@ -1080,7 +1080,7 @@ func fetchUser(id: string) -> Result[User, Error] {
 }
 
 func processUser(id: string) -> Result[User, Error] {
-    let user = fetchUser(id)?  // Unwraps Result
+    user := fetchUser(id)?  // Unwraps Result
     return Ok(user)
 }
 ```
@@ -1090,7 +1090,7 @@ func processUser(id: string) -> Result[User, Error] {
 Automatic error context injection:
 
 ```dingo
-let user = fetchUser(id)? wrap "failed to fetch user {id}"
+user := fetchUser(id)? wrap "failed to fetch user {id}"
 
 // Generates:
 if err != nil {

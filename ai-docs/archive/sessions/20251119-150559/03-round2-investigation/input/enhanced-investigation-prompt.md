@@ -169,7 +169,7 @@ func (r *RustMatchProcessor) transformMatch(matchExpr string, originalLine int, 
 	armsText := matches[2]
 
 	// Check if match expression is in assignment context and extract variable name
-	// If the entire match expression starts with "let x = match" or "var x = match",
+	// If the entire match expression starts with "x := match" or "var x = match",
 	// we need to handle it specially using Variable Hoisting pattern
 	isInAssignment, assignmentVar := r.extractAssignmentVar(matchExpr)
 
@@ -350,7 +350,7 @@ func handleStatus(status: Status) -> string {
 
 // Example 4: Pattern match in assignment context
 func doubleIfPresent(opt: Option[int]) -> Option[int] {
-	let result = match opt {
+	result := match opt {
 		Some(x) => Some(x * 2),
 		None => Option_int_None()
 	}
@@ -415,7 +415,7 @@ func processValue(r Result_int_error) int {
 	return match r {
 		Result_int_error_Ok(val) => {
 			// Block expression allows multiple statements
-			let doubled = val * 2
+			doubled := val * 2
 			doubled + 10
 		},
 		Result_int_error_Err(_) => 0,
@@ -432,7 +432,7 @@ func classifyStatus(s Status) string {
 
 // Example 5: Match in variable assignment
 func transform(opt Option_int) Option_int {
-	let result = match opt {
+	result := match opt {
 		Option_int_Some(x) => Option_int_Some(x * 3),
 		Option_int_None => Option_int_None,
 	}

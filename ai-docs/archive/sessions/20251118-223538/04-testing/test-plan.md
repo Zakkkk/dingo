@@ -18,7 +18,7 @@ Verify that the fix to error propagation preprocessor's `qPos` calculation (usin
 **Input**: `tests/golden/error_prop_01_simple.dingo`
 ```dingo
 func readConfig(path: string) (string, error) {
-    let data = os.ReadFile(path)?
+    data := os.ReadFile(path)?
     return string(data), nil
 }
 ```

@@ -7,7 +7,7 @@ Test null coalescing (`??`) operator integration with safe navigation (`?.`) ope
 
 ### 1. user?.name ?? "unknown"
 ```dingo
-let userName = user?.name ?? "unknown"
+userName := user?.name ?? "unknown"
 ```
 **Expected:** IIFE with safe nav IIFE inside
 - Safe navigation returns string (not Option)
@@ -16,7 +16,7 @@ let userName = user?.name ?? "unknown"
 
 ### 2. user?.address?.city ?? defaultCity
 ```dingo
-let city = user?.address?.city ?? defaultCity
+city := user?.address?.city ?? defaultCity
 ```
 **Expected:** Nested IIFE
 - Outer IIFE for ??
@@ -26,7 +26,7 @@ let city = user?.address?.city ?? defaultCity
 
 ### 3. profile?.getEmail() ?? "no-email@example.com"
 ```dingo
-let email = profile?.getEmail() ?? "no-email@example.com"
+email := profile?.getEmail() ?? "no-email@example.com"
 ```
 **Expected:** Method call integration
 - Safe navigation with method call
@@ -35,8 +35,8 @@ let email = profile?.getEmail() ?? "no-email@example.com"
 
 ### 4. Multiple safe nav with different fallbacks
 ```dingo
-let zip = user2?.address?.zip ?? "00000"
-let city2 = user2?.address?.city ?? "Unknown City"
+zip := user2?.address?.zip ?? "00000"
+city2 := user2?.address?.city ?? "Unknown City"
 ```
 **Expected:** Two separate ?? operations
 - Each uses safe navigation

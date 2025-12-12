@@ -221,7 +221,7 @@ Compiler flag: `dingo build --strict-match` (error) vs `dingo build --lenient-ma
 ```go
 // Example 1: Assign match result
 fn getValue(opt: Option[int]) -> int {
-    let default = match opt {
+    default := match opt {
         Some(x) => x          // Returns int
         None => 0             // Returns int (same type)
     }
@@ -247,13 +247,13 @@ fn compute(x: Option[int], y: Option[int]) -> int {
 **Type checking enforced:**
 ```go
 // COMPILER ERROR: type mismatch in match arms
-let x = match result {
+x := match result {
     Ok(v) => v          // Returns int
     Err(e) => e         // Returns string - ERROR!
 }
 
 // Fix: make types compatible
-let x = match result {
+x := match result {
     Ok(v) => fmt.Sprintf("%d", v)   // Returns string
     Err(e) => e                     // Returns string - OK
 }
@@ -281,7 +281,7 @@ fn handleResult(result: Result[int, string]) {
 }
 
 // Can't assign match result:
-let x = match result { ... }  // ERROR: match is a statement, not expression
+x := match result { ... }  // ERROR: match is a statement, not expression
 
 // Need temporary variables:
 let x: int
@@ -306,7 +306,7 @@ match result {
 
 ```go
 // Used in assignment → expression mode (type-checked)
-let x = match result {
+x := match result {
     Ok(v) => v
     Err(_) => 0
 }

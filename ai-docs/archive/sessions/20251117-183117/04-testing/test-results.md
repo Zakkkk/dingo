@@ -109,7 +109,7 @@ Errors: Only expected undefined function errors (ReadFile, Atoi, Unmarshal)
 **Dingo Input:**
 ```go
 func readConfig(path: string) ([]byte, error) {
-    let data = ReadFile(path)?
+    data := ReadFile(path)?
     return data, nil
 }
 ```
@@ -147,9 +147,9 @@ func readConfig(path string) ([]byte, error) {
 **Dingo Input:**
 ```go
 func loadData(path: string) (map[string]interface{}, error) {
-    let data = ReadFile(path)?
+    data := ReadFile(path)?
     var result map[string]interface{}
-    let err = Unmarshal(data, &result)?
+    err := Unmarshal(data, &result)?
     return result, nil
 }
 ```
@@ -195,7 +195,7 @@ func loadData(path string) (map[string]interface{}, error) {
 ```go
 func readUserConfig(username: string) ([]byte, error) {
     var path = "/home/" + username + "/config.json"
-    let data = ReadFile(path)? "failed to read user config"
+    data := ReadFile(path)? "failed to read user config"
     return data, nil
 }
 ```
@@ -235,7 +235,7 @@ func readUserConfig(username string) ([]byte, error) {
 **Dingo Input:**
 ```go
 func readWithMessage(path: string) ([]byte, error) {
-    let data = ReadFile(path)? "failed to read \"important\" file"
+    data := ReadFile(path)? "failed to read \"important\" file"
     return data, nil
 }
 ```
@@ -269,9 +269,9 @@ func readWithMessage(path string) ([]byte, error) {
 **Dingo Input:**
 ```go
 func pipeline(path: string) (*Config, error) {
-    let data = ReadFile(path)? "failed to read config"
+    data := ReadFile(path)? "failed to read config"
     var cfg Config
-    let err = Unmarshal(data, &cfg)? "failed to parse config"
+    err := Unmarshal(data, &cfg)? "failed to parse config"
     return &cfg, nil
 }
 ```
@@ -471,7 +471,7 @@ $ for f in /tmp/error_prop_*.go; do gofmt "$f" >/dev/null || echo "FAIL: $f"; do
 
 **Before (Dingo):**
 ```go
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
 ```
 
 **After (Go):**

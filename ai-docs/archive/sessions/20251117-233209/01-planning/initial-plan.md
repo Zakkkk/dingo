@@ -187,9 +187,9 @@ match result {
 1. Detect Go functions returning `(T, error)`
 2. Auto-wrap in Result constructor:
    ```dingo
-   let user = fetchUser(id)  // fetchUser returns (User, error)
+   user := fetchUser(id)  // fetchUser returns (User, error)
    // Transforms to:
-   let user = (func() Result_User_error {
+   user := (func() Result_User_error {
        __tmp0, __err0 := fetchUser(id)
        if __err0 != nil { return Err(__err0) }
        return Ok(__tmp0)
@@ -293,9 +293,9 @@ Same as Result, but simpler (no error type).
 **Implementation:**
 Auto-wrap Go pointers to Option:
 ```dingo
-let user = findUser(id)  // returns *User
+user := findUser(id)  // returns *User
 // Wraps to:
-let user = (func() Option_User {
+user := (func() Option_User {
     __tmp0 := findUser(id)
     if __tmp0 == nil { return None }
     return Some(*__tmp0)
@@ -324,7 +324,7 @@ Configuration flag: `auto_wrap_go_nils` (default: false)
 Make `?` operator work with Result types:
 ```dingo
 func processUser(id: string) -> Result[User, Error] {
-    let user = fetchUser(id)?  // Propagate Err variant
+    user := fetchUser(id)?  // Propagate Err variant
     return Ok(user)
 }
 ```
@@ -356,7 +356,7 @@ func processUser(id string) Result_User_Error {
 **Implementation:**
 Make `?.` operator work with Option types:
 ```dingo
-let name = user?.name  // Returns Option[string]
+name := user?.name  // Returns Option[string]
 ```
 
 Transform to:

@@ -91,7 +91,7 @@ type Context struct {
 
 **Example:**
 ```
-Source: "let emoji = 😀"  // 😀 is 4 bytes, 1 rune
+Source: "emoji := 😀"  // 😀 is 4 bytes, 1 rune
          ^         ^
 Byte 0            Byte 13 (4 extra bytes for emoji)
 Rune 0            Rune 13 (1 rune for emoji)
@@ -100,7 +100,7 @@ Rune 0            Rune 13 (1 rune for emoji)
 If we use byte indexing:
 ```
 Error at column 13 (byte-based):
-let emoji = 😀
+emoji := 😀
              ^^^  // Wrong! Off by 3 positions
 ```
 
@@ -112,7 +112,7 @@ caretIndent := utf8.RuneCountInString(line[:min(e.Column-1, len(line))])
 Now:
 ```
 Error at column 13 (rune-based):
-let emoji = 😀
+emoji := 😀
             ^  // Correct!
 ```
 
@@ -166,7 +166,7 @@ extractSourceLines("file.dingo", 9999, 2)
 
 **Example:**
 ```
-  40 |     let result = fetchData()     // Context -2
+  40 |     result := fetchData()     // Context -2
   41 |     match result {               // Context -1
   42 |         Ok(x) => process(x)      // Error line
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern

@@ -51,7 +51,7 @@
 package main
 
 func main() {
-    let message = "Hello, Dingo!"
+    message := "Hello, Dingo!"
     println(message)
     return
 }
@@ -122,7 +122,7 @@ dingo --help                # Show help
 package main
 
 func main() {
-    let message = "Hello, Dingo!"
+    message := "Hello, Dingo!"
     println(message)
     return
 }

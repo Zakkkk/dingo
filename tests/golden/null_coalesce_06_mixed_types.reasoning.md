@@ -7,7 +7,7 @@ Test null coalescing (`??`) with mixed Option and pointer types in same chain.
 
 ### 1. Option -> pointer transition
 ```dingo
-let bio = user?.profile?.bio ?? "No bio"
+bio := user?.profile?.bio ?? "No bio"
 ```
 **Expected:** Type change in chain
 - user: UserOption (enum)
@@ -17,7 +17,7 @@ let bio = user?.profile?.bio ?? "No bio"
 
 ### 2. Pointer -> Option transition
 ```dingo
-let name = userPtr?.name ?? "Anonymous"
+name := userPtr?.name ?? "Anonymous"
 ```
 **Expected:** Pointer to field
 - userPtr: *User (pointer)
@@ -27,7 +27,7 @@ let name = userPtr?.name ?? "Anonymous"
 ### 3. Mixed chain with data
 ```dingo
 let user2: UserOption = UserOption_Some(User{...})
-let profile = user2?.profile?.bio ?? "Default bio"
+profile := user2?.profile?.bio ?? "Default bio"
 ```
 **Expected:** Option with valid data
 - Option check (Some)
@@ -37,7 +37,7 @@ let profile = user2?.profile?.bio ?? "Default bio"
 
 ### 4. Method returning pointer
 ```dingo
-let email = user3?.getEmail() ?? "no-email"
+email := user3?.getEmail() ?? "no-email"
 ```
 **Expected:** Method call transition
 - user3: UserOption

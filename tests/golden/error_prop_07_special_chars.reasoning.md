@@ -49,7 +49,7 @@ This test validates the transpiler's **string escaping and handling of special c
 package main
 
 func readWithMessage(path: string) ([]byte, error) {
-	let data = ReadFile(path)? "failed to read \"important\" file"
+	data := ReadFile(path)? "failed to read \"important\" file"
 	return data, nil
 }
 ```

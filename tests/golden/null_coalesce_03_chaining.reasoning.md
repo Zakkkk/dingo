@@ -7,7 +7,7 @@ Test chained null coalescing (`a ?? b ?? c`) with single IIFE optimization.
 
 ### 1. firstName ?? middleName ?? lastName ?? "Unknown"
 ```dingo
-let name = firstName ?? middleName ?? lastName ?? "Unknown"
+name := firstName ?? middleName ?? lastName ?? "Unknown"
 ```
 **Expected:** Single IIFE with sequential checks
 - Try firstName (None)
@@ -17,7 +17,7 @@ let name = firstName ?? middleName ?? lastName ?? "Unknown"
 
 ### 2. primary ?? fallback ?? "default"
 ```dingo
-let config = primary ?? fallback ?? "default"
+config := primary ?? fallback ?? "default"
 ```
 **Expected:** Function call results
 - primary = getConfig("primary") returns None
@@ -26,7 +26,7 @@ let config = primary ?? fallback ?? "default"
 
 ### 3. opt1 ?? opt2 ?? opt3 ?? opt4 ?? "Not Found"
 ```dingo
-let result = opt1 ?? opt2 ?? opt3 ?? opt4 ?? "Not Found"
+result := opt1 ?? opt2 ?? opt3 ?? opt4 ?? "Not Found"
 ```
 **Expected:** Long chain (5 operands)
 - Try each in sequence

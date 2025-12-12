@@ -316,8 +316,8 @@ func (p *Pipeline) Execute(file *ast.File) error {
 
 Syntax:
 ```dingo
-let result = Ok(42)              // Result[int, error]
-let failure = Err(errors.New())  // Result[T, error]
+result := Ok(42)              // Result[int, error]
+failure := Err(errors.New())  // Result[T, error]
 ```
 
 Transform to:
@@ -337,7 +337,7 @@ failure := Result_T_error{tag: ResultTag_Err, err_0: errors.New()}
 Detect Go functions returning `(T, error)` and auto-wrap in Result:
 
 ```dingo
-let data = readFile("config.json")  // readFile returns ([]byte, error)
+data := readFile("config.json")  // readFile returns ([]byte, error)
 // Automatically wraps to Result[[]byte, error]
 ```
 
@@ -364,8 +364,8 @@ Enable `?` operator to work with Result types:
 
 ```dingo
 func processData() Result[Data, error] {
-    let config = readConfig()?  // readConfig returns Result[Config, error]
-    let validated = validate(config)?
+    config := readConfig()?  // readConfig returns Result[Config, error]
+    validated := validate(config)?
     return Ok(validated)
 }
 ```
@@ -395,8 +395,8 @@ func processData() Result[Data, error] {
 
 Syntax:
 ```dingo
-let value = Some(42)        // Option[int]
-let empty = None            // Option[T]
+value := Some(42)        // Option[int]
+empty := None            // Option[T]
 ```
 
 Transform to:
@@ -410,7 +410,7 @@ empty := Option_T{tag: OptionTag_None}
 Update NullCoalescingPlugin to detect Option types:
 
 ```dingo
-let value = maybeValue ?? 0  // maybeValue is Option[int]
+value := maybeValue ?? 0  // maybeValue is Option[int]
 ```
 
 Transform to:
@@ -433,7 +433,7 @@ value := func() int {
 Fix chaining bug by detecting Option returns:
 
 ```dingo
-let name = user?.address?.city  // Each step returns Option
+name := user?.address?.city  // Each step returns Option
 ```
 
 **Implementation:**

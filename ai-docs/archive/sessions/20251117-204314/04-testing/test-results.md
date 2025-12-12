@@ -225,7 +225,7 @@ Duration: cached (fast)
 **Test Case 1: os.ReadFile_import**
 ```go
 Input:
-  let data = ReadFile("test.txt")?
+  data := ReadFile("test.txt")?
 
 Expected Import:
   import "os"
@@ -239,7 +239,7 @@ Result: ✅ PASS
 **Test Case 2: strconv.Atoi_import**
 ```go
 Input:
-  let num = Atoi("123")?
+  num := Atoi("123")?
 
 Expected Import:
   import "strconv"
@@ -252,8 +252,8 @@ Result: ✅ PASS
 **Test Case 3: multiple_imports**
 ```go
 Input:
-  let data = ReadFile("test.txt")?
-  let num = Atoi("123")?
+  data := ReadFile("test.txt")?
+  num := Atoi("123")?
 
 Expected Imports:
   import (
@@ -288,7 +288,7 @@ Result: ✅ PASS
 **Validation:**
 ```go
 Input (line 4):
-  let data = ReadFile("test.txt")?
+  data := ReadFile("test.txt")?
 
 Output (line 6 after import injection):
   import "os"

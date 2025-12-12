@@ -73,7 +73,7 @@ enum Option[T] {
 ```dingo
 // Function returning optional value
 func findUser(id: string) -> Option[User] {
-    let user = database.query(id)
+    user := database.query(id)
     if user.exists() {
         return Some(user)
     }
@@ -93,13 +93,13 @@ func processUser(id: string) {
 
 ```dingo
 // Safe unwrap with default value
-let user = findUser("123").unwrapOr(User.default())
+user := findUser("123").unwrapOr(User.default())
 
 // Safe unwrap with nil coalescing
-let name = findUser("123")?.name ?? "Anonymous"
+name := findUser("123")?.name ?? "Anonymous"
 
 // Unsafe unwrap (panics if None)
-let user = findUser("123").unwrap()  // Use sparingly
+user := findUser("123").unwrap()  // Use sparingly
 
 // Check if present
 if findUser("123").isSome() {
@@ -174,7 +174,7 @@ enum Optional<Wrapped> {
 var user: User? = findUser("123")
 
 // Nil coalescing operator
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 
 // Optional binding
 if let user = findUser("123") {
@@ -184,7 +184,7 @@ if let user = findUser("123") {
 }
 
 // Optional chaining
-let city = user?.address?.city?.name
+city := user?.address?.city?.name
 ```
 
 **Key Insights:**
@@ -209,7 +209,7 @@ match find_user("123") {
 }
 
 // Chaining with map/and_then
-let user_name = find_user("123")
+user_name := find_user("123")
     .map(|u| u.name)
     .unwrap_or("Anonymous".to_string());
 
@@ -365,29 +365,29 @@ let user: User? = findUser(id)
 
 ```dingo
 // Chaining with ?.
-let city = user?.address?.city?.name  // Returns Option[string]
+city := user?.address?.city?.name  // Returns Option[string]
 
 // With nil coalescing
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 
 // Method calls
-let email = user?.getEmail()?.lowercase()
+email := user?.getEmail()?.lowercase()
 ```
 
 ### Interop with Go
 
 ```dingo
 // Go functions returning *T or nil
-let goFunc = import("some/package").MaybeNil
+goFunc := import("some/package").MaybeNil
 
 // Dingo wraps automatically
 let result: Option[User] = goFunc.call()
 
 // Explicit conversion
-let opt = Option.fromPtr(goPtr)
+opt := Option.fromPtr(goPtr)
 
 // Convert back to Go pointer
-let ptr = opt.toPtr()  // Returns nil if None
+ptr := opt.toPtr()  // Returns nil if None
 ```
 
 ---
@@ -427,7 +427,7 @@ func loadUser(id: string) -> Result[User, Error]
 
 ```dingo
 // Chain operations safely
-let city = findUser(id)
+city := findUser(id)
     .map(|u| u.address)
     .map(|a| a.city)
     .unwrapOr("Unknown")
@@ -500,7 +500,7 @@ if user != nil && user.Address != nil && user.Address.City != nil {
 
 ```dingo
 func findUserByEmail(email: string) -> Option[User] {
-    let users = database.query("SELECT * FROM users WHERE email = ?", email)
+    users := database.query("SELECT * FROM users WHERE email = ?", email)
     if users.isEmpty() {
         return None
     }
@@ -538,12 +538,12 @@ func loadConfig() -> Config {
 }
 
 func main() {
-    let config = loadConfig()
+    config := loadConfig()
 
     // Use defaults for missing values
-    let port = config.port.unwrapOr(8080)
-    let host = config.host.unwrapOr("localhost")
-    let timeout = config.timeout.unwrapOr(30 * time.Second)
+    port := config.port.unwrapOr(8080)
+    host := config.host.unwrapOr("localhost")
+    timeout := config.timeout.unwrapOr(30 * time.Second)
 
     server.start(host, port, timeout)
 }
@@ -560,7 +560,7 @@ func getUserCity(userID: string) -> Option[string] {
 }
 
 // Using the value
-let city = getUserCity("123").unwrapOr("Unknown location")
+city := getUserCity("123").unwrapOr("Unknown location")
 println("User is in: ${city}")
 ```
 
@@ -568,7 +568,7 @@ println("User is in: ${city}")
 
 ```dingo
 func queryFirst<T>(sql: string, args: ...any) -> Option[T] {
-    let rows = db.Query(sql, args...)
+    rows := db.Query(sql, args...)
     if !rows.Next() {
         return None
     }
@@ -579,7 +579,7 @@ func queryFirst<T>(sql: string, args: ...any) -> Option[T] {
 }
 
 // Usage
-let user = queryFirst<User>(
+user := queryFirst<User>(
     "SELECT * FROM users WHERE id = ?",
     userID
 ).unwrapOr(User.guest())

@@ -81,7 +81,7 @@ match result {
 
 **Expression mode** (type-checked):
 ```dingo
-let x = match result {
+x := match result {
     Ok(v) => v * 2,  // Must return int
     Err(_) => 0      // Must return int
 }
@@ -112,7 +112,7 @@ match { _ => None }  // OK - from other match arms
 
 **Invalid** (error):
 ```dingo
-let x = None  // ERROR: cannot infer type for None
+x := None  // ERROR: cannot infer type for None
 // Fix: let x: Option[int] = None
 ```
 
@@ -428,7 +428,7 @@ help: or add a wildcard arm:
 func (p *PatternMatchPlugin) isExpressionMode(matchNode ast.Node) bool {
     parent := p.ctx.GetParent(matchNode)
     switch parent.(type) {
-    case *ast.AssignStmt:  // let x = match { ... }
+    case *ast.AssignStmt:  // x := match { ... }
         return true
     case *ast.ReturnStmt:  // return match { ... }
         return true
@@ -813,7 +813,7 @@ fn getAge() -> Option[int] {
 processAge(None)  // ✅ Infers from parameter type
 
 // Struct field
-let user = User{ age: None }  // ✅ Infers from field type
+user := User{ age: None }  // ✅ Infers from field type
 
 // Match arm (expression mode)
 match status {
@@ -828,7 +828,7 @@ x = None  // ✅ Type already known
 
 **Invalid Contexts** (error):
 ```dingo
-let x = None  // ❌ ERROR: cannot infer type for None
+x := None  // ❌ ERROR: cannot infer type for None
 // Fix: let x: Option[int] = None
 ```
 
@@ -1002,7 +1002,7 @@ func (p *NoneContextPlugin) extractOptionType(typ types.Type) (types.Type, bool)
 error: cannot infer type for None constant
   --> example.dingo:42:12
    |
-42 |     let x = None
+42 |     x := None
    |             ^^^^ no type context available
    |
 help: add explicit type annotation:

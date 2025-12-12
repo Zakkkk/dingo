@@ -154,7 +154,7 @@ func ReadFile(name string) ([]byte, error) {
 }
 
 func main() {
-    let data = ReadFile("test.txt")?  // Incorrectly injects "os" import
+    data := ReadFile("test.txt")?  // Incorrectly injects "os" import
 }
 ```
 

@@ -27,7 +27,7 @@ Dingo is a meta-language for Go (like TypeScript for JavaScript) that transpiles
 package main
 
 func readConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 ```

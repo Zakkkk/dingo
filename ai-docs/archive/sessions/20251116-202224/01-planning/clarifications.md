@@ -23,7 +23,7 @@ match shape {
 
 **Example:**
 ```dingo
-let area = match shape {
+area := match shape {
     Circle { radius } => 3.14 * radius * radius
     Rectangle { width, height } => width * height
 }

@@ -315,7 +315,7 @@ func TestSourceMappingWithImports(t *testing.T) {
     source := `package main
 
 func example() {
-    let data = ReadFile("test.txt")?
+    data := ReadFile("test.txt")?
     return data
 }`
 

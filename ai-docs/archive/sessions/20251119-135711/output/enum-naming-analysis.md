@@ -125,10 +125,10 @@ match result {
 
 ### Current Approach (Global Functions)
 ```dingo
-let r = Ok(42)
-let e = Err("failed")
-let s = Some("hello")
-let n = None
+r := Ok(42)
+e := Err("failed")
+s := Some("hello")
+n := None
 ```
 Transpiles to:
 ```go
@@ -140,16 +140,16 @@ n := Option_string_None()
 
 ### Alternative: Namespaced
 ```dingo
-let r = Result.Ok(42)
-let e = Result.Err("failed")
+r := Result.Ok(42)
+e := Result.Err("failed")
 ```
 **Pros**: Clearer namespace, avoids name conflicts
 **Cons**: More verbose, requires parser changes
 
 ### Alternative: Factory Functions
 ```dingo
-let r = NewOk(42)
-let e = NewErr("failed")
+r := NewOk(42)
+e := NewErr("failed")
 ```
 **Pros**: Very Go-idiomatic
 **Cons**: Loses elegance, longer names

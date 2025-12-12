@@ -161,6 +161,6 @@ case ResultTagErr:
 1. ✅ C4 revert is COMPLETE and working
 2. ⚠️ Separate task needed: Fix `let` preprocessor to handle match expressions
    - File: `pkg/preprocessor/keywords.go` (LetBindingProcessor)
-   - Pattern: `let x = match expr { ... }` needs special handling
+   - Pattern: `x := match expr { ... }` needs special handling
    - Solution: Either IIFE pattern or multi-statement expansion
 3. Update golden file `pattern_match_01_simple.go.golden` after `let` fix

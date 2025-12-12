@@ -65,7 +65,7 @@ func process(value interface{}) {
 
 **Generated Code Example**:
 ```dingo
-let result = match opt {
+result := match opt {
     Some(x) => Some(x * 2),
     None => None,
 }
@@ -96,7 +96,7 @@ case OptionTagNone:
 
 **Implementation Complexity**:
 - Moderate: Modify `generateSwitch()` to detect assignment and generate hoisted var + branch assignments. Leverage existing exhaustiveness logic. Estimate: 4-6 hours.
-- Edge Cases: Nested matches (e.g., `let a = someFunc(b = match inner { ... })` )—would need recursive handling. Type inference might fail if plugin can't provide T.
+- Edge Cases: Nested matches (e.g., `a := someFunc(b = match inner { ... })` )—would need recursive handling. Type inference might fail if plugin can't provide T.
 - Cleanliness vs IIFE: 8/10 (much cleaner—no function, but requires var declaration).
 
 ### Alternative 3: Named Return Pattern

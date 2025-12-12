@@ -76,7 +76,7 @@ func (*LambdaExpr) exprNode() {}
 
 **Input** (line 6 of .dingo file):
 ```dingo
-let city = user?.address?.city
+city := user?.address?.city
 ```
 
 **Current Expected Output** (lines 11-16):
@@ -568,7 +568,7 @@ case config.SafeNavUnwrapOption:
 
 **Example**:
 ```dingo
-let name = user?.name  // What is "let"?
+name := user?.name  // What is "let"?
 ```
 
 **Why This Matters**:

@@ -199,12 +199,12 @@ func FindUserByID(db *sql.DB, id int) Result[User, DBError] {
 
 // TransferFunds shows Result chaining
 func TransferFunds(db *sql.DB, fromID, toID int, amount float64) Result[bool, DBError] {
-    let fromResult = FindUserByID(db, fromID)
+    fromResult := FindUserByID(db, fromID)
     if fromResult.IsErr() {
         return fromResult.MustErr()
     }
 
-    let toResult = FindUserByID(db, toID)
+    toResult := FindUserByID(db, toID)
     if toResult.IsErr() {
         return toResult.MustErr()
     }
@@ -261,7 +261,7 @@ func getUser(id int) (User, error) {
 }
 
 func processUser(id int) (string, error) {
-    let user = getUser(id)?  // Auto-unwrap or return error
+    user := getUser(id)?  // Auto-unwrap or return error
     return user.Name, nil
 }
 ```
@@ -293,8 +293,8 @@ Go functions returning `(T, error)` can be used directly:
 import "os"
 
 func loadConfig() (Config, error) {
-    let data = os.ReadFile("config.json")?
-    let config = parseConfig(data)?
+    data := os.ReadFile("config.json")?
+    config := parseConfig(data)?
     return config, nil
 }
 ```
@@ -394,8 +394,8 @@ func processOrder(orderID string) (*Order, error) {
 
 ```go
 func processOrder(orderID string) (Order, error) {
-    let order = fetchOrder(orderID)?
-    let validated = validateOrder(order)?
+    order := fetchOrder(orderID)?
+    validated := validateOrder(order)?
     return validated, nil
 }
 ```

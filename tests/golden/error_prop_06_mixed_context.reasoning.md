@@ -49,7 +49,7 @@ This test validates the transpiler's ability to handle `?` operators in **differ
 package main
 
 func processData(path: string) (int, error) {
-	let data = ReadFile(path)?        // Statement context
+	data := ReadFile(path)?        // Statement context
 	return Atoi(string(data))?        // Expression context
 }
 ```
@@ -60,7 +60,7 @@ func processData(path: string) (int, error) {
 
 The transpiler must detect whether `?` appears in:
 
-1. **Statement context**: `let x = expr?`
+1. **Statement context**: `x := expr?`
    - Generate error check before assignment
    - Assign unwrapped value to variable
 

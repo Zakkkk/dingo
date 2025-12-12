@@ -328,7 +328,7 @@ func (p *MyPlugin) Transform(ctx *Context) error {
 ```
 Error: Non-exhaustive match in api_server.dingo:42:5
 
-  40 |     let result = fetchData()
+  40 |     result := fetchData()
   41 |     match result {
   42 |         Ok(x) => process(x)
      |         ^^^^^^^^^^^^^^^^^^^ Missing pattern: Err(_)
@@ -347,7 +347,7 @@ Missing patterns: Err(_)
 ```
 Error: Tuple patterns limited to 6 elements (found 8) in tuple.dingo:15:9
 
-  13 |     let values = (a, b, c, d, e, f, g, h)
+  13 |     values := (a, b, c, d, e, f, g, h)
   14 |     match values {
   15 |         (Ok(_), Ok(_), Ok(_), Ok(_), Ok(_), Ok(_), Ok(_), Ok(_)) => ...
      |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Too many tuple elements (8 > 6)

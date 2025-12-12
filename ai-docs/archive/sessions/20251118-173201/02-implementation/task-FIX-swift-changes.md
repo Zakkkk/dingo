@@ -127,7 +127,7 @@ preprocessor := preprocessor.NewWithMainConfig(dingoSrc, cfg)  // Respects Swift
 
 **Expression Context Support** (`swift_match_01_basic.dingo` line 29):
 ```dingo
-let result = switch opt {  // ← Expression context
+result := switch opt {  // ← Expression context
     case .Some(let x): x * 2
     case .None: 0
 }

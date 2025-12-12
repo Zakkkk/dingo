@@ -56,9 +56,9 @@ This test validates the `?` operator's ability to handle multiple fallible opera
 package main
 
 func loadData(path: string) (map[string]interface{}, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	var result map[string]interface{}
-	let err = Unmarshal(data, &result)?
+	err := Unmarshal(data, &result)?
 	return result, nil
 }
 ```
@@ -224,8 +224,8 @@ From `error-propagation.md` Section 3 (Multiple Propagations):
 
 ```rust
 fn load_data(path: &str) -> Result<HashMap<String, Value>, Error> {
-    let data = read_file(path)?;
-    let result = serde_json::from_slice(&data)?;
+    data := read_file(path)?;
+    result := serde_json::from_slice(&data)?;
     Ok(result)
 }
 ```
@@ -285,9 +285,9 @@ But more importantly: **happy path is clearer** - you immediately see "read file
 **Readability Improvement**:
 ```dingo
 // Dingo: Linear, clear flow
-let data = ReadFile(path)?
+data := ReadFile(path)?
 var result map[string]interface{}
-let err = Unmarshal(data, &result)?
+err := Unmarshal(data, &result)?
 return result, nil
 ```
 
@@ -319,8 +319,8 @@ return result, nil
 1. **No shared error context**:
    ```dingo
    // Can't do:
-   let data = ReadFile(path)?
-   let parsed = Parse(data) ? "for file ${path}"
+   data := ReadFile(path)?
+   parsed := Parse(data) ? "for file ${path}"
    // Second ? doesn't know about 'path' from first operation
    ```
    **Future**: Error context propagation (Phase 3)
@@ -328,7 +328,7 @@ return result, nil
 2. **No control over return behavior**:
    ```dingo
    // Can't do:
-   let data = ReadFile(path) ??? {
+   data := ReadFile(path) ??? {
        log.Error("Failed at step 1")
        return nil, err
    }

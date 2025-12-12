@@ -103,7 +103,7 @@ func example(x int) {
 	}
 }
 
-func TestGuardLetDetector(t *testing.T) {
+func TestGuardDetector(t *testing.T) {
 	tests := []struct {
 		name     string
 		code     string
@@ -160,7 +160,7 @@ func example(config *Config) {
 		},
 	}
 
-	detector := &GuardLetDetector{}
+	detector := &GuardDetector{}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

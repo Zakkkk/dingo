@@ -59,10 +59,10 @@ func processOrder(orderID string) (*Order, error) {
 
 ```dingo
 func processOrder(orderID: string) -> Result[Order, Error] {
-    let order = fetchOrder(orderID)?      // Return Err if failed
-    let validated = validateOrder(order)? // Continue if Ok
-    let payment = processPayment(validated)?
-    let saved = saveOrder(payment)?
+    order := fetchOrder(orderID)?      // Return Err if failed
+    validated := validateOrder(order)? // Continue if Ok
+    payment := processPayment(validated)?
+    saved := saveOrder(payment)?
     return Ok(saved)
 }
 ```
@@ -71,10 +71,10 @@ func processOrder(orderID: string) -> Result[Order, Error] {
 
 ```dingo
 // This Dingo code...
-let user = fetchUser(id)?
+user := fetchUser(id)?
 
 // ...is syntactic sugar for:
-let user = match fetchUser(id) {
+user := match fetchUser(id) {
     Ok(value) => value,
     Err(error) => return Err(error)
 }
@@ -90,8 +90,8 @@ The simplest form - wraps the error with `fmt.Errorf`:
 
 ```dingo
 func processOrder(orderID: string) -> Result[Order, Error] {
-    let order = fetchOrder(orderID) ? "fetch failed"
-    let validated = validateOrder(order) ? "validation failed"
+    order := fetchOrder(orderID) ? "fetch failed"
+    validated := validateOrder(order) ? "validation failed"
     return Ok(validated)
 }
 ```
@@ -114,8 +114,8 @@ For custom error transformation using Rust-style lambda syntax:
 
 ```dingo
 func loadUserData(userID: int) -> Result[UserData, AppError] {
-    let user = fetchUser(userID) ? |err| AppError.wrap("user fetch", err)
-    let posts = fetchPosts(user.ID) ? |e| AppError.wrap("posts fetch", e)
+    user := fetchUser(userID) ? |err| AppError.wrap("user fetch", err)
+    posts := fetchPosts(user.ID) ? |e| AppError.wrap("posts fetch", e)
     return Ok(UserData{user, posts})
 }
 ```
@@ -138,8 +138,8 @@ Same functionality with TypeScript/JavaScript arrow syntax:
 
 ```dingo
 func loadConfig(path: string) -> Result[Config, error] {
-    let content = readFile(path) ? (e) => fmt.Errorf("read failed: %w", e)
-    let config = parseJSON(content) ? err => fmt.Errorf("parse failed: %w", err)
+    content := readFile(path) ? (e) => fmt.Errorf("read failed: %w", e)
+    config := parseJSON(content) ? err => fmt.Errorf("parse failed: %w", err)
     return Ok(config)
 }
 ```
@@ -163,11 +163,11 @@ Lambda parameters can use any valid identifier:
 **Note:** Nested error transforms are NOT supported. Use separate statements:
 ```dingo
 // ❌ Invalid - nested transforms
-let x = foo()? |e1| bar()? |e2| combine(e1, e2)
+x := foo()? |e1| bar()? |e2| combine(e1, e2)
 
 // ✅ Valid - use separate statements
-let a = foo() ? |e| wrap("foo", e)
-let b = bar() ? |e| wrap("bar", e)
+a := foo() ? |e| wrap("foo", e)
+b := bar() ? |e| wrap("bar", e)
 ```
 
 ---
@@ -178,7 +178,7 @@ let b = bar() ? |e| wrap("bar", e)
 
 ```dingo
 // Dingo source
-let user = fetchUser(id)?
+user := fetchUser(id)?
 processUser(user)
 ```
 
@@ -196,7 +196,7 @@ processUser(user)
 
 ```dingo
 // Dingo source
-let user = fetchUser(id) ? "failed to fetch user"
+user := fetchUser(id) ? "failed to fetch user"
 ```
 
 ```go
@@ -215,9 +215,9 @@ user := tmp
 ```dingo
 // Dingo source
 func processOrder(id: string) -> Result[Order, Error] {
-    let order = fetchOrder(id)?
-    let validated = validateOrder(order)?
-    let paid = processPayment(validated)?
+    order := fetchOrder(id)?
+    validated := validateOrder(order)?
+    paid := processPayment(validated)?
     return Ok(paid)
 }
 ```
@@ -335,23 +335,23 @@ func main() {
 
 ```dingo
 // ✅ Valid: After function call returning Result
-let user = fetchUser(id)?
+user := fetchUser(id)?
 
 // ✅ Valid: After method call
-let data = file.read()?
+data := file.read()?
 
 // ✅ Valid: In expression
 return processUser(fetchUser(id)?)
 
 // ✅ Valid: Multiple in one line (discouraged for readability)
-let result = fetch(id)?.validate()?.save()?
+result := fetch(id)?.validate()?.save()?
 
 // ❌ Invalid: On non-Result types
-let x = 42?  // Compile error
+x := 42?  // Compile error
 
 // ❌ Invalid: In function not returning Result
 func main() {
-    let user = fetchUser(id)?  // Error: main doesn't return Result
+    user := fetchUser(id)?  // Error: main doesn't return Result
 }
 ```
 
@@ -360,20 +360,20 @@ func main() {
 ```dingo
 // ✅ Same error type
 func process() -> Result[User, HttpError] {
-    let data = fetchData()?  // Returns Result[Data, HttpError]
+    data := fetchData()?  // Returns Result[Data, HttpError]
     return Ok(transformData(data))
 }
 
 // ✅ Error type conversion (automatic if conversion exists)
 func process() -> Result[User, AppError] {
-    let data = fetchData()?  // Returns Result[Data, HttpError]
+    data := fetchData()?  // Returns Result[Data, HttpError]
     // HttpError auto-converts to AppError if impl exists
     return Ok(transformData(data))
 }
 
 // ❌ Incompatible error types (compile error)
 func process() -> Result[User, AppError] {
-    let data = fetchData()?  // Returns Result[Data, DatabaseError]
+    data := fetchData()?  // Returns Result[Data, DatabaseError]
     // Error: Cannot convert DatabaseError to AppError
 }
 ```
@@ -435,8 +435,8 @@ For each `expr?` in source:
 ```dingo
 // Dingo: 5 lines
 func process(id: string) -> Result[Order, Error] {
-    let order = fetchOrder(id)?
-    let validated = validateOrder(order)?
+    order := fetchOrder(id)?
+    validated := validateOrder(order)?
     return Ok(validated)
 }
 ```
@@ -468,10 +468,10 @@ func process(id string) (*Order, error) {
 ```dingo
 // Happy path is clear
 func processOrder(id: string) -> Result[Order, Error] {
-    let order = fetchOrder(id)?
-    let validated = validateOrder(order)?
-    let paid = processPayment(validated)?
-    let shipped = shipOrder(paid)?
+    order := fetchOrder(id)?
+    validated := validateOrder(order)?
+    paid := processPayment(validated)?
+    shipped := shipOrder(paid)?
     return Ok(shipped)
 }
 
@@ -488,15 +488,15 @@ func validate(u: User) -> Result[User, ValidationError] { ... }
 
 // ❌ This won't compile (error type mismatch)
 func process() -> Result[User, DbError] {
-    let user = fetch()?
-    let validated = validate(user)?  // ERROR: ValidationError != DbError
+    user := fetch()?
+    validated := validate(user)?  // ERROR: ValidationError != DbError
     return Ok(validated)
 }
 
 // ✅ Must handle conversion explicitly
 func process() -> Result[User, AppError] {
-    let user = fetch().mapErr(AppError.from)?
-    let validated = validate(user).mapErr(AppError.from)?
+    user := fetch().mapErr(AppError.from)?
+    validated := validate(user).mapErr(AppError.from)?
     return Ok(validated)
 }
 ```
@@ -558,8 +558,8 @@ func process() -> Result[User, AppError] {
 
 ```dingo
 func loadConfig(path: string) -> Result[Config, IOError] {
-    let data = os.ReadFile(path)?
-    let config = json.Unmarshal(data)?
+    data := os.ReadFile(path)?
+    config := json.Unmarshal(data)?
     return Ok(config)
 }
 ```
@@ -588,10 +588,10 @@ func loadConfig(path string) ResultConfigIOError {
 
 ```dingo
 func fetchUserData(userID: string) -> Result[UserData, ApiError] {
-    let resp = http.Get("/api/users/" + userID)?
-    let user = parseUser(resp.Body)?
-    let posts = fetchPosts(user.ID)?
-    let comments = fetchComments(user.ID)?
+    resp := http.Get("/api/users/" + userID)?
+    user := parseUser(resp.Body)?
+    posts := fetchPosts(user.ID)?
+    comments := fetchComments(user.ID)?
 
     return Ok(UserData{user, posts, comments})
 }
@@ -601,11 +601,11 @@ func fetchUserData(userID: string) -> Result[UserData, ApiError] {
 
 ```dingo
 func transferMoney(from: int, to: int, amount: decimal) -> Result[Transaction, DbError] {
-    let tx = db.Begin()?
+    tx := db.Begin()?
     defer tx.Rollback()
 
-    let fromAccount = tx.GetAccount(from)?
-    let toAccount = tx.GetAccount(to)?
+    fromAccount := tx.GetAccount(from)?
+    toAccount := tx.GetAccount(to)?
 
     fromAccount.Balance -= amount
     toAccount.Balance += amount

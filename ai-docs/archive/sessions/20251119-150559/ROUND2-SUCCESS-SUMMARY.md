@@ -120,7 +120,7 @@ if strings.Contains(line, "match ") {
 ```go
 // FIX: Only detect match expressions that start with match keyword
 // This prevents reprocessing generated code like panic("unreachable: match is exhaustive")
-// Valid patterns: "match expr", "let x = match", "var y = match", "return match"
+// Valid patterns: "match expr", "x := match", "var y = match", "return match"
 if strings.HasPrefix(trimmed, "match ") ||
     strings.HasPrefix(trimmed, "let ") && strings.Contains(trimmed, " match ") ||
     strings.HasPrefix(trimmed, "var ") && strings.Contains(trimmed, " match ") ||
@@ -343,7 +343,7 @@ recursive preprocessing and "no pattern arms found" errors.
 
 Fix: Tighten detection to only trigger on valid match contexts:
 - match expr { ... }
-- let x = match expr { ... }
+- x := match expr { ... }
 - var y = match expr { ... }
 - return match expr { ... }
 

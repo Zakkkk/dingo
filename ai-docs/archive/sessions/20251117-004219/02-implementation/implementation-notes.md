@@ -18,7 +18,7 @@
 
 **Example**:
 ```dingo
-let x = a ?? b
+x := a ?? b
 ```
 Becomes:
 ```go

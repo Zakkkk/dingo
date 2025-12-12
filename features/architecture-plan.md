@@ -434,8 +434,8 @@ match result {
 
 **Dingo Syntax**:
 ```dingo
-let counter = || {
-    let count = 0
+counter := || {
+    count := 0
     return || { count++; return count }
 }
 ```
@@ -461,7 +461,7 @@ let counter = || {
 
 **Dingo Syntax**:
 ```dingo
-let user = fetchUser(id).map(|u| u.name).unwrapOr("Unknown")?
+user := fetchUser(id).map(|u| u.name).unwrapOr("Unknown")?
 ```
 
 **Stage 1: Preprocessor**:
@@ -492,7 +492,7 @@ let user = fetchUser(id).map(|u| u.name).unwrapOr("Unknown")?
 
 **Dingo Syntax**:
 ```dingo
-let (x, y, z) = getTuple()
+(x, y, z) = getTuple()
 ```
 
 **Stage 1: Preprocessor**:
@@ -511,7 +511,7 @@ let (x, y, z) = getTuple()
 
 **Dingo Syntax**:
 ```dingo
-let name = user?.name ?? "Unknown"
+name := user?.name ?? "Unknown"
 ```
 
 **Stage 1: Preprocessor**:

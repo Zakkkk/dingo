@@ -14,7 +14,7 @@
 
 ## 2. Detailed Analysis
 **Flow trace** (error_prop_01_simple):
-- Dingo line 4: `let data = ReadFile(path)?` (orig col13="R", col15="?").
+- Dingo line 4: `data := ReadFile(path)?` (orig col13="R", col15="?").
 - Gen Go line 4: `__tmp0, __err0 := ReadFile(path)` (col20="R" after `__tmp0, __err0 := ` ~9 chars + indent1=20).
 - Mappings:
   | Type | Gen L/C | Orig L/C | Len | Covers |

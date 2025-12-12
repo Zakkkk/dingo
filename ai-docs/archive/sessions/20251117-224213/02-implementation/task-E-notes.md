@@ -50,7 +50,7 @@
 
 **Rationale**:
 - The flag controls "return expr?" behavior (multi-value returns)
-- Assignment "let x = expr?" is always single-value (x is one variable)
+- Assignment "x := expr?" is always single-value (x is one variable)
 - Only return statements can propagate multiple values: (A, B, error)
 - Check happens at line 442-450 in expandReturn()
 
@@ -160,7 +160,7 @@ package main
 import "os"
 
 func main() {
-    let data = os.ReadFile("file.txt")?
+    data := os.ReadFile("file.txt")?
     _ = data
 }
 EOF

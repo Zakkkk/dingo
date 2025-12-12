@@ -89,7 +89,7 @@ When a disabled feature's syntax is used, the transpiler reports:
 error: feature 'lambdas' is disabled in configuration
   --> src/main.dingo:10:5
    |
-10 |     let add = |x, y| x + y
+10 |     add := |x, y| x + y
    |               ^^^^^^^^^^^^
    |
    = help: enable 'lambdas' in dingo.toml [feature_matrix] section

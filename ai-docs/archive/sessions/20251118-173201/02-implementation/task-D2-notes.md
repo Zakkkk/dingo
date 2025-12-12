@@ -148,7 +148,7 @@ case .Some(x): return x * 2
 
 // Braced block
 case .Some(x): {
-    let doubled = x * 2
+    doubled := x * 2
     return doubled
 }
 ```
@@ -159,7 +159,7 @@ case .Some(let x):
     x * 2
 
 case .Some(let x): {
-    let doubled = x * 2
+    doubled := x * 2
     return doubled
 }
 ```

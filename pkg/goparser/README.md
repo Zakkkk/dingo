@@ -27,7 +27,6 @@ A token-based parser that transforms Dingo syntax to valid Go, leveraging Go's s
 │   Using go/scanner:                     │
 │     • param: Type → param Type          │
 │     • Result[T,E] → Result[T,E]         │
-│     • let x = → x :=                    │
 └────────────────────┬────────────────────┘
                      │
                      ▼
@@ -77,10 +76,9 @@ goSource, mappings, err := parser.TransformToGo(dingoSource)
 | Feature | Dingo | Go Output |
 |---------|-------|-----------|
 | Type Annotations | `func(x: int)` | `func(x int)` |
-| Let Declarations | `let x = 42` | `x := 42` |
 | Generic Types | `Result[T, E]` | `Result[T, E]` |
-| Error Propagation | `let x = expr?` | `tmp, err := expr; if err != nil { return err }; var x = tmp` |
-| Guard Let | `guard let x = expr else \|err\| {...}` | `x, err := expr; if err != nil {...}` |
+| Error Propagation | `x := expr?` | `tmp, err := expr; if err != nil { return err }; x := tmp` |
+| Guard Let | `guard x := expr else \|err\| {...}` | `x, err := expr; if err != nil {...}` |
 | Lambdas (Rust) | `\|x\| x + 1` | `func(x) { return x + 1 }` |
 | Lambdas (TS) | `(x) => x + 1` | `func(x) { return x + 1 }` |
 | Enums | `enum Status { Active }` | Tagged union interface pattern |

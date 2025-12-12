@@ -264,7 +264,7 @@ Match transformation can't lookup enum names, leading to wrong tag constants (se
 **Problem:**
 ```go
 // match used as expression
-let x = match value { ... }
+x := match value { ... }
 
 // Generated: switch statement (invalid in expression position)
 ```

@@ -20,7 +20,7 @@
 ### Specific Requirements
 
 1. **Polish error_prop.go Preprocessor**:
-   - Handle multiple `?` in single expression: `let x = foo()? + bar()?`
+   - Handle multiple `?` in single expression: `x := foo()? + bar()?`
    - Handle complex expressions: `obj.Method(arg1, arg2)?`
    - Determine correct zero values (not hardcoded nil/0)
    - Better expression boundary detection (not just regex)

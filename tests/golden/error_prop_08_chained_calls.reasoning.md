@@ -60,9 +60,9 @@ type Config struct {
 }
 
 func pipeline(path: string) (*Config, error) {
-	let data = ReadFile(path)? "failed to read config"
+	data := ReadFile(path)? "failed to read config"
 	var cfg Config
-	let err = Unmarshal(data, &cfg)? "failed to parse config"
+	err := Unmarshal(data, &cfg)? "failed to parse config"
 	return &cfg, nil
 }
 ```
@@ -121,8 +121,8 @@ This test represents a **common production pattern**: configuration loading pipe
 
 Each `?` operation gets its own error message:
 ```dingo
-let data = ReadFile(path)? "failed to read config"
-let err = Unmarshal(data, &cfg)? "failed to parse config"
+data := ReadFile(path)? "failed to read config"
+err := Unmarshal(data, &cfg)? "failed to parse config"
 ```
 
 Generates:
@@ -160,7 +160,7 @@ This is the **highest reduction in the test suite** because it combines:
 
 ```rust
 fn pipeline(path: &str) -> Result<Config, Error> {
-    let data = read_file(path)
+    data := read_file(path)
         .context("failed to read config")?;
 
     let cfg: Config = serde_json::from_slice(&data)

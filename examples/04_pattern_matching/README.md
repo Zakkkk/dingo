@@ -84,7 +84,7 @@ OrderPlaced { .. } => "normal",  // Fallback
 ### Expression vs Statement
 `match` returns a value:
 ```dingo
-let message = match event {
+message := match event {
     PaymentFailed { .. } => "URGENT",
     _ => "normal",
 }

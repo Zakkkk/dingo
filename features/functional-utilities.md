@@ -15,17 +15,17 @@ Built-in map/filter/reduce functions for slices reduce boilerplate for common co
 
 ```dingo
 // Map
-let numbers = [1, 2, 3, 4, 5]
-let doubled = numbers.map(|x| x * 2)  // [2, 4, 6, 8, 10]
+numbers := [1, 2, 3, 4, 5]
+doubled := numbers.map(|x| x * 2)  // [2, 4, 6, 8, 10]
 
 // Filter
-let evens = numbers.filter(|x| x % 2 == 0)  // [2, 4]
+evens := numbers.filter(|x| x % 2 == 0)  // [2, 4]
 
 // Reduce
-let sum = numbers.reduce(0, |acc, x| acc + x)  // 15
+sum := numbers.reduce(0, |acc, x| acc + x)  // 15
 
 // Chaining
-let result = users
+result := users
     .filter(|u| u.age > 18)
     .map(|u| u.name)
     .sorted()
@@ -39,7 +39,7 @@ The implementation uses Immediately Invoked Function Expressions for clean scopi
 
 ```dingo
 // Dingo code
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 ```
 
 ```go
@@ -85,7 +85,7 @@ var doubled = func() []int {
 ### Chaining Support
 
 ```dingo
-let result = users
+result := users
     .filter(func(u User) bool { return u.age > 18 })
     .map(func(u User) string { return u.name })
     .reduce([]string{}, func(acc []string, name string) []string {

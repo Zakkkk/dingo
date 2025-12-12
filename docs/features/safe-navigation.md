@@ -52,7 +52,7 @@ if user != nil {
 
 ```go
 // Dingo - Clean and obvious
-let city = user?.address?.city ?? "Unknown"
+city := user?.address?.city ?? "Unknown"
 ```
 
 Same safety. Same null handling. 80% less code.
@@ -79,10 +79,10 @@ type Address struct {
 }
 
 func main() {
-    let user = UserOption_Some(User{name: "Alice"})
+    user := UserOption_Some(User{name: "Alice"})
 
     // Safe property access
-    let name = user?.name  // Returns Option[string]
+    name := user?.name  // Returns Option[string]
 
     if name.IsSome() {
         println("User:", *name.some)
@@ -107,13 +107,13 @@ func (u User) getName() string {
 }
 
 func main() {
-    let user = UserOption_Some(User{id: 123})
+    user := UserOption_Some(User{id: 123})
 
     // Safe method call
-    let name = user?.getName()  // Returns Option[string]
+    name := user?.getName()  // Returns Option[string]
 
     // Method with arguments
-    let formatted = user?.format("json", true)
+    formatted := user?.format("json", true)
 }
 ```
 
@@ -123,13 +123,13 @@ The real power comes from chaining multiple safe accesses:
 
 ```go
 // Property chains
-let city = user?.address?.city?.name
+city := user?.address?.city?.name
 
 // Method chains
-let upperName = user?.getName()?.toUpper()
+upperName := user?.getName()?.toUpper()
 
 // Mixed property and method
-let formatted = user?.getAddress()?.city?.format()
+formatted := user?.getAddress()?.city?.format()
 ```
 
 Each `?.` in the chain is a safety checkpoint. If any value is None/nil, the entire expression short-circuits and returns None/nil.
@@ -147,7 +147,7 @@ enum UserOption {
 }
 
 let user: UserOption = getUserOption()
-let name = user?.name  // Works! Uses IsSome()/Unwrap()
+name := user?.name  // Works! Uses IsSome()/Unwrap()
 ```
 
 **What Dingo generates:**
@@ -167,7 +167,7 @@ nameResult := func() Option[string] {
 ```go
 // Go function returns *User (standard library pattern)
 let user: *User = database.GetUser(123)
-let name = user?.name  // Works! Uses nil checks
+name := user?.name  // Works! Uses nil checks
 ```
 
 **What Dingo generates:**
@@ -207,7 +207,7 @@ type Profile struct {
 }
 
 let user: UserOption = getUser()
-let name = user?.profile.name  // Returns Option[string]
+name := user?.profile.name  // Returns Option[string]
 ```
 
 **Why:** Once the chain starts with Option, the entire result is Option (because the initial user could be None).
@@ -224,7 +224,7 @@ type Address struct {
 }
 
 let user: *User = getUser()
-let city = user?.address?.city  // Returns *string (or **string if original was *string)
+city := user?.address?.city  // Returns *string (or **string if original was *string)
 ```
 
 **Why:** Pointers propagate through the chain. Each ?. checks for nil and continues or returns nil.
@@ -246,7 +246,7 @@ type Address struct {
 }
 
 let user: UserOption = getUser()
-let city = user?.address?.city  // Returns Option[string]
+city := user?.address?.city  // Returns Option[string]
 ```
 
 **Why:** Starting with Option means the entire chain must be Option (to handle the initial None case). The intermediate pointer is checked but doesn't change the final type.
@@ -256,8 +256,8 @@ let city = user?.address?.city  // Returns Option[string]
 If type detection cannot determine whether a variable is Option or pointer:
 
 ```go
-let value = getSomeValue()  // No type annotation
-let result = value?.property  // Compiler error!
+value := getSomeValue()  // No type annotation
+result := value?.property  // Compiler error!
 ```
 
 **Error message:**
@@ -272,7 +272,7 @@ safe navigation requires nullable type
 
 ```go
 let value: UserOption = getSomeValue()  // ✅ Explicit
-let result = value?.property            // ✅ Works
+result := value?.property            // ✅ Works
 ```
 
 ### Type Promotion Table
@@ -336,7 +336,7 @@ import "database/sql"
 
 func getUserCity(db: *sql.DB, userID: int) string {
     // Query returns *User or nil
-    let user = queryUser(db, userID)
+    user := queryUser(db, userID)
 
     // Safe navigation through nullable chain
     return user?.address?.city?.name ?? "Unknown"
@@ -369,7 +369,7 @@ type ConnectionSettings struct {
 
 func getTimeout(config: *Config) int {
     // Safely navigate nested config
-    let timeout = config?.database?.connection?.timeout
+    timeout := config?.database?.connection?.timeout
 
     // Return timeout or default
     return timeout ?? 30
@@ -398,7 +398,7 @@ func (s string) isValid() bool {
 
 func validateUserEmail(user: UserOption) bool {
     // Chain: Option → method → string method
-    let valid = user?.normalize()?.isValid()
+    valid := user?.normalize()?.isValid()
     return valid ?? false
 }
 ```
@@ -497,7 +497,7 @@ func() ProcessResult {
 
 ```go
 // ❌ Invalid - trailing ?. without property
-let result = user?.
+result := user?.
 
 // Error: trailing ?. operator without property
 ```
@@ -506,7 +506,7 @@ let result = user?.
 
 ```go
 // ❌ Invalid - ?. without left operand
-let result = ?.name
+result := ?.name
 
 // Error: safe navigation requires base identifier
 ```
@@ -515,7 +515,7 @@ let result = ?.name
 
 ```go
 // user is *User (pointer), getSettings() returns SettingsOption
-let theme = user?.getSettings()?.theme
+theme := user?.getSettings()?.theme
 
 // Works! Result is Option[Theme]
 // Nil converts to None at pointer→Option boundary
@@ -552,13 +552,13 @@ func() Option[Theme] {
 
 ```go
 // ❌ Not supported in Phase 7
-let result = user?
+result := user?
     .address?
     .city?
     .name
 
 // ✅ Workaround: Keep on one line
-let result = user?.address?.city?.name
+result := user?.address?.city?.name
 ```
 
 **Future enhancement planned.**
@@ -598,10 +598,10 @@ The Go compiler optimizes IIFEs away completely. Generated code runs at the same
 
 ```go
 // Good: Provide default for None/nil
-let city = user?.address?.city ?? "Unknown"
+city := user?.address?.city ?? "Unknown"
 
 // Bad: Leaves result as Option (requires manual check)
-let city = user?.address?.city
+city := user?.address?.city
 if city.IsSome() {
     // ...
 }
@@ -622,10 +622,10 @@ let user: *User = database.GetUser()
 
 ```go
 // Good: Clear intent
-let theme = user?.getSettings()?.theme ?? defaultTheme
+theme := user?.getSettings()?.theme ?? defaultTheme
 
 // Bad: Too long, hard to debug
-let result = user?.getProfile()?.getPreferences()?.getTheme()?.getColor()?.getRGB()?.getHex()
+result := user?.getProfile()?.getPreferences()?.getTheme()?.getColor()?.getRGB()?.getHex()
 ```
 
 **Rule of thumb:** Max 3-4 levels in a chain.
@@ -646,7 +646,7 @@ func getUser(id: int) UserOption {
 ### 5. Combine with Pattern Matching
 
 ```go
-let result = user?.getSettings()
+result := user?.getSettings()
 
 match result {
     Some(settings) => applySettings(settings),
@@ -659,25 +659,25 @@ match result {
 ### Safe Method Call with Fallback
 
 ```go
-let name = user?.getName() ?? "Guest"
+name := user?.getName() ?? "Guest"
 ```
 
 ### Optional Property Access
 
 ```go
-let timeout = config?.database?.timeout ?? 30
+timeout := config?.database?.timeout ?? 30
 ```
 
 ### Nested Optional Transformation
 
 ```go
-let email = user?.getProfile()?.email?.toLowerCase()
+email := user?.getProfile()?.email?.toLowerCase()
 ```
 
 ### Validation Chain
 
 ```go
-let valid = input?.trim()?.validate()?.isOk() ?? false
+valid := input?.trim()?.validate()?.isOk() ?? false
 ```
 
 ## Migration from Go
@@ -729,8 +729,8 @@ match user?.getRole() {
 
 ```go
 func processUser(id: int) -> Result[Report, Error] {
-    let user = getUser(id)?  // Error propagation
-    let city = user?.address?.city ?? "Unknown"  // Safe navigation
+    user := getUser(id)?  // Error propagation
+    city := user?.address?.city ?? "Unknown"  // Safe navigation
     return Ok(Report{user: user, city: city})
 }
 ```
@@ -739,7 +739,7 @@ func processUser(id: int) -> Result[Report, Error] {
 
 ```go
 // Covered in null-coalescing.md
-let theme = user?.settings?.theme ?? config?.defaultTheme ?? "light"
+theme := user?.settings?.theme ?? config?.defaultTheme ?? "light"
 ```
 
 ## See Also

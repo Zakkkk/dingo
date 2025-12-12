@@ -60,7 +60,7 @@ match result {
 
 ```dingo
 fn makeCounter() -> fn() -> int {
-    let count = 0
+    count := 0
     return || {                          // Closure captures 'count'
         count += 1
         return count
@@ -76,7 +76,7 @@ fn makeCounter() -> fn() -> int {
 ### 3. Generic Type Inference
 
 ```dingo
-let result = fetchData()                 // Type inferred from return
+result := fetchData()                 // Type inferred from return
 result.map(|x| x * 2)?                   // Generic chain, needs context
 ```
 

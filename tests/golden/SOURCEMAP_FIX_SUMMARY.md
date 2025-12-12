@@ -19,7 +19,7 @@ The error propagation preprocessor (`pkg/preprocessor/error_prop.go`) only creat
 But it did NOT create mappings for subsequent lines that were unchanged (like the return statement).
 
 This meant:
-- Line 4: `let data = ReadFile(path)?` → Full mappings ✅
+- Line 4: `data := ReadFile(path)?` → Full mappings ✅
 - Line 5: `return data, nil` → NO MAPPING ❌
 
 Without a mapping, the LSP couldn't correctly translate positions back to the original source.

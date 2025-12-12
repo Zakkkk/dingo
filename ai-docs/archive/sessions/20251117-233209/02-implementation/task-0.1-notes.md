@@ -98,9 +98,9 @@ The `dingo.toml.example` file includes:
 # Go interoperability mode for (T, error) returns
 # Valid values: "opt-in", "auto", "disabled"
 # - "opt-in": Requires explicit Result.FromGo() wrapper (safe, recommended)
-#   Example: let user = Result.FromGo(fetchUser(id))
+#   Example: user := Result.FromGo(fetchUser(id))
 # - "auto": Automatically wraps (T, error) → Result[T, E]
-#   Example: let user = fetchUser(id)  // Auto-wrapped to Result
+#   Example: user := fetchUser(id)  // Auto-wrapped to Result
 # - "disabled": No Go interop, pure Dingo types only
 # Default: "opt-in"
 go_interop = "opt-in"

@@ -69,7 +69,7 @@ assignPattern := regexp.MustCompile(`^\s*(let|var)\s+(\w+)\s*=\s*(.+)\?\s*$`)
 
 `error_prop_08_chained_calls.dingo` uses:
 ```go
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
 ```
 
 Expected output:
@@ -128,7 +128,7 @@ func readConfig(path string) ([]byte, error)
 
 **Example:**
 ```go
-Input:  "let data = ReadFile(path)?"
+Input:  "data := ReadFile(path)?"
                    ^start        ^end
 Output: expr = "ReadFile(path)"
 ```
@@ -189,7 +189,7 @@ pattern := regexp.MustCompile(`(.+)\?\s+"([^"]+)"`)
 **Transformation:**
 ```go
 // Input
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
 
 // Output
 __tmp0, __err1 := ReadFile(path)
@@ -606,7 +606,7 @@ Error wrapping requires `import "fmt"`. Preprocessor needs to:
 
 **Example:**
 ```go
-let result = foo()? + bar()?
+result := foo()? + bar()?
 ```
 
 **Challenge:** This is NOT currently supported and should error gracefully.

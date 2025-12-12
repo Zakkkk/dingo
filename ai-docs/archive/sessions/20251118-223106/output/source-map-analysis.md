@@ -1,7 +1,7 @@
 # Source Map Analysis – ReadFile Diagnostic Span
 
 ## Summary of Failure
-When gopls reports `undefined: ReadFile` for a line such as `let data = ReadFile(path)?`, the Dingo LSP translates the diagnostic to the Dingo file but highlights `e(path)?` (the tail that includes the `?`) instead of the `ReadFile` identifier. This happens even though the generated Go diagnostic range targets the identifier correctly.
+When gopls reports `undefined: ReadFile` for a line such as `data := ReadFile(path)?`, the Dingo LSP translates the diagnostic to the Dingo file but highlights `e(path)?` (the tail that includes the `?`) instead of the `ReadFile` identifier. This happens even though the generated Go diagnostic range targets the identifier correctly.
 
 ## Root Cause
 The preprocessor source map entry that should cover the original `ReadFile(path)` span is produced in `pkg/preprocessor/error_prop.go` inside `expandAssignment`. The mapping calculates

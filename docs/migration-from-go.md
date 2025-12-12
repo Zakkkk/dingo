@@ -78,9 +78,9 @@ func processData(input string) (Result, error) {
 **Dingo:**
 ```go
 func processData(input: string) (Result, error) {
-    let validated = validate(input)?
-    let parsed = parse(validated)?
-    let transformed = transform(parsed)?
+    validated := validate(input)?
+    parsed := parse(validated)?
+    transformed := transform(parsed)?
     return transformed, nil
 }
 ```
@@ -121,13 +121,13 @@ enum UserOption {
 }
 
 func getUserCity(userID: int) (string, error) {
-    let userOpt = db.GetUserSafe(userID)?
+    userOpt := db.GetUserSafe(userID)?
 
     if userOpt.IsNone() {
         return "", errors.New("user not found")
     }
 
-    let user = *userOpt.some0
+    user := *userOpt.some0
 
     if user.Address == nil || user.Address.City == nil {
         return "", errors.New("no address/city")
@@ -303,7 +303,7 @@ type Config struct {
 }
 
 func loadConfig() (Config, error) {
-    let dbOpt = loadDatabaseConfig()
+    dbOpt := loadDatabaseConfig()
         .unwrapOr(DatabaseOptionNone())
 
     return Config{
@@ -397,9 +397,9 @@ import (
 
 func processData(data: []byte) (Result, error) {
     var obj Object
-    let _ = json.Unmarshal(data, &obj)?
+    _ := json.Unmarshal(data, &obj)?
 
-    let result = yourlib.DoSomething(obj)?
+    result := yourlib.DoSomething(obj)?
 
     return result, nil
 }
@@ -447,7 +447,7 @@ func HandleUserUpdate(w http.ResponseWriter, r *http.Request) {
 **Dingo:**
 ```go
 func HandleUserUpdate(w: http.ResponseWriter, r: http.Request) {
-    let result = processUpdate(r)
+    result := processUpdate(r)
 
     match result {
         Ok(user) => json.NewEncoder(w).Encode(user),
@@ -462,7 +462,7 @@ enum ApiError {
 }
 
 func processUpdate(r: http.Request) (User, ApiError) {
-    let userID = r.URL.Query().Get("id")
+    userID := r.URL.Query().Get("id")
     if userID == "" {
         return User{}, ApiErrorBadRequest("missing user ID")
     }
@@ -473,10 +473,10 @@ func processUpdate(r: http.Request) (User, ApiError) {
         return User{}, ApiErrorBadRequest("invalid JSON")
     }
 
-    let user = db.GetUser(userID)?
+    user := db.GetUser(userID)?
         .okOr(ApiErrorNotFound("user not found"))?
 
-    let _ = db.UpdateUser(user.ID, updateReq)?
+    _ := db.UpdateUser(user.ID, updateReq)?
 
     return user, nil
 }
@@ -527,7 +527,7 @@ func ProcessPipeline(input []Item) ([]ProcessedItem, error) {
 **Dingo:**
 ```go
 func ProcessPipeline(input: []Item) ([]ProcessedItem, error) {
-    let processed = input
+    processed := input
         .filter { it.isValid() }
         .mapWithLog { enrichItem(it) }
         .mapWithLog { validateItem(it) }
@@ -591,15 +591,15 @@ import (
 )
 
 func setupServer() {
-    let r = gin.Default()
+    r := gin.Default()
 
     r.GET("/users/:id", func(c *gin.Context) {
-        let id = c.Param("id")
-        let user = fetchUser(id)?
+        id := c.Param("id")
+        user := fetchUser(id)?
         c.JSON(200, user)
     })
 
-    let _ = r.Run(":8080")?
+    _ := r.Run(":8080")?
 }
 ```
 
@@ -674,17 +674,17 @@ run: build
 
 **Problem:**
 ```go
-let result = ResultOk(42)
+result := ResultOk(42)
 if result.IsErr() {
-    let err = *result.Err0  // PANIC: Err0 is nil!
+    err := *result.Err0  // PANIC: Err0 is nil!
 }
 ```
 
 **Solution:** Always check variant before accessing:
 ```go
-let result = ResultOk(42)
+result := ResultOk(42)
 if result.IsOk() {  // Check BEFORE accessing
-    let value = *result.Ok0
+    value := *result.Ok0
 }
 ```
 
@@ -693,14 +693,14 @@ if result.IsOk() {  // Check BEFORE accessing
 **Problem:**
 ```go
 func mixed(input: string) (Output, error) {
-    let validated = validate(input)?  // Dingo style
+    validated := validate(input)?  // Dingo style
 
     parsed, err := parse(validated)
     if err != nil {
         return Output{}, err
     }
 
-    let transformed = transform(parsed)?  // Dingo style
+    transformed := transform(parsed)?  // Dingo style
 
     return transformed, nil
 }
@@ -710,9 +710,9 @@ func mixed(input: string) (Output, error) {
 ```go
 // All Dingo style
 func allDingo(input: string) (Output, error) {
-    let validated = validate(input)?
-    let parsed = parse(validated)?
-    let transformed = transform(parsed)?
+    validated := validate(input)?
+    parsed := parse(validated)?
+    transformed := transform(parsed)?
     return transformed, nil
 }
 

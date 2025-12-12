@@ -424,7 +424,7 @@ bio := user?.profile?.bio.map(|s| s.toUpper())
 
 ```rust
 // Rust requires explicit combinators
-let bio = user
+bio := user
 	.and_then(|u| u.profile)
 	.and_then(|p| p.bio);
 // Returns Option<String>
@@ -435,7 +435,7 @@ let bio = user
 ### Swift (Optional Chaining)
 
 ```swift
-let bio = user?.profile?.bio
+bio := user?.profile?.bio
 // Returns String? (optional string)
 ```
 

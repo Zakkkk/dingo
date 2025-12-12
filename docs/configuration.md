@@ -283,10 +283,10 @@ To migrate from one syntax to another:
 2. Update your `.dingo` files:
    ```dingo
    # Before
-   let user = fetchUser()?
+   user := fetchUser()?
 
    # After
-   let user = try fetchUser()
+   user := try fetchUser()
    ```
 
 3. Rebuild:

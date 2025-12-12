@@ -118,7 +118,7 @@ const city = user?.address?.city;  // Returns undefined if any part is null/unde
 
 **Swift**:
 ```swift
-let city = user?.address?.city  // Returns nil if any part is nil
+city := user?.address?.city  // Returns nil if any part is nil
 ```
 
 **Kotlin**:
@@ -128,7 +128,7 @@ val city = user?.address?.city  // Safe call operator
 
 **Rust** (no direct equivalent - uses pattern matching or combinators):
 ```rust
-let city = user.and_then(|u| u.address).map(|a| a.city);
+city := user.and_then(|u| u.address).map(|a| a.city);
 ```
 
 ### Why This Test Matters

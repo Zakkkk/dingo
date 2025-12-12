@@ -51,11 +51,11 @@ go build -o dingo-test ./cmd/dingo
 
 **Original source** (line 4):
 ```
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 ```
 
 **Column verification**:
-- Columns 1-12: `	let data = ` (tab + declaration)
+- Columns 1-12: `	data := ` (tab + declaration)
 - Columns 13-26: `ReadFile(path)` (expression, 14 chars)
 - **Column 27**: `?` ✓ CORRECT
 

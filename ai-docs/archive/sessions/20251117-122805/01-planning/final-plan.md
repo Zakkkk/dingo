@@ -605,7 +605,7 @@ func (p *SumTypesPlugin) Transform(file *ast.File, ctx *plugin.Context) error {
   enum Result[int, error] { Ok(int), Err(error) }
 
   // ResultTypePlugin should detect this type
-  let x = Ok(42)  // Should recognize Result[int, error]
+  x := Ok(42)  // Should recognize Result[int, error]
   ```
 - Test pipeline with and without type inference
 - Test degraded mode (plugins work when TypeInference is nil)
@@ -749,8 +749,8 @@ func DefaultConfig() *TranspilerConfig {
 
 **Syntax:**
 ```dingo
-let result = Ok(42)              // Infers Result[int, error]
-let failure = Err(errors.New())  // Infers Result[T, error]
+result := Ok(42)              // Infers Result[int, error]
+failure := Err(errors.New())  // Infers Result[T, error]
 ```
 
 **Transform to:**
@@ -853,7 +853,7 @@ func (p *ResultTypePlugin) transformOkLiteral(callExpr *ast.CallExpr, ctx *plugi
 
 **Syntax:**
 ```dingo
-let data = readFile("config.json")  // readFile returns ([]byte, error)
+data := readFile("config.json")  // readFile returns ([]byte, error)
 // With auto_wrap_go_errors = true, wraps to Result[[]byte, error]
 ```
 
@@ -1016,8 +1016,8 @@ func (p *ResultTypePlugin) wrapGoCall(assignStmt *ast.AssignStmt, ctx *plugin.Co
 **Syntax:**
 ```dingo
 func processData() Result[Data, error] {
-    let config = readConfig()?  // readConfig returns Result[Config, error]
-    let validated = validate(config)?
+    config := readConfig()?  // readConfig returns Result[Config, error]
+    validated := validate(config)?
     return Ok(validated)
 }
 ```
@@ -1152,8 +1152,8 @@ func (p *ErrorPropagationPlugin) unwrapResultType(
 
 **Syntax:**
 ```dingo
-let value = Some(42)        // Option[int]
-let empty = None            // Option[T] (requires type context)
+value := Some(42)        // Option[int]
+empty := None            // Option[T] (requires type context)
 ```
 
 **Transform to:**
@@ -1224,7 +1224,7 @@ func (p *OptionTypePlugin) transformNoneLiteral(ident *ast.Ident, ctx *plugin.Co
 
 **Syntax:**
 ```dingo
-let value = maybeValue ?? 0  // maybeValue is Option[int]
+value := maybeValue ?? 0  // maybeValue is Option[int]
 ```
 
 **Transform to:**
@@ -1323,7 +1323,7 @@ func (p *NullCoalescingPlugin) unwrapOptionType(
 
 **Syntax:**
 ```dingo
-let name = user?.address?.city  // Each step returns Option
+name := user?.address?.city  // Each step returns Option
 ```
 
 **Expected Transform:**
@@ -1459,7 +1459,7 @@ type TernaryExpr struct {
 - Simple ternary: `a ? b : c`
 - Nested ternary: `a ? b ? c : d : e`
 - With operators: `x > 0 ? y + 1 : z - 1`
-- In assignment: `let v = cond ? 10 : 20`
+- In assignment: `v := cond ? 10 : 20`
 
 ---
 

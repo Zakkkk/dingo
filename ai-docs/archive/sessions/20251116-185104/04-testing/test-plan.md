@@ -12,7 +12,7 @@ This test plan validates all implemented features for Phase 1.6: Error Propagati
 
 ### Implemented Features to Test
 
-1. **Statement Context** - `let x = expr?`
+1. **Statement Context** - `x := expr?`
    - Simple assignment with error propagation
    - Multiple error propagations in sequence
    - Error wrapping in statement context

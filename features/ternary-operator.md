@@ -95,9 +95,9 @@ fmt.Printf("You have %d friend%s\n", count, func() string {
 
 ```dingo
 // Simple conditional assignment
-let max = a > b ? a : b
-let status = isActive ? "active" : "inactive"
-let message = hasError ? "Error occurred" : "Success"
+max := a > b ? a : b
+status := isActive ? "active" : "inactive"
+message := hasError ? "Error occurred" : "Success"
 
 // In expressions
 println("You have ${count} friend${count == 1 ? "" : "s"}")
@@ -115,32 +115,32 @@ func getLevel(score: int) -> string {
 
 ```dingo
 // ✅ Both branches must have same type
-let value = condition ? 42 : 0  // OK: both int
+value := condition ? 42 : 0  // OK: both int
 
 // ❌ Type mismatch
-let value = condition ? 42 : "string"  // ERROR: incompatible types
+value := condition ? 42 : "string"  // ERROR: incompatible types
 
 // ✅ Type inference
-let x = true ? "yes" : "no"  // Inferred as string
+x := true ? "yes" : "no"  // Inferred as string
 
 // ✅ Works with Option types
-let user = findUser(id) ? user : User.guest()
+user := findUser(id) ? user : User.guest()
 ```
 
 ### Style Guidelines (Recommended)
 
 ```dingo
 // ✅ Good: Simple, readable
-let max = a > b ? a : b
+max := a > b ? a : b
 
 // ✅ OK: Reasonable chaining
-let grade = score >= 90 ? "A" : score >= 80 ? "B" : "C"
+grade := score >= 90 ? "A" : score >= 80 ? "B" : "C"
 
 // ⚠️ Discouraged: Deep nesting (linter warning)
-let x = a ? b ? c ? d : e : f : g
+x := a ? b ? c ? d : e : f : g
 
 // ❌ Forbidden: Side effects in ternary (linter error)
-let x = condition ? doThing1() : doThing2()  // Use if/else instead
+x := condition ? doThing1() : doThing2()  // Use if/else instead
 ```
 
 ---
@@ -151,7 +151,7 @@ let x = condition ? doThing1() : doThing2()  // Use if/else instead
 
 ```dingo
 // Dingo source
-let max = a > b ? a : b
+max := a > b ? a : b
 ```
 
 ```go
@@ -186,7 +186,7 @@ fmt.Println(fmt.Sprintf("Status: %s", __ternary0))
 
 ```dingo
 // Dingo source
-let grade = score >= 90 ? "A" : score >= 80 ? "B" : "C"
+grade := score >= 90 ? "A" : score >= 80 ? "B" : "C"
 ```
 
 ```go
@@ -325,8 +325,8 @@ WARNING: Complex expression as condition
 ### Example 1: Min/Max
 
 ```dingo
-let min = a < b ? a : b
-let max = a > b ? a : b
+min := a < b ? a : b
+max := a > b ? a : b
 
 // Go equivalent: 5 lines each
 var min int
@@ -356,11 +356,11 @@ fmt.Printf("You have %d item%s\n", count, suffix)
 ### Example 3: Default Values
 
 ```dingo
-let port = env.get("PORT") ?? "8080"
-let host = config.host ? config.host : "localhost"
+port := env.get("PORT") ?? "8080"
+host := config.host ? config.host : "localhost"
 
 // Or with null coalescing (better)
-let host = config.host ?? "localhost"
+host := config.host ?? "localhost"
 ```
 
 ### Example 4: Grade Calculation
@@ -379,9 +379,9 @@ func getGrade(score: int) -> string {
 ### Example 5: React-Style Rendering (if Dingo had UI)
 
 ```dingo
-let statusIcon = user.isActive ? "✓" : "✗"
-let className = isSelected ? "selected" : "normal"
-let display = isVisible ? "block" : "none"
+statusIcon := user.isActive ? "✓" : "✗"
+className := isSelected ? "selected" : "normal"
+display := isVisible ? "block" : "none"
 ```
 
 ---
@@ -414,7 +414,7 @@ max = (a > b).then(a).else(b)
 ### `if` Expression (Considered)
 
 ```dingo
-let max = if a > b { a } else { b }
+max := if a > b { a } else { b }
 ```
 
 **Why Not:**

@@ -67,7 +67,7 @@ func max(a: int, b: int) -> int {
 | **Parameters** | `name type` | `name: type` | ✅ Clearer, more intuitive |
 | **Return Type** | `type` | `type` or `-> type` | Arrow optional (Go-style recommended) |
 | **Variables** | `var name type` | `let name: type` | ✅ `let` is immutable by default |
-| **Type inference** | `x := 5` | `let x = 5` | ✅ Explicit `let` keyword |
+| **Type inference** | `x := 5` | `x := 5` | ✅ Explicit `let` keyword |
 
 ---
 
@@ -170,7 +170,7 @@ func divide(a: int, b: int) (int, error) {
 
 ```dingo
 // Immutable (recommended)
-let x = 42
+x := 42
 let name: string = "Dingo"
 
 // Mutable
@@ -182,8 +182,8 @@ var message: string = "Hello"
 
 ```dingo
 // Optional when type can be inferred
-let x = 42              // inferred as int
-let name = "Dingo"       // inferred as string
+x := 42              // inferred as int
+name := "Dingo"       // inferred as string
 
 // Required when type cannot be inferred
 let result: int
@@ -197,7 +197,7 @@ let data: []byte
 ### Result Types (Planned)
 ```dingo
 func fetchUser(id: string) Result[User, Error] {
-    let user = db.query(id)?
+    user := db.query(id)?
     return Ok(user)
 }
 ```
@@ -213,10 +213,10 @@ match result {
 ### Lambdas (Planned)
 ```dingo
 // Rust-style
-let double = |x| x * 2
+double := |x| x * 2
 
 // Arrow-style
-let add = (a, b) => a + b
+add := (a, b) => a + b
 ```
 
 ---

@@ -30,9 +30,9 @@ func dispatch(cmd Command) error {
 
 ### 3. Let Bindings
 ```dingo
-let cmd = args[0]
-let rest = args[1:]
-let task = Task{ID: nextID, Description: description}
+cmd := args[0]
+rest := args[1:]
+task := Task{ID: nextID, Description: description}
 ```
 
 ### 4. Enum Constructors
@@ -53,7 +53,7 @@ func validateDescription(s string) Result[string, error] {
 }
 
 // guard let unwraps Result - returns early on Err
-guard let description = validateDescription(input) else |err| {
+guard description := validateDescription(input) else |err| {
     return nil, err
 }
 // 'description' is now available as the unwrapped string

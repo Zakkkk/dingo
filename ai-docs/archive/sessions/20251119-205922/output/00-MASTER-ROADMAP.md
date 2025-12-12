@@ -254,7 +254,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 **File**: `/Users/jack/mag/dingo/pkg/preprocessor/keywords.go` (37 lines)
 
 **Capabilities**:
-- Converts `let x = value` → `x := value`
+- Converts `x := value` → `x := value`
 - Handles multiple declarations: `let x, y, z = func()`
 - Pattern: `\blet\s+([\w\s,]+?)\s*=`
 
@@ -341,7 +341,7 @@ func Name_TupleVariant(val0 Type1, val1 Type2) Name { ... }
 
 **What Doesn't Work**:
 - ❌ Standalone tuple type declarations: `type Pair = (int, string)`
-- ❌ Tuple literals: `let x = (1, "hello")`
+- ❌ Tuple literals: `x := (1, "hello")`
 - ❌ Tuple field access: `x.0`, `x.1`
 - ❌ Tuple destructuring outside of pattern matching
 

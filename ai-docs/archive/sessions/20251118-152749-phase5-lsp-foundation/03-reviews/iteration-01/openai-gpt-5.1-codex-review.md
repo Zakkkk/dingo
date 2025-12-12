@@ -741,7 +741,7 @@ export function activate(context: vscode.ExtensionContext) {
     const logLevel = config.get<string>('lsp.logLevel') || 'info';
 
     let client: LanguageClient;
-    let restartCount = 0;
+    restartCount := 0;
     const MAX_RESTARTS = 3;
 
     function startClient() {

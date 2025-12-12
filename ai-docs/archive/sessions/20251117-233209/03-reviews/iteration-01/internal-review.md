@@ -335,7 +335,7 @@ func (s *TypeInferenceService) ValidateNoneInference(noneExpr ast.Expr) (ok bool
 
 **Impact**:
 - Users must always explicitly type None: `let x: Option[int] = None`
-- Cannot write `let x = None` even when type is obvious from context
+- Cannot write `x := None` even when type is obvious from context
 - More verbose than Rust (which infers from context)
 
 **Why Minor**:

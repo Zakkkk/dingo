@@ -122,7 +122,7 @@ parent := ctx.GetParent(switchStmt)
 
 switch parent.(type) {
 case *ast.AssignStmt:
-    return true  // let x = match { ... }
+    return true  // x := match { ... }
 case *ast.ReturnStmt:
     return true  // return match { ... }
 case *ast.CallExpr:

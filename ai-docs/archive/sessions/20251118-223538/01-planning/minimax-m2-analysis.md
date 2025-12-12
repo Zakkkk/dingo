@@ -14,7 +14,7 @@ In `error_prop.go:332`, the code calculates the `?` operator position:
 qPos := strings.Index(fullLineText, "?")
 ```
 
-This finds the `?` at **0-based position 26** in the full line `let data = ReadFile(path)?`, which is correct.
+This finds the `?` at **0-based position 26** in the full line `data := ReadFile(path)?`, which is correct.
 
 But then at lines 376, 388, 400, etc., it uses:
 ```go
@@ -50,13 +50,13 @@ The bug is in `error_prop.go:332` - it's correctly finding the `?` position (26)
 Actually, I need to trace through the calculation more carefully. Looking at the JSON output, all error_prop mappings have `original_column: 15`. Let me check how that's being calculated...
 
 The actual 1-based positions in line 4 are:
-- `let data = ` = columns 1-12
+- `data := ` = columns 1-12
 - `ReadFile(path)` = columns 13-26
 - `?` = column 27
 
 So if error_prop mappings claim column 15, something is calculating `qPos + 1` as 15, meaning `qPos = 14` (0-based).
 
-But `strings.Index("let data = ReadFile(path)?", "?")` should return 26!
+But `strings.Index("data := ReadFile(path)?", "?")` should return 26!
 
 Let me check if there's a different calculation being used... Ah! I see it now in the source map JSON provided in the prompt - it says the `?` position is being calculated as column 15, which would mean the code is somehow counting from the wrong position.
 

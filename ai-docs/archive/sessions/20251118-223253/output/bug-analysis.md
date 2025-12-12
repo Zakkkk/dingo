@@ -159,7 +159,7 @@ func TestSwitchInitPreservation(t *testing.T) {
 1. `switch Init; simple.tag {}` → Preserves Init
 2. `switch simple.tag {}` (no Init) → Direct if-chain
 3. Complex scrutinee: `match fetch()? {}` → Temp preserved
-4. Expression mode: `let x = match y {}` → Works (parent AssignStmt)
+4. Expression mode: `x := match y {}` → Works (parent AssignStmt)
 
 ### Performance
 - Benchmark: `go test -bench=BenchmarkPatternMatch` → <1ms overhead

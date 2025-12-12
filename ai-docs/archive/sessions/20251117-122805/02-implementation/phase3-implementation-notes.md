@@ -150,7 +150,7 @@ auto_wrap_go_errors = true
 
 **Example:**
 ```dingo
-let result = Err(errors.New("failed"))  // What is T?
+result := Err(errors.New("failed"))  // What is T?
 ```
 
 **Current Behavior:** Uses placeholder "Result_T_error" which may not compile.
@@ -387,8 +387,8 @@ func TestResultWithSumTypes(t *testing.T) {
 // tests/golden/result_basic.dingo
 enum Result[int, error] { Ok(int), Err(error) }
 
-let success = Ok(42)
-let failure = Err(errors.New("oops"))
+success := Ok(42)
+failure := Err(errors.New("oops"))
 ```
 
 Expected output:

@@ -87,7 +87,7 @@ This plan implements comprehensive VSCode syntax highlighting enhancements for D
 **Input (.dingo):**
 ```dingo
 func readConfig(path string) Result[Config, error] {
-    let data = ReadFile(path)? "failed to read config"
+    data := ReadFile(path)? "failed to read config"
     return Ok(parseConfig(data))
 }
 ```
@@ -571,11 +571,11 @@ export class GeneratedCodeHighlighter implements vscode.Disposable {
 
     private findGeneratedMarkers(document: vscode.TextDocument): MarkerRange[] {
         const markers: MarkerRange[] = [];
-        let inBlock = false;
+        inBlock := false;
         let blockStart: number | null = null;
-        let blockType = 'unknown';
+        blockType := 'unknown';
 
-        for (let i = 0; i < document.lineCount; i++) {
+        for (i := 0; i < document.lineCount; i++) {
             const line = document.lineAt(i);
             const text = line.text;
 
@@ -593,7 +593,7 @@ export class GeneratedCodeHighlighter implements vscode.Disposable {
             if (endMatch && inBlock) {
                 if (blockStart !== null) {
                     // Add all lines from blockStart to current line (inclusive)
-                    for (let j = blockStart; j <= i; j++) {
+                    for (j := blockStart; j <= i; j++) {
                         markers.push({
                             range: document.lineAt(j).range,
                             type: blockType
@@ -789,7 +789,7 @@ func TestMarkerGeneration(t *testing.T) {
 
     input := `
         func test() Result[int, error] {
-            let x = compute()? "compute failed"
+            x := compute()? "compute failed"
             return Ok(x)
         }
     `
@@ -988,13 +988,13 @@ test('respects configuration settings', async () => {
 
 **Before:**
 ```dingo
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
      ^all same color^     ^regular string color^
 ```
 
 **After:**
 ```dingo
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
                          │   └─ Special error message color (orange)
                          └─ Bright error operator (purple)
 ```

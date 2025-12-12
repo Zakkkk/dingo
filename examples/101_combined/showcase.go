@@ -115,9 +115,9 @@ func getPoint() (int, int) {
 	return 10, 20
 }
 
-// === 11. GUARD LET ===
+// === 11. GUARD ===
 func guardLetDemo() string {
-	// Guard let with Option
+	// Guard with Option
 	tmp := findUser("Bob")
 	if tmp.IsNone() {
 
@@ -126,7 +126,7 @@ func guardLetDemo() string {
 	}
 	user := *tmp.Some
 
-	// Guard let with Result
+	// Guard with Result
 	tmp1 := fetchUser(42)
 	if tmp1.IsErr() {
 		err := *tmp1.Err
@@ -193,7 +193,7 @@ func demo() string {
 	// BUG: Mishandles Go multiple returns as tuple struct - See BUGS.md Bug 3
 	x, y := getPoint()
 
-	// === 12. LET binding ===
+	// Build result string
 	result := fmt.Sprintf("%s %s! Lang=%s Status=%s Point=(%d,%d)",
 		greeting, user.Name, displayLang, statusMsg, x, y)
 

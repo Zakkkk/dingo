@@ -367,8 +367,8 @@ type Status =
 var status Status = 999  // Compiles, runtime bug
 
 // Dingo: Can only construct valid values
-let status = Status_Pending()  // Type-safe
-let invalid = Status_Pending(123)  // Compile error
+status := Status_Pending()  // Type-safe
+invalid := Status_Pending(123)  // Compile error
 ```
 
 ## Future Enhancements

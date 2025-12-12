@@ -50,8 +50,8 @@ This test validates the crucial **error wrapping** feature of the `?` operator -
 package main
 
 func readUserConfig(username: string) ([]byte, error) {
-	let path = "/home/" + username + "/config.json"
-	let data = ReadFile(path)? "failed to read user config"
+	path := "/home/" + username + "/config.json"
+	data := ReadFile(path)? "failed to read user config"
 	return data, nil
 }
 ```
@@ -147,7 +147,7 @@ But more importantly: **Error wrapping becomes trivial**
 
 ```dingo
 // Dingo: One line
-let data = ReadFile(path)? "failed to read config"
+data := ReadFile(path)? "failed to read config"
 ```
 
 vs
@@ -168,8 +168,8 @@ if err != nil {
 use anyhow::Context;
 
 fn read_config(username: &str) -> Result<Vec<u8>> {
-    let path = format!("/home/{}/config.json", username);
-    let data = read_file(&path)
+    path := format!("/home/{}/config.json", username);
+    data := read_file(&path)
         .context("failed to read user config")?;  // Similar to Dingo!
     Ok(data)
 }

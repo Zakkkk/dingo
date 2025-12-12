@@ -130,7 +130,7 @@ enum Status {
     Inactive(reason string)
 }
 
-let s = Active(time.Now())
+s := Active(time.Now())
 
 match s {
     Pending => println!("Waiting"),
@@ -192,10 +192,10 @@ enum State {
 
 **Bare constructors** (current approach):
 ```dingo
-let r = Ok(42)          // Simple, clean
-let e = Err("failed")
-let s = Some(value)
-let n = None
+r := Ok(42)          // Simple, clean
+e := Err("failed")
+s := Some(value)
+n := None
 ```
 
 **Why not namespaced?**

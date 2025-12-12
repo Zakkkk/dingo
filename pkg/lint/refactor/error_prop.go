@@ -2,6 +2,7 @@ package refactor
 
 import (
 	"go/ast"
+	goparser "go/parser"
 	"go/token"
 	"strings"
 
@@ -47,14 +48,19 @@ func (d *ErrorPropDetector) Doc() string {
 //
 // Generates a diagnostic with a Fix that replaces the pattern with ? operator.
 func (d *ErrorPropDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
-	if file == nil || file.File == nil {
+	// Use Go's standard parser to get full AST with function bodies
+	// The Dingo parser skips function bodies, so we need Go's parser here
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		// Dingo syntax may not be valid Go - that's expected
+		// Return empty diagnostics, don't treat as error
 		return nil
 	}
 
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk the Go AST to find function bodies
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		funcDecl, ok := n.(*ast.FuncDecl)
 		if !ok || funcDecl.Body == nil {
 			return true

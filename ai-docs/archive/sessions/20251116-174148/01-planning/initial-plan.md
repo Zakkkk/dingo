@@ -192,8 +192,8 @@ func (p *ErrorPropagationPlugin) transformErrorPropagation(
 **Input Dingo:**
 ```dingo
 func processUser(id: string) (User, error) {
-    let user = fetchUser(id)?
-    let validated = validateUser(user)?
+    user := fetchUser(id)?
+    validated := validateUser(user)?
     return save(validated)
 }
 ```
@@ -230,7 +230,7 @@ func processUser(id string) (User, error) {
    - Preserve error wrapping if present
 
 3. **Statement vs Expression Context**
-   - In assignment: `let x = f()?` → temp vars + check + assign
+   - In assignment: `x := f()?` → temp vars + check + assign
    - In return: `return f()?` → call + immediate check
    - In nested: `g(f()?)` → extract to statement first
 
@@ -457,7 +457,7 @@ dingo/
    - Identify blockers early
 
 2. **Incremental Development**
-   - Start with simplest case: `let x = f()?`
+   - Start with simplest case: `x := f()?`
    - Add complexity gradually
    - Test each increment
 
@@ -505,7 +505,7 @@ func fetchUser(id: string) -> Result[User, Error] {
 }
 
 func processUser(id: string) -> Result[User, Error] {
-    let user = fetchUser(id)?  // Now unwraps Result type
+    user := fetchUser(id)?  // Now unwraps Result type
     return Ok(user)
 }
 ```
@@ -534,7 +534,7 @@ Add bidirectional position mapping:
 Automatic error wrapping:
 
 ```dingo
-let user = fetchUser(id)? wrap "failed to fetch user ${id}"
+user := fetchUser(id)? wrap "failed to fetch user ${id}"
 ```
 
 Generates:
@@ -660,7 +660,7 @@ This approach:
 
 **Input:**
 ```dingo
-let user = fetchUser(id)?
+user := fetchUser(id)?
 ```
 
 **Output:**
@@ -676,7 +676,7 @@ user := __tmp0
 
 **Input:**
 ```dingo
-let result = step1()?.step2()?.step3()?
+result := step1()?.step2()?.step3()?
 ```
 
 **Output:**
@@ -705,10 +705,10 @@ result := __tmp4
 **Input:**
 ```dingo
 func handleUser(w: http.ResponseWriter, r: http.Request) {
-    let id = r.URL.Query().Get("id")
-    let user = fetchUser(id)?
-    let validated = validateUser(user)?
-    let saved = saveUser(validated)?
+    id := r.URL.Query().Get("id")
+    user := fetchUser(id)?
+    validated := validateUser(user)?
+    saved := saveUser(validated)?
 
     json.NewEncoder(w).Encode(saved)
 }

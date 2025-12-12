@@ -143,7 +143,7 @@ swift_match_04_equivalence: FAIL ❌ (compilation error)
 ### Issue 1: swift_match_01_basic Golden Mismatch
 **Symptom:** Preprocessed output differs from expected golden file
 **Likely cause:** Whitespace differences or expression context handling
-**Example line from test:** `let result = switch opt { ... }`
+**Example line from test:** `result := switch opt { ... }`
 **Status:** Needs manual comparison of actual vs expected output
 
 ### Issue 2: swift_match_04_equivalence Compilation Error

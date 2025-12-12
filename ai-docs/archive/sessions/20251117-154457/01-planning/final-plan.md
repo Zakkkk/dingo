@@ -41,8 +41,8 @@ enum Option[T] {
 }
 
 // Usage with type inference
-let x = Ok(42)               // Result[int, error]
-let y = Some("hello")         // Option[string]
+x := Ok(42)               // Result[int, error]
+y := Some("hello")         // Option[string]
 
 // Explicit type parameters
 let z: Result[int, MyError] = Ok(42)
@@ -64,14 +64,14 @@ Support BOTH modes via dingo.toml configuration:
 ```dingo
 // Requires explicit type annotation
 let x: Option[int] = None    // OK
-let y = None                  // ERROR: Cannot infer type
+y := None                  // ERROR: Cannot infer type
 ```
 
 **Mode 2: Context-based (Ergonomic)**
 ```dingo
 // Infer from assignment context
 let x: Option[int] = None    // OK (explicit)
-let y = None                  // OK (infers from later usage or return type)
+y := None                  // OK (infers from later usage or return type)
 
 fn getName() Option[string] {
     return None              // OK (infers from return type)
@@ -709,7 +709,7 @@ fn divide(a int, b int) Result[int, error] {
 }
 
 fn calculate() (int, error) {
-    let result = divide(10, 2)?  // Unwraps Result -> (int, error)
+    result := divide(10, 2)?  // Unwraps Result -> (int, error)
     return result, nil
 }
 ```
@@ -737,7 +737,7 @@ fn greet(id int) {
 ```dingo
 // Test with none_type_inference = "explicit"
 let x: Option[int] = None  // OK
-let y = None               // ERROR
+y := None               // ERROR
 
 // Test with none_type_inference = "context"
 let x: Option[int] = None  // OK
@@ -829,7 +829,7 @@ fn divide(a int, b int) Result[int, error] {
     return Ok(a / b)
 }
 
-let result = divide(10, 2)
+result := divide(10, 2)
     .Map(|x| x * 2)
     .UnwrapOr(0)
 ```
@@ -1040,9 +1040,9 @@ dingo/
 
 1. **Try Blocks** (Rust-style):
 ```dingo
-let result = try {
-    let a = operation1()?;
-    let b = operation2(a)?;
+result := try {
+    a := operation1()?;
+    b := operation2(a)?;
     b * 2
 }  // Returns Result[int, error]
 ```
@@ -1052,7 +1052,7 @@ let result = try {
 ```dingo
 // Go: func ReadFile(path string) ([]byte, error)
 // Auto-wrap: ReadFile("file.txt") -> Result[[]byte, error]
-let content = ReadFile("file.txt")?  // No manual wrapping
+content := ReadFile("file.txt")?  // No manual wrapping
 ```
 **Effort**: 15-20 hours (requires go/types integration)
 

@@ -11,7 +11,7 @@ package builtin
 //	        Match:             transformMatch,
 //	        EnumConstructors:  transformEnumConstructors,
 //	        ErrorProp:         transformErrorProp,
-//	        GuardLet:          transformGuardLet,
+//	        Guard:          transformGuard,
 //	        SafeNavStatements: transformSafeNavStatements,
 //	        SafeNav:           transformSafeNav,
 //	        NullCoalesce:      transformNullCoalesce,

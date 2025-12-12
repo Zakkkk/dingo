@@ -48,13 +48,13 @@ if a > b {
 
 ```dingo
 // Concise, readable
-let status = age >= 18 ? "adult" : "minor"
+status := age >= 18 ? "adult" : "minor"
 
 // Natural in expressions
 println("You have ${count} friend${count == 1 ? "" : "s"}")
 
 // One-liner for min/max
-let max = a > b ? a : b
+max := a > b ? a : b
 ```
 
 **Result:** 67% code reduction for simple conditional assignments, matching expressiveness of JavaScript/TypeScript while maintaining Go's type safety.
@@ -67,9 +67,9 @@ let max = a > b ? a : b
 
 ```dingo
 // Simple conditional assignment
-let max = a > b ? a : b
-let status = isActive ? "active" : "inactive"
-let message = hasError ? "Error occurred" : "Success"
+max := a > b ? a : b
+status := isActive ? "active" : "inactive"
+message := hasError ? "Error occurred" : "Success"
 
 // In return statements
 func getLevel(score: int) -> string {
@@ -80,7 +80,7 @@ func getLevel(score: int) -> string {
 processUser(isAdmin ? fullAccess : limitedAccess)
 
 // In struct initialization
-let config = Config{
+config := Config{
     port: env.get("PORT") ? parsePort(env.get("PORT")) : 8080,
     host: isDev ? "localhost" : "0.0.0.0"
 }
@@ -92,7 +92,7 @@ Ternary operators are **right-associative**, allowing clean chains for multi-way
 
 ```dingo
 // Chained ternaries (right-associative)
-let priority =
+priority :=
     urgency == "critical" ? "P0" :
     urgency == "high" ? "P1" :
     urgency == "medium" ? "P2" : "P3"
@@ -106,7 +106,7 @@ func getGrade(score: int) -> string {
 }
 
 // HTTP status description
-let statusText =
+statusText :=
     code < 300 ? "Success" :
     code < 400 ? "Redirect" :
     code < 500 ? "Client Error" : "Server Error"
@@ -132,16 +132,16 @@ Dingo enforces a **maximum nesting depth of 3 levels** to maintain readability:
 
 ```dingo
 // ✅ Level 1 - Simple (GOOD)
-let x = a ? b : c
+x := a ? b : c
 
 // ✅ Level 2 - Nested once (OK)
-let x = a ? (b ? c : d) : e
+x := a ? (b ? c : d) : e
 
 // ✅ Level 3 - Max allowed (USE SPARINGLY)
-let x = a ? (b ? (c ? d : e) : f) : g
+x := a ? (b ? (c ? d : e) : f) : g
 
 // ❌ Level 4 - ERROR (TOO DEEP)
-let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
+x := a ? (b ? (c ? (d ? e : f) : g) : h) : i
 // Error: ternary operator nesting too deep (level 4, max 3).
 //        Consider extracting nested logic into variables for readability
 ```
@@ -151,16 +151,16 @@ let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
 **Refactoring example:**
 ```dingo
 // ❌ BAD: Too deeply nested
-let result = a ? (b ? (c ? (d ? e : f) : g) : h) : i
+result := a ? (b ? (c ? (d ? e : f) : g) : h) : i
 
 // ✅ GOOD: Extract nested logic
-let innerResult = d ? e : f
-let midResult = c ? innerResult : g
-let outerResult = b ? midResult : h
-let result = a ? outerResult : i
+innerResult := d ? e : f
+midResult := c ? innerResult : g
+outerResult := b ? midResult : h
+result := a ? outerResult : i
 
 // ✅ BETTER: Use match expression (when pattern matching is implemented)
-let result = match (a, b, c, d) {
+result := match (a, b, c, d) {
     (true, true, true, true) => e,
     (true, true, true, false) => f,
     // ...
@@ -177,16 +177,16 @@ let result = match (a, b, c, d) {
 
 ```dingo
 // Both branches are strings → func() string
-let status = age >= 18 ? "adult" : "minor"
+status := age >= 18 ? "adult" : "minor"
 
 // Both branches are int → func() int
-let score = isPassing ? 100 : 0
+score := isPassing ? 100 : 0
 
 // Both branches are bool → func() bool
-let valid = hasData ? true : false
+valid := hasData ? true : false
 
 // Both branches are []string → func() []string
-let tags = isDev ? []string{"dev"} : []string{"prod"}
+tags := isDev ? []string{"dev"} : []string{"prod"}
 ```
 
 **Transpiles to:**
@@ -214,10 +214,10 @@ When branch types differ, Dingo falls back to `any` (Go 1.18+):
 
 ```dingo
 // Mixed types: string vs int → func() any
-let value = condition ? "text" : 123
+value := condition ? "text" : 123
 
 // Mixed types: User vs nil → func() any
-let user = found ? getUserData() : nil
+user := found ? getUserData() : nil
 ```
 
 **Transpiles to:**
@@ -234,11 +234,11 @@ var value = func() any {
 
 ```dingo
 // ❌ BAD: Mixed types
-let value = condition ? "100" : 100
+value := condition ? "100" : 100
 
 // ✅ GOOD: Convert to same type
-let value = condition ? "100" : "100"  // Both string
-let value = condition ? 100 : parseInt("100")  // Both int
+value := condition ? "100" : "100"  // Both string
+value := condition ? 100 : parseInt("100")  // Both int
 ```
 
 ### Advanced Type Inference
@@ -247,16 +247,16 @@ The `TypeDetector` uses `go/types` for sophisticated inference:
 
 ```dingo
 // Function return types
-let age = isValid(user) ? user.getAge() : 0  // → int (if getAge() returns int)
+age := isValid(user) ? user.getAge() : 0  // → int (if getAge() returns int)
 
 // Field access
-let name = user != nil ? user.Name : "Guest"  // → string
+name := user != nil ? user.Name : "Guest"  // → string
 
 // Expressions
-let sum = condition ? x + y : 0  // → int (if x, y are int)
+sum := condition ? x + y : 0  // → int (if x, y are int)
 
 // Complex types
-let data = found ? loadJSON() : []byte{}  // → []byte
+data := found ? loadJSON() : []byte{}  // → []byte
 ```
 
 ---
@@ -276,7 +276,7 @@ let data = found ? loadJSON() : []byte{}  // → []byte
 
 ```dingo
 // Level 4 nesting attempt
-let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
+x := a ? (b ? (c ? (d ? e : f) : g) : h) : i
 
 // Compiler error:
 // ternary operator nesting too deep (level 4, max 3).
@@ -287,10 +287,10 @@ let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
 
 ```dingo
 // Extract nested logic step-by-step
-let innerMost = d ? e : f
-let middle = c ? innerMost : g
-let outer = b ? middle : h
-let result = a ? outer : i
+innerMost := d ? e : f
+middle := c ? innerMost : g
+outer := b ? middle : h
+result := a ? outer : i
 
 // Or use pattern matching (when available)
 ```
@@ -326,19 +326,19 @@ a ? (b ? (c ? (d ? e : f) : g) : h) : i
 
 ```dingo
 // Min/Max
-let min = a < b ? a : b
-let max = a > b ? a : b
+min := a < b ? a : b
+max := a > b ? a : b
 
 // Status flags
-let status = user.isActive ? "active" : "inactive"
-let role = user.isAdmin ? "admin" : "user"
+status := user.isActive ? "active" : "inactive"
+role := user.isAdmin ? "admin" : "user"
 
 // Default values
-let port = config.port ? config.port : 8080
-let host = config.host ? config.host : "localhost"
+port := config.port ? config.port : 8080
+host := config.host ? config.host : "localhost"
 
 // Note: For defaults, use null coalescing instead:
-let port = config.port ?? 8080  // Better
+port := config.port ?? 8080  // Better
 ```
 
 ### Example 2: String Formatting
@@ -353,7 +353,7 @@ println("Server: ${isOnline ? "🟢 Online" : "🔴 Offline"}")
 println("Build: ${passing ? "✓ Passing" : "✗ Failing"}")
 
 // Dynamic messages
-let greeting = time < 12 ? "Good morning" : "Good afternoon"
+greeting := time < 12 ? "Good morning" : "Good afternoon"
 println("${greeting}, ${user.name}!")
 ```
 
@@ -397,13 +397,13 @@ sendEmail(
 
 ```dingo
 // HTTP status codes
-let statusText =
+statusText :=
     code == 200 ? "OK" :
     code == 404 ? "Not Found" :
     code == 500 ? "Server Error" : "Unknown"
 
 // Priority levels
-let priority =
+priority :=
     severity == "critical" ? 1 :
     severity == "high" ? 2 :
     severity == "medium" ? 3 : 4
@@ -421,18 +421,18 @@ func getGrade(score: int) -> string {
 
 ```dingo
 // Level 2: Basic nesting
-let access = isAdmin ? "full" : (isMember ? "limited" : "none")
+access := isAdmin ? "full" : (isMember ? "limited" : "none")
 
 // Level 3: Max allowed
-let discount =
+discount :=
     isPremium ? 0.3 :
     (isVIP ? 0.2 :
         (isMember ? 0.1 : 0.0))
 
 // Better approach: Extract nested logic
-let memberDiscount = isMember ? 0.1 : 0.0
-let vipDiscount = isVIP ? 0.2 : memberDiscount
-let discount = isPremium ? 0.3 : vipDiscount
+memberDiscount := isMember ? 0.1 : 0.0
+vipDiscount := isVIP ? 0.2 : memberDiscount
+discount := isPremium ? 0.3 : vipDiscount
 ```
 
 ---
@@ -451,9 +451,9 @@ let discount = isPremium ? 0.3 : vipDiscount
 
 ```dingo
 // ✅ GOOD: Clear and concise
-let max = a > b ? a : b
-let status = isActive ? "on" : "off"
-let label = count == 1 ? "item" : "items"
+max := a > b ? a : b
+status := isActive ? "on" : "off"
+label := count == 1 ? "item" : "items"
 ```
 
 ### ❌ When to Use if-else Instead
@@ -467,7 +467,7 @@ let label = count == 1 ? "item" : "items"
 
 ```dingo
 // ❌ BAD: Side effects in ternary
-let result = condition ? doSomething() : doOtherThing()
+result := condition ? doSomething() : doOtherThing()
 
 // ✅ GOOD: Use if-else for side effects
 if condition {
@@ -477,11 +477,11 @@ if condition {
 }
 
 // ❌ BAD: Complex expressions
-let value = condition ? (calculateSomethingComplex(a, b, c) + offset) : defaultValue
+value := condition ? (calculateSomethingComplex(a, b, c) + offset) : defaultValue
 
 // ✅ GOOD: Extract to variable
-let calculated = calculateSomethingComplex(a, b, c) + offset
-let value = condition ? calculated : defaultValue
+calculated := calculateSomethingComplex(a, b, c) + offset
+value := condition ? calculated : defaultValue
 ```
 
 ### Style Guidelines
@@ -489,33 +489,33 @@ let value = condition ? calculated : defaultValue
 **Recommended:**
 ```dingo
 // ✅ Single-line for simple cases
-let max = a > b ? a : b
+max := a > b ? a : b
 
 // ✅ Multi-line for chained ternaries (align colons)
-let grade =
+grade :=
     score >= 90 ? "A" :
     score >= 80 ? "B" :
     score >= 70 ? "C" : "F"
 
 // ✅ Parentheses for nested ternaries
-let result = a ? (b ? c : d) : e
+result := a ? (b ? c : d) : e
 
 // ✅ Extract complex nesting
-let inner = c ? d : e
-let outer = b ? inner : f
-let result = a ? outer : g
+inner := c ? d : e
+outer := b ? inner : f
+result := a ? outer : g
 ```
 
 **Avoid:**
 ```dingo
 // ❌ Unclear nesting without parens
-let result = a ? b ? c : d : e  // Hard to read
+result := a ? b ? c : d : e  // Hard to read
 
 // ❌ Side effects
-let x = condition ? mutateState() : doOtherThing()
+x := condition ? mutateState() : doOtherThing()
 
 // ❌ Too deep
-let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
+x := a ? (b ? (c ? (d ? e : f) : g) : h) : i
 ```
 
 ---
@@ -559,7 +559,7 @@ if user.IsActive {
 }
 
 // Dingo: 1 line
-let status = user.isActive ? "active" : "inactive"
+status := user.isActive ? "active" : "inactive"
 ```
 
 ---
@@ -572,7 +572,7 @@ Dingo uses **Immediately Invoked Function Expression** (IIFE) for ternary operat
 
 ```dingo
 // Dingo source
-let max = a > b ? a : b
+max := a > b ? a : b
 ```
 
 ```go
@@ -602,7 +602,7 @@ var max = func() int {
 Ternary processing happens in **Stage 1: Preprocessor** (text-based transformation):
 
 ```
-Dingo:  let x = condition ? trueValue : falseValue
+Dingo:  x := condition ? trueValue : falseValue
    ↓
 Preprocessor:
    ↓
@@ -703,7 +703,7 @@ var max = func() int {
 
 ```dingo
 // ❌ ERROR: Level 4
-let x = a ? (b ? (c ? (d ? e : f) : g) : h) : i
+x := a ? (b ? (c ? (d ? e : f) : g) : h) : i
 ```
 
 **Rationale:**
@@ -717,7 +717,7 @@ When branch types differ, Dingo uses `any` instead of finding common supertype:
 
 ```dingo
 // Falls back to 'any'
-let value = condition ? "string" : 123  // func() any
+value := condition ? "string" : 123  // func() any
 ```
 
 **Reason:**
@@ -731,7 +731,7 @@ Unlike `&&` and `||`, both branches are **always evaluated** (they're return sta
 
 ```dingo
 // Both getValue() and getDefault() are evaluated
-let x = condition ? getValue() : getDefault()
+x := condition ? getValue() : getDefault()
 ```
 
 **Transpiles to:**
@@ -752,22 +752,22 @@ Ternary (`? :`) vs error propagation (`?`) are distinguished by presence of `:`:
 
 ```dingo
 // Ternary (has colon)
-let x = condition ? a : b
+x := condition ? a : b
 
 // Error propagation (no colon)
-let user = getUser()?
+user := getUser()?
 ```
 
 **Edge case:**
 ```dingo
 // NOT a ternary (no colon)
-let result = fetchData()?  // Error propagation
+result := fetchData()?  // Error propagation
 ```
 
 If you need both:
 ```dingo
 // Ternary with error propagation in branches
-let x = condition ? getValue()? : getDefault()?
+x := condition ? getValue()? : getDefault()?
 ```
 
 ---
@@ -813,10 +813,10 @@ processor := NewTernaryProcessorWithOptions(opts)
 
 ```dingo
 // Current: ERROR (not supported)
-let x = a ? 1 : 2, y = b ? 3 : 4
+x := a ? 1 : 2, y = b ? 3 : 4
 
 // Future enhancement: Support multiple ternaries per line
-let x = a ? 1 : 2, y = b ? 3 : 4
+x := a ? 1 : 2, y = b ? 3 : 4
 ```
 
 **Decision:** Use case unclear. Users can split into multiple lines for v1.0.

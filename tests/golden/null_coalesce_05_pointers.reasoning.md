@@ -7,7 +7,7 @@ Test null coalescing (`??`) operator with raw Go pointer types (dual type suppor
 
 ### 1. Pointer with safe nav ?? literal
 ```dingo
-let name = user?.name ?? "Unknown"
+name := user?.name ?? "Unknown"
 ```
 **Expected:** Dual operation
 - Safe nav on pointer: `if user == nil`
@@ -16,7 +16,7 @@ let name = user?.name ?? "Unknown"
 
 ### 2. Pointer ?? pointer
 ```dingo
-let result = primary ?? fallback
+result := primary ?? fallback
 ```
 **Expected:** Pointer chain
 - Both operands are *string
@@ -26,7 +26,7 @@ let result = primary ?? fallback
 
 ### 3. Nested pointer access
 ```dingo
-let age = userPtr?.age ?? 0
+age := userPtr?.age ?? 0
 ```
 **Expected:** Safe nav + ??
 - Pointer nil check
@@ -36,7 +36,7 @@ let age = userPtr?.age ?? 0
 ### 4. Explicit nil handling
 ```dingo
 let nilUser: *User = nil
-let nilName = nilUser?.name ?? "Default"
+nilName := nilUser?.name ?? "Default"
 ```
 **Expected:** Nil propagates correctly
 - nilUser == nil

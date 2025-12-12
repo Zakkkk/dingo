@@ -56,8 +56,8 @@ When TypeInferenceService is available:
 
 **Example**:
 ```dingo
-let bad = Ok()        // Warns: "Ok() expects exactly one argument, found 0"
-let good = Ok(42)     // Transforms correctly
+bad := Ok()        // Warns: "Ok() expects exactly one argument, found 0"
+good := Ok(42)     // Transforms correctly
 ```
 
 ---

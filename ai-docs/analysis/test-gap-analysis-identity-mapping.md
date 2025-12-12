@@ -91,10 +91,10 @@ Result: Go-to-Definition uses wrong mapping (7 → 7 instead of 7 → 3)
 testLines: []int{
     1,  // package main (identity mapping - CRITICAL)
     3,  // func readConfig (identity mapping - CRITICAL for Go to Definition)
-    4,  // let data = ... ? (transformation)
+    4,  // data := ... ? (transformation)
     5,  // return data (identity mapping)
     9,  // func test (identity mapping)
-    10, // let a = ... ? (transformation)
+    10, // a := ... ? (transformation)
     11, // println (identity mapping)
 },
 description: []string{

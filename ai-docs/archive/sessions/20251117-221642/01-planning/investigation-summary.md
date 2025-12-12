@@ -79,7 +79,7 @@ func ReadFile(path string) error { ... }  // User-defined helper
 
 And uses it in error propagation:
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
 ```
 
 The import tracker will inject `import "os"` even though `os.ReadFile` was never called.

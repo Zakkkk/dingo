@@ -20,17 +20,17 @@ Create tuples using parentheses with comma-separated values:
 
 ```dingo
 // Basic tuple literals
-let pair = (10, 20)
-let triple = (true, "hello", 42)
-let coords = (100.5, 200.3)
+pair := (10, 20)
+triple := (true, "hello", 42)
+coords := (100.5, 200.3)
 
 // Nested tuples
-let nested = ((1, 2), (3, 4))
-let deep = (((1, 2), (3, 4)), ((5, 6), (7, 8)))
+nested := ((1, 2), (3, 4))
+deep := (((1, 2), (3, 4)), ((5, 6), (7, 8)))
 
 // Complex types
-let mixed = (Some(10), Err("fail"), true)
-let data = (User{name: "Alice"}, 200, true)
+mixed := (Some(10), Err("fail"), true)
+data := (User{name: "Alice"}, 200, true)
 ```
 
 ### Tuple Destructuring
@@ -39,15 +39,15 @@ Extract tuple elements using pattern matching:
 
 ```dingo
 // Basic destructuring
-let (x, y) = (10, 20)
-let (name, age, active) = getUserInfo()
+(x, y) = (10, 20)
+(name, age, active) = getUserInfo()
 
 // Nested destructuring
 let ((minX, maxX), (minY, maxY)) = getRange()
 
 // Wildcard patterns (ignore elements)
-let (x, _, z) = (1, 2, 3)
-let (name, _, active) = getUserInfo()
+(x, _, z) = (1, 2, 3)
+(name, _, active) = getUserInfo()
 ```
 
 ### Type Annotations
@@ -129,13 +129,13 @@ Tuples support **2 to 12 elements** (Tuple2 through Tuple12):
 
 ```dingo
 // Valid
-let pair = (1, 2)                                  // 2 elements ✅
-let max = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)  // 12 elements ✅
+pair := (1, 2)                                  // 2 elements ✅
+max := (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)  // 12 elements ✅
 
 // Invalid
-let empty = ()                                      // Error: empty tuple ❌
-let single = (42,)                                  // Error: single-element ❌
-let huge = (1,2,3,4,5,6,7,8,9,10,11,12,13)         // Error: >12 elements ❌
+empty := ()                                      // Error: empty tuple ❌
+single := (42,)                                  // Error: single-element ❌
+huge := (1,2,3,4,5,6,7,8,9,10,11,12,13)         // Error: >12 elements ❌
 ```
 
 **Rationale:**
@@ -164,8 +164,8 @@ Tuples transpile to numbered-field structs:
 
 ```dingo
 // Input
-let point = (10, 20)
-let (x, y) = point
+point := (10, 20)
+(x, y) = point
 ```
 
 ```go
@@ -185,7 +185,7 @@ func main() {
 
 ```dingo
 // Input
-let (x, y) = getCoords()
+(x, y) = getCoords()
 ```
 
 ```go
@@ -228,7 +228,7 @@ func main() {
 Tuples work seamlessly with pattern matching:
 
 ```dingo
-let pair = (Ok(10), Err("fail"))
+pair := (Ok(10), Err("fail"))
 
 match pair {
     (Ok(x), Ok(y)) => println("both ok:", x, y),
@@ -247,7 +247,7 @@ func getResults() (Result[int, string], Result[int, string]) {
     return (Ok(10), Err("fail"))
 }
 
-let (r1, r2) = getResults()
+(r1, r2) = getResults()
 
 // Result of tuple
 func divmod(a int, b int) Result[(int, int), string] {
@@ -257,7 +257,7 @@ func divmod(a int, b int) Result[(int, int), string] {
     return Ok((a / b, a % b))
 }
 
-let result = divmod(17, 5)
+result := divmod(17, 5)
 match result {
     Ok((q, r)) => println("Quotient:", q, "Remainder:", r),
     Err(msg) => println("Error:", msg),
@@ -274,7 +274,7 @@ enum Message {
     Color(int, int, int),
 }
 
-let msg = Message::Point(10, 20)
+msg := Message::Point(10, 20)
 match msg {
     Message::Point(x, y) => println(x, y),
     Message::Color(r, g, b) => println(r, g, b),
@@ -337,10 +337,10 @@ Use `_` to ignore elements you don't need:
 
 ```dingo
 // Only need first and last
-let (first, _, _, _, last) = getData()
+(first, _, _, _, last) = getData()
 
 // Only need middle value
-let (_, value, _) = getTriple()
+(_, value, _) = getTriple()
 ```
 
 ## Real-World Examples
@@ -349,13 +349,13 @@ let (_, value, _) = getTriple()
 
 ```dingo
 func translatePoint(point (int, int), dx int, dy int) (int, int) {
-    let (x, y) = point
+    (x, y) = point
     return (x + dx, y + dy)
 }
 
-let pos = (100, 200)
-let newPos = translatePoint(pos, 10, -5)
-let (x, y) = newPos
+pos := (100, 200)
+newPos := translatePoint(pos, 10, -5)
+(x, y) = newPos
 println("New position:", x, y)
 ```
 
@@ -367,7 +367,7 @@ func parseIPPort(addr string) Result[(string, int), string] {
     return Ok(("127.0.0.1", 8080))
 }
 
-let result = parseIPPort("127.0.0.1:8080")
+result := parseIPPort("127.0.0.1:8080")
 match result {
     Ok((ip, port)) => println("Connecting to", ip, "on port", port),
     Err(msg) => println("Parse error:", msg),
@@ -378,9 +378,9 @@ match result {
 
 ```dingo
 func batchProcess(items []Item) ((int, int), []error) {
-    let success = 0
-    let failed = 0
-    let errors = []error{}
+    success := 0
+    failed := 0
+    errors := []error{}
 
     for item in items {
         match process(item) {
@@ -423,9 +423,9 @@ Tuples use a **two-stage transpilation pipeline**:
 Multiple identical tuples generate only **one struct type**:
 
 ```dingo
-let a = (1, 2)
-let b = (3, 4)
-let c = (5, 6)
+a := (1, 2)
+b := (3, 4)
+c := (5, 6)
 ```
 
 ```go

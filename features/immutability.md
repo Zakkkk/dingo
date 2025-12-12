@@ -26,7 +26,7 @@ func processUsers(users []User) {
 
 ```dingo
 // Immutable variable
-let x = 42       // Cannot reassign
+x := 42       // Cannot reassign
 var y = 10       // Can reassign
 
 // Immutable struct

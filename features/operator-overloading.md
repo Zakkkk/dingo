@@ -69,7 +69,7 @@ impl Matrix: Multiply {
 }
 
 // Usage (natural mathematical notation)
-let result = matrixA + matrixB * matrixC
+result := matrixA + matrixB * matrixC
 
 // Transpiles to:
 // result := matrixA.Add(matrixB.Multiply(matrixC))
@@ -92,7 +92,7 @@ trait Compare { func <(Self, Self) -> bool }
 
 ```dingo
 // Dingo source
-let result = a + b * c
+result := a + b * c
 ```
 
 ```go
@@ -162,7 +162,7 @@ result := a.Add(b.Multiply(c))
 ### Matrix Math
 
 ```dingo
-let result = (A + B) * C - D.transpose()
+result := (A + B) * C - D.transpose()
 
 // Transpiles to:
 // result := (A.Add(B)).Multiply(C).Subtract(D.Transpose())
@@ -171,9 +171,9 @@ let result = (A + B) * C - D.transpose()
 ### Complex Numbers
 
 ```dingo
-let c1 = Complex{real: 3, imag: 4}
-let c2 = Complex{real: 1, imag: 2}
-let sum = c1 + c2  // {4, 6}
+c1 := Complex{real: 3, imag: 4}
+c2 := Complex{real: 1, imag: 2}
+sum := c1 + c2  // {4, 6}
 ```
 
 ---

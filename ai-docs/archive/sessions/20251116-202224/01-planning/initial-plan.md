@@ -695,7 +695,7 @@ func TestSumTypes_ResultType(t *testing.T) {
         }
 
         func main() {
-            let result = divide(10, 2)
+            result := divide(10, 2)
             match result {
                 Ok(value) => println("Result: ${value}"),
                 Err(msg) => println("Error: ${msg}")

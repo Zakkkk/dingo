@@ -78,7 +78,7 @@ case ResultTagErr:
 1. Simple Result[T,E] match in function
 2. Simple Option[T] match in function
 3. Enum pattern match with wildcard
-4. Pattern match in assignment context (let result = match ...)
+4. Pattern match in assignment context (result := match ...)
 5. Nested pattern matching (match inside match)
 
 **Test Status:** Created but currently skipped by test infrastructure (awaiting Phase 4 plugin implementation)

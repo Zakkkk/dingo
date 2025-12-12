@@ -11,7 +11,7 @@ The error propagation preprocessor was using `strings.Index()` to find the `?` o
 ### Example Bug
 For the line:
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
 ```
 
 **Before fix**:
@@ -72,18 +72,18 @@ let data = ReadFile(path)?
 ### Edge Cases Considered
 
 **Case 1**: Multiple `?` in one line (ternary + error propagation)
-- **Example**: `let x = (y > 0 ? y : 0)?` (hypothetical)
+- **Example**: `x := (y > 0 ? y : 0)?` (hypothetical)
 - **Handled**: `isTernaryLine()` filter prevents processing
 - **Result**: Line not transformed, no source mapping needed
 
 **Case 2**: `?` inside string literal
-- **Example**: `let x = ReadFile("file?.txt")?`
+- **Example**: `x := ReadFile("file?.txt")?`
 - **Before fix**: Would find `?` in `"file?.txt"` (column 25)
 - **After fix**: Finds last `?` at end (column 31)
 - **Result**: ✓ Correct
 
 **Case 3**: `?` in variable name (invalid Go, but hypothetically)
-- **Example**: `let x = ReadFile(path?var)?` (invalid syntax)
+- **Example**: `x := ReadFile(path?var)?` (invalid syntax)
 - **After fix**: Would still find the last `?` correctly
 - **Result**: ✓ Would fail Go parsing, but mapping would be correct
 
@@ -133,7 +133,7 @@ let data = ReadFile(path)?
 
 **Original Dingo source** (line 4):
 ```
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 ^              ^              ^
 1              13             27
 (tab)      (ReadFile)     (? operator)
@@ -141,7 +141,7 @@ let data = ReadFile(path)?
 
 **Column counting**:
 - Column 1: `	` (tab character)
-- Columns 2-12: `let data = ` (space-separated)
+- Columns 2-12: `data := ` (space-separated)
 - Columns 13-26: `ReadFile(path)` (14 characters) ✓
 - **Column 27: `?`** ✓
 

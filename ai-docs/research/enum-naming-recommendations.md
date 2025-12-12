@@ -177,8 +177,8 @@ match result {
 
 **Constructor Usage**:
 ```go
-let success = Ok(42);        // ✅ Already good
-let error = Err("failed");   // ✅ Already good
+success := Ok(42);        // ✅ Already good
+error := Err("failed");   // ✅ Already good
 ```
 
 ### Switch Statement Examples

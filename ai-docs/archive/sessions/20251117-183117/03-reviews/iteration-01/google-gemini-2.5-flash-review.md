@@ -219,7 +219,7 @@ errPart = fmt.Sprintf(`fmt.Errorf("%s: %%w", %s)`, errMsg, errVar)
 This is correct but could be improved. However, the more important issue is that error messages aren't escaped. If `errMsg` contains `%` characters, it will break the format string:
 
 ```dingo
-let data = ReadFile(path)? "failed: 50% complete"
+data := ReadFile(path)? "failed: 50% complete"
 // Generates: fmt.Errorf("failed: 50% complete: %w", __err0)
 // Runtime error: fmt.Errorf: missing argument
 ```

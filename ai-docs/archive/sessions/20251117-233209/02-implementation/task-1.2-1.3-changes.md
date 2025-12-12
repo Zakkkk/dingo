@@ -61,7 +61,7 @@ Added complete constructor call detection and transformation infrastructure:
 ### Transformation Examples
 
 ```dingo
-let result = Ok(42)
+result := Ok(42)
 ```
 
 **Transforms to:**
@@ -73,7 +73,7 @@ result := Result_int_error{
 ```
 
 ```dingo
-let err_result = Err(myError)
+err_result := Err(myError)
 ```
 
 **Transforms to:**
@@ -126,7 +126,7 @@ func (r Result_T_E) Map(fn func(T) interface{}) interface{}
 
 **Use Case**: Transform success values in a Result chain
 ```dingo
-let user = fetchUser(id).Map(func(u User) string { return u.Name })
+user := fetchUser(id).Map(func(u User) string { return u.Name })
 ```
 
 #### 2. **MapErr(fn func(E) F) Result[T, F]** (Lines 682-728)
@@ -141,7 +141,7 @@ func (r Result_T_E) MapErr(fn func(E) interface{}) interface{}
 
 **Use Case**: Enrich or convert error types
 ```dingo
-let result = apiCall().MapErr(func(e error) CustomError { return wrap(e) })
+result := apiCall().MapErr(func(e error) CustomError { return wrap(e) })
 ```
 
 #### 3. **Filter(predicate func(T) bool) Result[T, E]** (Lines 730-804)
@@ -157,7 +157,7 @@ func (r Result_T_E) Filter(predicate func(T) bool) Result_T_E
 
 **Use Case**: Validate success values
 ```dingo
-let adult = getUser(id).Filter(func(u User) bool { return u.Age >= 18 })
+adult := getUser(id).Filter(func(u User) bool { return u.Age >= 18 })
 ```
 
 #### 4. **AndThen(fn func(T) Result[U, E]) Result[U, E]** (Lines 806-852)
@@ -172,7 +172,7 @@ func (r Result_T_E) AndThen(fn func(T) interface{}) interface{}
 
 **Use Case**: Chain operations that can fail
 ```dingo
-let data = fetchUser(id)
+data := fetchUser(id)
     .AndThen(func(u User) Result { return loadProfile(u.ID) })
     .AndThen(func(p Profile) Result { return enrichData(p) })
 ```
@@ -189,7 +189,7 @@ func (r Result_T_E) OrElse(fn func(E) interface{}) interface{}
 
 **Use Case**: Error recovery with alternative operations
 ```dingo
-let user = fetchFromCache(id)
+user := fetchFromCache(id)
     .OrElse(func(e error) Result { return fetchFromDB(id) })
 ```
 
@@ -205,7 +205,7 @@ func (r Result_T_E) And(other interface{}) interface{}
 
 **Use Case**: Sequential operations where first success enables second
 ```dingo
-let step2 = step1.And(performStep2())
+step2 := step1.And(performStep2())
 ```
 
 #### 7. **Or(other Result[T, E]) Result[T, E]** (Lines 955-1007)
@@ -220,7 +220,7 @@ func (r Result_T_E) Or(other Result_T_E) Result_T_E
 
 **Use Case**: Fallback/alternative value
 ```dingo
-let user = fetchPrimaryUser().Or(fetchBackupUser())
+user := fetchPrimaryUser().Or(fetchBackupUser())
 ```
 
 ### Method Generation Pattern

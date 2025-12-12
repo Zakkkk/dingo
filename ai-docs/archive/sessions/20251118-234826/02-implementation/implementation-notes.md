@@ -6,7 +6,7 @@ Successfully implemented the Variable Hoisting pattern to fix the match-in-assig
 
 ## Problem Statement
 
-When using pattern matching in assignment context (e.g., `let result = match opt { ... }`), the preprocessor was generating invalid Go syntax:
+When using pattern matching in assignment context (e.g., `result := match opt { ... }`), the preprocessor was generating invalid Go syntax:
 
 ```go
 // BROKEN (Before Fix):
@@ -39,9 +39,9 @@ return result
 
 1. **Added `extractAssignmentVar()` function** (lines 192-235)
    - Detects when match is in assignment context
-   - Extracts variable name from `let x = match` or `var result = match`
+   - Extracts variable name from `x := match` or `var result = match`
    - Returns `(isInAssignment bool, varName string)`
-   - Handles various patterns: `let x =`, `var result =`, `x :=`
+   - Handles various patterns: `x :=`, `var result =`, `x :=`
 
 2. **Updated `transformMatch()` function** (lines 147-190)
    - Changed to call `extractAssignmentVar()` instead of simple boolean check
@@ -79,7 +79,7 @@ The `extractAssignmentVar()` function handles these patterns:
 
 ```go
 // Pattern 1: let binding
-let result = match opt { ... }
+result := match opt { ... }
 // Extracts: "result"
 
 // Pattern 2: var declaration
@@ -123,7 +123,7 @@ The `inferMatchResultType()` function uses pattern-based heuristics:
 ### Code Generation Flow
 
 ```
-1. Parser detects: let result = match opt { ... }
+1. Parser detects: result := match opt { ... }
                                    ↓
 2. extractAssignmentVar() → (true, "result")
                                    ↓
@@ -151,7 +151,7 @@ The `inferMatchResultType()` function uses pattern-based heuristics:
 Input (Dingo):
 ```dingo
 func doubleIfPresent(opt: Option[int]) -> Option[int] {
-    let result = match opt {
+    result := match opt {
         Some(x) => Some(x * 2),
         None => Option_int_None()
     }
@@ -253,7 +253,7 @@ func processResult(result Result_int_error) int {
 ### 1. Wildcard Patterns
 
 ```dingo
-let x = match status {
+x := match status {
     Active => 1,
     Pending => 2,
     _ => 0
@@ -277,7 +277,7 @@ default:
 ### 2. Nested Matches (Non-Assignment Inner)
 
 ```dingo
-let result = match outer {
+result := match outer {
     Ok(inner) => {
         match inner {  // Not in assignment
             Some(v) => v,
@@ -293,7 +293,7 @@ Inner match is NOT in assignment context → generates expressions as before.
 ### 3. Block Expressions
 
 ```dingo
-let x = match opt {
+x := match opt {
     Some(v) => {
         println!("Got value");
         v
@@ -403,7 +403,7 @@ Could leverage pattern match plugin's exhaustiveness analysis.
 ### Unit Tests (Not Yet Written)
 
 Suggested tests for `extractAssignmentVar()`:
-- `let x = match` → `(true, "x")`
+- `x := match` → `(true, "x")`
 - `var result = match` → `(true, "result")`
 - `  let   foo  =  match` → `(true, "foo")` (whitespace handling)
 - `match` → `(false, "")` (not in assignment)

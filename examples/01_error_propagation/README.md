@@ -17,10 +17,10 @@ A typical handler with 4 operations needs 12+ lines just for error handling, obs
 ## Dingo Solution
 The `?` operator propagates errors automatically:
 ```dingo
-let userID = extractUserID(r)?
-let user = loadUserFromDB(userID)?
-let _ = checkPermissions(r, user)?
-let response = json.Marshal(user)?
+userID := extractUserID(r)?
+user := loadUserFromDB(userID)?
+_ := checkPermissions(r, user)?
+response := json.Marshal(user)?
 ```
 
 ## Comparison

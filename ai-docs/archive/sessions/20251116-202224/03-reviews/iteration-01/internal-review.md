@@ -87,7 +87,7 @@ func (p *SumTypesPlugin) transformMatchExpr(cursor *astutil.Cursor, matchExpr *d
 `MatchExpr` implements `ast.Expr` interface, but `cursor.Replace()` is being called with `*ast.SwitchStmt`, which is an `ast.Stmt`, not an `ast.Expr`. This is a **type mismatch** that will break expression contexts like:
 
 ```dingo
-let x = match value { ... }  // match returns a value
+x := match value { ... }  // match returns a value
 ```
 
 According to the plan, match is an **expression** (can return values), not a statement.

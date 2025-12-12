@@ -39,7 +39,7 @@ The Error Propagation feature implements configurable syntax for error handling 
 
 #### Scenario 1.1: Basic Question Operator Detection
 - **Purpose**: Validate parser creates ErrorPropagationExpr for `?` operator
-- **Input**: `let user = fetchUser(id)?`
+- **Input**: `user := fetchUser(id)?`
 - **Expected Output**: ErrorPropagationExpr node with SyntaxQuestion
 - **Rationale**: Core functionality - must correctly parse the operator
 

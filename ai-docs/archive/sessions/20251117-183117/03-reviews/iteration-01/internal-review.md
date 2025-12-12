@@ -783,7 +783,7 @@ Exported types lack godoc comments:
 // ErrorPropProcessor transforms the ? operator into explicit error handling.
 //
 // It expands:
-//   let x = foo()?
+//   x := foo()?
 // Into:
 //   __tmp0, __err0 := foo()
 //   if __err0 != nil {

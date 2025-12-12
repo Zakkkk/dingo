@@ -47,8 +47,8 @@ This test demonstrates how `Result<T,E>` integrates with the `?` operator, enabl
 
 ```dingo
 func process() Result<Data, Error> {
-	let config = loadConfig()?  // Returns Result
-	let data = fetchData(config)?
+	config := loadConfig()?  // Returns Result
+	data := fetchData(config)?
 	return Ok(data)
 }
 ```

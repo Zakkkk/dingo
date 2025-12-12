@@ -152,7 +152,7 @@ type ErrorPropagationPlugin struct {
 - `preVisit()` - Tracks current function context
 - `postVisit()` - Detects and transforms error propagation nodes
 - `transformErrorPropagation()` - Main transformation logic
-- `transformStatementContext()` - Handles `let x = expr?`
+- `transformStatementContext()` - Handles `x := expr?`
 - `transformExpressionContext()` - Handles `return expr?`
 - `injectAfterStatement()` - Injects statements after current
 - `injectBeforeStatement()` - Injects statements before current

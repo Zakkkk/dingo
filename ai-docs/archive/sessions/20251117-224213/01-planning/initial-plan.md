@@ -490,7 +490,7 @@ func ReadFile(path string) ([]byte, error) {
 }
 
 func main() {
-	let data = ReadFile("config.txt")?
+	data := ReadFile("config.txt")?
 	println(data)
 }
 `
@@ -789,7 +789,7 @@ func ReadFile(path string) ([]byte, error) {
 }
 
 func loadConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 `

@@ -64,10 +64,10 @@ enum Status {
 }
 
 // Usage - constructor functions (Go-idiomatic)
-let status = NewStatusPending()
+status := NewStatusPending()
 
 // Or direct struct literal
-let status = StatusPending{}
+status := StatusPending{}
 
 match status {
     StatusPending => "waiting",
@@ -257,8 +257,8 @@ enum Status {
 let s: Status = 999  // Compile error
 
 // ✅ Only valid constructors
-let s = NewStatusPending()  // OK
-let s = StatusPending{}     // Also OK
+s := NewStatusPending()  // OK
+s := StatusPending{}     // Also OK
 ```
 
 ### Exhaustiveness
@@ -275,7 +275,7 @@ match status {
 ### String Conversion
 
 ```dingo
-let status = NewStatusPending()
+status := NewStatusPending()
 println(status)  // Prints: "StatusPending" (or implement String() method)
 ```
 

@@ -186,7 +186,7 @@ func TestErrorPropagation_StatementContext(t *testing.T) {
     input := `
 package main
 func test() (int, error) {
-    let x = fetch()?
+    x := fetch()?
     return x, nil
 }
 `

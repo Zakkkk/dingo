@@ -39,7 +39,7 @@ During implementation attempt, I discovered that the Dingo parser is **missing f
 - `result := divide(10, 2)`
 - `x, err := readFile(path)`
 
-**Workaround**: Use `let result = divide(10, 2)`
+**Workaround**: Use `result := divide(10, 2)`
 
 **Implementation needed**: ~1-2 hours (low priority - has workaround)
 
@@ -70,9 +70,9 @@ func Result_Ok(v float64) Result { /* ... */ }
 
 **Dingo Code** (what users write):
 ```dingo
-let result = divide(10.0, 2.0)
+result := divide(10.0, 2.0)
 if result.IsOk() {              // ❌ Parser error: unexpected '.'
-    let v = *result.ok_0         // ❌ Parser error: unexpected '.'
+    v := *result.ok_0         // ❌ Parser error: unexpected '.'
 }
 ```
 
@@ -184,9 +184,9 @@ enum Result {
 }
 
 func test() {
-    let r = Result_Ok(42.0)
+    r := Result_Ok(42.0)
     if r.IsOk() {               // Test selector
-        let v = *r.ok_0         // Test selector + dereference
+        v := *r.ok_0         // Test selector + dereference
         v = v + 1.0             // Test assignment
     }
 }

@@ -538,7 +538,7 @@ const color = user?.config?.theme?.color;
 
 ```swift
 // All optionals use same syntax (no pointer/Option distinction)
-let color = user?.config?.theme?.color
+color := user?.config?.theme?.color
 // Swift: One Optional type, not multiple
 ```
 
@@ -548,7 +548,7 @@ let color = user?.config?.theme?.color
 
 ```rust
 // Rust only has Option (no nullable pointers)
-let color = user.and_then(|u| u.config).and_then(|c| c.theme)?.color;
+color := user.and_then(|u| u.config).and_then(|c| c.theme)?.color;
 // All steps are Option, no mixing needed
 ```
 

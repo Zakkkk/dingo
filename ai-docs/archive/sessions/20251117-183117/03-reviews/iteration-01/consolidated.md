@@ -279,7 +279,7 @@ Use `go/scanner` to tokenize properly and handle complex types, or switch to AST
 Regex-driven detection only supports single-line statements. Multi-line expressions bypass transformation:
 
 ```dingo
-let x =
+x :=
     foo(
         arg1,
         arg2
@@ -381,7 +381,7 @@ Return errors to caller, log warnings, handle appropriately (don't fail silently
 Error messages aren't escaped for `fmt.Errorf`:
 
 ```dingo
-let data = ReadFile(path)? "failed: 50% complete"
+data := ReadFile(path)? "failed: 50% complete"
 // Generates: fmt.Errorf("failed: 50% complete: %w", __err0)
 // Runtime error: missing argument
 ```

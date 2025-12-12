@@ -15,13 +15,13 @@
 ```dingo
 // BEFORE transpilation (in .dingo file):
 func readConfig(path: string) ([]byte, error) {  // ← Type annotation syntax
-    let data = os.ReadFile(path)?                 // ← Error propagation
+    data := os.ReadFile(path)?                 // ← Error propagation
     return data, nil
 }
 
 // Syntax errors gopls CAN'T catch:
-let x = os.ReadFile(path)??   // ← Missing operand
-let y = user?.address?.       // ← Incomplete safe nav
+x := os.ReadFile(path)??   // ← Missing operand
+y := user?.address?.       // ← Incomplete safe nav
 match result {                 // ← Missing cases
     Ok(x) =>
 }
@@ -344,7 +344,7 @@ func TestDingoTranspilerDiagnostics(t *testing.T) {
     code := `
 package main
 func test() {
-    let x = readFile()?   // Missing second operand
+    x := readFile()?   // Missing second operand
 }
 `
 
@@ -362,7 +362,7 @@ func test() {
 func TestDingoRealTimeValidation(t *testing.T) {
     // Type incomplete syntax
     changes := []protocol.TextDocumentContentChangeEvent{
-        {Text: "let x = user?."},
+        {Text: "x := user?."},
     }
 
     // Trigger didChange

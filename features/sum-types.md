@@ -113,10 +113,10 @@ match resp {
 
 ```dingo
 // Creating variants
-let success = NewHttpResponseOk("Hello, World!")
-let notFound = NewHttpResponseNotFound()
-let error = NewHttpResponseServerError(500, "Internal error")
-let redirect = NewHttpResponseRedirect("https://example.com")
+success := NewHttpResponseOk("Hello, World!")
+notFound := NewHttpResponseNotFound()
+error := NewHttpResponseServerError(500, "Internal error")
+redirect := NewHttpResponseRedirect("https://example.com")
 
 // Type inference
 let response: HttpResponse = NewHttpResponseOk("data")
@@ -401,7 +401,7 @@ let nested: Option[Result[User, Error]] = NewOptionSome(NewResultOk(user))
 
 ```dingo
 // ❌ Cannot construct invalid variants
-let response = NewHttpResponseOk("data", 404)  // ERROR: Ok takes only 1 argument
+response := NewHttpResponseOk("data", 404)  // ERROR: Ok takes only 1 argument
 
 // ✅ Type-safe access via pattern matching
 match response {

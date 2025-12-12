@@ -39,7 +39,7 @@ Edit `syntaxes/dingo.tmLanguage.yaml` (YAML is easier to maintain than JSON).
 
 From `features/ternary-operator.md`:
 ```dingo
-let result = condition ? valueIfTrue : valueIfFalse
+result := condition ? valueIfTrue : valueIfFalse
 ```
 
 Add to `syntaxes/dingo.tmLanguage.yaml`:
@@ -74,8 +74,8 @@ Add a test file to `examples/`:
 package main
 
 func main() {
-    let age = 25
-    let category = age >= 18 ? "adult" : "minor"
+    age := 25
+    category := age >= 18 ? "adult" : "minor"
     println(category)
 }
 ```

@@ -164,8 +164,8 @@ enum Option[T] {
 **Borgo Code:**
 ```borgo
 fn fetchUser(id: string) -> Result[User, error] {
-    let resp = http.Get(url)?
-    let user = parseUser(resp)?
+    resp := http.Get(url)?
+    user := parseUser(resp)?
     Ok(user)
 }
 ```
@@ -320,9 +320,9 @@ fn infer_call() {
 **Borgo Example:**
 ```borgo
 // No type annotations needed
-let numbers = [1, 2, 3, 4, 5]              // Inferred: []int
-let doubled = numbers.map(|x| x * 2)       // Inferred: []int
-let greeting = "Hello"                     // Inferred: string
+numbers := [1, 2, 3, 4, 5]              // Inferred: []int
+doubled := numbers.map(|x| x * 2)       // Inferred: []int
+greeting := "Hello"                     // Inferred: string
 ```
 
 **Implementation (infer.rs):**
@@ -378,7 +378,7 @@ enum EmitMode {
 
 ```borgo
 // Borgo (expression-based)
-let x = if condition { 42 } else { 0 }
+x := if condition { 42 } else { 0 }
 ```
 
 ```go
@@ -395,14 +395,14 @@ if condition {
 
 ```rust
 // Borgo manages scope with variable renaming
-let x = expr
+x := expr
 // becomes:
 var var0 <type>
 var0 = expr
 
 // Inner scope rebinds:
 {
-    let x = other_expr
+    x := other_expr
     // becomes:
     var var1 <type>
     var1 = other_expr
@@ -865,9 +865,9 @@ Dingo LSP Proxy
 **Dingo Code (inspired by Borgo):**
 ```dingo
 func fetchUserData(id: string) -> Result[UserData, Error] {
-    let resp = http.Get("/api/users/" + id)?
-    let user = parseUser(resp.Body)?
-    let posts = fetchPosts(user.ID)?
+    resp := http.Get("/api/users/" + id)?
+    user := parseUser(resp.Body)?
+    posts := fetchPosts(user.ID)?
     Ok(UserData{user, posts})
 }
 ```

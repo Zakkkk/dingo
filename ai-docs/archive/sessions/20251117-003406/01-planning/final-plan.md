@@ -28,7 +28,7 @@ This plan implements functional utilities (map, filter, reduce + helpers) for Di
 From `features/functional-utilities.md`:
 
 ```dingo
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 
 // Transpiles to:
 var doubled []int
@@ -107,7 +107,7 @@ dingo/
 
 **Dingo Input:**
 ```dingo
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 ```
 
 **Generated Go (AST):**
@@ -132,7 +132,7 @@ for _, x := range numbers {
 
 **Dingo Input:**
 ```dingo
-let evens = numbers.filter(|x| x % 2 == 0)
+evens := numbers.filter(|x| x % 2 == 0)
 ```
 
 **Generated Go:**
@@ -159,7 +159,7 @@ for _, x := range numbers {
 
 **Dingo Input:**
 ```dingo
-let sum = numbers.reduce(0, |acc, x| acc + x)
+sum := numbers.reduce(0, |acc, x| acc + x)
 ```
 
 **Generated Go:**
@@ -185,7 +185,7 @@ for _, x := range numbers {
 
 **Dingo Input:**
 ```dingo
-let total = numbers.sum()
+total := numbers.sum()
 ```
 
 **Generated Go:**
@@ -203,7 +203,7 @@ for _, __v := range numbers {
 
 **Dingo Input:**
 ```dingo
-let numAdults = users.count(|u| u.age >= 18)
+numAdults := users.count(|u| u.age >= 18)
 ```
 
 **Generated Go:**
@@ -221,8 +221,8 @@ for _, u := range users {
 
 **Dingo Input:**
 ```dingo
-let allPositive = numbers.all(|x| x > 0)
-let hasNegative = numbers.any(|x| x < 0)
+allPositive := numbers.all(|x| x > 0)
+hasNegative := numbers.any(|x| x < 0)
 ```
 
 **Generated Go:**
@@ -252,7 +252,7 @@ for _, x := range numbers {
 
 **Dingo Input:**
 ```dingo
-let firstEven = numbers.find(|x| x % 2 == 0)
+firstEven := numbers.find(|x| x % 2 == 0)
 // Returns Option[int]
 ```
 
@@ -276,7 +276,7 @@ for _, x := range numbers {
 
 **Dingo Input:**
 ```dingo
-let result = users
+result := users
     .filter(|u| u.age > 18)
     .map(|u| u.name)
 ```
@@ -314,7 +314,7 @@ for _, u := range __temp0 {
 
 **Dingo Input:**
 ```dingo
-let parsed = strings.mapResult(|s| parseInt(s))
+parsed := strings.mapResult(|s| parseInt(s))
 // Returns Result[[]int, Error]
 ```
 
@@ -350,7 +350,7 @@ var parsed Result[[]int, Error]
 
 **Dingo Input:**
 ```dingo
-let validNames = maybeNames.filterSome()
+validNames := maybeNames.filterSome()
 // Filters out None values, extracts Some
 ```
 
@@ -373,7 +373,7 @@ for _, __opt := range maybeNames {
 
 **Temporary Syntax (until lambda implemented):**
 ```dingo
-let doubled = numbers.map(func(x int) int { return x * 2 })
+doubled := numbers.map(func(x int) int { return x * 2 })
 ```
 
 **Plugin Handling:**
@@ -385,7 +385,7 @@ let doubled = numbers.map(func(x int) int { return x * 2 })
 
 **Target Syntax (when lambda feature ships):**
 ```dingo
-let doubled = numbers.map(|x| x * 2)
+doubled := numbers.map(|x| x * 2)
 ```
 
 **Integration Plan:**
@@ -635,8 +635,8 @@ type MethodCall struct {
 package main
 
 func main() {
-    let numbers = []int{1, 2, 3, 4, 5}
-    let doubled = numbers.map(func(x int) int { return x * 2 })
+    numbers := []int{1, 2, 3, 4, 5}
+    doubled := numbers.map(func(x int) int { return x * 2 })
     println(doubled)
 }
 ```
@@ -1019,7 +1019,7 @@ func createForRange(
 
 **Example:**
 ```dingo
-let doubled = numbers.map(func(x int) int { return x * 2 })
+doubled := numbers.map(func(x int) int { return x * 2 })
 //                                    ^^^--- Need to extract this
 ```
 
@@ -1060,16 +1060,16 @@ makeCall := createMakeCall(resultSliceType, receiver)
 
 ```dingo
 // Primitives
-let doubled = []int{1,2,3}.map(func(x int) int { return x * 2 })
+doubled := []int{1,2,3}.map(func(x int) int { return x * 2 })
 
 // Structs
-let names = users.map(func(u User) string { return u.name })
+names := users.map(func(u User) string { return u.name })
 
 // Pointers
-let ptrs = values.map(func(v int) *int { return &v })
+ptrs := values.map(func(v int) *int { return &v })
 
 // Interfaces
-let strs = items.map(func(i fmt.Stringer) string { return i.String() })
+strs := items.map(func(i fmt.Stringer) string { return i.String() })
 ```
 
 **No Special Handling Needed**: Go's type system handles this.
@@ -1100,7 +1100,7 @@ func (r Result[T, E]) UnwrapErr() E
 **MapResult Implementation:**
 
 ```dingo
-let parsed = strings.mapResult(func(s string) Result[int, Error] {
+parsed := strings.mapResult(func(s string) Result[int, Error] {
     return parseInt(s)
 })
 // Type: Result[[]int, Error]
@@ -1155,7 +1155,7 @@ func (o Option[T]) Unwrap() T
 **FilterSome Implementation:**
 
 ```dingo
-let validNames = maybeNames.filterSome()
+validNames := maybeNames.filterSome()
 // Input: []Option[string]
 // Output: []string (only Some values)
 ```
@@ -1378,7 +1378,7 @@ After initial release, consider:
 For large datasets:
 
 ```dingo
-let results = bigSlice.parallelMap(|x| expensiveOperation(x))
+results := bigSlice.parallelMap(|x| expensiveOperation(x))
 ```
 
 **Implementation**: Use goroutines and channels
@@ -1388,7 +1388,7 @@ let results = bigSlice.parallelMap(|x| expensiveOperation(x))
 Iterator-like lazy evaluation:
 
 ```dingo
-let result = hugeSlice
+result := hugeSlice
     .iter()
     .filter(predicate)
     .map(transform)
@@ -1437,7 +1437,7 @@ let result = hugeSlice
 // transformMap generates an inline loop for map operations.
 //
 // Dingo:
-//   let doubled = numbers.map(|x| x * 2)
+//   doubled := numbers.map(|x| x * 2)
 //
 // Generated Go:
 //   var doubled []int

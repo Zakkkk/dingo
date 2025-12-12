@@ -277,7 +277,7 @@ func Shape_Rectangle(width, height float64) Shape {
 2. **Addressable**: Takes address internally (`&radius`)
 3. **Named parameters**: Future enhancement for readability:
    ```dingo
-   let rect = Shape_Rectangle(width: 10.0, height: 5.0)
+   rect := Shape_Rectangle(width: 10.0, height: 5.0)
    ```
 
 ### 4. Pattern Matching Support (Future)
@@ -565,8 +565,8 @@ match shape {
 
 3. **Pointer Semantics**:
    ```dingo
-   let circle1 = Shape_Circle(5.0)
-   let circle2 = Shape_Circle(5.0)
+   circle1 := Shape_Circle(5.0)
+   circle2 := Shape_Circle(5.0)
    // circle1 and circle2 have different pointer addresses
    // Deep equality needed, not pointer equality
    ```

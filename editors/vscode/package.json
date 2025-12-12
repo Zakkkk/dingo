@@ -91,16 +91,6 @@
           "default": "info",
           "description": "LSP server log level"
         },
-        "dingo.lsp.logToFile": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable logging to file for debugging"
-        },
-        "dingo.lsp.logFile": {
-          "type": "string",
-          "default": "/tmp/dingo-lsp.log",
-          "description": "Path to LSP log file (used when 'Log To File' is enabled)"
-        },
         "dingo.lsp.sqliteLogging": {
           "type": "boolean",
           "default": false,
@@ -108,8 +98,8 @@
         },
         "dingo.lsp.sqliteLogPath": {
           "type": "string",
-          "default": "",
-          "markdownDescription": "Path to SQLite log database. If empty, uses system temp directory (`$TMPDIR/dingo-lsp.db` on macOS/Linux, `%TEMP%\\dingo-lsp.db` on Windows)"
+          "default": "/tmp/dingo-lsp.db",
+          "markdownDescription": "Path to SQLite log database"
         }
       }
     },

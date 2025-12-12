@@ -98,8 +98,8 @@ The `let` keyword signals **immutability by default**, a pattern from Rust, Swif
 **Dingo**:
 ```go
 func getUserData(id: int, email: string) (*User, error) {
-    let validEmail = validateEmail(email)?
-    let user = fetchUser(id)?
+    validEmail := validateEmail(email)?
+    user := fetchUser(id)?
     user.Email = validEmail
     return user, nil
 }

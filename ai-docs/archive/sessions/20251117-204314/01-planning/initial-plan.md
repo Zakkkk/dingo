@@ -180,7 +180,7 @@ package main
 import "os"
 
 func readConfig(path: string) ([]byte, error) {
-    let data = os.ReadFile(path)?  // Fully qualified call
+    data := os.ReadFile(path)?  // Fully qualified call
     return data, nil
 }
 ```
@@ -322,12 +322,12 @@ func TestImportDetection(t *testing.T) {
     }{
         {
             name:     "ReadFile needs os import",
-            source:   `let data = ReadFile("file")?`,
+            source:   `data := ReadFile("file")?`,
             expected: []string{"os"},
         },
         {
             name:     "Multiple functions",
-            source:   `let x = Atoi("42")?\nlet y = ReadFile("f")?`,
+            source:   `x := Atoi("42")?\ny := ReadFile("f")?`,
             expected: []string{"strconv", "os"},
         },
     }

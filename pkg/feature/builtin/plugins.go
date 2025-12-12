@@ -20,7 +20,7 @@ type TransformFuncs struct {
 	Match             func(src []byte) []byte
 	EnumConstructors  func(src []byte) []byte
 	ErrorProp         func(src []byte) []byte
-	GuardLet          func(src []byte) []byte
+	Guard          func(src []byte) []byte
 	SafeNavStatements func(src []byte) []byte
 	SafeNav           func(src []byte) []byte
 	NullCoalesce      func(src []byte) []byte
@@ -132,24 +132,24 @@ func (p *ErrorPropPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, e
 	return Transforms.ErrorProp(src), nil
 }
 
-// --- Guard Let Plugin ---
+// --- Guard Plugin ---
 
-type GuardLetPlugin struct{}
+type GuardPlugin struct{}
 
-func (p *GuardLetPlugin) Name() string               { return "guard_let" }
-func (p *GuardLetPlugin) Version() string            { return "1.0.0" }
-func (p *GuardLetPlugin) Type() feature.PluginType   { return feature.CharacterLevel }
-func (p *GuardLetPlugin) Priority() int              { return 50 }
-func (p *GuardLetPlugin) Dependencies() []string     { return []string{"error_prop"} }
-func (p *GuardLetPlugin) Conflicts() []string        { return nil }
-func (p *GuardLetPlugin) Detect(src []byte) []feature.SyntaxLocation {
+func (p *GuardPlugin) Name() string               { return "guard" }
+func (p *GuardPlugin) Version() string            { return "1.0.0" }
+func (p *GuardPlugin) Type() feature.PluginType   { return feature.CharacterLevel }
+func (p *GuardPlugin) Priority() int              { return 50 }
+func (p *GuardPlugin) Dependencies() []string     { return []string{"error_prop"} }
+func (p *GuardPlugin) Conflicts() []string        { return nil }
+func (p *GuardPlugin) Detect(src []byte) []feature.SyntaxLocation {
 	return nil // Detection removed: compile errors suffice for disabled features
 }
-func (p *GuardLetPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
-	if Transforms.GuardLet == nil {
+func (p *GuardPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
+	if Transforms.Guard == nil {
 		return src, nil
 	}
-	return Transforms.GuardLet(src), nil
+	return Transforms.Guard(src), nil
 }
 
 // --- Safe Nav Statements Plugin ---

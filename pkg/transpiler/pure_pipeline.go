@@ -265,17 +265,68 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("tracker finalize error: %w", err)
 	}
 
+	// Convert v1 byte mappings to v2 line mappings and merge with tracker's mappings
+	// This bridges the gap where tuple transforms use v1 system but we need v2 for LSP
+	byteMappings := make([]sourcemap.ByteMapping, len(allMappings))
+	for i, m := range allMappings {
+		byteMappings[i] = sourcemap.ByteMapping{
+			DingoStart: m.DingoStart,
+			DingoEnd:   m.DingoEnd,
+			GoStart:    m.GoStart,
+			GoEnd:      m.GoEnd,
+			Kind:       m.Kind,
+		}
+	}
+	convertedMappings := sourcemap.ComputeLineMappingsFromByteMappings(byteMappings, source, finalGoCode)
+
+	// Merge tracker's precise mappings with converted v1 mappings
+	// Tracker mappings (from error_prop, lambdas) take priority over converted ones
+	mergedMappings := mergeLineMappings(tracker.LineMappings(), convertedMappings)
+
 	// Return complete transpilation result with mappings
 	return TranspileResult{
 		GoCode:       finalGoCode,
 		Mappings:     allMappings,
-		LineMappings: tracker.LineMappings(),
+		LineMappings: mergedMappings,
 		DingoSource:  source,
 		GoAST:        goFile,
 		Metadata: &TranspileMetadata{
 			OriginalFile: filename,
 		},
 	}, nil
+}
+
+// mergeLineMappings combines tracker's precise mappings with converted v1 mappings.
+// Deduplicates by DingoLine, keeping the first mapping (tracker's take priority).
+func mergeLineMappings(trackerMappings, convertedMappings []sourcemap.LineMapping) []sourcemap.LineMapping {
+	if len(trackerMappings) == 0 && len(convertedMappings) == 0 {
+		return nil
+	}
+
+	// Build set of Dingo lines already covered by tracker mappings
+	covered := make(map[int]bool, len(trackerMappings))
+	for _, m := range trackerMappings {
+		covered[m.DingoLine] = true
+	}
+
+	// Start with tracker's mappings
+	result := make([]sourcemap.LineMapping, 0, len(trackerMappings)+len(convertedMappings))
+	result = append(result, trackerMappings...)
+
+	// Add converted mappings for lines not covered by tracker
+	for _, m := range convertedMappings {
+		if !covered[m.DingoLine] {
+			result = append(result, m)
+			covered[m.DingoLine] = true
+		}
+	}
+
+	// Sort by DingoLine for efficient lookup
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].DingoLine < result[j].DingoLine
+	})
+
+	return result
 }
 
 // deduplicateAndSortMappings removes duplicate mappings and sorts by GoStart.

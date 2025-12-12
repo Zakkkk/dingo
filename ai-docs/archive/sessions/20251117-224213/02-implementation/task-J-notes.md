@@ -46,7 +46,7 @@ Create comprehensive test coverage for the new --multi-value-return compiler fla
 **TestConfigSingleMode_AssignmentAllowed**: Assignment test
 - Confirms assignments are not restricted in single mode
 - Only return statements are subject to mode restrictions
-- Tests: let data = ReadFile(path)?
+- Tests: data := ReadFile(path)?
 
 ### 4. Nil Config Tests (Lines 152-162)
 **TestConfigNilDefault**: Default behavior verification

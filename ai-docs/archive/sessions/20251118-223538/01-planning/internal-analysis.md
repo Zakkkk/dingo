@@ -25,7 +25,7 @@
 
 **Dingo source** (`error_prop_01_simple.dingo`):
 ```dingo
-4:  let data = ReadFile(path)?
+4:  data := ReadFile(path)?
             ↑             ↑
             col 13        col 28 (? at col 29)
 ```
@@ -489,7 +489,7 @@ But the user report says it's underlining at `?` position, which is column ~29 i
 I need to recount the columns in the Dingo source:
 
 ```dingo
-let data = ReadFile(path)?
+data := ReadFile(path)?
 123456789012345678901234567890
          1         2
 ```

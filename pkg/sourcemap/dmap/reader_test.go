@@ -3,11 +3,11 @@ package dmap
 import (
 	"testing"
 
-	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
 // Helper function to create a .dmap file in memory for testing
-func createTestDmap(t *testing.T, dingoSrc, goSrc []byte, mappings []ast.SourceMapping) []byte {
+func createTestDmap(t *testing.T, dingoSrc, goSrc []byte, mappings []sourcemap.LineMapping) []byte {
 	t.Helper()
 	writer := NewWriter(dingoSrc, goSrc)
 	data, err := writer.Write(mappings)
@@ -21,9 +21,9 @@ func TestReaderOpenBytes(t *testing.T) {
 	dingoSrc := []byte("let x = 10\nlet y = 20\n")
 	goSrc := []byte("x := 10\ny := 20\n")
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -34,10 +34,17 @@ func TestReaderOpenBytes(t *testing.T) {
 	}
 	defer reader.Close()
 
-	if reader.EntryCount() != 2 {
-		t.Errorf("EntryCount: got %d, want 2", reader.EntryCount())
+	// v2 format has no token-level entries
+	if reader.EntryCount() != 0 {
+		t.Errorf("EntryCount: got %d, want 0 (v2 format)", reader.EntryCount())
 	}
 
+	// But should have line mappings
+	if reader.Header().LineMappingCnt != 2 {
+		t.Errorf("LineMappingCnt: got %d, want 2", reader.Header().LineMappingCnt)
+	}
+
+	// Kind count should be 1 (deduplicated)
 	if reader.KindCount() != 1 {
 		t.Errorf("KindCount: got %d, want 1", reader.KindCount())
 	}
@@ -93,113 +100,6 @@ func TestReaderTruncatedFile(t *testing.T) {
 			_, err := OpenBytes(tt.data)
 			if err != ErrCorruptedFile {
 				t.Errorf("Expected ErrCorruptedFile, got %v", err)
-			}
-		})
-	}
-}
-
-func TestReaderFindByGoPos(t *testing.T) {
-	dingoSrc := []byte("let x = 10\nlet y = 20\n")
-	goSrc := []byte("x := 10\ny := 20\n")
-
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
-	}
-
-	data := createTestDmap(t, dingoSrc, goSrc, mappings)
-	reader, err := OpenBytes(data)
-	if err != nil {
-		t.Fatalf("OpenBytes failed: %v", err)
-	}
-	defer reader.Close()
-
-	tests := []struct {
-		name       string
-		goOffset   int
-		wantStart  int
-		wantEnd    int
-		wantKind   string
-		wantFound  bool
-	}{
-		{"first mapping start", 0, 0, 10, "identifier", true},
-		{"first mapping middle", 3, 0, 10, "identifier", true},
-		{"first mapping end-1", 6, 0, 10, "identifier", true},
-		{"second mapping start", 8, 11, 21, "identifier", true},
-		{"second mapping middle", 10, 11, 21, "identifier", true},
-		{"gap between mappings", 7, 7, 7, "", false},
-		{"after all mappings", 100, 100, 100, "", false},
-		{"before all mappings (negative)", -1, -1, -1, "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dingoStart, dingoEnd, kind := reader.FindByGoPos(tt.goOffset)
-
-			if tt.wantFound {
-				if dingoStart != tt.wantStart || dingoEnd != tt.wantEnd || kind != tt.wantKind {
-					t.Errorf("FindByGoPos(%d) = (%d, %d, %q), want (%d, %d, %q)",
-						tt.goOffset, dingoStart, dingoEnd, kind,
-						tt.wantStart, tt.wantEnd, tt.wantKind)
-				}
-			} else {
-				// Identity mapping expected
-				if dingoStart != tt.goOffset || dingoEnd != tt.goOffset || kind != "" {
-					t.Errorf("FindByGoPos(%d) identity mapping: got (%d, %d, %q), want (%d, %d, \"\")",
-						tt.goOffset, dingoStart, dingoEnd, kind, tt.goOffset, tt.goOffset)
-				}
-			}
-		})
-	}
-}
-
-func TestReaderFindByDingoPos(t *testing.T) {
-	dingoSrc := []byte("let x = 10\nlet y = 20\n")
-	goSrc := []byte("x := 10\ny := 20\n")
-
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 21, GoStart: 8, GoEnd: 15, Kind: "identifier"},
-	}
-
-	data := createTestDmap(t, dingoSrc, goSrc, mappings)
-	reader, err := OpenBytes(data)
-	if err != nil {
-		t.Fatalf("OpenBytes failed: %v", err)
-	}
-	defer reader.Close()
-
-	tests := []struct {
-		name        string
-		dingoOffset int
-		wantStart   int
-		wantEnd     int
-		wantKind    string
-		wantFound   bool
-	}{
-		{"first mapping start", 0, 0, 7, "identifier", true},
-		{"first mapping middle", 5, 0, 7, "identifier", true},
-		{"second mapping start", 11, 8, 15, "identifier", true},
-		{"gap between mappings", 10, 10, 10, "", false},
-		{"after all mappings", 100, 100, 100, "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			goStart, goEnd, kind := reader.FindByDingoPos(tt.dingoOffset)
-
-			if tt.wantFound {
-				if goStart != tt.wantStart || goEnd != tt.wantEnd || kind != tt.wantKind {
-					t.Errorf("FindByDingoPos(%d) = (%d, %d, %q), want (%d, %d, %q)",
-						tt.dingoOffset, goStart, goEnd, kind,
-						tt.wantStart, tt.wantEnd, tt.wantKind)
-				}
-			} else {
-				// Identity mapping expected
-				if goStart != tt.dingoOffset || goEnd != tt.dingoOffset || kind != "" {
-					t.Errorf("FindByDingoPos(%d) identity mapping: got (%d, %d, %q), want (%d, %d, \"\")",
-						tt.dingoOffset, goStart, goEnd, kind, tt.dingoOffset, tt.dingoOffset)
-				}
 			}
 		})
 	}
@@ -322,11 +222,49 @@ func TestReaderEmptyMappings(t *testing.T) {
 		t.Errorf("EntryCount: got %d, want 0", reader.EntryCount())
 	}
 
-	// Lookups should return identity mappings
-	dingoStart, dingoEnd, kind := reader.FindByGoPos(5)
-	if dingoStart != 5 || dingoEnd != 5 || kind != "" {
-		t.Errorf("FindByGoPos with no entries: got (%d, %d, %q), want (5, 5, \"\")",
-			dingoStart, dingoEnd, kind)
+	if reader.Header().LineMappingCnt != 0 {
+		t.Errorf("LineMappingCnt: got %d, want 0", reader.Header().LineMappingCnt)
+	}
+}
+
+func TestReaderGoLineToDingoLine(t *testing.T) {
+	dingoSrc := []byte("let x = 10\nlet y = 20\n")
+	goSrc := []byte("x := 10\ny := 20\n")
+
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identifier"},
+	}
+
+	data := createTestDmap(t, dingoSrc, goSrc, mappings)
+	reader, err := OpenBytes(data)
+	if err != nil {
+		t.Fatalf("OpenBytes failed: %v", err)
+	}
+	defer reader.Close()
+
+	tests := []struct {
+		name      string
+		goLine    int
+		wantDingo int
+	}{
+		{"line 1", 1, 1},
+		{"line 2", 2, 2},
+		// Line 0 is invalid (1-indexed), should clamp to first line
+		{"unmapped line 0", 0, 1},
+		// Line 100 is beyond file (3 lines), should clamp using proportional mapping
+		{"unmapped line 100", 100, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dingoLine, _ := reader.GoLineToDingoLine(tt.goLine)
+
+			if dingoLine != tt.wantDingo {
+				t.Errorf("GoLineToDingoLine(%d) = %d, want %d",
+					tt.goLine, dingoLine, tt.wantDingo)
+			}
+		})
 	}
 }
 
@@ -334,9 +272,9 @@ func TestReaderMultipleKinds(t *testing.T) {
 	dingoSrc := []byte("let x = 10\nmatch y { A => 1 }\n")
 	goSrc := []byte("x := 10\nswitch y { case A: return 1 }\n")
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
-		{DingoStart: 11, DingoEnd: 30, GoStart: 8, GoEnd: 35, Kind: "match_expr"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "match_expr"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -348,18 +286,6 @@ func TestReaderMultipleKinds(t *testing.T) {
 
 	if reader.KindCount() != 2 {
 		t.Errorf("KindCount: got %d, want 2", reader.KindCount())
-	}
-
-	// Verify first kind
-	_, _, kind1 := reader.FindByGoPos(3)
-	if kind1 != "identifier" {
-		t.Errorf("First mapping kind: got %q, want %q", kind1, "identifier")
-	}
-
-	// Verify second kind
-	_, _, kind2 := reader.FindByGoPos(20)
-	if kind2 != "match_expr" {
-		t.Errorf("Second mapping kind: got %q, want %q", kind2, "match_expr")
 	}
 }
 
@@ -377,57 +303,14 @@ func TestReaderClose(t *testing.T) {
 	if err := reader.Close(); err != nil {
 		t.Errorf("Close failed: %v", err)
 	}
-
-	// After close, internal state should be cleared
-	// (This tests the current implementation behavior)
-}
-
-func TestReaderZeroLengthGoRange(t *testing.T) {
-	// Test the case where GoStart == GoEnd (removed syntax)
-	dingoSrc := []byte("foo x = 10\n")
-	goSrc := []byte("x := 10\n")
-
-	// Simulate keyword being removed (zero-length Go range)
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 3, GoStart: 0, GoEnd: 0, Kind: "removed_keyword"},
-		{DingoStart: 4, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "assignment"},
-	}
-
-	data := createTestDmap(t, dingoSrc, goSrc, mappings)
-	reader, err := OpenBytes(data)
-	if err != nil {
-		t.Fatalf("OpenBytes failed: %v", err)
-	}
-	defer reader.Close()
-
-	// Looking up Go position 0 should NOT find the zero-length 'removed_keyword' mapping
-	// because the range check is GoStart <= offset < GoEnd, and 0 < 0 is false
-	dingoStart, dingoEnd, kind := reader.FindByGoPos(0)
-
-	// Should find the assignment mapping (0-7)
-	if kind != "assignment" {
-		t.Errorf("FindByGoPos(0) with zero-length range: got kind %q, want %q", kind, "assignment")
-	}
-	if dingoStart != 4 || dingoEnd != 10 {
-		t.Errorf("FindByGoPos(0): got (%d, %d), want (4, 10)", dingoStart, dingoEnd)
-	}
-
-	// Looking up Dingo position 0 (in the zero-length range) should find it
-	goStart, goEnd, kind2 := reader.FindByDingoPos(0)
-	if kind2 != "removed_keyword" {
-		t.Errorf("FindByDingoPos(0) for removed_keyword: got kind %q, want %q", kind2, "removed_keyword")
-	}
-	if goStart != 0 || goEnd != 0 {
-		t.Errorf("FindByDingoPos(0): got (%d, %d), want (0, 0)", goStart, goEnd)
-	}
 }
 
 func TestReaderConcurrentAccess(t *testing.T) {
 	dingoSrc := []byte("foo x = 10\nbar y = 20\n")
 	goSrc := []byte("x := 10\ny := 20\n")
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 7, Kind: "identifier"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identifier"},
 	}
 
 	data := createTestDmap(t, dingoSrc, goSrc, mappings)
@@ -442,8 +325,7 @@ func TestReaderConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 100; j++ {
-				reader.FindByGoPos(3)
-				reader.FindByDingoPos(5)
+				reader.GoLineToDingoLine(1)
 				reader.GoByteToLine(3)
 				reader.DingoByteToLine(5)
 				reader.EntryCount()

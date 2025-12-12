@@ -216,7 +216,7 @@ func TestConfigLoadMalformed(t *testing.T) {
 error: cannot infer type for None
   --> example.dingo:42:12
    |
-42 |     let x = None
+42 |     x := None
    |             ^^^^ no type context available
    |
 help: add explicit type annotation:

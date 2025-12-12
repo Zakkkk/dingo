@@ -7,7 +7,7 @@ Test complex null coalescing expressions with nested operations, function calls,
 
 ### 1. Function call on right side
 ```dingo
-let display = name ?? getDefaultName()
+display := name ?? getDefaultName()
 ```
 **Expected:** IIFE with function call fallback
 - Left: identifier (simple)
@@ -16,7 +16,7 @@ let display = name ?? getDefaultName()
 
 ### 2. Nested ?? in expressions
 ```dingo
-let finalPort = (port ?? 8080) + 1000
+finalPort := (port ?? 8080) + 1000
 ```
 **Expected:** ?? result used in arithmetic
 - Evaluate `port ?? 8080` first
@@ -25,7 +25,7 @@ let finalPort = (port ?? 8080) + 1000
 
 ### 3. Multiple ?? in single expression
 ```dingo
-let host = config?.host ?? getEnv("HOST") ?? "localhost"
+host := config?.host ?? getEnv("HOST") ?? "localhost"
 ```
 **Expected:** Triple chain
 - Safe nav: config?.host
@@ -35,7 +35,7 @@ let host = config?.host ?? getEnv("HOST") ?? "localhost"
 
 ### 4. ?? with method calls
 ```dingo
-let username = user?.toUpper() ?? getGuestName() ?? "GUEST"
+username := user?.toUpper() ?? getGuestName() ?? "GUEST"
 ```
 **Expected:** Method on left, function on right
 - Safe nav with method call
@@ -44,7 +44,7 @@ let username = user?.toUpper() ?? getGuestName() ?? "GUEST"
 
 ### 5. Nested function calls
 ```dingo
-let finalTimeout = timeout ?? parseEnv("TIMEOUT") ?? getDefaultTimeout()
+finalTimeout := timeout ?? parseEnv("TIMEOUT") ?? getDefaultTimeout()
 ```
 **Expected:** All function calls
 - Each operand evaluated lazily
@@ -53,7 +53,7 @@ let finalTimeout = timeout ?? parseEnv("TIMEOUT") ?? getDefaultTimeout()
 
 ### 6. Mixed with arithmetic
 ```dingo
-let total = (count ?? 10) * 2
+total := (count ?? 10) * 2
 ```
 **Expected:** ?? in arithmetic context
 - Parentheses enforce order

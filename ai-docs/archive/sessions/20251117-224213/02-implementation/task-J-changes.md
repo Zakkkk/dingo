@@ -48,7 +48,7 @@ Complete test suite for Config functionality with 10 test functions:
 **TestConfigSingleMode_AssignmentAllowed()** (Lines 192-209)
 - Tests single mode doesn't restrict assignments
 - Verifies only return statements are restricted
-- Tests assignment: let data = ReadFile(path)?
+- Tests assignment: data := ReadFile(path)?
 
 ## Files Modified
 

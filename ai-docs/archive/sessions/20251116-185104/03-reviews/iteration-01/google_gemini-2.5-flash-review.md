@@ -47,7 +47,7 @@ However, several critical issues, primarily related to accurate AST manipulation
 **IMPORTANT-2: `LiftStatement`'s use of `:=` for `varName`**
 - File: `pkg/plugin/builtin/statement_lifter.go:97`
 - Issue: `LiftStatement` uses `token.DEFINE` (`:=`) for the assignment `varName, errVar := expr`. If `varName` is an existing declaration (not a new variable), this will cause a compile-time error in Go ("no new variables on left side of :=").
-- Impact: Generated Go code will not compile if `let x = expr?` targets an already declared `x`.
+- Impact: Generated Go code will not compile if `x := expr?` targets an already declared `x`.
 - Fix: `LiftStatement` should be configurable to use either `token.DEFINE` or `token.ASSIGN` based on whether `varName` is a new declaration or an existing variable assignment, reflecting Dingo's `let` semantics.
 
 **IMPORTANT-3: `TypeInference.GenerateZeroValue` for named structs (`*types.Named`)**

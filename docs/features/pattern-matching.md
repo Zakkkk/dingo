@@ -87,7 +87,7 @@ func describe(status: Status) string {
 }
 
 func main() {
-    let s = Status_Active()
+    s := Status_Active()
     println(describe(s))
 }
 ```
@@ -125,7 +125,7 @@ match value {
 ### Match as Expression
 
 ```go
-let result = match status {
+result := match status {
     Active => "running",
     Inactive => "stopped",
     Pending => "waiting"
@@ -558,7 +558,7 @@ enum Option {
     None,
 }
 
-let message = match option {
+message := match option {
     Some(value) => "Found: " + value,
     None => "Not found"
 }

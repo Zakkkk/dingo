@@ -94,30 +94,30 @@ func FindUserByLanguage(users []User, lang string) Option[User] {
 
 ```go
 // Value present - type inferred from argument
-let found = Some("User123")
-let number = Some(42)
+found := Some("User123")
+number := Some(42)
 
 // Value absent - explicit type required
-let notFound = None[string]()
-let noNumber = None[int]()
+notFound := None[string]()
+noNumber := None[int]()
 
 // With explicit types when needed
-let user = Some[User](User{ID: 1, Name: "Alice"})
+user := Some[User](User{ID: 1, Name: "Alice"})
 ```
 
 ### Checking Option State
 
 ```go
 if option.IsSome() {
-    let value = option.MustSome()  // Go-style: panics if None
+    value := option.MustSome()  // Go-style: panics if None
     println("Found:", value)
 } else {
     println("Not found")
 }
 
 // Or use default values
-let value = option.SomeOr("default")
-let computed = option.SomeOrElse(func() string { return computeDefault() })
+value := option.SomeOr("default")
+computed := option.SomeOrElse(func() string { return computeDefault() })
 ```
 
 ### Available Methods
@@ -295,7 +295,7 @@ The safe navigation operator (`?.`) works with Option types:
 
 ```go
 // Instead of verbose unwrapping
-let city = user?.address?.city?.name ?? "Unknown"
+city := user?.address?.city?.name ?? "Unknown"
 ```
 
 See [safe-navigation.md](./safe-navigation.md) for details.
@@ -305,8 +305,8 @@ See [safe-navigation.md](./safe-navigation.md) for details.
 The null coalescing operator (`??`) provides elegant default values:
 
 ```go
-let port = config?.port ?? 8080
-let name = user?.name ?? user?.email ?? "Anonymous"
+port := config?.port ?? 8080
+name := user?.name ?? user?.email ?? "Anonymous"
 ```
 
 See [null-coalescing.md](./null-coalescing.md) for details.
@@ -323,7 +323,7 @@ func getUserPtr(id int) *User {
 
 // Wrap in Option
 func getUserSafe(id int) Option[User] {
-    let ptr = getUserPtr(id)
+    ptr := getUserPtr(id)
     if ptr == nil {
         return None[User]()
     }
@@ -482,7 +482,7 @@ func findUser(id int) Option[User] {
     return Some(User{ID: id, Name: "Alice"})
 }
 
-let user = findUser(42)
+user := findUser(42)
 if user.IsSome() {
     println("User:", user.MustSome().Name)
 } else {
@@ -504,18 +504,18 @@ println("User:", user.SomeOr(User{Name: "Guest"}).Name)
 ### 1. Accessing None Values
 
 ```go
-let opt = None[string]()
+opt := None[string]()
 
 // BAD: Will panic!
-let value = opt.MustSome()
+value := opt.MustSome()
 
 // GOOD: Always check first
 if opt.IsSome() {
-    let value = opt.MustSome()
+    value := opt.MustSome()
 }
 
 // BETTER: Use default values
-let value = opt.SomeOr("default")
+value := opt.SomeOr("default")
 ```
 
 ### 2. None Requires Type Parameter

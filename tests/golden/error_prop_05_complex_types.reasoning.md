@@ -54,12 +54,12 @@ type User struct {
 }
 
 func fetchUser(id: int) (*User, error) {
-	let data = ReadFile("user.json")?
+	data := ReadFile("user.json")?
 	return &User{ID: id, Name: string(data)}, nil
 }
 
 func getNames() ([]string, error) {
-	let data = ReadFile("names.txt")?
+	data := ReadFile("names.txt")?
 	return []string{string(data)}, nil
 }
 ```

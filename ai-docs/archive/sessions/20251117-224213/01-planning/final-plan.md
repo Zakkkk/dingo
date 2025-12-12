@@ -588,7 +588,7 @@ func ReadFile(path string) ([]byte, error) {
 }
 
 func loadConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 EOF
@@ -622,7 +622,7 @@ func TestCRITICAL2_SourceMapOffset_PackageLevelNotShifted(t *testing.T) {
 var config = "default"
 
 func loadFile(path string) ([]byte, error) {
-	let data = os.ReadFile(path)?
+	data := os.ReadFile(path)?
 	return data, nil
 }
 `
@@ -743,7 +743,7 @@ func ReadFile(path string) ([]byte, error) {
 }
 
 func loadConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 `
@@ -777,7 +777,7 @@ func Atoi(s string) (int, error) {
 }
 
 func parseValue(s string) (int, error) {
-	let value = Atoi(s)?
+	value := Atoi(s)?
 	return value, nil
 }
 `
@@ -806,7 +806,7 @@ func Marshal(v interface{}) ([]byte, error) {
 }
 
 func serialize(data map[string]string) ([]byte, error) {
-	let bytes = Marshal(data)?
+	bytes := Marshal(data)?
 	return bytes, nil
 }
 `
@@ -927,8 +927,8 @@ func TestNegative_MultipleQualifiedCalls(t *testing.T) {
 	input := `package main
 
 func loadAndParse(path string) (map[string]interface{}, error) {
-	let data = os.ReadFile(path)?
-	let parsed = json.Unmarshal(data)?
+	data := os.ReadFile(path)?
+	parsed := json.Unmarshal(data)?
 	return parsed, nil
 }
 `
@@ -960,10 +960,10 @@ func ReadFile(path string) ([]byte, error) {
 
 func loadConfig(path string) ([]byte, error) {
 	// User-defined ReadFile
-	let userdata = ReadFile("user.txt")?
+	userdata := ReadFile("user.txt")?
 
 	// Stdlib os.ReadFile
-	let sysdata = os.ReadFile("system.txt")?
+	sysdata := os.ReadFile("system.txt")?
 
 	return append(userdata, sysdata...), nil
 }

@@ -15,10 +15,10 @@ Demonstrate complex, real-world integration of safe navigation (`?.`) and null c
 **Real-world use case**: Extracting data from JSON API responses where fields may be missing.
 
 ```dingo
-let userBio = apiUser?.profile?.bio ?? "No bio available"
-let userWebsite = apiUser?.profile?.website ?? "https://example.com"
-let reputation = apiUser?.profile?.reputation ?? 0
-let userCity = apiUser?.address?.city ?? "Unknown City"
+userBio := apiUser?.profile?.bio ?? "No bio available"
+userWebsite := apiUser?.profile?.website ?? "https://example.com"
+reputation := apiUser?.profile?.reputation ?? 0
+userCity := apiUser?.address?.city ?? "Unknown City"
 ```
 
 **Why this is important**:
@@ -38,9 +38,9 @@ let userCity = apiUser?.address?.city ?? "Unknown City"
 **Real-world use case**: Loading configuration files with partial/missing values, providing sensible defaults.
 
 ```dingo
-let dbHost = config?.database?.host ?? "localhost"
-let dbPort = config?.database?.port ?? 5432
-let rateLimitRPS = config?.api?.rateLimiter?.requestsPerSec ?? 100
+dbHost := config?.database?.host ?? "localhost"
+dbPort := config?.database?.port ?? 5432
+rateLimitRPS := config?.api?.rateLimiter?.requestsPerSec ?? 100
 ```
 
 **Why this is important**:
@@ -59,9 +59,9 @@ let rateLimitRPS = config?.api?.rateLimiter?.requestsPerSec ?? 100
 **Real-world use case**: Chaining object access and method calls with safety.
 
 ```dingo
-let displayName = user2?.getDisplayName() ?? "Anonymous"
-let profileURL = user2?.profile?.formatURL() ?? "/default-profile"
-let formattedAddress = user2?.formatAddress("short")?.city ?? "N/A"
+displayName := user2?.getDisplayName() ?? "Anonymous"
+profileURL := user2?.profile?.formatURL() ?? "/default-profile"
+formattedAddress := user2?.formatAddress("short")?.city ?? "N/A"
 ```
 
 **Why this is important**:
@@ -81,9 +81,9 @@ let formattedAddress = user2?.formatAddress("short")?.city ?? "N/A"
 **Real-world use case**: Function calls as fallback values, chained fallbacks.
 
 ```dingo
-let city3 = user3?.address?.city ?? getDefaultCity()
-let country3 = user3?.address?.country ?? detectCountryFromIP()
-let primaryEmail = user3?.profile?.getEmail() ?? user3?.getBackupEmail() ?? "support@example.com"
+city3 := user3?.address?.city ?? getDefaultCity()
+country3 := user3?.address?.country ?? detectCountryFromIP()
+primaryEmail := user3?.profile?.getEmail() ?? user3?.getBackupEmail() ?? "support@example.com"
 ```
 
 **Why this is important**:
@@ -103,8 +103,8 @@ let primaryEmail = user3?.profile?.getEmail() ?? user3?.getBackupEmail() ?? "sup
 **Real-world use case**: Using safe navigation results in comparisons, data structures.
 
 ```dingo
-let areSameCity = (user4?.address?.city ?? "") == (user5?.address?.city ?? "")
-let jsonData = map[string]interface{}{
+areSameCity := (user4?.address?.city ?? "") == (user5?.address?.city ?? "")
+jsonData := map[string]interface{}{
     "name": user4?.name ?? "unknown",
     "city": user4?.address?.city ?? "unknown",
 }
@@ -128,7 +128,7 @@ let jsonData = map[string]interface{}{
 
 **Input**:
 ```dingo
-let userBio = apiUser?.profile?.bio ?? "No bio available"
+userBio := apiUser?.profile?.bio ?? "No bio available"
 ```
 
 **Expected Output**:
@@ -157,7 +157,7 @@ userBio := func() string {
 
 **Input**:
 ```dingo
-let dbHost = config?.database?.host ?? "localhost"
+dbHost := config?.database?.host ?? "localhost"
 ```
 
 **Expected Output**:
@@ -184,7 +184,7 @@ dbHost := func() string {
 
 **Input**:
 ```dingo
-let primaryEmail = user3?.profile?.getEmail() ?? user3?.getBackupEmail() ?? "support@example.com"
+primaryEmail := user3?.profile?.getEmail() ?? user3?.getBackupEmail() ?? "support@example.com"
 ```
 
 **Expected Output**:

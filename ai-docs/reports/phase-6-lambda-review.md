@@ -65,7 +65,7 @@ This review evaluates code clarity, error handling robustness, Go best practices
 **Issues:**
 1. **Comma Context Blindness** (`extractBalancedBody`)
    ```go
-   // In object literal: let f = x => ({prop: x, more: 1})  // OK
+   // In object literal: f := x => ({prop: x, more: 1})  // OK
    // In parameters: func(x, y => x + y)                   // WRONG (stops early)
    ```
    **Impact:** Expression ending logic fails in parameter contexts

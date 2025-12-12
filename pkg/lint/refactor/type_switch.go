@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	goparser "go/parser"
 	"go/token"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
@@ -54,10 +55,16 @@ func (d *TypeSwitchDetector) Doc() string {
 // For each type switch found, generates a diagnostic with a Fix that transforms
 // it to a Dingo match expression.
 func (d *TypeSwitchDetector) Detect(fset *token.FileSet, file *dingoast.File, src []byte) []analyzer.Diagnostic {
+	// Use Go's standard parser to get full AST with function bodies
+	goFile, err := goparser.ParseFile(fset, "", src, goparser.ParseComments)
+	if err != nil {
+		return nil
+	}
+
 	var diagnostics []analyzer.Diagnostic
 
 	// Walk AST looking for type switches
-	ast.Inspect(file.File, func(n ast.Node) bool {
+	ast.Inspect(goFile, func(n ast.Node) bool {
 		typeSwitch, ok := n.(*ast.TypeSwitchStmt)
 		if !ok {
 			return true

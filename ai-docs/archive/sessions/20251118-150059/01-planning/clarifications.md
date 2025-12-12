@@ -68,7 +68,7 @@ match result {
 **Examples:**
 ```go
 // Expression mode (assigned)
-let x = match result {
+x := match result {
     Ok(v) => v * 2  // Must return int
     Err(_) => 0     // Must return int
 }
@@ -102,13 +102,13 @@ match result {
 
 **Behavior:**
 ```go
-let x = None  // ERROR: cannot infer type for None
+x := None  // ERROR: cannot infer type for None
 // Fix: let x: Option[int] = None
 
 // Valid contexts (auto-inferred):
 return None  // OK - from function signature
 processAge(None)  // OK - from parameter type
-let user = User{ age: None }  // OK - from field type
+user := User{ age: None }  // OK - from field type
 match { _ => None }  // OK - from other match arms
 ```
 

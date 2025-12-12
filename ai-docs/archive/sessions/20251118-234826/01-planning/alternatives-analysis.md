@@ -7,7 +7,7 @@
 **Root Cause**:
 - Dingo treats `match` as an EXPRESSION (returns a value, like Rust/Swift)
 - Go's `switch` is a STATEMENT (doesn't return a value)
-- When match appears in assignment context (`let result = match opt { ... }`), the preprocessor incorrectly generates both assignment operators
+- When match appears in assignment context (`result := match opt { ... }`), the preprocessor incorrectly generates both assignment operators
 
 **Current Workaround**: IIFE wrapper pattern (proven, 2-3 hours, but "ugly")
 
@@ -47,7 +47,7 @@ case B: x = 2
 
 ### Alternative 1: Statement Sequence Transformation ⭐⭐⭐⭐⭐
 
-**Concept**: Transform `let result = match expr { ... }` into statement sequence with explicit assignments.
+**Concept**: Transform `result := match expr { ... }` into statement sequence with explicit assignments.
 
 **Generated Code**:
 ```go
@@ -71,7 +71,7 @@ func doubleIfPresent(opt Option_int) Option_int {
 
 **How It Works**:
 1. Detect assignment context in preprocessor (already done: `isInAssignmentContext`)
-2. Extract assignment target (`result`) from `let result = match ...`
+2. Extract assignment target (`result`) from `result := match ...`
 3. Pre-declare variable: `var result <type>`
 4. Transform each arm's expression to assignment: `pattern => expr` → `result = expr`
 5. No temp variable needed (`__match_N`), switch directly on scrutinee
@@ -358,7 +358,7 @@ case OptionTagNone:
 Uses **statement sequences**:
 ```typescript
 // TypeScript
-let result = match(x) {
+result := match(x) {
   case A: 1,
   case B: 2
 }
@@ -377,7 +377,7 @@ Has true expression-based match (not applicable).
 ### Borgo (Go Transpiler)
 Uses **IIFE pattern** (same as current approach):
 ```borgo
-let x = match opt {
+x := match opt {
   Some(v) => v,
   None => 0
 }

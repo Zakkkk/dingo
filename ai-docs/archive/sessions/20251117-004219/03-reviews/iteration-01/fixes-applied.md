@@ -179,7 +179,7 @@ func (c *Context) GetDingoConfig() interface{} {
 
 **Current Behavior:**
 ```dingo
-let city = user?.address?.city
+city := user?.address?.city
 ```
 
 **Current Output (WRONG):**

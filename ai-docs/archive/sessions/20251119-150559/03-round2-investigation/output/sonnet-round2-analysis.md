@@ -461,12 +461,12 @@ The regex matches:
 But what if there's a nested block expression?
 
 ```
-Input: "match result {\n    Ok(x) => { let y = x * 2; y },\n    Err(e) => 0\n}"
+Input: "match result {\n    Ok(x) => { y := x * 2; y },\n    Err(e) => 0\n}"
 ```
 
 The regex matches:
 - Scrutinee: `opt`
-- Arms: `\n    Ok(x) => { let y = x * 2; y },\n    Err(e) => 0\n`
+- Arms: `\n    Ok(x) => { y := x * 2; y },\n    Err(e) => 0\n`
 
 WAIT - this would INCLUDE the inner `}` from the block expression!
 
@@ -1172,7 +1172,7 @@ go test ./tests -v
 1. **Nested block expressions**:
    ```dingo
    match x {
-       Ok(v) => { let y = v * 2; { let z = y + 1; z } },
+       Ok(v) => { y := v * 2; { z := y + 1; z } },
        Err(e) => 0
    }
    ```

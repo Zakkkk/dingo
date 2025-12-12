@@ -214,7 +214,7 @@ This is more reliable and maintains proper formatting.
 Splits input by `\n` and processes per line, assuming code is line-oriented. Doesn't handle multiline expressions:
 
 ```dingo
-let x =
+x :=
     longFunctionCall(
         arg1,
         arg2

@@ -23,7 +23,7 @@ This document provides a detailed architectural plan for completing Phase 1.6 of
 
 **Example:**
 ```dingo
-let user = fetchUser(id)?
+user := fetchUser(id)?
 ```
 Parser creates:
 - Standard `ast.CallExpr` for `fetchUser(id)`
@@ -119,7 +119,7 @@ The `?` operator appears in expressions but generates statements:
 
 ```dingo
 // Expression context
-let user = fetchUser(id)?
+user := fetchUser(id)?
 
 // Must become statements
 __tmp0, __err0 := fetchUser(id)
@@ -474,10 +474,10 @@ func (g *Generator) Generate() ([]byte, error) {
 - `/Users/jack/mag/dingo/examples/error_propagation/expression_context.dingo`
 
 **Test Cases:**
-1. Simple statement context: `let user = fetchUser(id)?`
-2. Chained operations: `let result = fetch()?.validate()?.save()?`
+1. Simple statement context: `user := fetchUser(id)?`
+2. Chained operations: `result := fetch()?.validate()?.save()?`
 3. Expression context: `return processUser(fetchUser(id)?)`
-4. Error wrapping: `let user = fetchUser(id) ? "failed to fetch user"` (future)
+4. Error wrapping: `user := fetchUser(id) ? "failed to fetch user"` (future)
 5. Different return types: `int`, `string`, `*User`, `[]Item`
 
 **Validation:**
@@ -561,7 +561,7 @@ Compare generated output to golden files.
 
 **1. Expression Preservation**
 ```
-Dingo:  let user = fetchUser(id)?
+Dingo:  user := fetchUser(id)?
         ^          ^           ^
         |          |           |
 Go:     __tmp0, __err0 := fetchUser(id)
@@ -574,7 +574,7 @@ Map:
 
 **2. Statement Expansion**
 ```
-Dingo line 10: let user = fetchUser(id)?
+Dingo line 10: user := fetchUser(id)?
                           ^
 Go lines 10-14:
   10: __tmp0, __err0 := fetchUser(id)

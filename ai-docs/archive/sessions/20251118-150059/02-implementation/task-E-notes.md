@@ -193,7 +193,7 @@ func findFieldType(noneIdent, compLit) {
 
 ### No Context Found
 ```go
-let x = None  // ❌ ERROR
+x := None  // ❌ ERROR
 ```
 
 **Error message**:
@@ -263,7 +263,7 @@ func extractOptionTypeFromGoTypes(typ types.Type) string {
 
 ### 1. Selector Expressions
 ```go
-let tag = OptionTag_None  // ← NOT a None constant, it's a tag value
+tag := OptionTag_None  // ← NOT a None constant, it's a tag value
 ```
 
 **Handling**: Skip if parent is `*ast.SelectorExpr`
@@ -344,13 +344,13 @@ If go/types not available:
 
 3. **Bidirectional inference**
    ```go
-   let x = None  // Defer inference
+   x := None  // Defer inference
    processAge(x)  // Now infer from call site
    ```
 
 4. **Smart suggestions**
    ```go
-   let x = None  // ERROR
+   x := None  // ERROR
    // Suggestion: Did you mean Option[int]? (based on later usage)
    ```
 

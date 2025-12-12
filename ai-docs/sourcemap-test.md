@@ -6,7 +6,7 @@ Create a comprehensive test to validate MapToOriginal behavior in the exact scen
 ## Test Plan
 
 The specific case described in the bug report:
-- Dingo line 4: `let data = ReadFile(path)?`
+- Dingo line 4: `data := ReadFile(path)?`
 - After preprocessing, the generated Go line 4 is: `__tmp0, __err0 := ReadFile(path)`
 - Source mappings:
   - `expr_mapping`: generated_line 4, generated_col 20, original_line 4, original_col 13, length 14

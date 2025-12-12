@@ -510,7 +510,7 @@ case ResultTagOk:
 ```
 Error: Non-exhaustive tuple match in example.dingo:5:1
 
-    4 | let result = fetchData()
+    4 | result := fetchData()
     5 | match (result1, result2) {
       | ^^^^^ Missing patterns: (Err, Ok), (Err, Err)
     6 |     (Ok, Ok) => handleBoth(),

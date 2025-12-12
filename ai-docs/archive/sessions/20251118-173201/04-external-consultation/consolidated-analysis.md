@@ -17,7 +17,7 @@
 **Issue**: The assignment context logic has a fundamental flaw in Example 4:
 
 ```dingo
-let result = match opt {
+result := match opt {
     Some(x) => Some(x * 2),
     None => None
 }
@@ -52,7 +52,7 @@ By skipping the temp var declaration when in assignment context. But it forgot t
 
 **In Rust/Dingo**:
 ```rust
-let result = match opt {  // match returns a value
+result := match opt {  // match returns a value
     Some(x) => x * 2,
     None => 0
 }
@@ -101,7 +101,7 @@ Transform match-in-assignment to an immediately-invoked function expression:
 
 **Dingo Input**:
 ```dingo
-let result = match opt {
+result := match opt {
     Some(x) => Some(x * 2),
     None => None
 }
@@ -284,7 +284,7 @@ func (r *RustMatchProcessor) generateCaseWithReturn(scrutineeVar string, arm pat
 Create `pattern_match_14_assignment_iife.dingo`:
 ```dingo
 func test(opt: Option[int]) -> Option[int] {
-    let result = match opt {
+    result := match opt {
         Some(x) => Some(x * 2),
         None => None
     }

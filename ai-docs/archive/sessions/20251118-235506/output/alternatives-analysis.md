@@ -36,7 +36,7 @@
   }
   ```
 - **Pros**: Removes anonymous function/return boilerplate yet keeps single-evaluation semantics. Minimal change from current transformation.
-- **Cons**: Still requires hoisting the target variable. Extra braces may look odd and do not restore expression semantics; you still can’t write `let x = { ... }` without prior declaration.
+- **Cons**: Still requires hoisting the target variable. Extra braces may look odd and do not restore expression semantics; you still can’t write `x := { ... }` without prior declaration.
 - **Complexity**: Low. Only need to wrap generated switch in braces when match appeared in expression context. No type inference beyond hoisted variable.
 - **Edge Cases**: Same as hoisting; braces are syntactic no-ops but must ensure formatting and source maps remain consistent.
 

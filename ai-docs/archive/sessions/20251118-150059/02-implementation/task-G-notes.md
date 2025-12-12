@@ -273,7 +273,7 @@ help: add missing pattern arm:
 
 **Example**:
 ```dingo
-let x = match result {
+x := match result {
     Ok(v) => v * 2,    // Returns int
     Err(_) => "error"  // Returns string ← Should error!
 }
@@ -294,7 +294,7 @@ func getAge() -> Option[int] {
 
 **Example needs explicit type**:
 ```dingo
-let x = None  // ❌ Cannot infer (no context)
+x := None  // ❌ Cannot infer (no context)
 // Workaround:
 let x: Option[int] = None  // ✅ Explicit type
 ```

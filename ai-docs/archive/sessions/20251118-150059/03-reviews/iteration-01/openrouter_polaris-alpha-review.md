@@ -76,7 +76,7 @@ matchExprPattern = regexp.MustCompile(`(?s)match\s+([^{]+)\s*\{(.+)\}`)
 match getConfig().settings { ... }
 
 // FAILS: Multiple matches on same line
-let x = match a { ... }; let y = match b { ... };
+x := match a { ... }; y := match b { ... };
 ```
 
 **Recommendation**: Use proper parser instead of regex

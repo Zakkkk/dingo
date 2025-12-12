@@ -71,18 +71,18 @@ returnPattern := regexp.MustCompile(`^\s*return\s+(.+)\?\s*$`)
       return zeroValue, __errN
   }
   ```
-- Handles both `let x = expr?` and `return expr?` forms
+- Handles both `x := expr?` and `return expr?` forms
 
 **Known Limitations**:
 1. **Zero values**: Currently hardcoded (nil, 0)
    - Solution: Parse function signature to determine correct zero values
    - Requires AST analysis or function context tracking
 
-2. **Multiple ? in expression**: `let x = foo()? + bar()?`
+2. **Multiple ? in expression**: `x := foo()? + bar()?`
    - Not yet handled - needs expression parsing
    - Workaround: Require separate statements
 
-3. **Complex expressions**: `let x = obj.Method(arg1, arg2)?`
+3. **Complex expressions**: `x := obj.Method(arg1, arg2)?`
    - Regex may fail to detect expression boundaries
    - Need better expression parser
 

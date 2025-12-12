@@ -5,7 +5,7 @@
 In Dingo, `None` represents the absence of a value in `Option[T]`. But what type is `T`?
 
 ```go
-let x = None  // What is the type of x? Option[int]? Option[string]? Option[??]?
+x := None  // What is the type of x? Option[int]? Option[string]? Option[??]?
 ```
 
 This is ambiguous without context. We need rules to infer the type.
@@ -49,27 +49,27 @@ processAge(None)  // ✅ Clear from function signature: Option[int]
 
 ### Case 2.1: No Immediate Context
 ```go
-let x = None  // ❓ What type is x?
+x := None  // ❓ What type is x?
 println(x)    // Used later, but println accepts any type
 ```
 
 **Options:**
 1. **Error (require explicit type)** ← RECOMMENDED
    ```go
-   let x = None  // ERROR: cannot infer type for None
+   x := None  // ERROR: cannot infer type for None
    // Fix: let x: Option[int] = None
    ```
 
 2. **Use later usage context**
    ```go
-   let x = None
+   x := None
    processAge(x)  // Infer x as Option[int] from call site
    ```
    **Problem:** Requires complex forward type inference, hard to implement
 
 3. **Default to Option[interface{}]** (risky)
    ```go
-   let x = None  // Inferred as Option[interface{}]
+   x := None  // Inferred as Option[interface{}]
    ```
    **Problem:** Loses type safety, needs runtime type assertions
 
@@ -80,7 +80,7 @@ println(x)    // Used later, but println accepts any type
 fn handleAge(age: Option[int]) { ... }
 fn handleName(name: Option[string]) { ... }
 
-let x = None
+x := None
 if condition {
     handleAge(x)  // Wants Option[int]
 } else {
@@ -93,7 +93,7 @@ if condition {
 **Options:**
 1. **Error (conflicting contexts)**
    ```go
-   let x = None  // ERROR: conflicting type contexts for None
+   x := None  // ERROR: conflicting type contexts for None
    // Fix: use None directly in calls
    if condition {
        handleAge(None)  // Option[int] from parameter
@@ -141,7 +141,7 @@ if condition {
 
 2. **Infer from first assignment**
    ```go
-   let result = Some(42)  // Inferred as Option[int]
+   result := Some(42)  // Inferred as Option[int]
    // Later:
    result = None  // OK, already known as Option[int]
    ```
@@ -156,7 +156,7 @@ enum Status {
     Inactive
 }
 
-let age = match status {
+age := match status {
     Active(id) => Some(getUserAge(id))  // Returns Option[int]
     Inactive => None  // ❓ What type? Should match Some branch: Option[int]
 }
@@ -175,7 +175,7 @@ let age = match status {
 
 ### Case 3.1: None in Data Structures
 ```go
-let users = [Some(42), None, Some(99)]  // ❓ Type of None?
+users := [Some(42), None, Some(99)]  // ❓ Type of None?
 ```
 
 **Options:**
@@ -186,7 +186,7 @@ let users = [Some(42), None, Some(99)]  // ❓ Type of None?
 
 2. **Infer from other elements**
    ```go
-   let users = [Some(42), None, Some(99)]
+   users := [Some(42), None, Some(99)]
    // First element is Option[int], so None must be Option[int]
    ```
 
@@ -199,7 +199,7 @@ type User struct {
     age: Option[int]
 }
 
-let user = User{
+user := User{
     name: "Alice",
     age: None  // ✅ Inferred from struct field type: Option[int]
 }
@@ -222,7 +222,7 @@ let user = User{
 - Match arm: `match { _ => None }` (infer from other arms in expression mode)
 
 ❌ **Error:**
-- Bare initialization: `let x = None` → ERROR: "cannot infer type for None, use explicit type annotation"
+- Bare initialization: `x := None` → ERROR: "cannot infer type for None, use explicit type annotation"
 - Ambiguous contexts: conflicting types in different branches
 
 ---
@@ -248,13 +248,13 @@ If no context matches, **error** and require explicit annotation.
 For Phase 4, we **DO NOT** do forward inference:
 
 ```go
-let x = None  // ERROR now, no forward inference
+x := None  // ERROR now, no forward inference
 processAge(x)  // Can't look ahead to infer x's type
 ```
 
 **Future (Phase 5+):** Implement bidirectional type inference (like TypeScript):
 ```go
-let x = None  // Deferred type inference
+x := None  // Deferred type inference
 processAge(x)  // Infer x as Option[int] from call
 ```
 
@@ -288,10 +288,10 @@ fn getAge() -> Option[int] {
 processAge(None)  // OK, inferred from parameter
 
 // Struct field context
-let user = User{ age: None }  // OK, inferred from field type
+user := User{ age: None }  // OK, inferred from field type
 
 // Match expression context
-let result = match status {
+result := match status {
     Active(id) => Some(id)
     Inactive => None  // OK, inferred from Some(id) arm
 }
@@ -300,11 +300,11 @@ let result = match status {
 ### ❌ Invalid Code (Errors)
 ```go
 // No context
-let x = None  // ERROR: cannot infer type for None
+x := None  // ERROR: cannot infer type for None
               // Fix: let x: Option[int] = None
 
 // Ambiguous context
-let x = None
+x := None
 if cond {
     handleAge(x)     // Wants Option[int]
 } else {

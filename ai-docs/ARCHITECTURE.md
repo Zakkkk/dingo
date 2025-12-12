@@ -53,7 +53,6 @@ Dingo WILL use an **AST-based code generation** architecture:
 │  Each transform parses → generates Go → returns mappings:   │
 │                                                              │
 │    TransformEnumSource()        enum → Go interface          │
-│    TransformLetSource()         let x = → x :=              │
 │    TransformLambdaSource()      |x| expr → func(x any) any  │
 │    TransformMatchSource()       match → inline type switch   │
 │    TransformErrorPropSource()   expr? → inline error check   │
@@ -131,7 +130,6 @@ pkg/
 │   ├── enum_parser.go          # Parse enum declarations
 │   ├── enum_codegen.go         # Generate Go interface pattern
 │   │
-│   ├── let_codegen.go          # let x = → x :=
 │   ├── lambda_codegen.go       # |x| expr → func(x any) any { return }
 │   ├── match_codegen.go        # match → inline type switch
 │   ├── error_prop_codegen.go   # expr? → inline error handling
@@ -206,14 +204,13 @@ type Plugin interface {
 | `match` | 20 | Character | `match expr {...}` → IIFE type switch |
 | `enum_constructors` | 30 | Character | `Variant()` → `NewVariant()` |
 | `error_prop` | 40 | Character | `expr?` → error handling |
-| `guard_let` | 50 | Character | `guard let x = expr else {...}` |
+| `tuples` | 50 | Character | `(a, b) := fn()` → tuple destructuring |
 | `safe_nav_statements` | 55 | Character | Statement-level `?.` |
 | `safe_nav` | 60 | Character | Expression-level `?.` |
 | `null_coalesce` | 70 | Character | `a ?? b` → nil checks |
 | `lambdas` | 80 | Character | `\|x\| expr` and `x => expr` |
 | `type_annotations` | 100 | Token | `param: Type` → `param Type` |
 | `generics` | 110 | Token | `Result[T,E]` → `Result[T,E]` |
-| `let_binding` | 120 | Token | `let x =` → `x :=` |
 
 ### Feature Configuration (dingo.toml)
 
@@ -227,7 +224,7 @@ enum = true             # enum declarations
 match = true            # match expressions
 enum_constructors = true
 error_prop = true       # ? operator
-guard_let = true
+tuples = true           # tuple destructuring
 safe_nav_statements = true
 safe_nav = true         # ?. operator (set to false to disable)
 null_coalesce = true    # ?? operator (set to false to disable)
@@ -236,7 +233,6 @@ lambdas = true          # |x| and => syntax
 # Token-level features
 type_annotations = true # x: Type syntax
 generics = true         # <T> syntax
-let_binding = true      # let keyword
 ```
 
 ### Disabled Feature Detection
@@ -247,8 +243,8 @@ When a feature is disabled but its syntax is used, the transpiler reports a clea
 error: feature 'lambdas' is disabled in configuration
   --> src/main.dingo:10:5
    |
-10 |     let add = |x, y| x + y
-   |               ^^^^^^^^^^^^
+10 |     add := |x, y| x + y
+   |            ^^^^^^^^^^^^
    |
    = help: enable 'lambdas' in dingo.toml [feature_matrix] section
 ```
@@ -296,10 +292,9 @@ For 3rd-party plugins (v1.1+), use RPC-based loading via HashiCorp's go-plugin.
 | Feature | Dingo Syntax | Go Output |
 |---------|--------------|-----------|
 | **Type Annotations** | `func(x: int)` | `func(x int)` |
-| **Let Declarations** | `let x = 42` | `x := 42` |
 | **Generic Types** | `Result[T, E]` | `Result[T, E]` |
-| **Error Propagation** | `let x = expr?` | `tmp, err := expr; if err != nil { return err }; var x = tmp` |
-| **Guard Let** | `guard let x = expr else \|err\| {...}` | `x, err := expr; if err != nil {...}` |
+| **Error Propagation** | `x := expr?` | `tmp, err := expr; if err != nil { return err }; x := tmp` |
+| **Tuples** | `(a, b) := fn()` | Multi-value assignment with destructuring |
 | **Lambdas (Rust)** | `\|x\| x + 1` | `func(x) { return x + 1 }` |
 | **Lambdas (TS)** | `(x) => x + 1` | `func(x) { return x + 1 }` |
 | **Typed Lambdas** | `\|x: int\| x + 1` | `func(x int) { return x + 1 }` |
@@ -325,8 +320,8 @@ These markers are placeholders for future AST-level expansion.
 **Input (Dingo):**
 ```go
 func GetUser(id: int) (User, error) {
-    let data = fetchFromDB(id)?
-    let user = parseUser(data)?
+    data := fetchFromDB(id)?
+    user := parseUser(data)?
     return user, nil
 }
 ```
@@ -338,13 +333,13 @@ func GetUser(id int) (User, error) {
     if err != nil {
         return User{}, err
     }
-    var data = tmp
+    data := tmp
 
     tmp1, err1 := parseUser(data)
     if err1 != nil {
         return User{}, err1
     }
-    var user = tmp1
+    user := tmp1
 
     return user, nil
 }
@@ -460,9 +455,7 @@ Located in `pkg/goparser/parser/parser_test.go`:
 | Test Suite | Coverage |
 |------------|----------|
 | `TestTransformTypeAnnotations` | Function params, methods, receivers |
-| `TestTransformLetDeclarations` | Simple let, string values, in functions |
 | `TestParseFile` | Full file parsing, package names |
-| `TestGuardLetTransformation` | With/without error binding |
 | `TestLambdaTransformation` | Rust-style, TS-style, block bodies |
 | `TestEnumTransformation` | Simple enums, enums with fields |
 | `TestMatchTransformation` | Default patterns, field extraction |
@@ -524,10 +517,10 @@ Currently leaves `/*DINGO_NULL_COAL*/` marker. Full transformation:
 
 ```go
 // Input
-let x = getValue() ?? defaultValue
+x := getValue() ?? defaultValue
 
 // Output
-var x = func() T {
+x := func() T {
     tmp := getValue()
     if tmp != nil {
         return tmp
@@ -542,10 +535,10 @@ Currently leaves `/*DINGO_SAFE_NAV*/` marker. Full transformation:
 
 ```go
 // Input
-let name = user?.profile?.name ?? "Anonymous"
+name := user?.profile?.name ?? "Anonymous"
 
 // Output
-var name = func() string {
+name := func() string {
     if user == nil { return "Anonymous" }
     if user.profile == nil { return "Anonymous" }
     return user.profile.name

@@ -174,7 +174,7 @@ go build -o /tmp/test_$$ error_prop_06_type_conversion.go.golden
 **Rationale:** Core feature must not regress
 
 **Test Focus:**
-- Assignment context: `let x = f()?`
+- Assignment context: `x := f()?`
 - Return context: `return f()?`
 - Multi-statement functions
 - Nested error propagation

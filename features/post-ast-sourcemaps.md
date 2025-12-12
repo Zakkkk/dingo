@@ -75,7 +75,7 @@ Dingo's current source map generation creates mappings during text-based preproc
 #### Evidence 1: First Function (Line 4) ✅ CORRECT
 ```dingo
 3: func readConfig(path string) ([]byte, error) {
-4:     let data = os.ReadFile(path)?
+4:     data := os.ReadFile(path)?
 ```
 
 **Generated Go**:
@@ -89,7 +89,7 @@ Dingo's current source map generation creates mappings during text-based preproc
 #### Evidence 2: Second Function (Line 10) ❌ WRONG
 ```dingo
 9: func test() {
-10:     let a = readConfig("config.yaml")?
+10:     a := readConfig("config.yaml")?
 ```
 
 **Generated Go**:

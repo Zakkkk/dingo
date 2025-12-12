@@ -8,7 +8,7 @@ Test null coalescing (`??`) edge cases and special scenarios.
 ### 1. Empty string as fallback
 ```dingo
 let name: StringOption = StringOption_Some("")
-let display = name ?? "Default"
+display := name ?? "Default"
 ```
 **Expected:** Some("") should return ""
 - CRITICAL: Empty string is valid Some value
@@ -18,7 +18,7 @@ let display = name ?? "Default"
 ### 2. Zero value as fallback
 ```dingo
 let zero: BoolOption = BoolOption_Some(false)
-let result = zero ?? true
+result := zero ?? true
 ```
 **Expected:** Some(false) should return false
 - CRITICAL: false is valid Some value
@@ -27,7 +27,7 @@ let result = zero ?? true
 
 ### 3. Nested parentheses
 ```dingo
-let combined = (opt1 ?? opt2) ?? "Fallback"
+combined := (opt1 ?? opt2) ?? "Fallback"
 ```
 **Expected:** Nested ?? evaluation
 - Inner: opt1 ?? opt2 → "Found"
@@ -36,7 +36,7 @@ let combined = (opt1 ?? opt2) ?? "Fallback"
 
 ### 4. Boolean context
 ```dingo
-let enabled = flag ?? false
+enabled := flag ?? false
 ```
 **Expected:** BoolOption handling
 - None -> false
@@ -45,9 +45,9 @@ let enabled = flag ?? false
 
 ### 5. Multiple ?? in same expression
 ```dingo
-let a = first ?? "A"
-let b = second ?? "B"
-let concat = a + b
+a := first ?? "A"
+b := second ?? "B"
+concat := a + b
 ```
 **Expected:** Independent evaluation
 - Each ?? evaluates separately
@@ -56,7 +56,7 @@ let concat = a + b
 
 ### 6. ?? with method chain
 ```dingo
-let upper = text?.toUpper() ?? "DEFAULT"
+upper := text?.toUpper() ?? "DEFAULT"
 ```
 **Expected:** Safe nav + method + ??
 - text is Some("hello")

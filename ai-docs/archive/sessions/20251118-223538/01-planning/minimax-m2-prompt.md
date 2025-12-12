@@ -21,13 +21,13 @@ The Dingo language server is underlining the WRONG part of code when there's an 
 package main
 
 func readConfig(path string) ([]byte, error) {
-	let data = ReadFile(path)?
+	data := ReadFile(path)?
 	return data, nil
 }
 ```
 
 **Line 4 breakdown:**
-- `let data = ` - Columns 1-12
+- `data := ` - Columns 1-12
 - `ReadFile(path)` - Columns 13-27 (the function call that has the error)
 - `?` - Column 28 (error propagation operator)
 

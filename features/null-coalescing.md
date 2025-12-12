@@ -16,13 +16,13 @@ The `??` operator provides concise default values for `Option[T]` types, elimina
 
 ```dingo
 // Basic usage
-let name = user?.name ?? "Anonymous"
+name := user?.name ?? "Anonymous"
 
 // Chaining
-let value = primary ?? secondary ?? tertiary ?? "default"
+value := primary ?? secondary ?? tertiary ?? "default"
 
 // With expressions
-let port = env.get("PORT")?.parseInt() ?? 8080
+port := env.get("PORT")?.parseInt() ?? 8080
 ```
 
 ## Transpilation
