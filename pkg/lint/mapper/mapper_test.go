@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
 
@@ -26,17 +26,17 @@ func TestMapToDingo_WithValidDmap(t *testing.T) {
 	// Create a test .dmap file with known mappings
 	writer := dmap.NewWriter(dingoSrc, goSrc)
 
-	// Simulate some simple mappings:
-	// Dingo bytes 0-10 -> Go bytes 0-15 (kind: "match")
-	// Dingo bytes 22-32 -> Go bytes 48-58 (kind: "let")
+	// Simulate some simple line mappings:
+	// Dingo line 1 -> Go line 1 (kind: "match")
+	// Dingo line 3 -> Go line 4 (kind: "let")
 	// Line structure:
 	//   Dingo: each line is 11 bytes (10 chars + \n)
 	//     Line 1: 0-10, Line 2: 11-21, Line 3: 22-32, Line 4: 33-43
 	//   Go: each line is 16 bytes (15 chars + \n)
 	//     Line 1: 0-15, Line 2: 16-31, Line 3: 32-47, Line 4: 48-63
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 15, Kind: "match"},
-		{DingoStart: 22, DingoEnd: 32, GoStart: 48, GoEnd: 58, Kind: "let"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "match"},
+		{DingoLine: 3, GoLineStart: 4, GoLineEnd: 4, Kind: "let"},
 	}
 
 	data, err := writer.Write(mappings)
@@ -106,22 +106,26 @@ func TestMapToDingo_NoDmapFile(t *testing.T) {
 	}
 }
 
-// TestMapToDingo_GeneratedCode tests behavior for generated code (no mapping)
-func TestMapToDingo_GeneratedCode(t *testing.T) {
+// TestMapToDingo_UnmappedLine tests behavior for unmapped lines (uses fallback)
+// v2 format uses cumulative delta fallback for unmapped lines rather than returning errors.
+// This provides better UX for LSP - we always return an approximate position.
+func TestMapToDingo_UnmappedLine(t *testing.T) {
 	tmpDir := t.TempDir()
 	dmapPath := filepath.Join(tmpDir, "test.dmap")
 	goPath := filepath.Join(tmpDir, "test.go")
 
-	// Create mock source files
+	// Create mock source files:
+	// Dingo: 3 lines
+	// Go: 5 lines (more lines = expansion happened)
 	dingoSrc := []byte("0123456789\n0123456789\n0123456789\n")
 	goSrc := []byte("0123456789\n0123456789\n0123456789\n0123456789\n0123456789\n")
 
-	// Create a .dmap with a gap (generated code)
+	// Create a .dmap with only line 1 mapped explicitly
 	writer := dmap.NewWriter(dingoSrc, goSrc)
 
-	// Only map bytes 0-10, leave 20+ unmapped (generated)
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 10, Kind: "match"},
+	// Only map line 1, leave lines 2+ unmapped
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "match"},
 	}
 
 	data, err := writer.Write(mappings)
@@ -136,10 +140,25 @@ func TestMapToDingo_GeneratedCode(t *testing.T) {
 	mapper := New()
 	defer mapper.Close()
 
-	// Try to map a position in generated code (Go line 3, col 1 -> byte 20)
-	_, _, _, err = mapper.MapToDingo(goPath, 3, 1)
-	if err != ErrNoMapping {
-		t.Errorf("Expected ErrNoMapping for generated code, got: %v", err)
+	// Try to map a position in unmapped Go line 3
+	// v2 format uses fallback (cumulative delta) - should NOT error
+	dingoPath, line, col, err := mapper.MapToDingo(goPath, 3, 1)
+	if err != nil {
+		t.Errorf("Expected no error for unmapped line (v2 uses fallback), got: %v", err)
+	}
+
+	expectedPath := strings.TrimSuffix(goPath, ".go") + ".dingo"
+	if dingoPath != expectedPath {
+		t.Errorf("Expected path %s, got %s", expectedPath, dingoPath)
+	}
+
+	// Line should be a valid fallback (proportional or delta-based)
+	// We just verify it's reasonable (within source bounds)
+	if line < 1 || line > 3 {
+		t.Errorf("Expected line in range 1-3 (fallback), got %d", line)
+	}
+	if col != 1 {
+		t.Errorf("Expected col 1 (preserved), got %d", col)
 	}
 }
 
@@ -155,8 +174,8 @@ func TestMapToDingo_Caching(t *testing.T) {
 
 	// Create a minimal .dmap
 	writer := dmap.NewWriter(dingoSrc, goSrc)
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 10, Kind: "test"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 	}
 
 	data, err := writer.Write(mappings)
@@ -213,8 +232,8 @@ func TestMapToDingo_MultipleDmapFiles(t *testing.T) {
 		goSrc := []byte("0123456789\n0123456789\n")
 
 		writer := dmap.NewWriter(dingoSrc, goSrc)
-		mappings := []ast.SourceMapping{
-			{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 10, Kind: "test"},
+		mappings := []sourcemap.LineMapping{
+			{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 		}
 
 		data, err := writer.Write(mappings)
@@ -265,8 +284,8 @@ func TestClose(t *testing.T) {
 
 	// Create a minimal .dmap
 	writer := dmap.NewWriter(dingoSrc, goSrc)
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 10, GoStart: 0, GoEnd: 10, Kind: "test"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 	}
 
 	data, err := writer.Write(mappings)
@@ -323,16 +342,14 @@ func BenchmarkMapToDingo(b *testing.B) {
 
 	// Create a .dmap with many mappings
 	writer := dmap.NewWriter(dingoSrc, goSrc)
-	mappings := make([]ast.SourceMapping, 1000)
+	mappings := make([]sourcemap.LineMapping, 1000)
 	for i := 0; i < 1000; i++ {
-		start := i * 100
-		end := start + 50
-		mappings[i] = ast.SourceMapping{
-			DingoStart: start,
-			DingoEnd:   end,
-			GoStart:    start,
-			GoEnd:      end,
-			Kind:       "test",
+		line := i + 1 // 1-indexed lines
+		mappings[i] = sourcemap.LineMapping{
+			DingoLine:   line,
+			GoLineStart: line,
+			GoLineEnd:   line,
+			Kind:        "test",
 		}
 	}
 

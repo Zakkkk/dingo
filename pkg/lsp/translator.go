@@ -88,7 +88,19 @@ func (t *Translator) TranslatePosition(
 		// Go → Dingo translation using V2 line mappings
 		var kind string
 		newLine, kind = reader.GoLineToDingoLine(line)
-		newCol = col // Column stays the same (identity mapping within lines)
+		newCol = col // Start with identity mapping
+
+		// Always clamp column to Dingo line bounds when column exceeds line length.
+		// This prevents column overflow when Go line is longer than Dingo line
+		// (e.g., tuple literal expansion: "(x,y)" -> "tuples.Tuple2[...]{...}")
+		// We do this unconditionally because even with stale/empty source maps,
+		// the column should never exceed the line length in the Dingo file.
+		lineLen := reader.DingoLineLength(newLine)
+		if lineLen >= 0 && newCol > lineLen {
+			// Clamp to end of line (reasonable fallback for expanded lines)
+			newCol = lineLen
+			log.Printf("[LSP Translator] GoToDingo: clamped column %d -> %d (line length %d, kind=%q)", col, newCol, lineLen, kind)
+		}
 
 		if kind != "" {
 			log.Printf("[LSP Translator] GoToDingo: goLine=%d -> dingoLine=%d (kind=%s)", line, newLine, kind)
@@ -128,6 +140,28 @@ func (t *Translator) TranslateRange(
 	_, newEnd, err := t.TranslatePosition(uri, rng.End, dir)
 	if err != nil {
 		return uri, rng, err
+	}
+
+	// Preserve error span width when both positions get clamped to same location
+	// This happens when Go line is longer than Dingo line (e.g., tuple expansion)
+	// Without this fix, "nilf" (4 chars) would show as 1 char underline
+	if newStart.Line == newEnd.Line && newStart.Character == newEnd.Character {
+		// Both positions clamped to same spot - preserve original width
+		// LSP ranges are [start, end) so width = end - start
+		originalWidth := rng.End.Character - rng.Start.Character
+		if originalWidth > 0 {
+			// Move end forward by 1 to make room for full width
+			// (end was clamped to last char position, but needs to be exclusive)
+			newEnd.Character++
+			// Then move start back to get full width
+			if newEnd.Character >= originalWidth {
+				newStart.Character = newEnd.Character - originalWidth
+			} else {
+				newStart.Character = 0
+			}
+			log.Printf("[LSP Translator] TranslateRange: preserved width %d, range now %d-%d",
+				originalWidth, newStart.Character, newEnd.Character)
+		}
 	}
 
 	newRange := protocol.Range{

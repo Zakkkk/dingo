@@ -451,17 +451,45 @@ func (r *Reader) DingoLineToByteOffset(line int) int {
 	return int(r.dingoLines[line-1])
 }
 
+// DingoLineLength returns the length of a 1-indexed Dingo line in bytes.
+// This is useful for clamping columns to valid positions.
+// Returns -1 if line number is out of range.
+func (r *Reader) DingoLineLength(line int) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if line < 1 || line > len(r.dingoLines) {
+		return -1
+	}
+
+	lineStart := int(r.dingoLines[line-1])
+	var lineEnd int
+	if line < len(r.dingoLines) {
+		lineEnd = int(r.dingoLines[line])
+	} else {
+		// Last line - use DingoLen from header
+		lineEnd = int(r.hdr.DingoLen)
+	}
+
+	// Subtract 1 for newline character (if present)
+	length := lineEnd - lineStart
+	if length > 0 {
+		length-- // Exclude newline
+	}
+	return length
+}
+
 // GoLineToDingoLine converts a Go line to Dingo line using v2 line mappings.
 // Returns the Dingo line and kind string if a mapping is found.
-// Returns (goLine, "") as identity mapping if no mapping found or v1 format.
+// For unmapped lines, uses cumulative delta to compute approximate Dingo line.
 // Uses binary search for O(log N) performance instead of O(N) linear search.
 func (r *Reader) GoLineToDingoLine(goLine int) (dingoLine int, kind string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Return identity if no v2 mappings available
+	// If no v2 mappings available, use simple proportional fallback
 	if len(r.lineMappings) == 0 {
-		return goLine, ""
+		return r.proportionalFallback(goLine), ""
 	}
 
 	// Binary search for mapping containing goLine
@@ -483,8 +511,90 @@ func (r *Reader) GoLineToDingoLine(goLine int) (dingoLine int, kind string) {
 		}
 	}
 
-	// No mapping found - return identity
-	return goLine, ""
+	// No direct mapping found - compute using cumulative delta from previous mappings
+	return r.computeDeltaFallback(goLine, idx), ""
+}
+
+// proportionalFallback returns a proportionally mapped Dingo line when no v2 mappings exist.
+// Uses the ratio of Dingo/Go line counts for approximate mapping.
+func (r *Reader) proportionalFallback(goLine int) int {
+	goLineCount := len(r.goLines)
+	dingoLineCount := len(r.dingoLines)
+
+	if goLineCount == 0 || dingoLineCount == 0 {
+		return goLine
+	}
+
+	// Clamp goLine to valid range
+	if goLine < 1 {
+		return 1
+	}
+	if goLine > goLineCount {
+		goLine = goLineCount
+	}
+
+	// Proportional mapping: dingoLine ≈ goLine * (dingoCount / goCount)
+	// Use integer math to avoid float precision issues
+	dingoLine := (goLine * dingoLineCount) / goLineCount
+	if dingoLine < 1 {
+		dingoLine = 1
+	}
+	if dingoLine > dingoLineCount {
+		dingoLine = dingoLineCount
+	}
+	return dingoLine
+}
+
+// computeDeltaFallback computes Dingo line using cumulative delta from mappings.
+// For a Go line between mappings, we find the cumulative line delta from all
+// previous transforms and subtract it from the Go line.
+func (r *Reader) computeDeltaFallback(goLine int, searchIdx int) int {
+	goLineCount := len(r.goLines)
+	dingoLineCount := len(r.dingoLines)
+
+	if dingoLineCount == 0 {
+		return goLine
+	}
+
+	// Find cumulative delta from all mappings that end before goLine
+	cumulativeDelta := 0
+	for i := 0; i < len(r.lineMappings); i++ {
+		entry := &r.lineMappings[i]
+		if int(entry.GoLineEnd) < goLine {
+			// This mapping is entirely before goLine
+			// Delta = (GoLineEnd - GoLineStart + 1) - 1 = lines added by this transform
+			// Actually: delta contribution = GoLineEnd - DingoLine (since DingoLine stays same)
+			goLinesInMapping := int(entry.GoLineEnd) - int(entry.GoLineStart) + 1
+			dingoLinesInMapping := 1 // All Go lines in mapping correspond to 1 Dingo line
+			cumulativeDelta += goLinesInMapping - dingoLinesInMapping
+		} else {
+			// This mapping is at or after goLine, stop
+			break
+		}
+	}
+
+	// NOTE: We keep identity fallback here (cumulativeDelta = 0 when no mappings before goLine)
+	// because proportional fallback can be worse for early lines when transforms are
+	// concentrated later in the file. Identity (goLine - 0) is often closer when
+	// the header delta is small (e.g., just import changes early in file).
+
+	// Apply cumulative delta
+	dingoLine := goLine - cumulativeDelta
+
+	// Clamp to valid range
+	if dingoLine < 1 {
+		dingoLine = 1
+	}
+	if dingoLine > dingoLineCount {
+		dingoLine = dingoLineCount
+	}
+
+	// Sanity check: if goLine > goLineCount, use proportional
+	if goLine > goLineCount {
+		return r.proportionalFallback(goLine)
+	}
+
+	return dingoLine
 }
 
 // Header returns a copy of the file header.

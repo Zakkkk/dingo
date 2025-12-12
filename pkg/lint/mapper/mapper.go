@@ -52,33 +52,18 @@ func (m *Mapper) MapToDingo(goPath string, goLine, goCol int) (
 		return goPath, goLine, goCol, nil
 	}
 
-	// Convert line/col to byte offset
-	// goLine is 1-indexed, goCol is 1-indexed
-	goLineStart := reader.GoLineToByteOffset(goLine)
-	if goLineStart == -1 {
-		return "", 0, 0, fmt.Errorf("mapper: Go line %d out of range", goLine)
-	}
-	goByteOffset := goLineStart + (goCol - 1)
+	// Use v2 line-level mapping API
+	// GoLineToDingoLine always returns a valid line (using fallback for unmapped lines)
+	dingoLine, _ := reader.GoLineToDingoLine(goLine)
 
-	// Find mapping for this byte offset
-	dingoStart, _, kind := reader.FindByGoPos(goByteOffset)
-
-	// If no mapping found (generated code), return error
-	if kind == "" {
-		return "", 0, 0, ErrNoMapping
-	}
-
-	// Convert Dingo byte offset to line/col
-	dingoLine := reader.DingoByteToLine(dingoStart)
+	// If dingoLine is 0 (shouldn't happen with proper fallback), use identity
 	if dingoLine == 0 {
-		return "", 0, 0, fmt.Errorf("mapper: Dingo byte offset %d out of range", dingoStart)
+		dingoLine = goLine
 	}
 
-	dingoLineStart := reader.DingoLineToByteOffset(dingoLine)
-	if dingoLineStart == -1 {
-		return "", 0, 0, fmt.Errorf("mapper: Dingo line %d out of range", dingoLine)
-	}
-	dingoCol := dingoStart - dingoLineStart + 1
+	// For line-level mappings, column is preserved (identity within line)
+	// This is correct because line-level transforms expand entire lines
+	dingoCol := goCol
 
 	// Construct .dingo path from .go path
 	dingoPath = strings.TrimSuffix(goPath, ".go") + ".dingo"

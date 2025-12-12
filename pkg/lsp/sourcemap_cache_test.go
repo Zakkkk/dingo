@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
 
@@ -84,8 +84,8 @@ func createTestDmapFile(t *testing.T, workspaceRoot, relPath string) {
 	dingoSrc := []byte("x := 10\n")
 	goSrc := []byte("x := 10\n")
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
 	}
 
 	writer := dmap.NewWriter(dingoSrc, goSrc)
@@ -160,8 +160,14 @@ func TestSourceMapCacheGetSuccess(t *testing.T) {
 		t.Fatal("Expected non-nil reader")
 	}
 
-	if reader.EntryCount() != 1 {
-		t.Errorf("Expected 1 entry, got %d", reader.EntryCount())
+	// v2 format stores line mappings - verify via line lookup API
+	// The test dmap has: DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"
+	dingoLine, kind := reader.GoLineToDingoLine(1)
+	if dingoLine != 1 {
+		t.Errorf("Expected dingo line 1, got %d", dingoLine)
+	}
+	if kind != "identity" {
+		t.Errorf("Expected kind 'identity', got %q", kind)
 	}
 
 	// Cache should now have 1 entry
@@ -425,22 +431,14 @@ func TestSourceMapCacheReaderLookups(t *testing.T) {
 		t.Fatalf("Get failed: %v", err)
 	}
 
-	// Test FindByGoPos
-	dingoStart, dingoEnd, kind := reader.FindByGoPos(3)
+	// Test v2 line-level mapping API: GoLineToDingoLine
+	// The test dmap has: DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"
+	dingoLine, kind := reader.GoLineToDingoLine(1)
 	if kind != "identity" {
-		t.Errorf("FindByGoPos: got kind %q, want %q", kind, "identity")
+		t.Errorf("GoLineToDingoLine: got kind %q, want %q", kind, "identity")
 	}
-	if dingoStart != 0 || dingoEnd != 7 {
-		t.Errorf("FindByGoPos: got (%d, %d), want (0, 7)", dingoStart, dingoEnd)
-	}
-
-	// Test FindByDingoPos
-	goStart, goEnd, kind2 := reader.FindByDingoPos(3)
-	if kind2 != "identity" {
-		t.Errorf("FindByDingoPos: got kind %q, want %q", kind2, "identity")
-	}
-	if goStart != 0 || goEnd != 7 {
-		t.Errorf("FindByDingoPos: got (%d, %d), want (0, 7)", goStart, goEnd)
+	if dingoLine != 1 {
+		t.Errorf("GoLineToDingoLine: got line %d, want 1", dingoLine)
 	}
 }
 

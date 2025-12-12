@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
@@ -32,7 +32,7 @@ func (m *mockSourceMapGetter) InvalidateAll()               {}
 func (m *mockSourceMapGetter) Size() int                    { return len(m.readers) }
 
 // createMockReader creates a dmap.Reader with test data
-func createMockReader(t *testing.T, dingoSrc, goSrc string, mappings []ast.SourceMapping) *dmap.Reader {
+func createMockReader(t *testing.T, dingoSrc, goSrc string, mappings []sourcemap.LineMapping) *dmap.Reader {
 	t.Helper()
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))
 	data, err := writer.Write(mappings)
@@ -65,9 +65,9 @@ func TestTranslatePositionDingoToGo(t *testing.T) {
 	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
-		{DingoStart: 8, DingoEnd: 15, GoStart: 8, GoEnd: 15, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -110,9 +110,9 @@ func TestTranslatePositionGoToDingo(t *testing.T) {
 	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
-		{DingoStart: 8, DingoEnd: 15, GoStart: 8, GoEnd: 15, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
+		{DingoLine: 2, GoLineStart: 2, GoLineEnd: 2, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -217,8 +217,8 @@ func TestTranslateRange(t *testing.T) {
 	dingoSrc := "x := 10\ny := 20\n"
 	goSrc := "x := 10\ny := 20\n"
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -262,8 +262,8 @@ func TestTranslateLocation(t *testing.T) {
 	dingoSrc := "x := 10\n"
 	goSrc := "x := 10\n"
 
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -361,8 +361,8 @@ func TestTranslatePositionIdentityMapping(t *testing.T) {
 	goSrc := "package main\n\nx := 10\n"
 
 	// Only map line 3
-	mappings := []ast.SourceMapping{
-		{DingoStart: 14, DingoEnd: 21, GoStart: 14, GoEnd: 21, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 3, GoLineStart: 3, GoLineEnd: 3, Kind: "identity"},
 	}
 
 	reader := createMockReader(t, dingoSrc, goSrc, mappings)
@@ -423,8 +423,8 @@ func TestTranslatorWithRealWorkspace(t *testing.T) {
 
 	dingoSrc := "x := 10\n"
 	goSrc := "x := 10\n"
-	mappings := []ast.SourceMapping{
-		{DingoStart: 0, DingoEnd: 7, GoStart: 0, GoEnd: 7, Kind: "identity"},
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "identity"},
 	}
 
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))
