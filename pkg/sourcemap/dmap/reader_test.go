@@ -10,7 +10,7 @@ import (
 func createTestDmap(t *testing.T, dingoSrc, goSrc []byte, mappings []sourcemap.LineMapping) []byte {
 	t.Helper()
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings in tests
 	if err != nil {
 		t.Fatalf("Failed to create test dmap: %v", err)
 	}
@@ -34,9 +34,9 @@ func TestReaderOpenBytes(t *testing.T) {
 	}
 	defer reader.Close()
 
-	// v2 format has no token-level entries
-	if reader.EntryCount() != 0 {
-		t.Errorf("EntryCount: got %d, want 0 (v2 format)", reader.EntryCount())
+	// v3 format uses line mappings only
+	if reader.LineMappingCount() != 2 {
+		t.Errorf("LineMappingCount: got %d, want 2", reader.LineMappingCount())
 	}
 
 	// But should have line mappings
@@ -218,8 +218,8 @@ func TestReaderEmptyMappings(t *testing.T) {
 	}
 	defer reader.Close()
 
-	if reader.EntryCount() != 0 {
-		t.Errorf("EntryCount: got %d, want 0", reader.EntryCount())
+	if reader.LineMappingCount() != 0 {
+		t.Errorf("LineMappingCount: got %d, want 0", reader.LineMappingCount())
 	}
 
 	if reader.Header().LineMappingCnt != 0 {
@@ -328,7 +328,7 @@ func TestReaderConcurrentAccess(t *testing.T) {
 				reader.GoLineToDingoLine(1)
 				reader.GoByteToLine(3)
 				reader.DingoByteToLine(5)
-				reader.EntryCount()
+				reader.LineMappingCount()
 				reader.Header()
 			}
 			done <- true

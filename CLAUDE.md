@@ -133,6 +133,17 @@ Variable naming:
 
 **Landing page** (`landingpage/` dir): Use astro-* agents instead.
 
+## Sourcemap Architecture (v3)
+
+Position tracking uses `token.Pos` from Dingo AST, NOT byte offsets.
+The pipeline emits `//line file.dingo:line:col` directives so gopls
+reports errors directly at Dingo positions.
+
+Key files:
+- `pkg/sourcemap/position_tracker.go` - New token.Pos-based tracker
+- `pkg/sourcemap/dmap/format.go` - v3 format with column mappings
+- `pkg/transpiler/pure_pipeline.go` - Main pipeline (see header comment)
+
 ## Key Files
 
 - Entry: `pkg/transpiler/pure_pipeline.go` → `PureASTTranspile()`

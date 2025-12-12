@@ -4,10 +4,10 @@ package transpiler
 
 import (
 	"fmt"
-	"go/token"
 	"os"
 
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
 
 // Transpiler handles transpilation of .dingo files to .go files
@@ -57,16 +57,25 @@ func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error
 		return fmt.Errorf("failed to read file: %w", err)
 	}
 
-	// Use new AST-based pipeline
-	fset := token.NewFileSet()
-	result, err := ASTTranspile(src, inputPath, fset)
+	// Use full AST-based pipeline with mappings so we can keep LSP `.dmap` files in sync.
+	// This is critical for reliable Go↔Dingo diagnostic mapping in dingo-lsp.
+	result, err := PureASTTranspileWithMappings(src, inputPath, true)
 	if err != nil {
 		return fmt.Errorf("transpilation error: %w", err)
 	}
 
 	// Write output
-	if err := os.WriteFile(outputPath, result.GoCode, 0644); err != nil {
+	if err := os.WriteFile(outputPath, result.GoCode, 0o644); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
+	}
+
+	// Write `.dmap` source map (used by dingo-lsp and other tooling).
+	// Keep this non-fatal: transpilation output is still valuable without maps.
+	if dmapPath, err := calculateDmapPath(inputPath); err == nil {
+		writer := dmap.NewWriter(result.DingoSource, result.GoCode)
+		// Write v3 format with column mappings
+		// Intentionally non-fatal: tooling can still use the `.go` file.
+		_ = writer.WriteFile(dmapPath, result.LineMappings, result.ColumnMappings)
 	}
 
 	return nil

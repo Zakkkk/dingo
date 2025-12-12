@@ -39,7 +39,7 @@ func TestMapToDingo_WithValidDmap(t *testing.T) {
 		{DingoLine: 3, GoLineStart: 4, GoLineEnd: 4, Kind: "let"},
 	}
 
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create test .dmap: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestMapToDingo_UnmappedLine(t *testing.T) {
 		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "match"},
 	}
 
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create test .dmap: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestMapToDingo_Caching(t *testing.T) {
 		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 	}
 
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create test .dmap: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestMapToDingo_MultipleDmapFiles(t *testing.T) {
 			{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 		}
 
-		data, err := writer.Write(mappings)
+		data, err := writer.Write(mappings, nil)
 		if err != nil {
 			t.Fatalf("Failed to create .dmap: %v", err)
 		}
@@ -288,7 +288,7 @@ func TestClose(t *testing.T) {
 		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "test"},
 	}
 
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create test .dmap: %v", err)
 	}
@@ -353,7 +353,7 @@ func BenchmarkMapToDingo(b *testing.B) {
 		}
 	}
 
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		b.Fatalf("Failed to create test .dmap: %v", err)
 	}

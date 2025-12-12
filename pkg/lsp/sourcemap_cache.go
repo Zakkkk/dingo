@@ -73,11 +73,11 @@ func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
 		c.logger.Debugf("[SourceMapCache] Failed to open dmap: %v", err)
 		return nil, fmt.Errorf("failed to read source map %s: %w", dmapPath, err)
 	}
-	c.logger.Debugf("[SourceMapCache] Successfully opened dmap with %d entries", reader.EntryCount())
+	c.logger.Debugf("[SourceMapCache] Successfully opened dmap with %d line mappings", reader.LineMappingCount())
 
 	// Store with consistent key (dingoPath)
 	c.maps[dingoPath] = reader
-	c.logger.Infof("Source map loaded: %s (%d entries)", dmapPath, reader.EntryCount())
+	c.logger.Infof("Source map loaded: %s (%d line mappings)", dmapPath, reader.LineMappingCount())
 
 	return reader, nil
 }

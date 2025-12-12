@@ -18,7 +18,7 @@ func TestWriterBasic(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -39,25 +39,19 @@ func TestWriterBasic(t *testing.T) {
 		t.Errorf("Invalid version: got %d, want %d", version, Version)
 	}
 
-	// v2 format has EntryCount = 0 (no token-level entries)
-	entryCount := binary.LittleEndian.Uint32(data[8:12])
-	if entryCount != 0 {
-		t.Errorf("Invalid entry count: got %d, want 0 (v2 format)", entryCount)
-	}
-
-	// Check source lengths
-	dingoLen := binary.LittleEndian.Uint32(data[12:16])
+	// Check source lengths (v3 format: bytes 8-12 DingoLen, 12-16 GoLen)
+	dingoLen := binary.LittleEndian.Uint32(data[8:12])
 	if dingoLen != uint32(len(dingoSrc)) {
 		t.Errorf("Invalid DingoLen: got %d, want %d", dingoLen, len(dingoSrc))
 	}
 
-	goLen := binary.LittleEndian.Uint32(data[16:20])
+	goLen := binary.LittleEndian.Uint32(data[12:16])
 	if goLen != uint32(len(goSrc)) {
 		t.Errorf("Invalid GoLen: got %d, want %d", goLen, len(goSrc))
 	}
 
-	// Check line mapping count
-	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	// Check line mapping count (v3 format: bytes 32-36)
+	lineMappingCnt := binary.LittleEndian.Uint32(data[32:36])
 	if lineMappingCnt != 2 {
 		t.Errorf("Invalid LineMappingCnt: got %d, want 2", lineMappingCnt)
 	}
@@ -68,7 +62,7 @@ func TestWriterEmptyMappings(t *testing.T) {
 	goSrc := []byte("package main\n")
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write([]sourcemap.LineMapping{})
+	data, err := writer.Write([]sourcemap.LineMapping{}, nil)
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -78,14 +72,8 @@ func TestWriterEmptyMappings(t *testing.T) {
 		t.Fatalf("Output too short: got %d bytes", len(data))
 	}
 
-	// v2 format has EntryCount = 0 (no token-level entries)
-	entryCount := binary.LittleEndian.Uint32(data[8:12])
-	if entryCount != 0 {
-		t.Errorf("Invalid entry count: got %d, want 0", entryCount)
-	}
-
-	// Line mapping count should also be 0
-	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	// Line mapping count should be 0 (v3 format: bytes 32-36)
+	lineMappingCnt := binary.LittleEndian.Uint32(data[32:36])
 	if lineMappingCnt != 0 {
 		t.Errorf("Invalid LineMappingCnt: got %d, want 0", lineMappingCnt)
 	}
@@ -103,13 +91,13 @@ func TestWriterKindDeduplication(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
-	// Read kind strings section
-	kindStrOff := binary.LittleEndian.Uint32(data[32:36])
+	// Read kind strings section (v3 format: bytes 44-48)
+	kindStrOff := binary.LittleEndian.Uint32(data[44:48])
 	kindCount := binary.LittleEndian.Uint32(data[kindStrOff : kindStrOff+4])
 
 	// Should only have 1 unique kind
@@ -123,13 +111,13 @@ func TestWriterLineOffsets(t *testing.T) {
 	goSrc := []byte("a\nb\nc\nd")
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write([]sourcemap.LineMapping{})
+	data, err := writer.Write([]sourcemap.LineMapping{}, nil)
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
-	// Read line index section
-	lineIdxOff := binary.LittleEndian.Uint32(data[28:32])
+	// Read line index section (v3 format: bytes 16-20)
+	lineIdxOff := binary.LittleEndian.Uint32(data[16:20])
 	dingoLineCount := binary.LittleEndian.Uint32(data[lineIdxOff : lineIdxOff+4])
 	goLineCount := binary.LittleEndian.Uint32(data[lineIdxOff+4 : lineIdxOff+8])
 
@@ -168,14 +156,14 @@ func TestWriterLineMappingEntries(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
-	// Read line mapping section
-	lineMappingOff := binary.LittleEndian.Uint32(data[36:40])
-	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	// Read line mapping section (v3 format: bytes 28-32 offset, 32-36 count)
+	lineMappingOff := binary.LittleEndian.Uint32(data[28:32])
+	lineMappingCnt := binary.LittleEndian.Uint32(data[32:36])
 
 	if lineMappingCnt != 3 {
 		t.Errorf("LineMappingCnt: got %d, want 3", lineMappingCnt)

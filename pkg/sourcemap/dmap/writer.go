@@ -1,6 +1,7 @@
 package dmap
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -22,13 +23,41 @@ func NewWriter(dingoSrc, goSrc []byte) *Writer {
 	}
 }
 
-// WriteFile writes .dmap v2 format with line-level mappings directly to a file
-func (w *Writer) WriteFile(path string, lineMappings []sourcemap.LineMapping) error {
-	data, err := w.Write(lineMappings)
+// WriteFile writes .dmap v3 format with line and column mappings directly to a file
+func (w *Writer) WriteFile(path string, lineMappings []sourcemap.LineMapping, colMappings []sourcemap.ColumnMapping) error {
+	data, err := w.Write(lineMappings, colMappings)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// countLineDirectives counts the number of //line directives in the source
+func countLineDirectives(src []byte) uint32 {
+	if len(src) == 0 {
+		return 0
+	}
+
+	count := uint32(0)
+	i := 0
+
+	for i < len(src) {
+		// Find next newline
+		lineEnd := i
+		for lineEnd < len(src) && src[lineEnd] != '\n' {
+			lineEnd++
+		}
+
+		// Check if line starts with //line
+		line := src[i:lineEnd]
+		if len(line) >= 7 && bytes.Equal(line[0:7], []byte("//line ")) {
+			count++
+		}
+
+		i = lineEnd + 1
+	}
+
+	return count
 }
 
 // buildLineOffsets scans source and returns byte offset of each line start
@@ -48,10 +77,11 @@ func buildLineOffsets(src []byte) []uint32 {
 				// Just LF - line starts after the \n
 				offsets = append(offsets, uint32(i+1))
 			}
-		} else if src[i] == '\r' && (i+1 >= len(src) || src[i+1] != '\n') {
-			// Bare CR (not followed by LF) - treat as line ending
+		} else if src[i] == '\r' && (i+1 < len(src) && src[i+1] != '\n') {
+			// Bare CR (not followed by LF, and not at EOF) - treat as line ending
 			offsets = append(offsets, uint32(i+1))
 		}
+		// Note: Bare CR at EOF is NOT a line ending
 	}
 	return offsets
 }
@@ -95,13 +125,21 @@ func writeKindStrings(buf []byte, kinds []string) int {
 	return offset
 }
 
-// Write generates .dmap v2 bytes with line-level mappings.
-// This is the v2 format that includes line mapping section for efficient line-level lookups.
-func (w *Writer) Write(lineMappings []sourcemap.LineMapping) ([]byte, error) {
-	// Build kind string table from line mappings (deduplicated)
+// Write generates .dmap v3 bytes with line and column mappings.
+// This is the v3 format with 56-byte header and column mapping support.
+func (w *Writer) Write(lineMappings []sourcemap.LineMapping, colMappings []sourcemap.ColumnMapping) ([]byte, error) {
+	// Build kind string table from both line and column mappings (deduplicated)
 	kindMap := make(map[string]uint16)
 	kinds := []string{}
+
 	for _, m := range lineMappings {
+		if _, exists := kindMap[m.Kind]; !exists {
+			kindMap[m.Kind] = uint16(len(kinds))
+			kinds = append(kinds, m.Kind)
+		}
+	}
+
+	for _, m := range colMappings {
 		if _, exists := kindMap[m.Kind]; !exists {
 			kindMap[m.Kind] = uint16(len(kinds))
 			kinds = append(kinds, m.Kind)
@@ -120,32 +158,68 @@ func (w *Writer) Write(lineMappings []sourcemap.LineMapping) ([]byte, error) {
 		}
 	}
 
+	// Convert ColumnMapping to ColumnMappingEntry with overflow validation
+	colEntries := make([]ColumnMappingEntry, len(colMappings))
+	for i, m := range colMappings {
+		// Validate uint16 bounds to prevent silent truncation
+		if m.DingoLine > 65535 || m.GoLine > 65535 {
+			return nil, fmt.Errorf("column mapping %d: line number exceeds uint16 max (file too large for v3 format)", i)
+		}
+		if m.DingoCol > 65535 || m.GoCol > 65535 {
+			return nil, fmt.Errorf("column mapping %d: column number exceeds uint16 max", i)
+		}
+		if m.Length > 65535 {
+			return nil, fmt.Errorf("column mapping %d: length exceeds uint16 max", i)
+		}
+
+		colEntries[i] = ColumnMappingEntry{
+			DingoLine: uint16(m.DingoLine),
+			DingoCol:  uint16(m.DingoCol),
+			GoLine:    uint16(m.GoLine),
+			GoCol:     uint16(m.GoCol),
+			Length:    uint16(m.Length),
+			KindIdx:   kindMap[m.Kind],
+			Reserved:  0,
+		}
+	}
+
 	// Build line offsets for Dingo and Go sources
 	dingoLines := buildLineOffsets(w.dingoSrc)
 	goLines := buildLineOffsets(w.goSrc)
 
-	// Calculate section offsets for v2 format
-	// v2 has NO token-level entries (Go/Dingo indexes), only line mappings
+	// Calculate section offsets for v3 format
 	lineIdxOff := uint32(HeaderSize)
 	lineIdxSize := 8 + uint32(len(dingoLines))*4 + uint32(len(goLines))*4
 	lineMappingOff := lineIdxOff + lineIdxSize
 	lineMappingSize := uint32(len(lineEntries)) * LineMappingEntrySize
-	kindStrOff := lineMappingOff + lineMappingSize
+	columnMappingOff := lineMappingOff + lineMappingSize
+	columnMappingSize := uint32(len(colEntries)) * ColumnMappingEntrySize
+	kindStrOff := columnMappingOff + columnMappingSize
 
-	// Build v2 header
+	// Build v3 header
+	flags := uint16(0)
+	if len(colMappings) > 0 {
+		flags |= FlagHasColumnMappings
+	}
+
+	// Count //line directives in Go source
+	lineDirectiveCount := countLineDirectives(w.goSrc)
+
 	header := Header{
-		Magic:          Magic,
-		Version:        Version,
-		Flags:          0,
-		EntryCount:     0, // v2 has no token-level entries
-		DingoLen:       uint32(len(w.dingoSrc)),
-		GoLen:          uint32(len(w.goSrc)),
-		GoIdxOff:       0, // No Go index in v2
-		DingoIdxOff:    0, // No Dingo index in v2
-		LineIdxOff:     lineIdxOff,
-		KindStrOff:     kindStrOff,
-		LineMappingOff: lineMappingOff,
-		LineMappingCnt: uint32(len(lineEntries)),
+		Magic:            Magic,
+		Version:          Version,
+		Flags:            flags,
+		DingoLen:         uint32(len(w.dingoSrc)),
+		GoLen:            uint32(len(w.goSrc)),
+		LineIdxOff:       lineIdxOff,
+		DingoLineCnt:     uint32(len(dingoLines)),
+		GoLineCnt:        uint32(len(goLines)),
+		LineMappingOff:   lineMappingOff,
+		LineMappingCnt:   uint32(len(lineEntries)),
+		ColumnMappingOff: columnMappingOff,
+		ColumnMappingCnt: uint32(len(colEntries)),
+		KindStrOff:       kindStrOff,
+		LineDirectiveCnt: lineDirectiveCount,
 	}
 
 	// Estimate total size
@@ -156,7 +230,7 @@ func (w *Writer) Write(lineMappings []sourcemap.LineMapping) ([]byte, error) {
 	buf := make([]byte, totalSize)
 
 	// Write header
-	writeHeaderV2(buf, header)
+	writeHeaderV3(buf, header)
 
 	// Write line index section
 	offset := int(lineIdxOff)
@@ -184,9 +258,20 @@ func (w *Writer) Write(lineMappings []sourcemap.LineMapping) ([]byte, error) {
 		offset += LineMappingEntrySize
 	}
 
+	// Verify we're at the expected column mapping offset
+	if offset != int(columnMappingOff) {
+		return nil, fmt.Errorf("internal error: writer offset mismatch at line mapping (expected %d, got %d)", columnMappingOff, offset)
+	}
+
+	// Write column mapping entries
+	for _, entry := range colEntries {
+		writeColumnMappingEntry(buf[offset:], entry)
+		offset += ColumnMappingEntrySize
+	}
+
 	// Verify we're at the expected kind strings offset
 	if offset != int(kindStrOff) {
-		return nil, fmt.Errorf("internal error: writer offset mismatch at line mapping (expected %d, got %d)", kindStrOff, offset)
+		return nil, fmt.Errorf("internal error: writer offset mismatch at column mapping (expected %d, got %d)", kindStrOff, offset)
 	}
 
 	// Write kind strings
@@ -196,20 +281,27 @@ func (w *Writer) Write(lineMappings []sourcemap.LineMapping) ([]byte, error) {
 	return buf[:offset+finalOffset], nil
 }
 
-// writeHeaderV2 writes the v2 Header with line mapping fields to the buffer
-func writeHeaderV2(buf []byte, h Header) {
+// writeHeaderV3 writes the v3 Header (56 bytes) to the buffer
+func writeHeaderV3(buf []byte, h Header) {
 	copy(buf[0:4], h.Magic[:])
 	binary.LittleEndian.PutUint16(buf[4:6], h.Version)
 	binary.LittleEndian.PutUint16(buf[6:8], h.Flags)
-	binary.LittleEndian.PutUint32(buf[8:12], h.EntryCount)
-	binary.LittleEndian.PutUint32(buf[12:16], h.DingoLen)
-	binary.LittleEndian.PutUint32(buf[16:20], h.GoLen)
-	binary.LittleEndian.PutUint32(buf[20:24], h.GoIdxOff)
-	binary.LittleEndian.PutUint32(buf[24:28], h.DingoIdxOff)
-	binary.LittleEndian.PutUint32(buf[28:32], h.LineIdxOff)
-	binary.LittleEndian.PutUint32(buf[32:36], h.KindStrOff)
-	binary.LittleEndian.PutUint32(buf[36:40], h.LineMappingOff)
-	binary.LittleEndian.PutUint32(buf[40:44], h.LineMappingCnt)
+	binary.LittleEndian.PutUint32(buf[8:12], h.DingoLen)
+	binary.LittleEndian.PutUint32(buf[12:16], h.GoLen)
+	binary.LittleEndian.PutUint32(buf[16:20], h.LineIdxOff)
+	binary.LittleEndian.PutUint32(buf[20:24], h.DingoLineCnt)
+	binary.LittleEndian.PutUint32(buf[24:28], h.GoLineCnt)
+	binary.LittleEndian.PutUint32(buf[28:32], h.LineMappingOff)
+	binary.LittleEndian.PutUint32(buf[32:36], h.LineMappingCnt)
+	binary.LittleEndian.PutUint32(buf[36:40], h.ColumnMappingOff)
+	binary.LittleEndian.PutUint32(buf[40:44], h.ColumnMappingCnt)
+	binary.LittleEndian.PutUint32(buf[44:48], h.KindStrOff)
+	binary.LittleEndian.PutUint32(buf[48:52], h.LineDirectiveCnt)
+	// Zero-initialize reserved bytes for deterministic output
+	buf[52] = 0
+	buf[53] = 0
+	buf[54] = 0
+	buf[55] = 0
 }
 
 // writeLineMappingEntry writes a LineMappingEntry to the buffer
@@ -219,4 +311,15 @@ func writeLineMappingEntry(buf []byte, e LineMappingEntry) {
 	binary.LittleEndian.PutUint32(buf[8:12], e.GoLineEnd)
 	binary.LittleEndian.PutUint16(buf[12:14], e.KindIdx)
 	binary.LittleEndian.PutUint16(buf[14:16], e.Reserved)
+}
+
+// writeColumnMappingEntry writes a ColumnMappingEntry to the buffer
+func writeColumnMappingEntry(buf []byte, e ColumnMappingEntry) {
+	binary.LittleEndian.PutUint16(buf[0:2], e.DingoLine)
+	binary.LittleEndian.PutUint16(buf[2:4], e.DingoCol)
+	binary.LittleEndian.PutUint16(buf[4:6], e.GoLine)
+	binary.LittleEndian.PutUint16(buf[6:8], e.GoCol)
+	binary.LittleEndian.PutUint16(buf[8:10], e.Length)
+	binary.LittleEndian.PutUint16(buf[10:12], e.KindIdx)
+	binary.LittleEndian.PutUint32(buf[12:16], e.Reserved)
 }

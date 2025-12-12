@@ -29,7 +29,7 @@ import (
 //
 // Returns error immediately on any parse failure with byte offset information.
 func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformASTExpressionsWithRegistry(src, nil, nil, nil)
+	return transformASTExpressionsWithRegistry(src, nil, nil, nil, "")
 }
 
 // transformASTExpressionsWithRegistry is like transformASTExpressions but accepts
@@ -37,7 +37,8 @@ func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
 // If originalSrc is provided, source mappings will use positions from originalSrc instead of src.
 // This is needed because earlier transforms (like error prop) may have shifted positions.
 // If tracker is provided, transforms will be recorded for line-level mapping generation.
-func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
+// If filename is provided, //line directives will be emitted for accurate error reporting.
+func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte, tracker *sourcemap.TransformTracker, filename string) ([]byte, []ast.SourceMapping, error) {
 	// Find all Dingo expressions in the (potentially transformed) source
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
@@ -190,24 +191,42 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			hoistedInsertPos := loc.StatementStart
 
 			// Record transform before splicing (if tracker provided)
+			dingoPos := loc.Start
+			dingoEnd := loc.End
 			if tracker != nil {
-				dingoPos := loc.Start
-				dingoEnd := loc.End
 				if originalSrc != nil {
 					if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
 						dingoPos = origPos
 						dingoEnd = origPos + (loc.End - loc.Start)
 					}
 				}
-				// Total generated length includes hoisted code + newline + temp var
-				generatedLen := len(genResult.HoistedCode) + 1 + len(genResult.Output)
+			}
+
+			// Prepend //line directive to hoisted code if filename is provided
+			var finalHoistedCode []byte
+			if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
+				line, col := byteOffsetToLineCol(originalSrc, dingoPos)
+				if line > 0 && col > 0 {
+					lineDirective := ast.FormatLineDirective(filename, line, col)
+					finalHoistedCode = append([]byte(lineDirective), genResult.HoistedCode...)
+				} else {
+					finalHoistedCode = genResult.HoistedCode
+				}
+			} else {
+				finalHoistedCode = genResult.HoistedCode
+			}
+
+			// Record transform after calculating final size
+			if tracker != nil {
+				// Total generated length includes line directive + hoisted code + newline + temp var
+				generatedLen := len(finalHoistedCode) + 1 + len(genResult.Output)
 				tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), generatedLen)
 			}
 
 			// Insert hoisted code before the statement
-			newResult := make([]byte, 0, len(result)+len(genResult.HoistedCode)+len(genResult.Output))
+			newResult := make([]byte, 0, len(result)+len(finalHoistedCode)+len(genResult.Output))
 			newResult = append(newResult, result[:hoistedInsertPos]...)
-			newResult = append(newResult, genResult.HoistedCode...)
+			newResult = append(newResult, finalHoistedCode...)
 			newResult = append(newResult, []byte("\n")...)
 
 			// Replace expression with temp variable
@@ -241,38 +260,48 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			replacement = genResult.Output
 		}
 
-		// Record transform before splicing (if tracker provided)
-		// Use original source positions for accurate tracking
-		if tracker != nil {
-			dingoPos := loc.Start
-			dingoEnd := loc.End
-			if originalSrc != nil {
-				if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
-					dingoPos = origPos
-					// Adjust end position by same delta
-					dingoEnd = origPos + (loc.End - loc.Start)
-				}
+		// Calculate original source position for both tracking and //line directives
+		dingoPos := loc.Start
+		dingoEnd := loc.End
+		if originalSrc != nil {
+			if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
+				dingoPos = origPos
+				// Adjust end position by same delta
+				dingoEnd = origPos + (loc.End - loc.Start)
 			}
-			tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), len(replacement))
+		}
+
+		// Prepend //line directive if filename is provided
+		// Calculate line:col from byte offset in original source
+		var finalReplacement []byte
+		if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
+			line, col := byteOffsetToLineCol(originalSrc, dingoPos)
+			if line > 0 && col > 0 {
+				lineDirective := ast.FormatLineDirective(filename, line, col)
+				finalReplacement = append([]byte(lineDirective), replacement...)
+			} else {
+				finalReplacement = replacement
+			}
+		} else {
+			finalReplacement = replacement
+		}
+
+		// Record transform before splicing (if tracker provided)
+		if tracker != nil {
+			tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), len(finalReplacement))
 		}
 
 		// Splice generated code into result
 		oldLen := replaceEnd - replaceStart
-		newResult := make([]byte, 0, len(result)-oldLen+len(replacement))
+		newResult := make([]byte, 0, len(result)-oldLen+len(finalReplacement))
 		newResult = append(newResult, result[:replaceStart]...)
-		newResult = append(newResult, replacement...)
+		newResult = append(newResult, finalReplacement...)
 		newResult = append(newResult, result[replaceEnd:]...)
 		result = newResult
 
 		// Convert codegen mappings to SourceMapping
 		// Adjust mapping positions based on splice location
-		// Use original source position if available (to account for shifts from earlier transforms)
-		dingoPos := loc.Start
-		if originalSrc != nil {
-			if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
-				dingoPos = origPos
-			}
-		}
+		// Note: dingoPos already calculated above for //line directives
 
 		for _, m := range genResult.Mappings {
 			mappings = append(mappings, ast.SourceMapping{
@@ -330,12 +359,13 @@ func findOriginalErrorPropPosition(originalSrc []byte, transformedSrc []byte, po
 //   x := foo()?                 →  tmp, err := foo(); if err != nil { return ..., err }; x := tmp
 //   return foo()?               →  tmp, err := foo(); if err != nil { return ..., err }; return tmp
 func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformErrorPropStatementsWithTracker(src, src, nil)
+	return transformErrorPropStatementsWithTracker(src, src, nil, "")
 }
 
 // transformErrorPropStatementsWithTracker wraps transformErrorPropStatements with tracker support.
 // originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
-func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
+// filename is used to generate //line directives for accurate error reporting.
+func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker, filename string) ([]byte, []ast.SourceMapping, error) {
 	locations, err := ast.FindErrorPropStatements(src)
 	if err != nil {
 		return src, nil, err
@@ -394,16 +424,31 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 
 		// Record transform before applying (if tracker provided)
 		// Calculate position in original source
+		origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
+		origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
+
+		// Prepend //line directive if filename is provided
+		var finalGenerated []byte
+		if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
+			line, col := byteOffsetToLineCol(originalSrc, origStart)
+			if line > 0 && col > 0 {
+				lineDirective := ast.FormatLineDirective(filename, line, col)
+				finalGenerated = append([]byte(lineDirective), generated...)
+			} else {
+				finalGenerated = generated
+			}
+		} else {
+			finalGenerated = generated
+		}
+
 		if tracker != nil {
-			origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
-			origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
-			tracker.RecordTransform(origStart, origEnd, "error_prop", len(generated))
+			tracker.RecordTransform(origStart, origEnd, "error_prop", len(finalGenerated))
 		}
 
 		// Replace in result
-		newResult := make([]byte, 0, len(result)-int(loc.End-loc.Start)+len(generated))
+		newResult := make([]byte, 0, len(result)-int(loc.End-loc.Start)+len(finalGenerated))
 		newResult = append(newResult, result[:loc.Start]...)
-		newResult = append(newResult, generated...)
+		newResult = append(newResult, finalGenerated...)
 		newResult = append(newResult, result[loc.End:]...)
 		result = newResult
 
@@ -1027,4 +1072,26 @@ func filterExprNestedInTernary(locations []ast.ExprLocation) []ast.ExprLocation 
 	}
 
 	return result
+}
+
+// byteOffsetToLineCol converts a byte offset in source to 1-indexed line:col.
+// Returns (0, 0) if offset is invalid.
+func byteOffsetToLineCol(src []byte, offset int) (line, col int) {
+	if offset < 0 || offset >= len(src) {
+		return 0, 0
+	}
+
+	line = 1
+	col = 1
+
+	for i := 0; i < offset && i < len(src); i++ {
+		if src[i] == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+
+	return line, col
 }

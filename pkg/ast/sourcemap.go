@@ -1,5 +1,7 @@
 package ast
 
+import "strconv"
+
 // SourceMapping represents a mapping from Dingo source positions to Go output positions.
 // Used by the LSP for translating positions between the two representations.
 type SourceMapping struct {
@@ -29,6 +31,7 @@ type CodeGenResult struct {
 	StatementOutput []byte          // Statement-level output (for hoisting)
 	HoistedCode     []byte          // Code to hoist before the expression
 	Error           *CodeGenError   // Error if code generation failed
+	LineDirective   string          // //line directive for this generated code (e.g., "//line foo.dingo:42:5\n")
 }
 
 // CodeGenError represents an error during code generation.
@@ -91,4 +94,19 @@ func (b *MappingBuilder) AddRange(dingoStart, dingoEnd, goStart, goEnd int, kind
 // Build returns the accumulated source mappings.
 func (b *MappingBuilder) Build() []SourceMapping {
 	return b.mappings
+}
+
+// FormatLineDirective generates a //line directive in Go 1.17+ format.
+// Format: //line filename:line:col
+// Returns the directive with trailing newline.
+//
+// Example:
+//   FormatLineDirective("foo.dingo", 42, 5) → "//line foo.dingo:42:5\n"
+func FormatLineDirective(filename string, line, col int) string {
+	if filename == "" || line <= 0 || col <= 0 {
+		return ""
+	}
+	// Go 1.17+ format: //line filename:line:col
+	// Note: No space after //line
+	return "//line " + filename + ":" + strconv.Itoa(line) + ":" + strconv.Itoa(col) + "\n"
 }

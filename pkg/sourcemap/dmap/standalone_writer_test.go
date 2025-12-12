@@ -21,7 +21,7 @@ func TestWriterStandalone(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
@@ -44,28 +44,22 @@ func TestWriterStandalone(t *testing.T) {
 		t.Errorf("Invalid version: got %d, want %d", version, Version)
 	}
 
-	// v2 format has EntryCount = 0 (no token-level entries)
-	entryCount := binary.LittleEndian.Uint32(data[8:12])
-	if entryCount != 0 {
-		t.Errorf("Invalid entry count: got %d, want 0 (v2 format)", entryCount)
-	}
-
-	// Verify source lengths
-	dingoLen := binary.LittleEndian.Uint32(data[12:16])
+	// Verify source lengths (v3 header: bytes 8-12 DingoLen, 12-16 GoLen)
+	dingoLen := binary.LittleEndian.Uint32(data[8:12])
 	if dingoLen != uint32(len(dingoSrc)) {
 		t.Errorf("Invalid DingoLen: got %d, want %d", dingoLen, len(dingoSrc))
 	}
 
-	goLen := binary.LittleEndian.Uint32(data[16:20])
+	goLen := binary.LittleEndian.Uint32(data[12:16])
 	if goLen != uint32(len(goSrc)) {
 		t.Errorf("Invalid GoLen: got %d, want %d", goLen, len(goSrc))
 	}
 
-	// Read v2 offsets
-	lineIdxOff := binary.LittleEndian.Uint32(data[28:32])
-	kindStrOff := binary.LittleEndian.Uint32(data[32:36])
-	lineMappingOff := binary.LittleEndian.Uint32(data[36:40])
-	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	// Read v3 offsets (correct byte positions)
+	lineIdxOff := binary.LittleEndian.Uint32(data[16:20])
+	lineMappingOff := binary.LittleEndian.Uint32(data[28:32])
+	lineMappingCnt := binary.LittleEndian.Uint32(data[32:36])
+	kindStrOff := binary.LittleEndian.Uint32(data[44:48])
 
 	t.Logf("Offsets: LineIdx=%d, KindStr=%d, LineMapping=%d, LineMappingCnt=%d",
 		lineIdxOff, kindStrOff, lineMappingOff, lineMappingCnt)
@@ -88,7 +82,7 @@ func TestWriterFileWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	dmapPath := filepath.Join(tmpDir, "test.dmap")
 
-	err := writer.WriteFile(dmapPath, mappings)
+	err := writer.WriteFile(dmapPath, mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
@@ -120,13 +114,13 @@ func TestWriterMultipleKinds(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
 	// Read kind strings section
-	kindStrOff := binary.LittleEndian.Uint32(data[32:36])
+	kindStrOff := binary.LittleEndian.Uint32(data[44:48])
 	kindCount := binary.LittleEndian.Uint32(data[kindStrOff : kindStrOff+4])
 
 	// Should have 3 unique kinds
@@ -141,13 +135,13 @@ func TestWriterLineOffsetsCorrectness(t *testing.T) {
 	goSrc := []byte("x\ny\nz\nw") // Lines at: 0, 2, 4, 6
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write([]sourcemap.LineMapping{})
+	data, err := writer.Write([]sourcemap.LineMapping{}, nil)
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
 	// Read line index section
-	lineIdxOff := binary.LittleEndian.Uint32(data[28:32])
+	lineIdxOff := binary.LittleEndian.Uint32(data[16:20])
 
 	dingoLineCount := binary.LittleEndian.Uint32(data[lineIdxOff : lineIdxOff+4])
 	goLineCount := binary.LittleEndian.Uint32(data[lineIdxOff+4 : lineIdxOff+8])
@@ -194,14 +188,14 @@ func TestStandaloneWriterLineMappingEntries(t *testing.T) {
 	}
 
 	writer := NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil) // No column mappings
 	if err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
 
-	// Read line mapping section
-	lineMappingOff := binary.LittleEndian.Uint32(data[36:40])
-	lineMappingCnt := binary.LittleEndian.Uint32(data[40:44])
+	// Read line mapping section (v3 format: bytes 28-32 offset, 32-36 count)
+	lineMappingOff := binary.LittleEndian.Uint32(data[28:32])
+	lineMappingCnt := binary.LittleEndian.Uint32(data[32:36])
 
 	if lineMappingCnt != 3 {
 		t.Errorf("LineMappingCnt incorrect: got %d, want 3", lineMappingCnt)

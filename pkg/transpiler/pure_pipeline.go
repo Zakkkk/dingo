@@ -14,6 +14,73 @@ import (
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
+/*
+DINGO TRANSPILATION PIPELINE (v3 Architecture)
+==============================================
+
+This file implements the main transpilation pipeline from .dingo to .go.
+
+POSITION TRACKING FLOW:
+
+  .dingo source
+      |
+      v
+  pkg/tokenizer/Scanner
+      - Creates token.FileSet for Dingo
+      - Scanner.Pos() returns token.Pos
+      |
+      v
+  pkg/parser/Parser (Pratt-based)
+      - Produces Dingo AST nodes
+      - Each node has Pos()/End() -> token.Pos
+      - KEY: These positions are PRESERVED through all transforms
+      |
+      v
+  pkg/codegen/* (with //line directives)
+      - Transforms AST to Go code text
+      - Emits //line file.dingo:LINE:COL directives (Go 1.17+)
+      - Records transforms via PositionTracker using token.Pos
+      |
+      v
+  go/parser + go/printer
+      - PRESERVES //line directives in output
+      - go/printer may reformat but directives survive
+      |
+      v
+  PositionTracker.Finalize()
+      - Resolves token.Pos to line:col using fset.Position()
+      - Generates v3 .dmap file with column-level mappings
+
+DIAGNOSTIC FLOW (why //line directives matter):
+
+  gopls analyzes .go file
+      |
+      v
+  Sees //line file.dingo:42:5
+      |
+      v
+  Reports diagnostic at file.dingo:42:5
+      |
+      v
+  LSP client shows error in .dingo editor
+
+  → No remapping needed for diagnostics! //line directives handle it.
+
+WHY token.Pos INSTEAD OF BYTE OFFSETS:
+
+  The old TransformTracker used byte arithmetic:
+    goBytePos += untransformedLen  // FRAGILE: breaks after go/printer reformats!
+
+  The new PositionTracker stores token.Pos from Dingo AST:
+    tracker.RecordTransform(node.Pos(), node.End(), "lambda")
+
+  Then resolves AFTER go/printer:
+    pos := fset.Position(transform.DingoPos)  // Always accurate!
+
+  Key insight: Dingo AST positions survive the entire pipeline because
+  we store the token.Pos value, not a byte offset that becomes stale.
+*/
+
 // PureASTTranspile uses AST-based transformation for all Dingo features.
 //
 // Currently handles:
@@ -53,7 +120,14 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 // PureASTTranspileWithMappings transpiles and returns source mappings for LSP integration.
 // This is the full-featured version that returns all transformation metadata.
 func PureASTTranspileWithMappings(source []byte, filename string, inferTypes bool) (TranspileResult, error) {
+	// Create Dingo FileSet for position tracking (will be populated by parser)
+	// Note: In v3 architecture, we would get this from the parser, but for now
+	// we use TransformTracker as a bridge until parser integration is complete
+	dingoFset := token.NewFileSet()
+	_ = dingoFset.AddFile(filename, -1, len(source))
+
 	// Create TransformTracker to record all transformations
+	// TODO: Migrate to PositionTracker once parser provides token.Pos
 	tracker := sourcemap.NewTransformTracker(source)
 
 	// Extract enum registry from ORIGINAL source (before transformation)
@@ -110,7 +184,8 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	tupleMappings = append(tupleMappings, typeAliasMappings...)
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
-	transformedSource, stmtMappings, err := transformErrorPropStatementsWithTracker(transformedSource, source, tracker)
+	// Pass filename for //line directive generation
+	transformedSource, stmtMappings, err := transformErrorPropStatementsWithTracker(transformedSource, source, tracker, filename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
@@ -124,7 +199,8 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	// Also pass original source for accurate position mapping (earlier transforms shift positions)
-	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry, source, tracker)
+	// Pass filename for //line directive generation
+	transformedSource, astMappings, err := transformASTExpressionsWithRegistry(transformedSource, enumRegistry, source, tracker, filename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
@@ -265,68 +341,29 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("tracker finalize error: %w", err)
 	}
 
-	// Convert v1 byte mappings to v2 line mappings and merge with tracker's mappings
-	// This bridges the gap where tuple transforms use v1 system but we need v2 for LSP
-	byteMappings := make([]sourcemap.ByteMapping, len(allMappings))
-	for i, m := range allMappings {
-		byteMappings[i] = sourcemap.ByteMapping{
-			DingoStart: m.DingoStart,
-			DingoEnd:   m.DingoEnd,
-			GoStart:    m.GoStart,
-			GoEnd:      m.GoEnd,
-			Kind:       m.Kind,
-		}
-	}
-	convertedMappings := sourcemap.ComputeLineMappingsFromByteMappings(byteMappings, source, finalGoCode)
+	// For v3 format, we also need column mappings
+	// Currently TransformTracker doesn't provide column mappings,
+	// so we create empty slice (will be populated when migrating to PositionTracker)
+	var columnMappings []sourcemap.ColumnMapping
 
-	// Merge tracker's precise mappings with converted v1 mappings
-	// Tracker mappings (from error_prop, lambdas) take priority over converted ones
-	mergedMappings := mergeLineMappings(tracker.LineMappings(), convertedMappings)
+	// Use tracker's line mappings directly (v2 format)
+	// In v3 architecture with PositionTracker, this will be replaced with:
+	//   lineMappings := tracker.LineMappings()
+	//   columnMappings := tracker.ColumnMappings()
+	lineMappings := tracker.LineMappings()
 
 	// Return complete transpilation result with mappings
 	return TranspileResult{
-		GoCode:       finalGoCode,
-		Mappings:     allMappings,
-		LineMappings: mergedMappings,
-		DingoSource:  source,
-		GoAST:        goFile,
+		GoCode:         finalGoCode,
+		Mappings:       allMappings,
+		LineMappings:   lineMappings,
+		ColumnMappings: columnMappings,
+		DingoSource:    source,
+		GoAST:          goFile,
 		Metadata: &TranspileMetadata{
 			OriginalFile: filename,
 		},
 	}, nil
-}
-
-// mergeLineMappings combines tracker's precise mappings with converted v1 mappings.
-// Deduplicates by DingoLine, keeping the first mapping (tracker's take priority).
-func mergeLineMappings(trackerMappings, convertedMappings []sourcemap.LineMapping) []sourcemap.LineMapping {
-	if len(trackerMappings) == 0 && len(convertedMappings) == 0 {
-		return nil
-	}
-
-	// Build set of Dingo lines already covered by tracker mappings
-	covered := make(map[int]bool, len(trackerMappings))
-	for _, m := range trackerMappings {
-		covered[m.DingoLine] = true
-	}
-
-	// Start with tracker's mappings
-	result := make([]sourcemap.LineMapping, 0, len(trackerMappings)+len(convertedMappings))
-	result = append(result, trackerMappings...)
-
-	// Add converted mappings for lines not covered by tracker
-	for _, m := range convertedMappings {
-		if !covered[m.DingoLine] {
-			result = append(result, m)
-			covered[m.DingoLine] = true
-		}
-	}
-
-	// Sort by DingoLine for efficient lookup
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].DingoLine < result[j].DingoLine
-	})
-
-	return result
 }
 
 // deduplicateAndSortMappings removes duplicate mappings and sorts by GoStart.

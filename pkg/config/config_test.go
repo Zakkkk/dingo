@@ -17,8 +17,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Error("Expected source maps to be enabled by default")
 	}
 
-	if cfg.SourceMap.Format != FormatInline {
-		t.Errorf("Expected default format to be 'inline', got %q", cfg.SourceMap.Format)
+	if cfg.SourceMap.Format != FormatSeparate {
+		t.Errorf("Expected default format to be 'separate', got %q", cfg.SourceMap.Format)
 	}
 
 	// Test Match defaults
@@ -109,7 +109,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: true,
@@ -141,7 +141,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -158,7 +158,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -175,7 +175,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -192,7 +192,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: true,
@@ -210,7 +210,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -227,7 +227,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -244,7 +244,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -261,7 +261,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: true,
@@ -283,7 +283,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -299,7 +299,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -315,7 +315,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: true,
@@ -331,7 +331,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: true,
@@ -348,7 +348,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			},
 			wantError: false,
@@ -361,7 +361,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 				Debug: DebugConfig{
 					KeepMarkers: true,
@@ -377,7 +377,7 @@ func TestConfigValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 				Debug: DebugConfig{
 					KeepMarkers: false,
@@ -767,7 +767,7 @@ func TestLambdaStyleValidation(t *testing.T) {
 				},
 				SourceMap: SourceMapConfig{
 					Enabled: true,
-					Format:  FormatInline,
+					Format:  FormatSeparate,
 				},
 			}
 

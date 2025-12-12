@@ -35,7 +35,7 @@ func (m *mockSourceMapGetter) Size() int                    { return len(m.reade
 func createMockReader(t *testing.T, dingoSrc, goSrc string, mappings []sourcemap.LineMapping) *dmap.Reader {
 	t.Helper()
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create dmap: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestTranslatorWithRealWorkspace(t *testing.T) {
 	}
 
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to write dmap: %v", err)
 	}

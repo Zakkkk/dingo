@@ -31,6 +31,9 @@ type TranspileResult struct {
 	// LineMappings contains line-level mappings for .dmap v2 format
 	LineMappings []sourcemap.LineMapping
 
+	// ColumnMappings contains column-level mappings for .dmap v3 format
+	ColumnMappings []sourcemap.ColumnMapping
+
 	// DingoSource is the original Dingo source (for line index in .dmap)
 	DingoSource []byte
 }

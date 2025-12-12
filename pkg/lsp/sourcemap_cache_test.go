@@ -89,7 +89,7 @@ func createTestDmapFile(t *testing.T, workspaceRoot, relPath string) {
 	}
 
 	writer := dmap.NewWriter(dingoSrc, goSrc)
-	data, err := writer.Write(mappings)
+	data, err := writer.Write(mappings, nil)
 	if err != nil {
 		t.Fatalf("Failed to create dmap data: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestSourceMapCacheConcurrentAccess(t *testing.T) {
 					return
 				}
 				// Verify we can read from the reader
-				_ = reader.EntryCount()
+				_ = reader.LineMappingCount()
 			}
 		}()
 	}

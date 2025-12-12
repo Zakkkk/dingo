@@ -13,14 +13,14 @@ func TestMagicConstant(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	if Version != 2 {
-		t.Errorf("Version incorrect: got %d, want 2", Version)
+	if Version != 3 {
+		t.Errorf("Version incorrect: got %d, want 3", Version)
 	}
 }
 
 func TestHeaderSize(t *testing.T) {
-	if HeaderSize != 44 {
-		t.Errorf("HeaderSize incorrect: got %d, want 44", HeaderSize)
+	if HeaderSize != 56 {
+		t.Errorf("HeaderSize incorrect: got %d, want 56", HeaderSize)
 	}
 }
 
@@ -30,8 +30,8 @@ func TestLineMappingEntrySize(t *testing.T) {
 	}
 }
 
-func TestEntrySize(t *testing.T) {
-	if EntrySize != 20 {
-		t.Errorf("EntrySize incorrect: got %d, want 20", EntrySize)
+func TestColumnMappingEntrySize(t *testing.T) {
+	if ColumnMappingEntrySize != 16 {
+		t.Errorf("ColumnMappingEntrySize incorrect: got %d, want 16", ColumnMappingEntrySize)
 	}
 }

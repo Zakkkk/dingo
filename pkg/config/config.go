@@ -38,14 +38,8 @@ func (s SyntaxStyle) IsValid() bool {
 type SourceMapFormat string
 
 const (
-	// FormatInline embeds source maps as comments in generated Go files
-	FormatInline SourceMapFormat = "inline"
-
-	// FormatSeparate writes source maps to .go.map files
+	// FormatSeparate writes source maps to .dmap files
 	FormatSeparate SourceMapFormat = "separate"
-
-	// FormatBoth writes both inline and separate source maps
-	FormatBoth SourceMapFormat = "both"
 
 	// FormatNone disables source map generation
 	FormatNone SourceMapFormat = "none"
@@ -79,11 +73,10 @@ type BuildConfig struct {
 	OutDir string `toml:"outdir"`
 
 	// TranspileMode selects the transpilation strategy
-	// Valid values: "legacy", "ast", "hybrid"
-	// - "legacy": Preprocessor-based (current production implementation)
-	// - "ast": New AST parser + transformer (under development)
-	// - "hybrid": Try AST first, fall back to legacy on error
-	// Default: "legacy" for backward compatibility
+	// Valid values: "ast" (only)
+	// - "ast": Pure AST-based pipeline (production implementation)
+	// Note: Legacy and hybrid modes have been removed
+	// Default: "ast" (implicit, only available mode)
 	TranspileMode string `toml:"transpile_mode"`
 }
 
@@ -277,7 +270,8 @@ type SourceMapConfig struct {
 	Enabled bool `toml:"enabled"`
 
 	// Format controls the source map output format
-	// Valid values: "inline", "separate", "both", "none"
+	// Valid values: "separate", "none"
+	// Note: inline and both formats have been removed (v3 uses .dmap files only)
 	Format SourceMapFormat `toml:"format"`
 }
 
@@ -315,14 +309,14 @@ func DefaultConfig() *Config {
 		},
 		SourceMap: SourceMapConfig{
 			Enabled: true,
-			Format:  FormatInline, // Default to inline for development
+			Format:  FormatSeparate, // Default to separate .dmap files
 		},
 		Debug: DebugConfig{
 			KeepMarkers: false, // Default to clean output for production
 		},
 		Build: BuildConfig{
-			OutDir:        "",       // Default to placing output alongside source
-			TranspileMode: "legacy", // Default to legacy mode for stability
+			OutDir:        "",    // Default to placing output alongside source
+			TranspileMode: "ast", // Default to AST mode (only available mode)
 		},
 		TypeInference: TypeInferenceConfig{
 			GoplsEnabled: false, // Default to disabled for CI compatibility
@@ -512,20 +506,23 @@ func (c *Config) Validate() error {
 
 	// Validate source map format
 	switch c.SourceMap.Format {
-	case FormatInline, FormatSeparate, FormatBoth, FormatNone:
+	case FormatSeparate, FormatNone, "": // Empty string is valid, will use default
 		// Valid
 	default:
-		return fmt.Errorf("invalid sourcemap format: %q (must be 'inline', 'separate', 'both', or 'none')",
+		return fmt.Errorf("invalid sourcemap format: %q (must be 'separate' or 'none')",
 			c.SourceMap.Format)
 	}
 
 	// Validate transpile mode
 	if c.Build.TranspileMode != "" {
 		switch c.Build.TranspileMode {
-		case "legacy", "ast", "hybrid":
-			// Valid
+		case "ast":
+			// Valid - only mode available
+		case "legacy", "hybrid":
+			return fmt.Errorf("invalid build.transpile_mode: %q (legacy and hybrid modes removed, use 'ast')",
+				c.Build.TranspileMode)
 		default:
-			return fmt.Errorf("invalid build.transpile_mode: %q (must be 'legacy', 'ast', or 'hybrid')",
+			return fmt.Errorf("invalid build.transpile_mode: %q (must be 'ast')",
 				c.Build.TranspileMode)
 		}
 	}
