@@ -140,8 +140,7 @@ func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 	}
 
 	return ast.CodeGenResult{
-		Output:   result,
-		Mappings: []ast.SourceMapping{},
+		Output: result,
 	}, nil
 }
 
@@ -775,7 +774,7 @@ func (r *TupleTypeResolver) expandDestructureMarker(call *goast.CallExpr) []goas
 // Example: "x:0" → ("x", [0])
 // Example: "x" → ("x", []) (legacy format without path)
 func parseEncodedBinding(encoded string) (string, []int) {
-	colonIdx := strings.Index(encoded, ":")
+	colonIdx := strings.Index(encoded, ":") // OK: Parses data format, not source positions
 	if colonIdx == -1 {
 		// Legacy format: just name, no path
 		return encoded, nil

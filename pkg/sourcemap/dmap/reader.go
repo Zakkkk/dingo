@@ -553,6 +553,54 @@ func (r *Reader) computeDeltaFallback(goLine int, searchIdx int) int {
 	return dingoLine
 }
 
+// DingoLineToGoLine converts a 1-indexed Dingo line to the corresponding Go line.
+// For transformed lines (error propagation, match, etc.), returns GoLineStart where
+// the actual code is located (not the //line directive which is at GoLineStart-1).
+// For untransformed lines, uses CalculateLineShift for proper offset calculation.
+func (r *Reader) DingoLineToGoLine(dingoLine int) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Check if this Dingo line has a direct mapping (is a transformed line)
+	for _, m := range r.lineMappings {
+		if int(m.DingoLine) == dingoLine {
+			// Found direct mapping - return GoLineStart where the code is
+			// The //line directive is at GoLineStart-1, but we want the actual code
+			return int(m.GoLineStart)
+		}
+	}
+
+	// No direct mapping - use line shift calculation
+	baseOffset := r.calculateBaseOffset()
+	transformShift := 0
+	for _, m := range r.lineMappings {
+		if int(m.DingoLine) < dingoLine {
+			// Each transform expansion adds extra Go lines:
+			// - 1 line for the //line directive (at GoLineStart - 1)
+			// - (GoLineEnd - GoLineStart) extra lines beyond the 1 Dingo line
+			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
+			dingoLines := 1
+			directiveLine := 1 // The //line directive adds one more Go line
+			transformShift += (goLines - dingoLines) + directiveLine
+		}
+	}
+	return dingoLine + baseOffset + transformShift
+}
+
+// IsTransformedLine returns true if the given Dingo line has a direct transformation mapping.
+// Transformed lines have different code structure and require special column handling.
+func (r *Reader) IsTransformedLine(dingoLine int) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, m := range r.lineMappings {
+		if int(m.DingoLine) == dingoLine {
+			return true
+		}
+	}
+	return false
+}
+
 // Header returns a copy of the file header.
 func (r *Reader) Header() Header {
 	r.mu.RLock()
@@ -588,17 +636,116 @@ func (r *Reader) CalculateLineShift(dingoLine int) int {
 	defer r.mu.RUnlock()
 
 	// V3 format: Use line mappings for efficient calculation
-	totalShift := 0
+	// First, calculate base offset from header differences
+	// (e.g., if Go removed an empty comment, lines shift by -1)
+	baseOffset := r.calculateBaseOffset()
+
+	// Then add shifts from transformed code expansions
+	transformShift := 0
 	for _, m := range r.lineMappings {
 		// Only count mappings BEFORE the target line
 		if int(m.DingoLine) < dingoLine {
-			// Each mapping spans (GoLineEnd - GoLineStart + 1) Go lines
-			// but represents 1 Dingo line
+			// Each transform expansion adds extra Go lines:
+			// - 1 line for the //line directive (at GoLineStart - 1)
+			// - (GoLineEnd - GoLineStart) extra lines beyond the 1 Dingo line
 			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
 			dingoLines := 1
-			totalShift += (goLines - dingoLines)
+			directiveLine := 1 // The //line directive adds one more Go line
+			transformShift += (goLines - dingoLines) + directiveLine
 		}
 	}
-	return totalShift
+	return baseOffset + transformShift
+}
+
+// TranslateDingoColumn translates a Dingo column to Go column for transformed lines.
+// Takes 1-indexed line and column. Returns the translated Go column and whether a mapping was found.
+// If no column mapping applies, returns the original column unchanged.
+func (r *Reader) TranslateDingoColumn(dingoLine, dingoCol int) (goCol int, found bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Look for a column mapping that contains this position
+	for _, m := range r.columnMappings {
+		if int(m.DingoLine) == dingoLine {
+			// Check if column falls within the mapped expression range
+			// The mapping covers [DingoCol, DingoCol + Length)
+			if dingoCol >= int(m.DingoCol) && dingoCol < int(m.DingoCol)+int(m.Length) {
+				// Translate using the column offset
+				// offset = GoCol - DingoCol (positive means Go has more leading chars)
+				offset := int(m.GoCol) - int(m.DingoCol)
+				return dingoCol + offset, true
+			}
+		}
+	}
+	return dingoCol, false
+}
+
+// TranslateGoColumn translates a Go column to Dingo column for transformed lines.
+// Takes 1-indexed line and column. Returns the translated Dingo column and whether a mapping was found.
+// If no column mapping applies, returns the original column unchanged.
+func (r *Reader) TranslateGoColumn(goLine, goCol int) (dingoCol int, found bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Look for a column mapping that contains this position
+	for _, m := range r.columnMappings {
+		if int(m.GoLine) == goLine {
+			// Check if column falls within the mapped expression range
+			// The mapping covers [GoCol, GoCol + Length)
+			if goCol >= int(m.GoCol) && goCol < int(m.GoCol)+int(m.Length) {
+				// Translate using the column offset (reverse direction)
+				// offset = GoCol - DingoCol
+				offset := int(m.GoCol) - int(m.DingoCol)
+				return goCol - offset, true
+			}
+		}
+	}
+	return goCol, false
+}
+
+// calculateBaseOffset computes the initial line offset from header differences.
+// This accounts for lines removed/added during Go formatting (e.g., empty comments).
+// Returns negative if Go has fewer lines, positive if Go has more lines.
+func (r *Reader) calculateBaseOffset() int {
+	// If we have line mappings, use the first mapping to compute header offset.
+	// The //line directive forces GoLineStart = DingoLine, but lines BEFORE
+	// the directive may have an offset due to removed/added lines during formatting.
+	if len(r.lineMappings) > 0 {
+		first := r.lineMappings[0]
+
+		// Check if this is an identity/simple mapping (no //line directive)
+		// Identity mappings have no expansion: GoLineEnd == GoLineStart
+		// Transformed code has expansion: GoLineEnd > GoLineStart
+		if first.GoLineEnd == first.GoLineStart {
+			// No expansion means no //line directive was emitted, so no header offset
+			return 0
+		}
+
+		// For transformed code with //line directive:
+		// The //line directive appears at Go line (GoLineStart - 1) and says:
+		//   "the next line (GoLineStart) is Dingo line DingoLine"
+		// The directive line itself doesn't correspond to any Dingo line.
+		//
+		// For lines BEFORE the directive, the content at Go line N should be
+		// Dingo line (N + offset) if there's an offset.
+		//
+		// If there's no header offset:
+		//   - Go line (GoLineStart - 2) = Dingo line (DingoLine - 1) content
+		//   - So Dingo line N maps to Go line N
+		// If header offset is -1 (Go has 1 fewer line):
+		//   - Go line (GoLineStart - 3) = Dingo line (DingoLine - 1) content
+		//   - So Dingo line N maps to Go line (N - 1)
+		//
+		// Formula: headerOffset = (GoLineStart - 2) - (DingoLine - 1) = GoLineStart - DingoLine - 1
+		// This gives the offset to ADD to Dingo line to get Go line.
+		headerOffset := int(first.GoLineStart) - int(first.DingoLine) - 1
+
+		return headerOffset
+	}
+
+	// No mappings - simple case, check line counts
+	dingoTotal := int(r.hdr.DingoLineCnt)
+	goTotal := int(r.hdr.GoLineCnt)
+	return goTotal - dingoTotal
 }
 

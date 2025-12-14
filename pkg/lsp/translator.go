@@ -74,21 +74,48 @@ func (t *Translator) TranslatePosition(
 	var newURI protocol.DocumentURI
 
 	if dir == DingoToGo {
-		// V2 line-based mapping: Calculate line shift and apply
-		lineShift := reader.CalculateLineShift(line)
+		// Use DingoLineToGoLine which handles both:
+		// - Transformed lines (returns GoLineStart where actual code is)
+		// - Untransformed lines (uses line shift calculation)
+		newLine = reader.DingoLineToGoLine(line)
 
-		// Add line shift to get Go line number (column stays the same)
-		newLine = line + lineShift
-		newCol = col
+		// Apply column translation for transformed lines (error propagation, etc.)
+		// This adjusts for LHS changes: "userID := func()?" -> "tmp, err := func()"
+		var colFound bool
+		newCol, colFound = reader.TranslateDingoColumn(line, col)
+		if colFound {
+			log.Printf("[LSP Translator] DingoToGo: column translated %d -> %d", col, newCol)
+		} else {
+			// For transformed lines, positions outside the mapped range can't use
+			// identity mapping because the Go line has different content.
+			// For example, Dingo "user := func()? |err| handler(err)" maps to
+			// Go "tmp, err := func()" - the "?" and lambda don't exist on that line.
+			if reader.IsTransformedLine(line) {
+				// Clamp to column 1 - hover on unmapped positions will show
+				// info for the start of the line (better than random garbage)
+				newCol = 1
+				log.Printf("[LSP Translator] DingoToGo: transformed line, unmapped col %d -> clamped to 1", col)
+			} else {
+				log.Printf("[LSP Translator] DingoToGo: column identity %d", col)
+			}
+		}
 
-		log.Printf("[LSP Translator] DingoToGo: dingoLine=%d, lineShift=%d, goLine=%d", line, lineShift, newLine)
+		log.Printf("[LSP Translator] DingoToGo: dingoLine=%d -> goLine=%d", line, newLine)
 		log.Printf("[LSP Translator] AFTER DingoToGo: newLine=%d, newCol=%d", newLine, newCol)
 		newURI = lspuri.File(goPath)
 	} else {
 		// Go → Dingo translation using V2 line mappings
 		var kind string
 		newLine, kind = reader.GoLineToDingoLine(line)
-		newCol = col // Start with identity mapping
+
+		// Apply column translation for transformed lines (reverse direction)
+		var colFound bool
+		newCol, colFound = reader.TranslateGoColumn(line, col)
+		if colFound {
+			log.Printf("[LSP Translator] GoToDingo: column translated %d -> %d", col, newCol)
+		} else {
+			newCol = col // Fallback to identity mapping
+		}
 
 		// Always clamp column to Dingo line bounds when column exceeds line length.
 		// This prevents column overflow when Go line is longer than Dingo line

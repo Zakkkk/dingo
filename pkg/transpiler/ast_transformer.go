@@ -3,8 +3,11 @@ package transpiler
 import (
 	"bytes"
 	"fmt"
+	"go/scanner"
 	"go/token"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/codegen"
@@ -13,6 +16,136 @@ import (
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
+
+// extractLineMappingsFromGoAST extracts line mappings using Go's scanner.
+// This uses proper token-based positioning - the scanner tokenizes the source
+// and provides token.Pos for each token, which we convert to line numbers.
+//
+// //line directives appear as COMMENT tokens in Go's scanner.
+//
+// Error propagation generates a fixed pattern of 5 lines after the directive.
+func extractLineMappingsFromGoAST(goSource []byte, kind string) []sourcemap.LineMapping {
+	// Create file set and add file for position tracking
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(goSource))
+
+	// Initialize scanner with comment handling enabled
+	var s scanner.Scanner
+	s.Init(file, goSource, nil, scanner.ScanComments)
+
+	var mappings []sourcemap.LineMapping
+
+	// Scan all tokens looking for //line directive comments
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// //line directives are COMMENT tokens
+		if tok != token.COMMENT {
+			continue
+		}
+
+		// Check if this comment is a //line directive
+		// Use strings.HasPrefix for clean prefix check
+		if !strings.HasPrefix(lit, "//line ") {
+			continue
+		}
+
+		// Extract the directive content after "//line "
+		directiveContent := lit[7:] // len("//line ") == 7
+
+		// Parse the Dingo line number from the directive
+		dingoLine := parseLineNumberFromDirective(directiveContent)
+		if dingoLine <= 0 {
+			continue
+		}
+
+		// Get the Go line number from the token position
+		goLineNum := fset.Position(pos).Line
+
+		// Create mapping with fixed expansion size based on error prop pattern
+		// GoLineStart is the NEXT line (after directive), GoLineEnd is +4 lines (5 total)
+		mappings = append(mappings, sourcemap.LineMapping{
+			DingoLine:   dingoLine,
+			GoLineStart: goLineNum + 1, // Code starts on next line after directive
+			GoLineEnd:   goLineNum + 5, // Error prop is always 5 lines
+			Kind:        kind,
+		})
+	}
+
+	return mappings
+}
+
+// parseLineNumberFromDirective extracts the line number from a //line directive.
+// Input format: "path/file.dingo:LINE" or "path/file.dingo:LINE:COL"
+// Uses strings.Split for safe parsing without byte index manipulation.
+func parseLineNumberFromDirective(directive string) int {
+	// Split by colon - the line number is always present
+	// Format: path/to/file.dingo:LINE or path/to/file.dingo:LINE:COL
+	parts := strings.Split(directive, ":")
+
+	if len(parts) < 2 {
+		return 0
+	}
+
+	// Try parsing from the end - last part might be line or column
+	lastPart := parts[len(parts)-1]
+	if num, err := strconv.Atoi(lastPart); err == nil && num > 0 {
+		// Check if there's a column (3+ parts with numeric second-to-last)
+		if len(parts) >= 3 {
+			secondLast := parts[len(parts)-2]
+			if lineNum, err := strconv.Atoi(secondLast); err == nil && lineNum > 0 {
+				return lineNum // This was line:col format
+			}
+		}
+		return num // This was just line format
+	}
+
+	// Try second-to-last (handles edge cases)
+	if len(parts) >= 3 {
+		secondLast := parts[len(parts)-2]
+		if num, err := strconv.Atoi(secondLast); err == nil && num > 0 {
+			return num
+		}
+	}
+
+	return 0
+}
+
+// fixColumnMappingGoLines correlates column mappings with line mappings to set correct GoLine.
+//
+// Column mappings are created during transformation with GoLine = DingoLine (placeholder).
+// Line mappings are extracted after transformation with accurate GoLineStart values.
+//
+// For each column mapping with DingoLine = X:
+//   - Find the line mapping with DingoLine = X
+//   - Set GoLine = GoLineStart + 1 (the assignment line, not the directive line)
+//
+// This is necessary because the final Go line numbers depend on all transforms,
+// which aren't known until after the complete transformation pass.
+func fixColumnMappingGoLines(colMappings []sourcemap.ColumnMapping, lineMappings []sourcemap.LineMapping) []sourcemap.ColumnMapping {
+	// Build lookup map: DingoLine -> GoLineStart
+	dingoToGoLine := make(map[int]int)
+	for _, lm := range lineMappings {
+		dingoToGoLine[lm.DingoLine] = lm.GoLineStart
+	}
+
+	// Fix each column mapping's GoLine
+	result := make([]sourcemap.ColumnMapping, len(colMappings))
+	for i, cm := range colMappings {
+		result[i] = cm
+		if goLineStart, found := dingoToGoLine[cm.DingoLine]; found {
+			// GoLine = GoLineStart + 1 because:
+			// - GoLineStart is the //line directive line
+			// - GoLineStart + 1 is the "tmp, err := expr" line where the function call lives
+			result[i].GoLine = goLineStart + 1
+		}
+	}
+
+	return result
+}
 
 // transformASTExpressions finds and transforms all Dingo expressions (match, lambda)
 // to Go code using the AST-based parser and codegen pipeline.
@@ -25,29 +158,23 @@ import (
 //    b. Set IsExpr on MatchExpr based on context (Assignment/Return/Argument = true)
 //    c. Generate Go code using pkg/codegen
 //    d. Splice generated code back into result
-// 4. Return transformed source and mappings
+// 4. Return transformed source
+//
+// enumRegistry provides enum name resolution for match expressions.
+// originalSrc is the original Dingo source (before transforms) for //line directives.
+// filename is used to generate //line directives for accurate error reporting.
 //
 // Returns error immediately on any parse failure with byte offset information.
-func transformASTExpressions(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformASTExpressionsWithRegistry(src, nil, nil, nil, "")
-}
-
-// transformASTExpressionsWithRegistry is like transformASTExpressions but accepts
-// an enum registry for match expression pattern name resolution.
-// If originalSrc is provided, source mappings will use positions from originalSrc instead of src.
-// This is needed because earlier transforms (like error prop) may have shifted positions.
-// If tracker is provided, transforms will be recorded for line-level mapping generation.
-// If filename is provided, //line directives will be emitted for accurate error reporting.
-func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]string, originalSrc []byte, tracker *sourcemap.TransformTracker, filename string) ([]byte, []ast.SourceMapping, error) {
+func transformASTExpressions(src []byte, enumRegistry map[string]string, originalSrc []byte, filename string) ([]byte, error) {
 	// Find all Dingo expressions in the (potentially transformed) source
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
-		return nil, nil, fmt.Errorf("find expressions: %w", err)
+		return nil, fmt.Errorf("find expressions: %w", err)
 	}
 
 	// If no expressions found, return source unchanged
 	if len(locations) == 0 {
-		return src, nil, nil
+		return src, nil
 	}
 
 	// Also find expressions in original source for accurate mapping positions
@@ -67,7 +194,6 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 		return locations[i].Start > locations[j].Start
 	})
 
-	var mappings []ast.SourceMapping
 	result := src
 
 	// Shared counter for unique temp var names across all expressions
@@ -101,7 +227,7 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			if loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav {
 				continue
 			}
-			return nil, nil, fmt.Errorf("parse expression at byte %d: %w", loc.Start, parseErr)
+			return nil, fmt.Errorf("parse expression at byte %d: %w", loc.Start, parseErr)
 		}
 
 		// Extract the actual Expr from DingoNode wrapper
@@ -111,7 +237,7 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 		} else if astExpr, ok := dingoNode.(ast.Expr); ok {
 			expr = astExpr
 		} else {
-			return nil, nil, fmt.Errorf("unexpected node type at byte %d: %T", loc.Start, dingoNode)
+			return nil, fmt.Errorf("unexpected node type at byte %d: %T", loc.Start, dingoNode)
 		}
 
 		// Set IsExpr flag on MatchExpr based on context
@@ -173,7 +299,7 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 		}
 
 		if len(genResult.Output) == 0 && len(genResult.StatementOutput) == 0 {
-			return nil, nil, fmt.Errorf("codegen produced no output for expression at byte %d", loc.Start)
+			return nil, fmt.Errorf("codegen produced no output for expression at byte %d", loc.Start)
 		}
 
 		// Determine what to replace and what to use as replacement
@@ -190,22 +316,18 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			// Build replacement: hoisted code at statement start, temp var at expression location
 			hoistedInsertPos := loc.StatementStart
 
-			// Record transform before splicing (if tracker provided)
+			// Calculate original position for //line directive
 			dingoPos := loc.Start
-			dingoEnd := loc.End
-			if tracker != nil {
-				if originalSrc != nil {
-					if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
-						dingoPos = origPos
-						dingoEnd = origPos + (loc.End - loc.Start)
-					}
+			if originalSrc != nil {
+				if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
+					dingoPos = origPos
 				}
 			}
 
 			// Prepend //line directive to hoisted code if filename is provided
 			var finalHoistedCode []byte
 			if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
-				line, col := byteOffsetToLineCol(originalSrc, dingoPos)
+				line, col := offsetToLineCol(originalSrc, dingoPos)
 				if line > 0 && col > 0 {
 					lineDirective := ast.FormatLineDirective(filename, line, col)
 					finalHoistedCode = append([]byte(lineDirective), genResult.HoistedCode...)
@@ -214,13 +336,6 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 				}
 			} else {
 				finalHoistedCode = genResult.HoistedCode
-			}
-
-			// Record transform after calculating final size
-			if tracker != nil {
-				// Total generated length includes line directive + hoisted code + newline + temp var
-				generatedLen := len(finalHoistedCode) + 1 + len(genResult.Output)
-				tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), generatedLen)
 			}
 
 			// Insert hoisted code before the statement
@@ -234,17 +349,6 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			newResult = append(newResult, genResult.Output...)
 			newResult = append(newResult, result[loc.End:]...)
 			result = newResult
-
-			// Adjust mapping positions
-			for _, m := range genResult.Mappings {
-				mappings = append(mappings, ast.SourceMapping{
-					DingoStart: loc.Start + m.DingoStart,
-					DingoEnd:   loc.Start + m.DingoEnd,
-					GoStart:    hoistedInsertPos + m.GoStart,
-					GoEnd:      hoistedInsertPos + m.GoEnd,
-					Kind:       m.Kind,
-				})
-			}
 			continue
 		}
 
@@ -260,61 +364,26 @@ func transformASTExpressionsWithRegistry(src []byte, enumRegistry map[string]str
 			replacement = genResult.Output
 		}
 
-		// Calculate original source position for both tracking and //line directives
-		dingoPos := loc.Start
-		dingoEnd := loc.End
-		if originalSrc != nil {
-			if origPos := findOriginalPosition(originalLocations, loc, exprSrc); origPos >= 0 {
-				dingoPos = origPos
-				// Adjust end position by same delta
-				dingoEnd = origPos + (loc.End - loc.Start)
-			}
-		}
-
-		// Prepend //line directive if filename is provided
-		// Calculate line:col from byte offset in original source
-		var finalReplacement []byte
-		if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
-			line, col := byteOffsetToLineCol(originalSrc, dingoPos)
-			if line > 0 && col > 0 {
-				lineDirective := ast.FormatLineDirective(filename, line, col)
-				finalReplacement = append([]byte(lineDirective), replacement...)
-			} else {
-				finalReplacement = replacement
-			}
-		} else {
-			finalReplacement = replacement
-		}
-
-		// Record transform before splicing (if tracker provided)
-		if tracker != nil {
-			tracker.RecordTransform(dingoPos, dingoEnd, loc.Kind.String(), len(finalReplacement))
-		}
+		// NOTE: Do NOT emit //line directives for expression-level replacements.
+		// These get spliced into the middle of statements (e.g., "return expr")
+		// and a //line directive would break the syntax: "return //line ...\nfunc()..."
+		//
+		// //line directives are only emitted for:
+		// 1. HoistedCode (standalone statements before the expression)
+		// 2. Statement-level transforms (error propagation)
+		//
+		// For expression-level transforms, gopls uses the nearby //line directives.
 
 		// Splice generated code into result
 		oldLen := replaceEnd - replaceStart
-		newResult := make([]byte, 0, len(result)-oldLen+len(finalReplacement))
+		newResult := make([]byte, 0, len(result)-oldLen+len(replacement))
 		newResult = append(newResult, result[:replaceStart]...)
-		newResult = append(newResult, finalReplacement...)
+		newResult = append(newResult, replacement...)
 		newResult = append(newResult, result[replaceEnd:]...)
 		result = newResult
-
-		// Convert codegen mappings to SourceMapping
-		// Adjust mapping positions based on splice location
-		// Note: dingoPos already calculated above for //line directives
-
-		for _, m := range genResult.Mappings {
-			mappings = append(mappings, ast.SourceMapping{
-				DingoStart: dingoPos + m.DingoStart,
-				DingoEnd:   dingoPos + m.DingoEnd,
-				GoStart:    replaceStart + m.GoStart,
-				GoEnd:      replaceStart + m.GoEnd,
-				Kind:       m.Kind,
-			})
-		}
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // findOriginalPosition finds the position of an expression in the original source
@@ -351,21 +420,45 @@ func findOriginalErrorPropPosition(originalSrc []byte, transformedSrc []byte, po
 	return pos
 }
 
-// transformErrorPropStatements transforms statement-level error propagation.
-// This MUST run before expression-level transforms.
-//
-// Transforms:
-//   let data = readFile(path)?  →  tmp, err := readFile(path); if err != nil { return ..., err }; data := tmp
-//   x := foo()?                 →  tmp, err := foo(); if err != nil { return ..., err }; x := tmp
-//   return foo()?               →  tmp, err := foo(); if err != nil { return ..., err }; return tmp
-func transformErrorPropStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformErrorPropStatementsWithTracker(src, src, nil, "")
+// originalLineInfo stores line/column info from original source for error prop statements
+type originalLineInfo struct {
+	line   int
+	column int
 }
 
-// transformErrorPropStatementsWithTracker wraps transformErrorPropStatements with tracker support.
+// buildOriginalLineMap scans the original source for error propagation statements
+// and returns a list of line info in source order.
+// This is needed because earlier transforms (like enum expansion) change line counts.
+// We use a list instead of a map because the same expression text can appear multiple times.
+func buildOriginalLineMap(originalSrc []byte) []originalLineInfo {
+	// Scan original source for error prop locations
+	origLocations, err := ast.FindErrorPropStatements(originalSrc)
+	if err != nil || len(origLocations) == 0 {
+		return nil
+	}
+
+	// Build list of line info in source order (sorted by position)
+	// Sort ascending by Start position to match processing order
+	sort.Slice(origLocations, func(i, j int) bool {
+		return origLocations[i].Start < origLocations[j].Start
+	})
+
+	lineInfos := make([]originalLineInfo, 0, len(origLocations))
+	for _, loc := range origLocations {
+		lineInfos = append(lineInfos, originalLineInfo{
+			line:   loc.Line,
+			column: loc.Column,
+		})
+	}
+
+	return lineInfos
+}
+
+// transformErrorPropStatements transforms error propagation statements.
 // originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
 // filename is used to generate //line directives for accurate error reporting.
-func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker, filename string) ([]byte, []ast.SourceMapping, error) {
+// Returns column mappings for precise hover/go-to-definition on function calls.
+func transformErrorPropStatements(src []byte, originalSrc []byte, filename string) ([]byte, []sourcemap.ColumnMapping, error) {
 	locations, err := ast.FindErrorPropStatements(src)
 	if err != nil {
 		return src, nil, err
@@ -375,13 +468,30 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 		return src, nil, nil
 	}
 
-	// Sort by position (descending) to avoid position shifting
+	// Pre-scan original source to get accurate line numbers
+	// Earlier transforms (like enum expansion) change line counts, so we need original positions
+	originalLineInfos := buildOriginalLineMap(originalSrc)
+
+	// Sort locations by position (ascending) to match with originalLineInfos order
+	// We'll reverse after to process end-to-beginning
 	sort.Slice(locations, func(i, j int) bool {
-		return locations[i].Start > locations[j].Start
+		return locations[i].Start < locations[j].Start
 	})
 
+	// Create mapping from sorted index to original line info
+	// This allows us to look up the correct line when processing each transform
+	locationToLineInfo := make(map[int]originalLineInfo) // map[location index] → line info
+	for i := 0; i < len(locations) && i < len(originalLineInfos); i++ {
+		locationToLineInfo[i] = originalLineInfos[i]
+	}
+
+	// Now reverse to process end-to-beginning (to avoid position shifting)
+	for i, j := 0, len(locations)-1; i < j; i, j = i+1, j-1 {
+		locations[i], locations[j] = locations[j], locations[i]
+	}
+
 	result := src
-	var mappings []ast.SourceMapping
+	var columnMappings []sourcemap.ColumnMapping
 	// Start counter at len(locations) and decrement, so first statement in source
 	// gets tmp/err, second gets tmp1/err1, etc. (we process end-to-beginning)
 	counter := len(locations)
@@ -389,13 +499,20 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 	// First pass: calculate all deltas to know final positions
 	// We need to track byte deltas from transforms to calculate correct Go positions
 	type transformInfo struct {
-		loc       ast.StmtLocation
-		generated []byte
-		delta     int // len(generated) - original length
+		loc          ast.StmtLocation
+		generated    []byte
+		delta        int    // len(generated) - original length
+		goLHSLen     int    // Length of Go LHS (e.g., "tmp, err := ")
+		dingoLHSLen  int    // Length of Dingo LHS (e.g., "varName := ")
+		counterValue int    // Counter value for this transform (determines tmp/tmpN naming)
+		exprText     string // Expression text for looking up original line info
+		origIndex    int    // Index in original (ascending) order for line lookup
 	}
 	transforms := make([]transformInfo, 0, len(locations))
 
-	for _, loc := range locations {
+	for loopIdx, loc := range locations {
+		// Calculate original index (locations are now reversed, so last in loop = first in source)
+		origIndex := len(locations) - 1 - loopIdx
 		// Extract the expression between operator and ?
 		exprBytes := src[loc.ExprStart : loc.ExprEnd-1] // -1 to exclude ?
 
@@ -409,40 +526,56 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 		}
 
 		// Generate statement-level code
+		// Capture counter before it decrements (for column mapping calculation)
+		currentCounter := counter
 		var generated []byte
+		var goLHSLen, dingoLHSLen int
 		switch loc.Kind {
 		case ast.StmtErrorPropAssign, ast.StmtErrorPropLet:
 			// x := foo()? or let x = foo()?
 			generated = generateErrorPropStatementAdvanced(exprBytes, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			// Calculate LHS lengths for column mapping
+			// Dingo: "varName := " or "varName = " for underscore
+			dingoLHSLen = len(loc.VarName) + 4 // " := " or " = " (always 4 with leading space consideration)
+			// Go: "tmpN, errN := " where N is counter-1 or empty
+			if currentCounter == 1 {
+				goLHSLen = 3 + 2 + 3 + 4 // "tmp" + ", " + "err" + " := "
+			} else {
+				// tmpN and errN where N = currentCounter-1
+				goLHSLen = len(fmt.Sprintf("tmp%d", currentCounter-1)) + 2 + len(fmt.Sprintf("err%d", currentCounter-1)) + 4
+			}
 		case ast.StmtErrorPropReturn:
 			// return foo()?
 			generated = generateErrorPropReturnAdvanced(exprBytes, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			// For return statements, no variable assignment - expression starts immediately after "return "
+			dingoLHSLen = 0
+			goLHSLen = 0
 		case ast.StmtErrorPropBare:
 			// foo()?
 			generated = generateErrorPropBareAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			// For bare statements, no variable assignment
+			dingoLHSLen = 0
+			goLHSLen = 0
 		}
 
-		// Record transform before applying (if tracker provided)
-		// Calculate position in original source
-		origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
-		origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
-
 		// Prepend //line directive if filename is provided
+		// Look up correct line number from original source using original index
+		// This is needed because earlier transforms (like enum expansion) change line counts
 		var finalGenerated []byte
-		if filename != "" && originalSrc != nil && len(originalSrc) > 0 {
-			line, col := byteOffsetToLineCol(originalSrc, origStart)
-			if line > 0 && col > 0 {
-				lineDirective := ast.FormatLineDirective(filename, line, col)
+		if filename != "" {
+			// Look up line info by original index (order preserved from original source)
+			if lineInfo, found := locationToLineInfo[origIndex]; found && lineInfo.line > 0 {
+				lineDirective := ast.FormatLineDirective(filename, lineInfo.line, lineInfo.column)
+				finalGenerated = append([]byte(lineDirective), generated...)
+			} else if loc.Line > 0 && loc.Column > 0 {
+				// Fall back to loc.Line/Column if not found (same source or no enum transforms)
+				lineDirective := ast.FormatLineDirective(filename, loc.Line, loc.Column)
 				finalGenerated = append([]byte(lineDirective), generated...)
 			} else {
 				finalGenerated = generated
 			}
 		} else {
 			finalGenerated = generated
-		}
-
-		if tracker != nil {
-			tracker.RecordTransform(origStart, origEnd, "error_prop", len(finalGenerated))
 		}
 
 		// Replace in result
@@ -456,9 +589,14 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 		originalLen := loc.End - loc.Start
 		delta := len(generated) - originalLen
 		transforms = append(transforms, transformInfo{
-			loc:       loc,
-			generated: generated,
-			delta:     delta,
+			loc:          loc,
+			generated:    generated,
+			delta:        delta,
+			goLHSLen:     goLHSLen,
+			dingoLHSLen:  dingoLHSLen,
+			counterValue: currentCounter,
+			exprText:     string(exprBytes),
+			origIndex:    origIndex,
 		})
 	}
 
@@ -476,22 +614,45 @@ func transformErrorPropStatementsWithTracker(src []byte, originalSrc []byte, tra
 	// Calculate cumulative delta for each transform position
 	cumulativeDelta := 0
 	for _, t := range sortedTransforms {
-		goStart := t.loc.Start + cumulativeDelta
-		goEnd := goStart + len(t.generated)
+		// Generate column mapping for function call position translation
+		// Only for assignment statements where LHS changes (not for bare/return statements)
+		if t.goLHSLen > 0 || t.dingoLHSLen > 0 {
+			// Look up correct line/col from original source using original index
+			// This is needed because earlier transforms (like enum expansion) change line counts
+			var dingoLine, dingoCol int
+			if lineInfo, found := locationToLineInfo[t.origIndex]; found && lineInfo.line > 0 {
+				dingoLine = lineInfo.line
+				dingoCol = lineInfo.column
+			} else {
+				// Fall back to calculating from byte offset (works when no enum transforms)
+				origStart := findOriginalErrorPropPosition(originalSrc, src, t.loc.Start)
+				dingoLine, dingoCol = offsetToLineCol(originalSrc, origStart)
+			}
 
-		mappings = append(mappings, ast.SourceMapping{
-			DingoStart: t.loc.Start,
-			DingoEnd:   t.loc.End,
-			GoStart:    goStart,
-			GoEnd:      goEnd,
-			Kind:       "error_prop",
-		})
+			// Calculate expression column (after the assignment operator)
+			// Dingo: "varName := expr?" - expression starts at column dingoLHSLen+1
+			// Go: "tmp, err := expr" - expression starts at column goLHSLen+1
+			// Column offset = goLHSLen - dingoLHSLen
+			colOffset := t.goLHSLen - t.dingoLHSLen
+
+			// Expression length (function call without the ? operator)
+			exprLen := t.loc.ExprEnd - t.loc.ExprStart - 1 // -1 for ?
+
+			columnMappings = append(columnMappings, sourcemap.ColumnMapping{
+				DingoLine: dingoLine,
+				DingoCol:  dingoCol + t.dingoLHSLen, // Column where expression starts
+				GoLine:    dingoLine,                // Same line in Go output
+				GoCol:     dingoCol + t.dingoLHSLen + colOffset,
+				Length:    exprLen,
+				Kind:      "error_prop",
+			})
+		}
 
 		// Accumulate delta for subsequent transforms
 		cumulativeDelta += t.delta
 	}
 
-	return result, mappings, nil
+	return result, columnMappings, nil
 }
 
 // generateErrorPropStatementAdvanced generates code for statement-level error propagation
@@ -946,24 +1107,20 @@ func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnT
 
 // transformGuardStatements transforms guard statements.
 // This MUST run after error propagation but before expression-level transforms.
+// originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
+// filename is used for //line directive generation (pass "" to disable).
 //
 // Transforms:
 //   guard user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
 //   guard (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
-func transformGuardStatements(src []byte) ([]byte, []ast.SourceMapping, error) {
-	return transformGuardStatementsWithTracker(src, src, nil)
-}
-
-// transformGuardStatementsWithTracker wraps transformGuardStatements with tracker support.
-// originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
-func transformGuardStatementsWithTracker(src []byte, originalSrc []byte, tracker *sourcemap.TransformTracker) ([]byte, []ast.SourceMapping, error) {
+func transformGuardStatements(src []byte, originalSrc []byte, filename string) ([]byte, error) {
 	locations, err := ast.FindGuardStatements(src)
 	if err != nil {
-		return src, nil, err
+		return src, err
 	}
 
 	if len(locations) == 0 {
-		return src, nil, nil
+		return src, nil
 	}
 
 	// Sort by position (descending) to avoid position shifting
@@ -973,7 +1130,6 @@ func transformGuardStatementsWithTracker(src []byte, originalSrc []byte, tracker
 	}
 
 	result := src
-	var mappings []ast.SourceMapping
 
 	// Share counter across all guard statements
 	// Locations are sorted descending, so we iterate last-to-first in source order.
@@ -986,7 +1142,7 @@ func transformGuardStatementsWithTracker(src []byte, originalSrc []byte, tracker
 		// HasBinding (|err|) is a strong signal for Result type
 		exprType, err := codegen.InferExprTypeWithBinding(loc.ExprText, loc.HasBinding)
 		if err != nil {
-			return nil, nil, fmt.Errorf("line %d: cannot infer type: %w", loc.Line, err)
+			return nil, fmt.Errorf("line %d: cannot infer type: %w", loc.Line, err)
 		}
 
 		// Generate code with source context and shared counter
@@ -996,35 +1152,24 @@ func transformGuardStatementsWithTracker(src []byte, originalSrc []byte, tracker
 		counter-- // Decrement for next guard
 		genResult := gen.Generate()
 
-		// Record transform before applying (if tracker provided)
-		if tracker != nil {
-			origStart := findOriginalErrorPropPosition(originalSrc, src, loc.Start)
-			origEnd := findOriginalErrorPropPosition(originalSrc, src, loc.End)
-			tracker.RecordTransform(origStart, origEnd, "guard", len(genResult.Output))
+		// Prepend //line directive if filename is provided
+		// Use loc.Line and loc.Column directly - they're already calculated during parsing
+		generated := genResult.Output
+		if filename != "" && loc.Line > 0 && loc.Column > 0 {
+			lineDirective := ast.FormatLineDirective(filename, loc.Line, loc.Column)
+			generated = append([]byte(lineDirective), generated...)
 		}
 
 		// Replace in result
 		oldLen := loc.End - loc.Start
-		generated := genResult.Output
 		newResult := make([]byte, 0, len(result)-oldLen+len(generated))
 		newResult = append(newResult, result[:loc.Start]...)
 		newResult = append(newResult, generated...)
 		newResult = append(newResult, result[loc.End:]...)
 		result = newResult
-
-		// Collect source mappings
-		for _, m := range genResult.Mappings {
-			mappings = append(mappings, ast.SourceMapping{
-				DingoStart: loc.Start + m.DingoStart,
-				DingoEnd:   loc.Start + m.DingoEnd,
-				GoStart:    loc.Start + m.GoStart,
-				GoEnd:      loc.Start + m.GoEnd,
-				Kind:       m.Kind,
-			})
-		}
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // filterExprNestedInTernary removes expressions that are nested inside ternary expressions.
@@ -1074,24 +1219,27 @@ func filterExprNestedInTernary(locations []ast.ExprLocation) []ast.ExprLocation 
 	return result
 }
 
-// byteOffsetToLineCol converts a byte offset in source to 1-indexed line:col.
+// offsetToLineCol converts a byte offset in source to 1-indexed line:col.
 // Returns (0, 0) if offset is invalid.
-func byteOffsetToLineCol(src []byte, offset int) (line, col int) {
+//
+// This uses Go's token.FileSet which handles line counting internally.
+// The FileSet is the proper token-based approach for position tracking.
+func offsetToLineCol(src []byte, offset int) (line, col int) {
 	if offset < 0 || offset >= len(src) {
 		return 0, 0
 	}
 
-	line = 1
-	col = 1
+	// Create a FileSet and add the source file
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
 
-	for i := 0; i < offset && i < len(src); i++ {
-		if src[i] == '\n' {
-			line++
-			col = 1
-		} else {
-			col++
-		}
-	}
+	// SetLinesForContent scans the source and records newline positions
+	// This is the token-based way to set up line info
+	file.SetLinesForContent(src)
 
-	return line, col
+	// Convert byte offset to token.Pos, then to Position (line:col)
+	pos := file.Pos(offset)
+	position := fset.Position(pos)
+
+	return position.Line, position.Column
 }
