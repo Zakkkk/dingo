@@ -67,10 +67,6 @@ func (g *BuiltinCallCodeGen) Generate() ast.CodeGenResult {
 //   - HoistedCode: var tmp int\nif env != nil && env.Region != nil {\n\ttmp = len(*env.Region)\n}\n
 //   - Output: tmp
 func (g *BuiltinCallCodeGen) generateHoisted() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-
 	// Generate unique temp variable name
 	var tmpName string
 	if g.Context != nil && g.Context.TempCounter != nil {
@@ -107,13 +103,6 @@ func (g *BuiltinCallCodeGen) generateHoisted() ast.CodeGenResult {
 	result := g.Result()
 	result.HoistedCode = hoisted.Bytes()
 	result.Output = []byte(tmpName)
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		0,
-		len(tmpName),
-		"builtin_call_hoisted",
-	))
 
 	return result
 }
@@ -168,11 +157,6 @@ func (g *BuiltinCallCodeGen) generateArgHoisting(buf *bytes.Buffer, tmpName stri
 
 // generateIIFE generates an IIFE for contexts where hoisting isn't possible.
 func (g *BuiltinCallCodeGen) generateIIFE() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-	outputStart := g.Buf.Len()
-
 	// Determine return type
 	returnType := "int" // len and cap always return int
 
@@ -189,18 +173,7 @@ func (g *BuiltinCallCodeGen) generateIIFE() ast.CodeGenResult {
 		g.Write("return 0 }()")
 	}
 
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"builtin_call_iife",
-	))
-
-	return result
+	return g.Result()
 }
 
 // generateIIFEBody generates the body of the IIFE.

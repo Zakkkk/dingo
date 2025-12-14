@@ -144,3 +144,99 @@ func isIdentChar(r rune) bool {
 		(r >= '0' && r <= '9') ||
 		r == '_'
 }
+
+// vsCodeColumnWidth returns the VS Code column width of a rune.
+// VS Code counts:
+// - Tab: advances to next tab stop (multiple of tabSize)
+// - All other characters: 1 column (including CJK, emoji, full-width)
+func vsCodeColumnWidth(r rune, currentCol int, tabSize int) int {
+	if r == '\t' {
+		// Tab advances to next tab stop
+		return ((currentCol / tabSize) + 1) * tabSize - currentCol
+	}
+	// VS Code counts all other characters as 1 column
+	return 1
+}
+
+// ByteOffsetToVisualColumn converts a byte offset to VS Code column position
+// accounting for tab expansion (all other chars are 1 column in VS Code)
+func ByteOffsetToVisualColumn(text string, byteOffset int, tabSize int) int {
+	if tabSize <= 0 {
+		tabSize = 4 // Default tab size
+	}
+
+	col := 0
+	bytePos := 0
+
+	for _, r := range text {
+		if bytePos >= byteOffset {
+			break
+		}
+
+		col += vsCodeColumnWidth(r, col, tabSize)
+		bytePos += len(string(r))
+	}
+
+	return col
+}
+
+// VisualColumnToByteOffset converts a VS Code column to byte offset
+// accounting for tab expansion (all other chars are 1 column in VS Code)
+func VisualColumnToByteOffset(text string, vsCodeCol int, tabSize int) int {
+	if tabSize <= 0 {
+		tabSize = 4
+	}
+
+	currentCol := 0
+	bytePos := 0
+
+	for _, r := range text {
+		if currentCol >= vsCodeCol {
+			break
+		}
+
+		bytePos += len(string(r))
+		currentCol += vsCodeColumnWidth(r, currentCol, tabSize)
+	}
+
+	return bytePos
+}
+
+// getVisualWidth calculates the total VS Code column width of a line
+// (tabs expand to tab stops, all other chars are 1 column)
+func getVisualWidth(text string, tabSize int) int {
+	if tabSize <= 0 {
+		tabSize = 4
+	}
+
+	col := 0
+	for _, r := range text {
+		col += vsCodeColumnWidth(r, col, tabSize)
+	}
+	return col
+}
+
+// getCharAtVisualColumn returns the character at a VS Code column position
+// Returns the rune and whether it's a "virtual" position (within a tab)
+func getCharAtVisualColumn(text string, vsCodeCol int, tabSize int) (rune, bool) {
+	if tabSize <= 0 {
+		tabSize = 4
+	}
+
+	currentCol := 0
+	for _, r := range text {
+		width := vsCodeColumnWidth(r, currentCol, tabSize)
+		nextCol := currentCol + width
+
+		// Is vsCodeCol within this character's column span?
+		if vsCodeCol >= currentCol && vsCodeCol < nextCol {
+			// For tabs, if we're past the first column, it's "virtual"
+			isVirtual := r == '\t' && vsCodeCol > currentCol
+			return r, isVirtual
+		}
+
+		currentCol = nextCol
+	}
+
+	return 0, false // Past end of line
+}

@@ -17,8 +17,8 @@ error_propagation_syntax = "question"
 # Enable source map generation
 enabled = true
 
-# Source map format: "inline" | "separate" | "both" | "none"
-format = "inline"
+# Source map format: "separate" | "none"
+format = "separate"
 ```
 
 ### User Configuration (`~/.dingo/config.toml`)
@@ -31,7 +31,7 @@ error_propagation_syntax = "question"
 
 [sourcemaps]
 enabled = true
-format = "inline"
+format = "separate"
 ```
 
 ## Configuration Precedence
@@ -101,22 +101,22 @@ enabled = true
 **Option**: `sourcemaps.format`
 
 **Values**:
-- `"inline"` - Embed source maps as base64 comments in `.go` files (default)
-- `"separate"` - Write source maps to `.go.map` files
-- `"both"` - Generate both inline and separate files
+- `"separate"` - Write source maps to `.dmap` files (default)
 - `"none"` - Disable source maps (same as `enabled = false`)
+
+**Note**: Legacy `"inline"` and `"both"` formats have been removed in v3 architecture.
 
 **Example**:
 
 ```toml
 [sourcemaps]
-format = "inline"
+format = "separate"
 ```
 
 **Recommendations**:
-- **Development**: Use `"inline"` for convenience
-- **Production**: Use `"separate"` for cleaner generated code
-- **CI/CD**: Use `"both"` to support multiple workflows
+- **Development**: Use `"separate"` (default) for full IDE support
+- **Production**: Use `"separate"` for clean generated code with debugging support
+- **CI/CD**: Use `"none"` if source maps are not needed in build artifacts
 
 ## Complete Configuration Example
 
@@ -132,8 +132,8 @@ error_propagation_syntax = "question"
 # Generate source maps for better error messages
 enabled = true
 
-# Use inline source maps during development
-format = "inline"
+# Use separate .dmap source maps
+format = "separate"
 ```
 
 ## CLI Reference
@@ -211,7 +211,7 @@ Transpiles `.dingo` files to `.go` files without compilation. This is the origin
 **Flags**:
 - `--syntax <style>` - Error propagation syntax (question|bang|try)
 - `--no-sourcemaps` - Disable source map generation
-- `--sourcemap-format <format>` - Source map format (inline|separate|both|none)
+- `--sourcemap-format <format>` - Source map format (separate|none)
 - `-o, --output <file>` - Output file path
 
 **Examples**:
@@ -257,7 +257,7 @@ error_propagation_syntax = "question"
 
 [sourcemaps]
 enabled = true
-format = "inline"
+format = "separate"
 ```
 
 ## Migration Guide

@@ -50,11 +50,6 @@ func TestSafeNavCodeGen_FieldAccess(t *testing.T) {
 			if got != tt.expected {
 				t.Errorf("SafeNavCodeGen.Generate() = %q, want %q", got, tt.expected)
 			}
-
-			// Verify source mappings
-			if len(result.Mappings) != 1 {
-				t.Errorf("expected 1 mapping, got %d", len(result.Mappings))
-			}
 		})
 	}
 }
@@ -117,11 +112,6 @@ func TestSafeNavCodeGen_MethodCall(t *testing.T) {
 
 			if got != tt.expected {
 				t.Errorf("SafeNavCodeGen.Generate() = %q, want %q", got, tt.expected)
-			}
-
-			// Verify source mappings
-			if len(result.Mappings) != 1 {
-				t.Errorf("expected 1 mapping, got %d", len(result.Mappings))
 			}
 		})
 	}

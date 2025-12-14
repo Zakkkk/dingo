@@ -27,7 +27,9 @@ func NewTranslator(cache SourceMapGetter) *Translator {
 	return &Translator{cache: cache}
 }
 
-// TranslatePosition translates a single position between Dingo and Go files
+// TranslatePosition translates a single position between Dingo and Go files.
+// LSP uses character offsets (0-indexed), where each character (including tabs) counts as 1.
+// This is NOT visual columns - tabs are 1 character, not 4 visual columns.
 func (t *Translator) TranslatePosition(
 	uri protocol.DocumentURI,
 	pos protocol.Position,
@@ -37,12 +39,12 @@ func (t *Translator) TranslatePosition(
 	if dir == GoToDingo {
 		dirName = "GoToDingo"
 	}
-	log.Printf("[LSP Translator] TranslatePosition START: direction=%s, uri=%s, line=%d, col=%d",
+	log.Printf("[LSP Translator] TranslatePosition START: direction=%s, uri=%s, line=%d, char=%d",
 		dirName, uri.Filename(), pos.Line, pos.Character)
 
-	// Convert LSP position (0-based) to 1-based line:column
+	// Convert LSP position (0-based) to 1-based for dmap
 	line := int(pos.Line) + 1
-	col := int(pos.Character) + 1
+	col := int(pos.Character) + 1 // LSP character offset is 0-indexed, dmap uses 1-indexed
 
 	// Determine file paths
 	var goPath string
@@ -86,18 +88,15 @@ func (t *Translator) TranslatePosition(
 		if colFound {
 			log.Printf("[LSP Translator] DingoToGo: column translated %d -> %d", col, newCol)
 		} else {
-			// For transformed lines, positions outside the mapped range can't use
-			// identity mapping because the Go line has different content.
-			// For example, Dingo "user := func()? |err| handler(err)" maps to
-			// Go "tmp, err := func()" - the "?" and lambda don't exist on that line.
+			// For transformed lines, positions outside the mapped range:
+			// - Don't fall back to first code char (that gives wrong hover info for operators like := or ?)
+			// - Use identity mapping and let gopls handle it (may return empty for non-symbols)
 			if reader.IsTransformedLine(line) {
-				// Clamp to column 1 - hover on unmapped positions will show
-				// info for the start of the line (better than random garbage)
-				newCol = 1
-				log.Printf("[LSP Translator] DingoToGo: transformed line, unmapped col %d -> clamped to 1", col)
+				log.Printf("[LSP Translator] DingoToGo: transformed line, unmapped col %d -> identity (no mapping)", col)
 			} else {
 				log.Printf("[LSP Translator] DingoToGo: column identity %d", col)
 			}
+			// newCol stays as col (identity mapping)
 		}
 
 		log.Printf("[LSP Translator] DingoToGo: dingoLine=%d -> goLine=%d", line, newLine)
@@ -139,13 +138,17 @@ func (t *Translator) TranslatePosition(
 		newURI = lspuri.File(dingoPath)
 	}
 
-	// Convert back to LSP position (0-based)
+	// Convert 1-indexed column back to 0-indexed LSP character offset
+	// LSP uses character offsets directly (no visual column conversion needed)
+	finalCharacter := newCol - 1
+	log.Printf("[LSP Translator] %s: returning character offset %d", dirName, finalCharacter)
+
 	newPos := protocol.Position{
 		Line:      uint32(newLine - 1),
-		Character: uint32(newCol - 1),
+		Character: uint32(finalCharacter),
 	}
 
-	log.Printf("[LSP Translator] TranslatePosition END: returning uri=%s, line=%d, col=%d",
+	log.Printf("[LSP Translator] TranslatePosition END: returning uri=%s, line=%d, character=%d",
 		newURI.Filename(), newPos.Line, newPos.Character)
 
 	return newURI, newPos, nil

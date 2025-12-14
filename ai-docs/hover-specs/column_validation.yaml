@@ -1,0 +1,27 @@
+# Column validation test - uses EXPLICIT character positions
+# This test validates LSP character offset handling
+#
+# Test file: http_handler.dingo line 55
+# Content: "\tuserID := extractUserID(r)?"
+#
+# LSP uses character offsets (0-indexed), NOT visual columns:
+# - Tab at position 0 counts as 1 character (not 4 visual columns)
+# - 'u' of userID is at character offset 1
+# - 'r' parameter is at character offset 25
+
+file: examples/01_error_propagation/http_handler.dingo
+
+cases:
+  # Test 1: userID starts at char 1 (after tab at char 0)
+  - name: "userID after tab - explicit character offset"
+    line: 55
+    character: 1  # char 0=tab, char 1='u'
+    expect:
+      contains: "string"  # userID is string type
+
+  # Test 2: 'r' parameter at char 25
+  - name: "r parameter - explicit character offset"
+    line: 55
+    character: 25  # char 25='r' in extractUserID(r)
+    expect:
+      contains: "*http.Request"  # r is *http.Request

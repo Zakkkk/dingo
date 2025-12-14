@@ -106,6 +106,7 @@ func FindUser(db *sql.DB, id int) dgo.Result[User, ServiceError] {
 func FindOrdersByUser(db *sql.DB, userID int) dgo.Result[[]Order, ServiceError] {
 	// Pattern 3: Explicit |err| lambda binding
 	// Note: db.Query returns (*sql.Rows, error) - supports ?
+	//line examples/11_result_propagation/user_service.dingo:109:2
 	tmp, err := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)
 	if err != nil {
 		return dgo.Err[[]Order](ServiceError{Code: "DB_ERROR", Message: err.Error()})
@@ -159,6 +160,7 @@ func GetUserOrderTotal(db *sql.DB, userID int) dgo.Result[float64, ServiceError]
 
 func ProcessUserOrder(db *sql.DB, userID int, orderID int) (string, error) {
 	// Pattern 1: Basic ? - error is descriptive enough
+	//line examples/11_result_propagation/user_service.dingo:149:2
 	tmp1, err1 := GetUserBasic(db, userID)
 	if err1 != nil {
 		return "", err1
@@ -166,6 +168,7 @@ func ProcessUserOrder(db *sql.DB, userID int, orderID int) (string, error) {
 	user := tmp1
 
 	// Pattern 2: String context - add simple context
+	//line examples/11_result_propagation/user_service.dingo:152:2
 	tmp2, err2 := getOrderByID(db, orderID)
 	if err2 != nil {
 		return "", fmt.Errorf("order lookup failed: %w", err2)
@@ -173,6 +176,7 @@ func ProcessUserOrder(db *sql.DB, userID int, orderID int) (string, error) {
 	order := tmp2
 
 	// Pattern 3: Lambda - custom error transformation
+	//line examples/11_result_propagation/user_service.dingo:155:2
 	tmp3, err3 := validateOrder(order, user)
 	if err3 != nil {
 		return "", fmt.Errorf("validation failed for user %d: %w", userID, err3)

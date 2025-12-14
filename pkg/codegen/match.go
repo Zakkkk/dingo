@@ -112,19 +112,9 @@ func (g *MatchCodeGen) Generate() ast.CodeGenResult {
 // generateMatchIIFE generates IIFE wrapper for match expressions.
 // Example: func() TYPE { switch ... }()
 func (g *MatchCodeGen) generateMatchIIFE() {
-	// Track mapping for opening func()
-	matchPos := int(g.Match.Pos())
-	iifePart := "func() interface{} {\n"
-	g.MB.Add(matchPos, matchPos+5, len(iifePart), "match")
-	g.Write(iifePart)
-
+	g.Write("func() interface{} {\n")
 	g.generateMatchSwitch()
-
-	// Track mapping for closing
-	matchEnd := int(g.Match.End())
-	closingPart := "\n}()"
-	g.MB.Add(matchEnd-1, matchEnd, len(closingPart), "match")
-	g.Write(closingPart)
+	g.Write("\n}()")
 }
 
 // generateMatchSwitch generates switch statement for match expression.
@@ -133,10 +123,6 @@ func (g *MatchCodeGen) generateMatchSwitch() {
 	// Generate scrutinee
 	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
 	scrutineeCode := string(scrutineeResult.Output)
-
-	// Track mapping for scrutinee
-	scrutineeStart := int(g.Match.Scrutinee.Pos())
-	scrutineeEnd := int(g.Match.Scrutinee.End())
 
 	// CRITICAL FIX: Always bind match value to temp var to prevent double evaluation
 	// This prevents side-effect functions from executing multiple times
@@ -155,24 +141,18 @@ func (g *MatchCodeGen) generateMatchSwitch() {
 			// Need temp var for bindings
 			tempVar := g.SharedTempVar("v")
 			g.scrutineeTempVar = tempVar // Store for generateArmBody
-			switchPrefix := "switch " + tempVar + " := "
-			g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(".(type) {\n"), "match")
-			g.Write(switchPrefix)
+			g.Write("switch " + tempVar + " := ")
 			g.Write(scrutineeTempVar)
 			g.Write(".(type) {\n")
 		} else {
 			// No bindings - just use scrutinee.(type) without variable
-			switchPrefix := "switch "
-			g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(".(type) {\n"), "match")
-			g.Write(switchPrefix)
+			g.Write("switch ")
 			g.Write(scrutineeTempVar)
 			g.Write(".(type) {\n")
 		}
 	} else {
 		// Generate value switch: switch scrutinee {
-		switchPrefix := "switch "
-		g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(" {\n"), "match")
-		g.Write(switchPrefix)
+		g.Write("switch ")
 		g.Write(scrutineeTempVar)
 		g.Write(" {\n")
 	}
@@ -255,25 +235,16 @@ func (g *MatchCodeGen) generateGroupedCase(group *armGroup, typeSwitch bool) {
 	}
 
 	firstArm := group.arms[0]
-	patternStart := int(firstArm.PatternPos)
-	patternEnd := int(firstArm.Pattern.End())
 
 	// Generate case clause header
 	if group.isDefault {
-		defaultCase := "default:\n"
-		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-		g.Write(defaultCase)
-	} else if _, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
+		g.Write("default:\n")
+	} else if lit, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
 		// Literal pattern
-		lit := firstArm.Pattern.(*ast.LiteralPattern)
-		caseClause := "case " + lit.Value + ":\n"
-		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-		g.Write(caseClause)
+		g.Write("case " + lit.Value + ":\n")
 	} else {
 		// Constructor pattern
-		caseClause := "case " + group.typeName + ":\n"
-		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-		g.Write(caseClause)
+		g.Write("case " + group.typeName + ":\n")
 	}
 
 	// Extract bindings from first arm (all arms in group have same pattern structure)
@@ -320,26 +291,17 @@ func (g *MatchCodeGen) generateGroupedCase(group *armGroup, typeSwitch bool) {
 // This handles multiple patterns for the same constructor with guards.
 func (g *MatchCodeGen) generateArmsChain(arms []*ast.MatchArm) {
 	for i, arm := range arms {
-		bodyStart := int(arm.Body.Pos())
-		bodyEnd := int(arm.Body.End())
-
 		hasGuard := arm.Guard != nil
 		isFirst := i == 0
 		isLast := i == len(arms)-1
 
 		if hasGuard {
 			guardResult := GenerateExpr(arm.Guard)
-			guardStart := int(arm.GuardPos)
-			guardEnd := int(arm.Guard.End())
 
 			if isFirst {
-				guardCode := "if " + string(guardResult.Output) + " {\n"
-				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-				g.Write(guardCode)
+				g.Write("if " + string(guardResult.Output) + " {\n")
 			} else {
-				guardCode := "} else if " + string(guardResult.Output) + " {\n"
-				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-				g.Write(guardCode)
+				g.Write("} else if " + string(guardResult.Output) + " {\n")
 			}
 		} else {
 			// Unguarded arm
@@ -353,11 +315,8 @@ func (g *MatchCodeGen) generateArmsChain(arms []*ast.MatchArm) {
 		// Generate body
 		bodyResult := GenerateExpr(arm.Body)
 		if g.Match.IsExpr {
-			bodyCode := "return " + string(bodyResult.Output) + "\n"
-			g.MB.Add(bodyStart, bodyEnd, len(bodyCode), "match")
-			g.Write(bodyCode)
+			g.Write("return " + string(bodyResult.Output) + "\n")
 		} else {
-			g.MB.Add(bodyStart, bodyEnd, len(bodyResult.Output), "match")
 			g.Buf.Write(bodyResult.Output)
 			g.WriteByte('\n')
 		}
@@ -400,23 +359,14 @@ func (g *MatchCodeGen) generateGroupedCaseWithAssignment(group *armGroup, varNam
 	}
 
 	firstArm := group.arms[0]
-	patternStart := int(firstArm.PatternPos)
-	patternEnd := int(firstArm.Pattern.End())
 
 	// Generate case clause header
 	if group.isDefault {
-		defaultCase := "default:\n"
-		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-		g.Write(defaultCase)
-	} else if _, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
-		lit := firstArm.Pattern.(*ast.LiteralPattern)
-		caseClause := "case " + lit.Value + ":\n"
-		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-		g.Write(caseClause)
+		g.Write("default:\n")
+	} else if lit, ok := firstArm.Pattern.(*ast.LiteralPattern); ok {
+		g.Write("case " + lit.Value + ":\n")
 	} else {
-		caseClause := "case " + group.typeName + ":\n"
-		g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-		g.Write(caseClause)
+		g.Write("case " + group.typeName + ":\n")
 	}
 
 	// Extract bindings from first arm
@@ -455,26 +405,17 @@ func (g *MatchCodeGen) generateGroupedCaseWithAssignment(group *armGroup, varNam
 // generateArmsChainWithAssignment generates an if/else chain with assignments.
 func (g *MatchCodeGen) generateArmsChainWithAssignment(arms []*ast.MatchArm, varName string) {
 	for i, arm := range arms {
-		bodyStart := int(arm.Body.Pos())
-		bodyEnd := int(arm.Body.End())
-
 		hasGuard := arm.Guard != nil
 		isFirst := i == 0
 		isLast := i == len(arms)-1
 
 		if hasGuard {
 			guardResult := GenerateExpr(arm.Guard)
-			guardStart := int(arm.GuardPos)
-			guardEnd := int(arm.Guard.End())
 
 			if isFirst {
-				guardCode := "if " + string(guardResult.Output) + " {\n"
-				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-				g.Write(guardCode)
+				g.Write("if " + string(guardResult.Output) + " {\n")
 			} else {
-				guardCode := "} else if " + string(guardResult.Output) + " {\n"
-				g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-				g.Write(guardCode)
+				g.Write("} else if " + string(guardResult.Output) + " {\n")
 			}
 		} else {
 			if !isFirst {
@@ -484,9 +425,7 @@ func (g *MatchCodeGen) generateArmsChainWithAssignment(arms []*ast.MatchArm, var
 
 		// Generate assignment
 		bodyResult := GenerateExpr(arm.Body)
-		assignCode := fmt.Sprintf("\t%s = %s\n", varName, string(bodyResult.Output))
-		g.MB.Add(bodyStart, bodyEnd, len(assignCode), "match")
-		g.Write(assignCode)
+		g.Write(fmt.Sprintf("\t%s = %s\n", varName, string(bodyResult.Output)))
 
 		// Close if/else chain
 		if isLast && (hasGuard || i > 0 && arms[0].Guard != nil) {
@@ -548,41 +487,33 @@ func (g *MatchCodeGen) patternHasBindings(pattern ast.Pattern) bool {
 // generateMatchArm generates a case clause for a match arm.
 // Handles pattern matching, guards, and body generation.
 func (g *MatchCodeGen) generateMatchArm(arm *ast.MatchArm, typeSwitch bool) {
-	// Track mapping for pattern
-	patternStart := int(arm.PatternPos)
-	patternEnd := int(arm.Pattern.End())
-
 	// Generate case clause based on pattern type
 	switch pattern := arm.Pattern.(type) {
 	case *ast.ConstructorPattern:
-		g.generateConstructorCase(pattern, arm, typeSwitch, patternStart, patternEnd)
+		g.generateConstructorCase(pattern, arm, typeSwitch)
 	case *ast.LiteralPattern:
-		g.generateLiteralCase(pattern, arm, patternStart, patternEnd)
+		g.generateLiteralCase(pattern, arm)
 	case *ast.WildcardPattern:
-		g.generateWildcardCase(arm, patternStart, patternEnd)
+		g.generateWildcardCase(arm)
 	case *ast.VariablePattern:
-		g.generateVariableCase(pattern, arm, patternStart, patternEnd)
+		g.generateVariableCase(pattern, arm)
 	case *ast.TuplePattern:
-		g.generateTupleCase(pattern, arm, patternStart, patternEnd)
+		g.generateTupleCase(pattern, arm)
 	default:
 		// Unknown pattern type - generate default case
-		defaultCase := "default:\n"
-		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-		g.Write(defaultCase)
+		g.Write("default:\n")
 		g.generateArmBody(arm, nil)
 	}
 }
 
 // generateConstructorCase generates case for constructor patterns (Ok(x), Err(e), Some(v), None).
-func (g *MatchCodeGen) generateConstructorCase(pattern *ast.ConstructorPattern, arm *ast.MatchArm, typeSwitch bool, patternStart, patternEnd int) {
+func (g *MatchCodeGen) generateConstructorCase(pattern *ast.ConstructorPattern, arm *ast.MatchArm, typeSwitch bool) {
 	// Convert constructor name to full type name
 	// - Result/Option: Ok → ResultOk, Some → OptionSome
 	// - Enum: Status_Pending → StatusPending (strip underscore prefix)
 	typeName := g.constructorToTypeName(pattern.Name)
 
-	caseClause := "case " + typeName + ":\n"
-	g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-	g.Write(caseClause)
+	g.Write("case " + typeName + ":\n")
 
 	// Extract bindings from constructor parameters
 	var bindings []Binding
@@ -655,26 +586,20 @@ func (g *MatchCodeGen) extractBindings(pattern ast.Pattern, index int, numParams
 }
 
 // generateLiteralCase generates case for literal patterns (1, "hello", true).
-func (g *MatchCodeGen) generateLiteralCase(pattern *ast.LiteralPattern, arm *ast.MatchArm, patternStart, patternEnd int) {
-	caseClause := "case " + pattern.Value + ":\n"
-	g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-	g.Write(caseClause)
+func (g *MatchCodeGen) generateLiteralCase(pattern *ast.LiteralPattern, arm *ast.MatchArm) {
+	g.Write("case " + pattern.Value + ":\n")
 	g.generateArmBody(arm, nil)
 }
 
 // generateWildcardCase generates default case for wildcard pattern (_).
-func (g *MatchCodeGen) generateWildcardCase(arm *ast.MatchArm, patternStart, patternEnd int) {
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+func (g *MatchCodeGen) generateWildcardCase(arm *ast.MatchArm) {
+	g.Write("default:\n")
 	g.generateArmBody(arm, nil)
 }
 
 // generateVariableCase generates default case with binding for variable pattern (x).
-func (g *MatchCodeGen) generateVariableCase(pattern *ast.VariablePattern, arm *ast.MatchArm, patternStart, patternEnd int) {
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+func (g *MatchCodeGen) generateVariableCase(pattern *ast.VariablePattern, arm *ast.MatchArm) {
+	g.Write("default:\n")
 
 	// Bind variable to scrutinee value
 	bindings := []Binding{{
@@ -685,12 +610,10 @@ func (g *MatchCodeGen) generateVariableCase(pattern *ast.VariablePattern, arm *a
 }
 
 // generateTupleCase generates case for tuple patterns ((a, b)).
-func (g *MatchCodeGen) generateTupleCase(pattern *ast.TuplePattern, arm *ast.MatchArm, patternStart, patternEnd int) {
+func (g *MatchCodeGen) generateTupleCase(pattern *ast.TuplePattern, arm *ast.MatchArm) {
 	// Tuple patterns need special handling - not implemented yet
 	// For now, generate default case
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+	g.Write("default:\n")
 	g.generateArmBody(arm, nil)
 }
 
@@ -729,26 +652,14 @@ func (g *MatchCodeGen) generateArmBody(arm *ast.MatchArm, bindings []Binding) {
 	// Generate guard check if present
 	if arm.Guard != nil {
 		guardResult := GenerateExpr(arm.Guard)
-		guardStart := int(arm.GuardPos)
-		guardEnd := int(arm.Guard.End())
-		guardCode := "if " + string(guardResult.Output) + " {\n"
-		g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-		g.Write(guardCode)
+		g.Write("if " + string(guardResult.Output) + " {\n")
 	}
 
 	// Generate body
-	bodyStart := int(arm.Body.Pos())
-	bodyEnd := int(arm.Body.End())
-
-	// If match is expression, use return statement
+	bodyResult := GenerateExpr(arm.Body)
 	if g.Match.IsExpr {
-		bodyResult := GenerateExpr(arm.Body)
-		bodyCode := "return " + string(bodyResult.Output) + "\n"
-		g.MB.Add(bodyStart, bodyEnd, len(bodyCode), "match")
-		g.Write(bodyCode)
+		g.Write("return " + string(bodyResult.Output) + "\n")
 	} else {
-		bodyResult := GenerateExpr(arm.Body)
-		g.MB.Add(bodyStart, bodyEnd, len(bodyResult.Output), "match")
 		g.Buf.Write(bodyResult.Output)
 		g.WriteByte('\n')
 	}
@@ -849,11 +760,8 @@ func (g *MatchCodeGen) generateHumanLikeAssignment() ast.CodeGenResult {
 		return g.Result()
 	}
 
-	// Track mapping for var declaration
-	matchPos := int(g.Match.Pos())
-	varDecl := fmt.Sprintf("var %s %s\n", varName, varType)
-	g.MB.Add(matchPos, matchPos+5, len(varDecl), "match")
-	g.Write(varDecl)
+	// Generate var declaration
+	g.Write(fmt.Sprintf("var %s %s\n", varName, varType))
 
 	// Generate switch with assignments
 	g.generateMatchSwitchWithAssignment(varName)
@@ -861,7 +769,7 @@ func (g *MatchCodeGen) generateHumanLikeAssignment() ast.CodeGenResult {
 	// Get result and move output to StatementOutput
 	result := g.Result()
 	result.StatementOutput = result.Output // Move to statement output
-	result.Output = nil                      // Clear expression output
+	result.Output = nil                    // Clear expression output
 
 	return result
 }
@@ -885,10 +793,8 @@ func (g *MatchCodeGen) generateHoistedMatch() ast.CodeGenResult {
 	hoistedBuf.WriteString(fmt.Sprintf("var %s %s\n", tmpVar, varType))
 
 	// Save current buffer and switch to hoistedBuf
-	// CRITICAL FIX: Keep using original MappingBuilder so mappings accumulate
 	origBuf := g.Buf
 	g.Buf = *hoistedBuf
-	// DON'T create new MB - keep using g.MB so LSP mappings are preserved
 
 	// Generate switch with assignments to tmpVar
 	g.generateMatchSwitchWithAssignment(tmpVar)
@@ -896,7 +802,7 @@ func (g *MatchCodeGen) generateHoistedMatch() ast.CodeGenResult {
 	// Get the hoisted code from the buffer
 	hoistedCode := g.Buf.Bytes()
 
-	// Restore original buffer (mappings already accumulated in g.MB)
+	// Restore original buffer
 	g.Buf = origBuf
 
 	// Build result
@@ -914,10 +820,6 @@ func (g *MatchCodeGen) generateMatchSwitchWithAssignment(varName string) {
 	// Generate scrutinee
 	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
 	scrutineeCode := string(scrutineeResult.Output)
-
-	// Track mapping for scrutinee
-	scrutineeStart := int(g.Match.Scrutinee.Pos())
-	scrutineeEnd := int(g.Match.Scrutinee.End())
 
 	// CRITICAL FIX: Always bind match value to temp var to prevent double evaluation
 	// This prevents side-effect functions (e.g., popQueue()) from executing twice:
@@ -937,24 +839,18 @@ func (g *MatchCodeGen) generateMatchSwitchWithAssignment(varName string) {
 			// Need temp var for bindings
 			tempVar := g.SharedTempVar("v")
 			g.scrutineeTempVar = tempVar // Store for generateArmBodyWithAssignment
-			switchPrefix := "switch " + tempVar + " := "
-			g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(".(type) {\n"), "match")
-			g.Write(switchPrefix)
+			g.Write("switch " + tempVar + " := ")
 			g.Write(scrutineeTempVar)
 			g.Write(".(type) {\n")
 		} else {
 			// No bindings - just use scrutinee.(type) without variable
-			switchPrefix := "switch "
-			g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(".(type) {\n"), "match")
-			g.Write(switchPrefix)
+			g.Write("switch ")
 			g.Write(scrutineeTempVar)
 			g.Write(".(type) {\n")
 		}
 	} else {
 		// Generate value switch: switch scrutinee {
-		switchPrefix := "switch "
-		g.MB.Add(scrutineeStart, scrutineeEnd, len(switchPrefix)+len(scrutineeTempVar)+len(" {\n"), "match")
-		g.Write(switchPrefix)
+		g.Write("switch ")
 		g.Write(scrutineeTempVar)
 		g.Write(" {\n")
 	}
@@ -973,39 +869,31 @@ func (g *MatchCodeGen) generateMatchSwitchWithAssignment(varName string) {
 // generateMatchArmWithAssignment generates a case clause with assignment to varName.
 // Handles pattern matching, guards, and assignment generation.
 func (g *MatchCodeGen) generateMatchArmWithAssignment(arm *ast.MatchArm, varName string, typeSwitch bool) {
-	// Track mapping for pattern
-	patternStart := int(arm.PatternPos)
-	patternEnd := int(arm.Pattern.End())
-
 	// Generate case clause based on pattern type
 	switch pattern := arm.Pattern.(type) {
 	case *ast.ConstructorPattern:
-		g.generateConstructorCaseWithAssignment(pattern, arm, varName, typeSwitch, patternStart, patternEnd)
+		g.generateConstructorCaseWithAssignment(pattern, arm, varName, typeSwitch)
 	case *ast.LiteralPattern:
-		g.generateLiteralCaseWithAssignment(pattern, arm, varName, patternStart, patternEnd)
+		g.generateLiteralCaseWithAssignment(pattern, arm, varName)
 	case *ast.WildcardPattern:
-		g.generateWildcardCaseWithAssignment(arm, varName, patternStart, patternEnd)
+		g.generateWildcardCaseWithAssignment(arm, varName)
 	case *ast.VariablePattern:
-		g.generateVariableCaseWithAssignment(pattern, arm, varName, patternStart, patternEnd)
+		g.generateVariableCaseWithAssignment(pattern, arm, varName)
 	case *ast.TuplePattern:
-		g.generateTupleCaseWithAssignment(pattern, arm, varName, patternStart, patternEnd)
+		g.generateTupleCaseWithAssignment(pattern, arm, varName)
 	default:
 		// Unknown pattern type - generate default case
-		defaultCase := "default:\n"
-		g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-		g.Write(defaultCase)
+		g.Write("default:\n")
 		g.generateArmBodyWithAssignment(arm, varName, nil)
 	}
 }
 
 // generateConstructorCaseWithAssignment generates case for constructor patterns with assignment.
-func (g *MatchCodeGen) generateConstructorCaseWithAssignment(pattern *ast.ConstructorPattern, arm *ast.MatchArm, varName string, typeSwitch bool, patternStart, patternEnd int) {
+func (g *MatchCodeGen) generateConstructorCaseWithAssignment(pattern *ast.ConstructorPattern, arm *ast.MatchArm, varName string, typeSwitch bool) {
 	// Convert constructor name to full type name
 	typeName := g.constructorToTypeName(pattern.Name)
 
-	caseClause := "case " + typeName + ":\n"
-	g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-	g.Write(caseClause)
+	g.Write("case " + typeName + ":\n")
 
 	// Extract bindings from constructor parameters
 	var bindings []Binding
@@ -1019,26 +907,20 @@ func (g *MatchCodeGen) generateConstructorCaseWithAssignment(pattern *ast.Constr
 }
 
 // generateLiteralCaseWithAssignment generates case for literal patterns with assignment.
-func (g *MatchCodeGen) generateLiteralCaseWithAssignment(pattern *ast.LiteralPattern, arm *ast.MatchArm, varName string, patternStart, patternEnd int) {
-	caseClause := "case " + pattern.Value + ":\n"
-	g.MB.Add(patternStart, patternEnd, len(caseClause), "match")
-	g.Write(caseClause)
+func (g *MatchCodeGen) generateLiteralCaseWithAssignment(pattern *ast.LiteralPattern, arm *ast.MatchArm, varName string) {
+	g.Write("case " + pattern.Value + ":\n")
 	g.generateArmBodyWithAssignment(arm, varName, nil)
 }
 
 // generateWildcardCaseWithAssignment generates default case for wildcard pattern with assignment.
-func (g *MatchCodeGen) generateWildcardCaseWithAssignment(arm *ast.MatchArm, varName string, patternStart, patternEnd int) {
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+func (g *MatchCodeGen) generateWildcardCaseWithAssignment(arm *ast.MatchArm, varName string) {
+	g.Write("default:\n")
 	g.generateArmBodyWithAssignment(arm, varName, nil)
 }
 
 // generateVariableCaseWithAssignment generates default case with binding for variable pattern with assignment.
-func (g *MatchCodeGen) generateVariableCaseWithAssignment(pattern *ast.VariablePattern, arm *ast.MatchArm, varName string, patternStart, patternEnd int) {
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+func (g *MatchCodeGen) generateVariableCaseWithAssignment(pattern *ast.VariablePattern, arm *ast.MatchArm, varName string) {
+	g.Write("default:\n")
 
 	// Bind variable to scrutinee value
 	bindings := []Binding{{
@@ -1049,12 +931,10 @@ func (g *MatchCodeGen) generateVariableCaseWithAssignment(pattern *ast.VariableP
 }
 
 // generateTupleCaseWithAssignment generates case for tuple patterns with assignment.
-func (g *MatchCodeGen) generateTupleCaseWithAssignment(pattern *ast.TuplePattern, arm *ast.MatchArm, varName string, patternStart, patternEnd int) {
+func (g *MatchCodeGen) generateTupleCaseWithAssignment(pattern *ast.TuplePattern, arm *ast.MatchArm, varName string) {
 	// Tuple patterns need special handling - not implemented yet
 	// For now, generate default case
-	defaultCase := "default:\n"
-	g.MB.Add(patternStart, patternEnd, len(defaultCase), "match")
-	g.Write(defaultCase)
+	g.Write("default:\n")
 	g.generateArmBodyWithAssignment(arm, varName, nil)
 }
 
@@ -1093,21 +973,12 @@ func (g *MatchCodeGen) generateArmBodyWithAssignment(arm *ast.MatchArm, varName 
 	// Generate guard check if present
 	if arm.Guard != nil {
 		guardResult := GenerateExpr(arm.Guard)
-		guardStart := int(arm.GuardPos)
-		guardEnd := int(arm.Guard.End())
-		guardCode := "if " + string(guardResult.Output) + " {\n"
-		g.MB.Add(guardStart, guardEnd, len(guardCode), "match")
-		g.Write(guardCode)
+		g.Write("if " + string(guardResult.Output) + " {\n")
 	}
 
 	// Generate body with assignment
-	bodyStart := int(arm.Body.Pos())
-	bodyEnd := int(arm.Body.End())
-
 	bodyResult := GenerateExpr(arm.Body)
-	assignCode := fmt.Sprintf("\t%s = %s\n", varName, string(bodyResult.Output))
-	g.MB.Add(bodyStart, bodyEnd, len(assignCode), "match")
-	g.Write(assignCode)
+	g.Write(fmt.Sprintf("\t%s = %s\n", varName, string(bodyResult.Output)))
 
 	// Close guard if present
 	if arm.Guard != nil {
@@ -1295,11 +1166,7 @@ func (g *MatchCodeGen) generateOptionMatch() ast.CodeGenResult {
 
 	// Store scrutinee in temp var to avoid double evaluation
 	tmpVar := g.SharedTempVar("opt")
-	scrutineeStart := int(g.Match.Scrutinee.Pos())
-	scrutineeEnd := int(g.Match.Scrutinee.End())
-	tmpAssign := fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode)
-	g.MB.Add(scrutineeStart, scrutineeEnd, len(tmpAssign), "match")
-	g.Write(tmpAssign)
+	g.Write(fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode))
 
 	// Find Some and None arms
 	var someArms []*ast.MatchArm
@@ -1437,11 +1304,7 @@ func (g *MatchCodeGen) generateResultMatch() ast.CodeGenResult {
 
 	// Store scrutinee in temp var to avoid double evaluation
 	tmpVar := g.SharedTempVar("res")
-	scrutineeStart := int(g.Match.Scrutinee.Pos())
-	scrutineeEnd := int(g.Match.Scrutinee.End())
-	tmpAssign := fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode)
-	g.MB.Add(scrutineeStart, scrutineeEnd, len(tmpAssign), "match")
-	g.Write(tmpAssign)
+	g.Write(fmt.Sprintf("%s := %s\n", tmpVar, scrutineeCode))
 
 	// Find Ok and Err arms
 	var okArms []*ast.MatchArm
@@ -1625,7 +1488,6 @@ func (g *MatchCodeGen) wrapInIIFE(inner ast.CodeGenResult) ast.CodeGenResult {
 	buf.WriteString("}()")
 
 	return ast.CodeGenResult{
-		Output:   buf.Bytes(),
-		Mappings: inner.Mappings,
+		Output: buf.Bytes(),
 	}
 }

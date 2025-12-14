@@ -9,9 +9,10 @@
 //   - Character scanning loops
 //
 // Correct pattern:
-//   func Generate(expr *ast.MatchExpr) ast.CodeGenResult
-//   - Input: AST node
-//   - Output: Generated Go + source mappings
+//
+//	func Generate(expr *ast.MatchExpr) ast.CodeGenResult
+//	- Input: AST node
+//	- Output: Generated Go code
 package codegen
 
 import (
@@ -29,15 +30,13 @@ type Generator interface {
 // BaseGenerator provides common functionality for all code generators.
 // All specific generators (match, lambda, etc.) should embed this.
 type BaseGenerator struct {
-	Buf     bytes.Buffer      // Output buffer for generated Go code
-	MB      *ast.MappingBuilder // Source mapping builder
-	Counter int               // For unique variable naming (start at 1, not 0)
+	Buf     bytes.Buffer // Output buffer for generated Go code
+	Counter int          // For unique variable naming (start at 1, not 0)
 }
 
 // NewBaseGenerator creates a base generator with initialized state.
 func NewBaseGenerator() *BaseGenerator {
 	return &BaseGenerator{
-		MB:      ast.NewMappingBuilder(),
 		Counter: 1, // First variable has no number, second is "1", etc.
 	}
 }
@@ -71,10 +70,9 @@ func (g *BaseGenerator) WriteByte(b byte) error {
 	return g.Buf.WriteByte(b)
 }
 
-// Result returns the final CodeGenResult with generated code and mappings.
+// Result returns the final CodeGenResult with generated code.
 func (g *BaseGenerator) Result() ast.CodeGenResult {
 	return ast.CodeGenResult{
-		Output:   g.Buf.Bytes(),
-		Mappings: g.MB.Build(),
+		Output: g.Buf.Bytes(),
 	}
 }

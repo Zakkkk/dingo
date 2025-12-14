@@ -46,7 +46,7 @@ func TestNestedTupleDestructuring(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			input := []byte(tc.input)
-			result, _, err := transformTupleDestructuring(input)
+			result, err := transformTupleDestructuring(input)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

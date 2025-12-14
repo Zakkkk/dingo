@@ -38,6 +38,10 @@ type StmtLocation struct {
 	LambdaParam     string        // Lambda parameter name (for ErrorPropLambda)
 	LambdaBodyStart int           // Start byte position of lambda body
 	LambdaBodyEnd   int           // End byte position of lambda body
+
+	// Source location for LSP (1-indexed, like GuardLocation)
+	Line   int // 1-indexed line number of the statement
+	Column int // 1-indexed column number
 }
 
 // findMatchingColonForErrorProp looks ahead from questionIdx to find a matching : at the same depth.
@@ -205,6 +209,8 @@ func isPrecededByAssignOrReturn(tokens []tokenizer.Token, startIdx int) bool {
 func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 	depth := 0
 	stmtStart := tokens[startIdx].BytePos()
+	stmtLine := tokens[startIdx].Line
+	stmtColumn := tokens[startIdx].Column
 
 	for i := startIdx; i < len(tokens); i++ {
 		t := tokens[i]
@@ -241,6 +247,8 @@ func scanForQuestionMark(tokens []tokenizer.Token, startIdx int) *StmtLocation {
 					ExprStart: exprStart,
 					ExprEnd:   t.ByteEnd(), // End of expression (excluding ? and transform)
 					ErrorKind: ErrorPropBasic,
+					Line:      stmtLine,
+					Column:    stmtColumn,
 				}
 
 				// Look at what follows the ?

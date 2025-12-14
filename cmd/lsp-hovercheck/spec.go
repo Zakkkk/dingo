@@ -18,7 +18,8 @@ type Spec struct {
 type TestCase struct {
 	ID          int         `yaml:"id"`
 	Line        int         `yaml:"line"`        // 1-based line number
-	Token       string      `yaml:"token"`       // Token to hover on
+	Token       string      `yaml:"token"`       // Token to hover on (used if Character not set)
+	Character   int         `yaml:"character"`   // Exact 0-based character position (overrides token search)
 	Occurrence  int         `yaml:"occurrence"`  // Which occurrence (1-based, default 1)
 	Description string      `yaml:"description"` // Human-readable description
 	Expect      Expectation `yaml:"expect"`      // What we expect to see
@@ -118,8 +119,10 @@ func normalizeHoverText(text string) string {
 	return text
 }
 
-// FindTokenColumn finds the column (0-based, UTF-16 code units) of a token on a line
-// Returns UTF-16 column position as required by LSP specification
+// FindTokenColumn finds the character offset (0-based) of a token on a line
+// Returns character position at the CENTER of the token for more reliable hover results
+// (hovering at token edges can hit adjacent symbols)
+// NOTE: LSP uses character offsets, NOT visual columns (tabs count as 1 char, not 4)
 func FindTokenColumn(lineText, token string, occurrence int) (int, error) {
 	if occurrence < 1 {
 		occurrence = 1
@@ -144,8 +147,8 @@ func FindTokenColumn(lineText, token string, occurrence int) (int, error) {
 			}
 		}
 		if byteIdx >= 0 {
-			// Convert byte offset to UTF-16 code units
-			return ByteOffsetToUTF16(lineText, byteIdx), nil
+			// Return byte offset directly as character offset (for ASCII)
+			return byteIdx, nil
 		}
 		return -1, fmt.Errorf("token %q occurrence %d not found on line", token, occurrence)
 	}
@@ -167,8 +170,11 @@ func FindTokenColumn(lineText, token string, occurrence int) (int, error) {
 		if IsWordBoundary(lineText, actualPos, len(token)) {
 			count++
 			if count == occurrence {
-				// Convert byte offset to UTF-16 code units
-				return ByteOffsetToUTF16(lineText, actualPos), nil
+				// Calculate center position of token for more reliable hover
+				// (edge positions can hit adjacent symbols)
+				// Return byte offset directly as character offset (for ASCII)
+				centerCharOffset := actualPos + len(token)/2
+				return centerCharOffset, nil
 			}
 		}
 

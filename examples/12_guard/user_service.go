@@ -48,6 +48,7 @@ func getCoords() dgo.Result[Point, string] {
 
 func loadUser(id int) dgo.Result[string, string] {
 	// guard with := declares new variable, |err| binds the error
+	//line examples/12_guard/user_service.dingo:47:2
 	tmp := findUser(id)
 	if tmp.IsErr() {
 		err := *tmp.Err
@@ -64,6 +65,7 @@ func loadUser(id int) dgo.Result[string, string] {
 
 func getUserTheme(id int) string {
 	// guard with Option - no |err| because None has nothing to bind
+	//line examples/12_guard/user_service.dingo:57:2
 	tmp1 := getTheme(id)
 	if tmp1.IsNone() {
 
@@ -81,6 +83,7 @@ func refreshUser(id int) dgo.Result[User, string] {
 	var user User // existing variable
 
 	// guard with = reassigns instead of declaring
+	//line examples/12_guard/user_service.dingo:69:2
 	tmp2 := findUser(id)
 	if tmp2.IsErr() {
 		err := *tmp2.Err
@@ -96,6 +99,7 @@ func refreshUser(id int) dgo.Result[User, string] {
 // --- Guard with struct unwrapping ---
 
 func getPosition() dgo.Result[string, string] {
+	//line examples/12_guard/user_service.dingo:78:2
 	tmp3 := getCoords()
 	if tmp3.IsErr() {
 		err := *tmp3.Err
@@ -111,6 +115,7 @@ func getPosition() dgo.Result[string, string] {
 // --- Chained guards (the real power) ---
 
 func getUserWithTheme(id int) dgo.Result[string, string] {
+	//line examples/12_guard/user_service.dingo:87:2
 	tmp4 := findUser(id)
 	if tmp4.IsErr() {
 		err := *tmp4.Err
@@ -120,6 +125,7 @@ func getUserWithTheme(id int) dgo.Result[string, string] {
 	}
 	user := *tmp4.Ok
 
+	//line examples/12_guard/user_service.dingo:91:2
 	tmp5 := getTheme(user.ID)
 	if tmp5.IsNone() {
 

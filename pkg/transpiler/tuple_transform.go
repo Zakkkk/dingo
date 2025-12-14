@@ -30,10 +30,9 @@ type tupleNodeWithPos struct {
 //
 // NOTE: This uses tokenizer-based scanning which is normally discouraged per CLAUDE.md,
 // but is necessary here because type declarations cannot be parsed by our statement parser.
-func transformTupleTypeAliases(src []byte) ([]byte, []ast.SourceMapping, error) {
+func transformTupleTypeAliases(src []byte) ([]byte, error) {
 	tok := tokenizer.New(src)
 	result := src
-	var mappings []ast.SourceMapping
 
 	// Find all type alias locations (scan backwards to avoid offset drift)
 	type typeAliasLoc struct {
@@ -135,17 +134,9 @@ func transformTupleTypeAliases(src []byte) ([]byte, []ast.SourceMapping, error) 
 		newResult = append(newResult, []byte(marker)...)
 		newResult = append(newResult, result[loc.tupleEnd:]...)
 		result = newResult
-
-		mappings = append(mappings, ast.SourceMapping{
-			DingoStart: loc.tupleStart,
-			DingoEnd:   loc.tupleEnd,
-			GoStart:    loc.tupleStart,
-			GoEnd:      loc.tupleStart + len(marker),
-			Kind:       "tuple_type_alias",
-		})
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // trimTypeWhitespace removes leading/trailing whitespace from type string
@@ -191,10 +182,9 @@ type tupleLiteralLoc struct {
 // Key distinction from type aliases:
 // - Type aliases: `type X = (A, B)` - types after `=`
 // - Literals: `return (a, b)` - expressions in various contexts
-func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
+func transformTupleLiterals(src []byte) ([]byte, error) {
 	tok := tokenizer.New(src)
 	result := src
-	var mappings []ast.SourceMapping
 	var locs []tupleLiteralLoc
 
 	// Track context to distinguish tuple literals from other parens
@@ -383,17 +373,9 @@ func transformTupleLiterals(src []byte) ([]byte, []ast.SourceMapping, error) {
 		newResult = append(newResult, marker...)
 		newResult = append(newResult, result[loc.end:]...)
 		result = newResult
-
-		mappings = append(mappings, ast.SourceMapping{
-			DingoStart: loc.start,
-			DingoEnd:   loc.end,
-			GoStart:    loc.start,
-			GoEnd:      loc.start + len(marker),
-			Kind:       "tuple_literal",
-		})
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // tupleDestructureLoc holds location and bindings for a tuple destructure pattern
@@ -479,10 +461,9 @@ func parseNestedDestructurePattern(tok *tokenizer.Tokenizer, pathPrefix string) 
 // - A Go multiple return call (e.g., getPoint()) → x, y := getPoint()
 //
 // This transform MUST run before transformTupleLiterals and before the Go parser.
-func transformTupleDestructuring(src []byte) ([]byte, []ast.SourceMapping, error) {
+func transformTupleDestructuring(src []byte) ([]byte, error) {
 	tok := tokenizer.New(src)
 	result := src
-	var mappings []ast.SourceMapping
 	var locs []tupleDestructureLoc
 
 	for {
@@ -576,17 +557,9 @@ func transformTupleDestructuring(src []byte) ([]byte, []ast.SourceMapping, error
 		newResult = append(newResult, replacement...)
 		newResult = append(newResult, result[loc.end:]...)
 		result = newResult
-
-		mappings = append(mappings, ast.SourceMapping{
-			DingoStart: loc.start,
-			DingoEnd:   loc.end,
-			GoStart:    loc.start,
-			GoEnd:      loc.start + len(replacement),
-			Kind:       "tuple_destructure",
-		})
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // findExpressionEnd finds the end position of an expression starting at startPos.
@@ -657,7 +630,7 @@ func trimExprWhitespace(s string) string {
 //
 // ARCHITECTURE: This function now uses the parser to produce AST nodes instead of
 // scanning raw bytes. This follows the mandated pipeline: tokenizer → parser → AST → codegen.
-func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
+func transformTuplePass1(src []byte) ([]byte, error) {
 	// Parse the source to extract tuple AST nodes
 	fset := token.NewFileSet()
 	tok := tokenizer.New(src)
@@ -707,7 +680,7 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 
 	// If no tuples found, return source unchanged
 	if len(tupleNodes) == 0 {
-		return src, nil, nil
+		return src, nil
 	}
 
 	// Sort tuple nodes by position descending (transform from end to avoid offset shifts)
@@ -716,7 +689,6 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 	})
 
 	result := src
-	var mappings []ast.SourceMapping
 
 	// Transform each tuple from end to beginning
 	for _, node := range tupleNodes {
@@ -766,18 +738,9 @@ func transformTuplePass1(src []byte) ([]byte, []ast.SourceMapping, error) {
 		newResult = append(newResult, marker...)
 		newResult = append(newResult, result[replaceEnd:]...)
 		result = newResult
-
-		// Add source mapping
-		mappings = append(mappings, ast.SourceMapping{
-			DingoStart: replaceStart,
-			DingoEnd:   replaceEnd,
-			GoStart:    replaceStart,
-			GoEnd:      replaceStart + len(marker),
-			Kind:       "tuple_" + node.kind.String(),
-		})
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // Pos returns the starting position of a tuple node

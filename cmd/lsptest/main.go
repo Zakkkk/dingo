@@ -144,16 +144,16 @@ func (c *LSPClient) Close() {
 func main() {
 	fmt.Println("=== Dingo LSP Feature Test ===")
 
-	// Start LSP
-	client, err := NewLSPClient("/Users/jack/go/bin/dingo-lsp")
+	// Start LSP - use locally built binary
+	client, err := NewLSPClient("./dingo-lsp")
 	if err != nil {
 		fmt.Printf("Failed to start LSP: %v\n", err)
 		return
 	}
 	defer client.Close()
 
-	// Test file path
-	testFile := "/Users/jack/mag/dingo/test_ide.dingo"
+	// Test file path - use real example file
+	testFile := "/Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo"
 	fileURI := "file://" + testFile
 
 	// Test 1: Initialize
@@ -209,11 +209,10 @@ func main() {
 
 	// Test 3: Hover
 	fmt.Println("\n--- Test 3: textDocument/hover ---")
-	// Hover on "getData" function definition on line 5 (0-indexed line 4)
-	// This is untransformed code so position mapping should be 1:1
+	// Hover on "GetUserHandler" function definition (line 52, 0-indexed 51)
 	hoverParams := map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": fileURI},
-		"position":     map[string]interface{}{"line": 4, "character": 6}, // "getData" on line 5
+		"position":     map[string]interface{}{"line": 51, "character": 5}, // "GetUserHandler" function
 	}
 	if err := client.Send(Request{JSONRPC: "2.0", ID: 2, Method: "textDocument/hover", Params: hoverParams}); err != nil {
 		fmt.Printf("Send error: %v\n", err)
@@ -238,9 +237,10 @@ func main() {
 
 	// Test 4: Completion
 	fmt.Println("\n--- Test 4: textDocument/completion ---")
+	// Request completion inside main() function (line 140, 0-indexed 139)
 	completionParams := map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": fileURI},
-		"position":     map[string]interface{}{"line": 26, "character": 10}, // Inside main()
+		"position":     map[string]interface{}{"line": 139, "character": 2}, // Inside main()
 	}
 	if err := client.Send(Request{JSONRPC: "2.0", ID: 3, Method: "textDocument/completion", Params: completionParams}); err != nil {
 		fmt.Printf("Send error: %v\n", err)
@@ -264,9 +264,10 @@ func main() {
 
 	// Test 5: Definition
 	fmt.Println("\n--- Test 5: textDocument/definition ---")
+	// Go to definition of "extractUserID" call (line 55, 0-indexed 54)
 	defParams := map[string]interface{}{
 		"textDocument": map[string]interface{}{"uri": fileURI},
-		"position":     map[string]interface{}{"line": 26, "character": 16}, // processData() call
+		"position":     map[string]interface{}{"line": 54, "character": 12}, // extractUserID call
 	}
 	if err := client.Send(Request{JSONRPC: "2.0", ID: 4, Method: "textDocument/definition", Params: defParams}); err != nil {
 		fmt.Printf("Send error: %v\n", err)

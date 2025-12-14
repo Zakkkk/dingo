@@ -7,7 +7,6 @@ import (
 	goparser "go/parser"
 	"go/token"
 
-	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
@@ -25,13 +24,12 @@ type TranspileResult struct {
 	// Metadata contains transformation metadata for source maps
 	Metadata *TranspileMetadata
 
-	// Mappings contains source mappings from Dingo to Go (for .dmap generation)
-	Mappings []dingoast.SourceMapping
-
-	// LineMappings contains line-level mappings for .dmap v2 format
+	// LineMappings contains line-level mappings for .dmap v2/v3 format
+	// Extracted from //line directives in generated Go code
 	LineMappings []sourcemap.LineMapping
 
 	// ColumnMappings contains column-level mappings for .dmap v3 format
+	// Used for LSP hover and go-to-definition
 	ColumnMappings []sourcemap.ColumnMapping
 
 	// DingoSource is the original Dingo source (for line index in .dmap)

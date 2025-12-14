@@ -227,6 +227,48 @@ Variable naming:
 
 **Landing page** (`landingpage/` dir): Use astro-* agents instead.
 
+## Agent Skills
+
+Project-specific skills are available in `.claude/skills/`:
+
+| Skill | Description | When to Use |
+|-------|-------------|-------------|
+| `lsp-hover-testing` | Automated LSP hover validation | After sourcemap changes, debugging hover issues |
+
+### LSP Hover Testing
+
+Automated headless testing of hover functionality. Use instead of manual VS Code checks.
+
+```bash
+# Build required tools
+go build -o dingo ./cmd/dingo
+go build -o editors/vscode/server/bin/dingo-lsp ./cmd/dingo-lsp
+go build -o lsp-hovercheck ./cmd/lsp-hovercheck
+
+# Run hover tests
+./lsp-hovercheck --spec "ai-docs/hover-specs/*.yaml"
+
+# Verbose for debugging
+./lsp-hovercheck --spec ai-docs/hover-specs/http_handler.yaml --verbose
+```
+
+**Test specs** are in `ai-docs/hover-specs/*.yaml`. See `.claude/skills/lsp-hover-testing/SKILL.md` for full documentation.
+
+**Available test specs:**
+- `http_handler.yaml` - Token-based tests for all error propagation patterns (16 tests)
+- `column_precision.yaml` - Explicit character position tests validating column mapping (5 tests)
+- `column_validation.yaml` - Basic character position validation (2 tests)
+
+**LSP Position Specification:**
+- LSP uses **0-indexed** positions for both `line` and `character`
+- VS Code UI shows **1-indexed** columns (Col 15 in status bar = `character: 14` in LSP)
+- Test specs use LSP's 0-indexed `character` field
+
+**When to run hover tests:**
+- After ANY changes to `pkg/lsp/`, `pkg/sourcemap/`, or `pkg/transpiler/`
+- Before committing position tracking changes
+- When debugging user-reported hover issues
+
 ## Sourcemap Architecture (v3)
 
 Position tracking uses `token.Pos` from Dingo AST, NOT byte offsets.
@@ -247,8 +289,9 @@ Key files:
 
 ## Testing
 
-- Golden tests: `tests/golden/` - see `GOLDEN_TEST_GUIDELINES.md`
-- Run: `go test ./...`
+- **Unit tests**: `go test ./...`
+- **Golden tests**: `tests/golden/` - see `GOLDEN_TEST_GUIDELINES.md`
+- **LSP hover tests**: `./lsp-hovercheck --spec "ai-docs/hover-specs/*.yaml"` (see Agent Skills section)
 
 ## CLI Commands
 

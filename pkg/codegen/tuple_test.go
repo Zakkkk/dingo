@@ -114,7 +114,7 @@ func TestTupleCodeGen_NestedLiteral(t *testing.T) {
 	}
 }
 
-func TestTupleCodeGen_LiteralSourceMapping(t *testing.T) {
+func TestTupleCodeGen_LiteralOutput(t *testing.T) {
 	// (10, 20)
 	lit := &ast.TupleLiteral{
 		Lparen: token.Pos(100),
@@ -128,27 +128,9 @@ func TestTupleCodeGen_LiteralSourceMapping(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateLiteral(lit)
 
-	// Should have one mapping
-	if len(result.Mappings) != 1 {
-		t.Fatalf("Expected 1 mapping, got %d", len(result.Mappings))
-	}
-
-	m := result.Mappings[0]
-	// DingoStart is relative (0) - the transformer adds the actual position offset
-	if m.DingoStart != 0 {
-		t.Errorf("Expected DingoStart=0 (relative), got %d", m.DingoStart)
-	}
-
-	if m.GoStart != 0 {
-		t.Errorf("Expected GoStart=0, got %d", m.GoStart)
-	}
-
-	if m.GoEnd != len(result.Output) {
-		t.Errorf("Expected GoEnd=%d, got %d", len(result.Output), m.GoEnd)
-	}
-
-	if m.Kind != "tuple_literal" {
-		t.Errorf("Expected Kind='tuple_literal', got '%s'", m.Kind)
+	// Verify output is not empty
+	if len(result.Output) == 0 {
+		t.Error("Expected non-empty output for tuple literal")
 	}
 }
 
@@ -249,7 +231,7 @@ func TestTupleCodeGen_DestructureComplexExpression(t *testing.T) {
 	}
 }
 
-func TestTupleCodeGen_DestructureSourceMapping(t *testing.T) {
+func TestTupleCodeGen_DestructureOutput(t *testing.T) {
 	// let (x, y) = point
 	dest := &ast.TupleDestructure{
 		LetPos: token.Pos(200),
@@ -264,19 +246,9 @@ func TestTupleCodeGen_DestructureSourceMapping(t *testing.T) {
 	gen := NewTupleCodeGen()
 	result := gen.GenerateDestructure(dest)
 
-	// Should have one mapping
-	if len(result.Mappings) != 1 {
-		t.Fatalf("Expected 1 mapping, got %d", len(result.Mappings))
-	}
-
-	m := result.Mappings[0]
-	// DingoStart is relative (0) - the transformer adds the actual position offset
-	if m.DingoStart != 0 {
-		t.Errorf("Expected DingoStart=0 (relative), got %d", m.DingoStart)
-	}
-
-	if m.Kind != "tuple_destructure" {
-		t.Errorf("Expected Kind='tuple_destructure', got '%s'", m.Kind)
+	// Verify output is not empty
+	if len(result.Output) == 0 {
+		t.Error("Expected non-empty output for tuple destructure")
 	}
 }
 

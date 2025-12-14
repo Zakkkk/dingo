@@ -398,9 +398,10 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 			return nil, fmt.Errorf("transpilation error in %s: %w", dingoFile, transpileErr)
 		}
 
-		// Extract Go code and line mappings from transpilation result
+		// Extract Go code and mappings from transpilation result
 		goSource := result.GoCode
 		lineMappings := result.LineMappings
+		columnMappings := result.ColumnMappings
 
 		if buildUI != nil {
 			fmt.Printf("  %s Transpile   Done %s\n",
@@ -434,7 +435,8 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
 				if dmapPathErr == nil {
 					writer := dmap.NewWriter(src, goSource)
-					if dmapErr := writer.WriteFile(dmapPath, lineMappings); dmapErr != nil {
+					// Write v3 format with column mappings
+					if dmapErr := writer.WriteFile(dmapPath, lineMappings, columnMappings); dmapErr != nil {
 						// .dmap write failure is non-fatal - warn but don't fail build
 						fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
 					}
@@ -454,7 +456,8 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
 				if dmapPathErr == nil {
 					writer := dmap.NewWriter(src, goSource)
-					if dmapErr := writer.WriteFile(dmapPath, lineMappings); dmapErr != nil {
+					// Write v3 format with column mappings
+					if dmapErr := writer.WriteFile(dmapPath, lineMappings, columnMappings); dmapErr != nil {
 						// .dmap write failure is non-fatal - warn but don't fail build
 						fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)
 					}

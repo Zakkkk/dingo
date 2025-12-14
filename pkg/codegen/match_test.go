@@ -327,50 +327,6 @@ func TestMatchCodeGen_MatchExpression(t *testing.T) {
 	}
 }
 
-// TestMatchCodeGen_SourceMappings tests that source mappings are generated.
-func TestMatchCodeGen_SourceMappings(t *testing.T) {
-	match := &ast.MatchExpr{
-		Match: 1,
-		Scrutinee: &ast.RawExpr{
-			StartPos: 7,
-			EndPos:   13,
-			Text:     "result",
-		},
-		Arms: []*ast.MatchArm{
-			{
-				PatternPos: 15,
-				Pattern: &ast.ConstructorPattern{
-					Name: "Ok",
-					Params: []ast.Pattern{
-						&ast.VariablePattern{Name: "value"},
-					},
-				},
-				Body: &ast.RawExpr{
-					StartPos: 25,
-					EndPos:   30,
-					Text:     "value",
-				},
-			},
-		},
-		IsExpr: false,
-	}
-
-	gen := NewMatchCodeGen(match).(*MatchCodeGen)
-	result := gen.Generate()
-
-	// Should have mappings
-	if len(result.Mappings) == 0 {
-		t.Error("Expected source mappings, got none")
-	}
-
-	// All mappings should be "match" kind
-	for _, mapping := range result.Mappings {
-		if mapping.Kind != "match" {
-			t.Errorf("Expected mapping kind 'match', got %q", mapping.Kind)
-		}
-	}
-}
-
 // TestMatchCodeGen_EmptyMatch tests handling of empty match expression.
 func TestMatchCodeGen_EmptyMatch(t *testing.T) {
 	gen := NewMatchCodeGen(nil).(*MatchCodeGen)

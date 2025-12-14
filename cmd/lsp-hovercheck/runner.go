@@ -62,6 +62,30 @@ func (r *Runner) RunSpec(spec *Spec) ([]CaseResult, error) {
 		results = append(results, result)
 	}
 
+	// Print LSP stderr only if there were failures (for debugging)
+	// In normal operation, suppress verbose stderr
+	hasFailures := false
+	for _, result := range results {
+		if !result.Passed {
+			hasFailures = true
+			break
+		}
+	}
+	if r.Verbose && hasFailures {
+		if stderr := client.Stderr(); stderr != "" {
+			fmt.Println("\n=== LSP Server Stderr (last 50 lines) ===")
+			lines := strings.Split(stderr, "\n")
+			start := 0
+			if len(lines) > 50 {
+				start = len(lines) - 50
+			}
+			for _, line := range lines[start:] {
+				fmt.Println(line)
+			}
+			fmt.Println("=== End LSP Stderr ===\n")
+		}
+	}
+
 	return results, nil
 }
 
@@ -147,10 +171,21 @@ func (r *Runner) runCase(client *LSPClient, tc TestCase, lines []string, docURI 
 
 	lineText := lines[lineIdx]
 
-	// Find token column
-	col, err := FindTokenColumn(lineText, tc.Token, tc.Occurrence)
-	if err != nil {
-		result.Error = err.Error()
+	// Determine column: use explicit Character if set, otherwise find token
+	var col int
+	if tc.Character > 0 {
+		// Use exact character position (already 0-based)
+		col = tc.Character
+	} else if tc.Token != "" {
+		// Find token column
+		var err error
+		col, err = FindTokenColumn(lineText, tc.Token, tc.Occurrence)
+		if err != nil {
+			result.Error = err.Error()
+			return result
+		}
+	} else {
+		result.Error = "test case must specify either 'token' or 'character'"
 		return result
 	}
 	result.Column = col

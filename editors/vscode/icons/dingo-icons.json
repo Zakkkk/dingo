@@ -1,0 +1,14 @@
+{
+  "iconDefinitions": {
+    "dingo": {
+      "iconPath": "./dingo.svg"
+    }
+  },
+  "fileExtensions": {
+    "dingo": "dingo"
+  },
+  "fileNames": {},
+  "languageIds": {
+    "dingo": "dingo"
+  }
+}

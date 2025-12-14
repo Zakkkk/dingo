@@ -39,12 +39,6 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 		return ast.CodeGenResult{}
 	}
 
-	// Track start position - use relative positions (0 to exprLen)
-	// Transformer will add loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-	outputStart := g.Buf.Len()
-
 	// func(
 	g.Write("func(")
 
@@ -72,19 +66,7 @@ func (g *LambdaCodeGen) Generate() ast.CodeGenResult {
 	g.WriteByte(' ')
 	g.generateBody()
 
-	// Create mapping from lambda to generated function
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"lambda",
-	))
-
-	return result
+	return g.Result()
 }
 
 // generateParams generates the parameter list.

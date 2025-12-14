@@ -35,18 +35,14 @@ func NewTupleCodeGen() *TupleCodeGen {
 // Output: __tuple{N}__(elem1, elem2, ...)
 //
 // Example:
-//   (10, 20) → __tuple2__(10, 20)
-//   (a, b, c) → __tuple3__(a, b, c)
-//   ((1, 2), 3) → __tuple2__(__tuple2__(1, 2), 3)
+//
+//	(10, 20) → __tuple2__(10, 20)
+//	(a, b, c) → __tuple3__(a, b, c)
+//	((1, 2), 3) → __tuple2__(__tuple2__(1, 2), 3)
 func (g *TupleCodeGen) GenerateLiteral(lit *ast.TupleLiteral) ast.CodeGenResult {
 	if lit == nil {
 		return ast.CodeGenResult{}
 	}
-
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(lit.End() - lit.Pos())
-	outputStart := g.Buf.Len()
 
 	// Marker function: __tuple{N}__
 	elemCount := len(lit.Elements)
@@ -73,18 +69,7 @@ func (g *TupleCodeGen) GenerateLiteral(lit *ast.TupleLiteral) ast.CodeGenResult 
 
 	g.WriteByte(')')
 
-	// Create source mapping
-	outputEnd := g.Buf.Len()
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"tuple_literal",
-	))
-
-	return result
+	return g.Result()
 }
 
 // collectBindings recursively collects variable bindings with path encoding.
@@ -119,19 +104,15 @@ func collectBindings(pattern []ast.DestructureElement, pathPrefix string) []stri
 // Nested patterns are flattened with dot-separated paths.
 //
 // Example:
-//   let (x, y) = point → __tupleDest2__("x:0", "y:1", point)
-//   let (x, _) = pair → __tupleDest1__("x:0", pair)
-//   let ((a, b), c) = nested → __tupleDest3__("a:0.0", "b:0.1", "c:1", nested)
-//   let ((_, b), _) = nested → __tupleDest1__("b:0.1", nested)
+//
+//	let (x, y) = point → __tupleDest2__("x:0", "y:1", point)
+//	let (x, _) = pair → __tupleDest1__("x:0", pair)
+//	let ((a, b), c) = nested → __tupleDest3__("a:0.0", "b:0.1", "c:1", nested)
+//	let ((_, b), _) = nested → __tupleDest1__("b:0.1", nested)
 func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeGenResult {
 	if dest == nil {
 		return ast.CodeGenResult{}
 	}
-
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(dest.End() - dest.Pos())
-	outputStart := g.Buf.Len()
 
 	// Collect all bindings with path encoding (handles nesting and skips wildcards)
 	bindings := collectBindings(dest.Pattern, "")
@@ -166,18 +147,7 @@ func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeG
 
 	g.WriteByte(')')
 
-	// Create source mapping
-	outputEnd := g.Buf.Len()
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"tuple_destructure",
-	))
-
-	return result
+	return g.Result()
 }
 
 // GenerateTypeAlias generates marker for tuple type alias.
@@ -186,14 +156,13 @@ func (g *TupleCodeGen) GenerateDestructure(dest *ast.TupleDestructure) ast.CodeG
 // Output: __tupleType{N}__(type1, type2, ...)
 //
 // Example:
-//   ["int", "int"] → __tupleType2__(int, int)
-//   ["string", "int"] → __tupleType2__(string, int)
+//
+//	["int", "int"] → __tupleType2__(int, int)
+//	["string", "int"] → __tupleType2__(string, int)
 func (g *TupleCodeGen) GenerateTypeAlias(elementTypes []string) ast.CodeGenResult {
 	if len(elementTypes) == 0 {
 		return ast.CodeGenResult{}
 	}
-
-	outputStart := g.Buf.Len()
 
 	// Marker function: __tupleType{N}__
 	elemCount := len(elementTypes)
@@ -211,19 +180,7 @@ func (g *TupleCodeGen) GenerateTypeAlias(elementTypes []string) ast.CodeGenResul
 
 	g.WriteByte(')')
 
-	outputEnd := g.Buf.Len()
-	result := g.Result()
-
-	// Add mapping (positions are relative to output)
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		0, // Placeholder - caller should set actual dingo positions
-		0,
-		outputStart,
-		outputEnd,
-		"tuple_type_alias",
-	))
-
-	return result
+	return g.Result()
 }
 
 // exprToGoCode converts an ast.Expr to Go source code string.

@@ -269,7 +269,8 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 	}
 
 	writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
-	if dmapErr := writer.WriteFile(dmapPath, transpileResult.LineMappings); dmapErr != nil {
+	// Write v3 format with column mappings from transpiler
+	if dmapErr := writer.WriteFile(dmapPath, transpileResult.LineMappings, transpileResult.ColumnMappings); dmapErr != nil {
 		buildUI.PrintStep(ui.Step{
 			Name:     "Write",
 			Status:   ui.StepSuccess,
@@ -377,7 +378,8 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 		}
 
 		writer := dmap.NewWriter(transpileResult.DingoSource, transpileResult.GoCode)
-		if dmapErr := writer.WriteFile(dmapPath, transpileResult.LineMappings); dmapErr != nil {
+		// Write v3 format with column mappings from transpiler
+		if dmapErr := writer.WriteFile(dmapPath, transpileResult.LineMappings, transpileResult.ColumnMappings); dmapErr != nil {
 			// .dmap write failure is non-fatal - warn but don't fail build
 			// This ensures build still works even if source mapping fails
 			fmt.Printf("\n  ⚠ Warning: Failed to write source map: %v\n", dmapErr)

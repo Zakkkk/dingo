@@ -2,7 +2,6 @@ package codegen
 
 import (
 	"go/parser"
-	"go/token"
 	"strings"
 	"testing"
 
@@ -31,14 +30,6 @@ func TestTernaryCodeGen_BasicExpression(t *testing.T) {
 
 	if got != expected {
 		t.Errorf("Generate() output mismatch\nExpected:\n%s\n\nGot:\n%s", expected, got)
-	}
-
-	// Verify source mapping exists
-	if len(result.Mappings) != 1 {
-		t.Errorf("Expected 1 source mapping, got %d", len(result.Mappings))
-	}
-	if result.Mappings[0].Kind != "ternary" {
-		t.Errorf("Expected mapping kind 'ternary', got '%s'", result.Mappings[0].Kind)
 	}
 }
 
@@ -150,48 +141,6 @@ func TestTernaryCodeGen_NilExpression(t *testing.T) {
 
 	if len(result.Output) != 0 {
 		t.Error("Expected empty output for nil expression")
-	}
-	if len(result.Mappings) != 0 {
-		t.Error("Expected no mappings for nil expression")
-	}
-}
-
-func TestTernaryCodeGen_SourceMappings(t *testing.T) {
-	// Verify source mappings are correct
-	startPos := token.Pos(10)
-	colonPos := token.Pos(30)
-
-	expr := &ast.TernaryExpr{
-		CondStr:    "true",
-		TrueStr:    "1",
-		FalseStr:   "0",
-		ResultType: "int",
-		Question:   startPos,
-		Colon:      colonPos,
-	}
-
-	gen := NewTernaryCodeGen(expr)
-	result := gen.Generate()
-
-	if len(result.Mappings) != 1 {
-		t.Fatalf("Expected 1 mapping, got %d", len(result.Mappings))
-	}
-
-	mapping := result.Mappings[0]
-	// DingoStart is relative (0) - transformer adds the actual position offset
-	if mapping.DingoStart != 0 {
-		t.Errorf("Expected DingoStart=0 (relative), got %d", mapping.DingoStart)
-	}
-	// DingoEnd is also relative: (colonPos + 1) - startPos = (30 + 1) - 10 = 21
-	expectedEnd := int(colonPos) + 1 - int(startPos)
-	if mapping.DingoEnd != expectedEnd {
-		t.Errorf("Expected DingoEnd=%d (relative), got %d", expectedEnd, mapping.DingoEnd)
-	}
-	if mapping.GoStart != 0 {
-		t.Errorf("Expected GoStart=0, got %d", mapping.GoStart)
-	}
-	if mapping.GoEnd != len(result.Output) {
-		t.Errorf("Expected GoEnd=%d, got %d", len(result.Output), mapping.GoEnd)
 	}
 }
 

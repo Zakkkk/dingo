@@ -72,10 +72,6 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 // Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
 // the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-
 	// Mark this as statement-level output (not expression replacement)
 	var stmt []byte
 
@@ -131,14 +127,9 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 		stmt = append(stmt, g.exprToBytes(g.expr.False, g.expr.FalseStr)...)
 	}
 
-	result := ast.CodeGenResult{
+	return ast.CodeGenResult{
 		StatementOutput: stmt,
-		Mappings: []ast.SourceMapping{
-			ast.NewSourceMapping(dingoStart, dingoEnd, 0, len(stmt), "ternary"),
-		},
 	}
-
-	return result
 }
 
 // generateAssignmentContext generates code for assignment context.
@@ -153,10 +144,6 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 // Null-state inference: if condition is `len(x?.y) > 0` and true branch is `x?.y`,
 // the true branch is optimized to `*x.y` (direct dereference, no IIFE).
 func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-
 	var stmt []byte
 
 	// Create context for transforming condition (enables hoisting for BuiltinCallExpr)
@@ -218,31 +205,22 @@ func (g *TernaryCodeGen) generateAssignmentContext() ast.CodeGenResult {
 	stmt = append(stmt, g.exprToBytes(g.expr.False, g.expr.FalseStr)...)
 	stmt = append(stmt, []byte("\n}")...)
 
-	result := ast.CodeGenResult{
+	return ast.CodeGenResult{
 		StatementOutput: stmt,
-		Mappings: []ast.SourceMapping{
-			ast.NewSourceMapping(dingoStart, dingoEnd, 0, len(stmt), "ternary"),
-		},
 	}
-
-	return result
 }
 
 // generateIIFE generates an IIFE (Immediately Invoked Function Expression).
 //
 // Output format:
-//   func() T {
-//       if cond {
-//           return trueVal
-//       }
-//       return falseVal
-//   }()
+//
+//	func() T {
+//	    if cond {
+//	        return trueVal
+//	    }
+//	    return falseVal
+//	}()
 func (g *TernaryCodeGen) generateIIFE() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-	outputStart := g.Buf.Len()
-
 	// func()
 	g.Write("func()")
 
@@ -257,19 +235,7 @@ func (g *TernaryCodeGen) generateIIFE() ast.CodeGenResult {
 	g.generateIIFEBody()
 	g.Write("}()")
 
-	// Create mapping from ternary to generated IIFE
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"ternary",
-	))
-
-	return result
+	return g.Result()
 }
 
 // generateIIFEBody generates the if/return body of the IIFE.

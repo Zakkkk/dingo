@@ -181,20 +181,7 @@ func (g *SafeNavCodeGen) generateArgsFrom(args []ast.Expr) {
 //
 // This uses temporaries to avoid duplicate receiver evaluation and method call side effects.
 func (g *SafeNavCodeGen) generateHumanLikeReturn(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Track Dingo source positions for LSP
-	// Use relative positions (0 to exprLen) - transformer will add loc.Start offset
-	var dingoStart, dingoEnd int
-	if g.expr != nil {
-		// Normalize: AST positions are 1-indexed, convert to 0-indexed relative
-		dingoStart = 0
-		dingoEnd = int(g.expr.End() - g.expr.Pos())
-	} else {
-		dingoStart = 0
-		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
-	}
-
 	var output bytes.Buffer
-	outputStart := 0
 
 	// Generate sequential checks with temporaries (same pattern as IIFE)
 	// tmp := config
@@ -256,16 +243,6 @@ func (g *SafeNavCodeGen) generateHumanLikeReturn(chain []chainSegment, baseRecei
 	result := g.Result()
 	result.StatementOutput = output.Bytes()
 
-	// Add source mapping for LSP integration
-	outputEnd := len(result.StatementOutput)
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"safe_nav_return",
-	))
-
 	return result
 }
 
@@ -285,19 +262,7 @@ func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseR
 		return g.generateIIFE(chain, baseReceiver)
 	}
 
-	// Track Dingo source positions for LSP
-	// Use relative positions (0 to exprLen) - transformer will add loc.Start offset
-	var dingoStart, dingoEnd int
-	if g.expr != nil {
-		dingoStart = 0
-		dingoEnd = int(g.expr.End() - g.expr.Pos())
-	} else {
-		dingoStart = 0
-		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
-	}
-
 	var output bytes.Buffer
-	outputStart := 0
 
 	// var path *string
 	output.WriteString("var ")
@@ -352,46 +317,13 @@ func (g *SafeNavCodeGen) generateHumanLikeAssignment(chain []chainSegment, baseR
 	result := g.Result()
 	result.StatementOutput = output.Bytes()
 
-	// Add source mapping
-	outputEnd := len(result.StatementOutput)
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"safe_nav_assign",
-	))
-
 	return result
 }
 
 // generateIIFE generates an IIFE for contexts where statement-level replacement isn't possible.
 func (g *SafeNavCodeGen) generateIIFE(chain []chainSegment, baseReceiver string) ast.CodeGenResult {
-	// Track start position - use relative positions (0 to exprLen)
-	var dingoStart, dingoEnd int
-	if g.expr != nil {
-		dingoStart = 0
-		dingoEnd = int(g.expr.End() - g.expr.Pos())
-	} else {
-		dingoStart = 0
-		dingoEnd = int(g.callExpr.End() - g.callExpr.Pos())
-	}
-	outputStart := g.Buf.Len()
-
 	g.generateIIFEContent(chain, baseReceiver)
-
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"safe_nav",
-	))
-
-	return result
+	return g.Result()
 }
 
 // generateIIFEContent writes the IIFE code to the buffer.

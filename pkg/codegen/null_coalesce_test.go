@@ -1,7 +1,6 @@
 package codegen
 
 import (
-	"go/token"
 	"strings"
 	"testing"
 
@@ -42,22 +41,6 @@ func TestNullCoalesceGenerator_Simple(t *testing.T) {
 	}
 	if !strings.Contains(output, "}()") {
 		t.Error("Expected IIFE invocation")
-	}
-
-	// Verify mappings
-	if len(result.Mappings) != 3 {
-		t.Errorf("Expected 3 mappings (entire expr, left, right), got %d", len(result.Mappings))
-	}
-
-	// Check main mapping
-	if result.Mappings[0].Kind != "null_coalesce" {
-		t.Errorf("Expected first mapping to be 'null_coalesce', got %s", result.Mappings[0].Kind)
-	}
-	if result.Mappings[1].Kind != "null_coalesce_left" {
-		t.Errorf("Expected second mapping to be 'null_coalesce_left', got %s", result.Mappings[1].Kind)
-	}
-	if result.Mappings[2].Kind != "null_coalesce_right" {
-		t.Errorf("Expected third mapping to be 'null_coalesce_right', got %s", result.Mappings[2].Kind)
 	}
 }
 
@@ -131,46 +114,6 @@ func TestNullCoalesceGenerator_NilInput(t *testing.T) {
 
 	if len(result.Output) != 0 {
 		t.Error("Expected empty output for nil expression")
-	}
-	if len(result.Mappings) != 0 {
-		t.Error("Expected no mappings for nil expression")
-	}
-}
-
-func TestNullCoalesceGenerator_SourceMappingPositions(t *testing.T) {
-	// Test that source mappings have correct positions
-	expr := &dingoast.NullCoalesceExpr{
-		Left: &dingoast.DingoIdent{
-			NamePos: token.Pos(10), // Dingo position 10
-			Name:    "x",
-		},
-		OpPos: token.Pos(12),
-		Right: &dingoast.DingoIdent{
-			NamePos: token.Pos(15), // Dingo position 15
-			Name:    "y",
-		},
-	}
-
-	gen := NewNullCoalesceGenerator(expr)
-	result := gen.Generate()
-
-	// Check that mappings exist and have non-zero positions
-	if len(result.Mappings) != 3 {
-		t.Fatalf("Expected 3 mappings, got %d", len(result.Mappings))
-	}
-
-	// Mappings now use relative positions (DingoStart=0, transformer adds actual offset)
-	// So we just verify GoStart/GoEnd are valid
-	for i, m := range result.Mappings {
-		if m.DingoEnd < m.DingoStart {
-			t.Errorf("Mapping %d has invalid DingoEnd: %d < DingoStart %d", i, m.DingoEnd, m.DingoStart)
-		}
-		if m.GoStart < 0 {
-			t.Errorf("Mapping %d has invalid GoStart: %d", i, m.GoStart)
-		}
-		if m.GoEnd <= m.GoStart {
-			t.Errorf("Mapping %d has invalid GoEnd: %d (should be > GoStart %d)", i, m.GoEnd, m.GoStart)
-		}
 	}
 }
 

@@ -33,6 +33,13 @@
     "onLanguage:go"
   ],
   "contributes": {
+    "iconThemes": [
+      {
+        "id": "dingo-icons",
+        "label": "Dingo Icons",
+        "path": "./icons/dingo-icons.json"
+      }
+    ],
     "languages": [
       {
         "id": "dingo",
@@ -43,12 +50,17 @@
         "extensions": [
           ".dingo"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/dingo.svg",
+          "dark": "./icons/dingo.svg"
+        }
       }
     ],
     "configurationDefaults": {
       "files.associations": {
-        "*.go.golden": "go"
+        "*.go.golden": "go",
+        "*.dingo": "dingo"
       },
       "[dingo]": {
         "editor.quickSuggestions": {

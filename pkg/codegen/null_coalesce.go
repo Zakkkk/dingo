@@ -357,22 +357,7 @@ func (g *NullCoalesceGenerator) generateIIFE(chain []safeNavSegment, baseReceive
 	defaultValue := g.dingoExprToString(g.expr.Right)
 	g.generateIIFEContent(chain, baseReceiver, defaultValue)
 
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-	outputStart := 0
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"null_coalesce_safe_nav",
-	))
-
-	return result
+	return g.Result()
 }
 
 // generateIIFEContent writes the IIFE code to the buffer.
@@ -454,11 +439,6 @@ func (g *NullCoalesceGenerator) generateIIFEContent(chain []safeNavSegment, base
 // generateStandard generates a standard null coalesce IIFE.
 // Handles pointer-to-value coalescing: *string ?? "default" → string
 func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
-	// Use relative positions (0 to exprLen) - transformer adds loc.Start offset
-	dingoStart := 0
-	dingoEnd := int(g.expr.End() - g.expr.Pos())
-	outputStart := g.Buf.Len()
-
 	// Infer return type from operands (use right side type for pointer ?? value case)
 	returnType := g.inferType(g.expr.Left, g.expr.Right)
 
@@ -475,9 +455,7 @@ func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
 	g.Write("\tif ")
 
 	// Generate left expression for nil check
-	leftStart := g.Buf.Len()
 	g.Write(leftSrc)
-	leftEnd := g.Buf.Len()
 
 	// nil check
 	g.Write(" != nil {\n")
@@ -492,45 +470,11 @@ func (g *NullCoalesceGenerator) generateStandard() ast.CodeGenResult {
 
 	// Return right expression (default value)
 	g.Write("\treturn ")
-	rightStart := g.Buf.Len()
 	rightSrc := g.dingoExprToString(g.expr.Right)
 	g.Write(rightSrc)
-	rightEnd := g.Buf.Len()
 	g.Write("\n}()")
 
-	// Create mapping for entire null coalesce expression
-	outputEnd := g.Buf.Len()
-
-	result := g.Result()
-
-	// Map entire ?? expression to generated IIFE
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		dingoStart,
-		dingoEnd,
-		outputStart,
-		outputEnd,
-		"null_coalesce",
-	))
-
-	// Map left expression to if condition
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		int(g.expr.Left.Pos()),
-		int(g.expr.Left.End()),
-		leftStart,
-		leftEnd,
-		"null_coalesce_left",
-	))
-
-	// Map right expression to return statement
-	result.Mappings = append(result.Mappings, ast.NewSourceMapping(
-		int(g.expr.Right.Pos()),
-		int(g.expr.Right.End()),
-		rightStart,
-		rightEnd,
-		"null_coalesce_right",
-	))
-
-	return result
+	return g.Result()
 }
 
 // dingoExprToString converts Dingo AST expression to Go source string

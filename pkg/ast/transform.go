@@ -30,14 +30,15 @@ type tokenInfo struct {
 // - Lambdas: |x| → func(x any) any
 // - Null coalescing: a ?? b → (future)
 // - Safe navigation: x?.field → (future)
-func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
+//
+// Note: Previously returned []SourceMapping for byte-offset tracking, but this has
+// been removed. Position tracking now uses //line directives + LineMappings.
+func TransformSource(src []byte) ([]byte, error) {
 	// First pass: Transform enums (uses separate parser + codegen)
 	src, enumRegistry := TransformEnumSource(src)
 
 	// Second pass: Transform enum constructor calls to NewVariant() pattern
 	src = TransformEnumConstructors(src, enumRegistry)
-
-	var mappings []SourceMapping
 
 	// Create a file set for tokenization
 	fset := gotoken.NewFileSet()
@@ -114,14 +115,6 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 				result = append(result, src[lastCopied:offset]...)
 				result = append(result, ' ')
 				lastCopied = offset + 1
-
-				mappings = append(mappings, SourceMapping{
-					DingoStart: offset,
-					DingoEnd:   offset + 1,
-					GoStart:    len(result) - 1,
-					GoEnd:      len(result),
-					Kind:       "type_annotation",
-				})
 				continue
 			}
 			// Case 3: Lambda return type - ): Type => pattern
@@ -135,14 +128,6 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 					// For now, just skip the colon - the issue is go/parser doesn't understand this syntax
 					// Solution: We need to transform the ENTIRE lambda BEFORE this stage
 					lastCopied = offset + 1 // Skip the colon
-
-					mappings = append(mappings, SourceMapping{
-						DingoStart: offset,
-						DingoEnd:   offset + 1,
-						GoStart:    len(result),
-						GoEnd:      len(result),
-						Kind:       "lambda_return_type",
-					})
 					continue
 				}
 			}
@@ -155,7 +140,7 @@ func TransformSource(src []byte) ([]byte, []SourceMapping, error) {
 		result = append(result, src[lastCopied:]...)
 	}
 
-	return result, mappings, nil
+	return result, nil
 }
 
 // isIdentifier checks if a string is a valid Go identifier.

@@ -55,7 +55,14 @@ func (t *Translator) TranslateHover(
 
 	// Translate range if present
 	if hover.Range != nil {
-		_, newRange, err := t.TranslateRange(originalURI, *hover.Range, dir)
+		// The hover.Range is in Go coordinates (from gopls).
+		// For GoToDingo direction, we need to pass the Go URI, not the Dingo URI.
+		rangeURI := originalURI
+		if dir == GoToDingo && isDingoFile(originalURI) {
+			// Convert Dingo URI to Go URI for proper translation
+			rangeURI = uri.File(dingoToGoPath(originalURI.Filename()))
+		}
+		_, newRange, err := t.TranslateRange(rangeURI, *hover.Range, dir)
 		if err != nil {
 			// Keep original range on error
 			return hover, nil
@@ -346,25 +353,37 @@ func (s *Server) handlePublishDiagnostics(
 		len(params.Diagnostics), params.URI.Filename())
 
 	// Check if this is for a .go file that has a corresponding .dingo file
+	// OR if gopls is reporting diagnostics directly for .dingo files (via //line directives)
 	goPath := params.URI.Filename()
 	dingoPath := goToDingoPath(goPath)
 
 	s.config.Logger.Debugf("[Diagnostic Handler] Path conversion: .go=%s → .dingo=%s", goPath, dingoPath)
 
-	// If no .dingo file, ignore (this is a pure Go file)
-	if dingoPath == goPath {
+	// Handle //line directive case: gopls may report diagnostics directly with .dingo URIs
+	// In this case goPath already ends with .dingo and goToDingoPath returns it unchanged
+	var translatedDiagnostics []protocol.Diagnostic
+	if strings.HasSuffix(goPath, ".dingo") {
+		// gopls is reporting directly to .dingo file (via //line directive)
+		// No translation needed - pass through directly
+		s.config.Logger.Debugf("[Diagnostic Handler] Direct .dingo diagnostics (via //line directive) - no translation needed")
+		dingoPath = goPath
+		translatedDiagnostics = params.Diagnostics
+	} else if dingoPath == goPath {
+		// Not a .go file and not a .dingo file - skip (pure Go or other file)
 		s.config.Logger.Debugf("[Diagnostic Handler] SKIP: No .dingo file (pure Go file)")
 		return nil
+	} else {
+		// Normal case: .go file with corresponding .dingo file
+		// Translate diagnostics: Go positions → Dingo positions
+		s.config.Logger.Debugf("[Diagnostic Handler] Translating %d diagnostics from Go → Dingo", len(params.Diagnostics))
+		var err error
+		translatedDiagnostics, err = s.translator.TranslateDiagnostics(params.Diagnostics, params.URI, GoToDingo)
+		if err != nil {
+			s.config.Logger.Warnf("[Diagnostic Handler] ERROR: Diagnostic translation failed: %v", err)
+			return nil
+		}
 	}
-
-	// Translate diagnostics: Go positions → Dingo positions
-	s.config.Logger.Debugf("[Diagnostic Handler] Translating %d diagnostics from Go → Dingo", len(params.Diagnostics))
-	translatedDiagnostics, err := s.translator.TranslateDiagnostics(params.Diagnostics, params.URI, GoToDingo)
-	if err != nil {
-		s.config.Logger.Warnf("[Diagnostic Handler] ERROR: Diagnostic translation failed: %v", err)
-		return nil
-	}
-	s.config.Logger.Debugf("[Diagnostic Handler] Successfully translated to %d diagnostics", len(translatedDiagnostics))
+	s.config.Logger.Debugf("[Diagnostic Handler] Successfully processed %d diagnostics", len(translatedDiagnostics))
 
 	// Publish diagnostics for the .dingo file using unified cache
 	dingoURI := uri.File(dingoPath)

@@ -33,9 +33,14 @@ func (m *mockSourceMapGetter) Size() int                    { return len(m.reade
 
 // createMockReader creates a dmap.Reader with test data
 func createMockReader(t *testing.T, dingoSrc, goSrc string, mappings []sourcemap.LineMapping) *dmap.Reader {
+	return createMockReaderWithColumns(t, dingoSrc, goSrc, mappings, nil)
+}
+
+// createMockReaderWithColumns creates a dmap.Reader with test data including column mappings
+func createMockReaderWithColumns(t *testing.T, dingoSrc, goSrc string, mappings []sourcemap.LineMapping, columnMappings []sourcemap.ColumnMapping) *dmap.Reader {
 	t.Helper()
 	writer := dmap.NewWriter([]byte(dingoSrc), []byte(goSrc))
-	data, err := writer.Write(mappings, nil)
+	data, err := writer.Write(mappings, columnMappings)
 	if err != nil {
 		t.Fatalf("Failed to create dmap: %v", err)
 	}
@@ -398,6 +403,269 @@ func TestTranslatePositionIdentityMapping(t *testing.T) {
 	if newPos.Line != goPos.Line || newPos.Character != goPos.Character {
 		t.Errorf("Position should be identity for unmapped region: got (%d,%d), want (%d,%d)",
 			newPos.Line, newPos.Character, goPos.Line, goPos.Character)
+	}
+}
+
+// TestTranslatePositionErrorPropagationColumn tests column mapping for error propagation transforms.
+// This is a REGRESSION TEST for the issue where hovering on `extractUserID` in Dingo
+// shows hover info for `tmp` instead, because column positions differ:
+//   - Dingo: `userID := extractUserID(r)?`  → extractUserID at col 12
+//   - Go:    `tmp, err := extractUserID(r)` → extractUserID at col 14
+//
+// The test verifies that column positions are correctly mapped for transformed lines.
+func TestTranslatePositionErrorPropagationColumn(t *testing.T) {
+	// Realistic error propagation example
+	// Dingo line: "	userID := extractUserID(r)?\n"
+	// Go line:    "	tmp, err := extractUserID(r)\n"
+	//
+	// Character positions (1-indexed):
+	//   Dingo: extractUserID starts at col 12 (after tab + "userID := ")
+	//   Go:    extractUserID starts at col 14 (after tab + "tmp, err := ")
+	dingoSrc := "\tuserID := extractUserID(r)?\n"
+	goSrc := "\ttmp, err := extractUserID(r)\n"
+
+	// Error propagation expands 1 dingo line to 5 go lines typically,
+	// but for this test we simplify to just the first line mapping
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "error_prop"},
+	}
+
+	// Column mapping for the function call expression
+	// Dingo: "\tuserID := extractUserID(r)?" - extractUserID at col 12 (1-indexed)
+	// Go:    "\ttmp, err := extractUserID(r)" - extractUserID at col 14 (1-indexed)
+	// Offset = 14 - 12 = +2 (Go has 2 more leading chars due to "tmp, err" vs "userID")
+	columnMappings := []sourcemap.ColumnMapping{
+		{
+			DingoLine: 1,
+			DingoCol:  12, // 1-indexed position of 'e' in extractUserID
+			GoLine:    1,
+			GoCol:     14, // 1-indexed position of 'e' in extractUserID
+			Length:    13, // length of "extractUserID"
+			Kind:      "error_prop",
+		},
+	}
+
+	reader := createMockReaderWithColumns(t, dingoSrc, goSrc, mappings, columnMappings)
+	defer reader.Close()
+
+	goPath := "/test/file.go"
+	dingoPath := "/test/file.dingo"
+
+	cache := &mockSourceMapGetter{
+		readers: map[string]*dmap.Reader{
+			goPath: reader,
+		},
+	}
+
+	translator := NewTranslator(cache)
+	dingoURI := lspuri.File(dingoPath)
+
+	// Test: Position on 'extractUserID' in Dingo (col 12, 0-indexed = 11)
+	// In Dingo: "\tuserID := extractUserID(r)?"
+	//            ^          ^
+	//            0          11 (0-indexed)
+	dingoPos := protocol.Position{Line: 0, Character: 11}
+
+	newURI, newPos, err := translator.TranslatePosition(dingoURI, dingoPos, DingoToGo)
+	if err != nil {
+		t.Fatalf("TranslatePosition failed: %v", err)
+	}
+
+	// Should return Go URI
+	expectedURI := lspuri.File(goPath)
+	if newURI != expectedURI {
+		t.Errorf("URI: got %s, want %s", newURI, expectedURI)
+	}
+
+	// Line should be correct (line 0)
+	if newPos.Line != 0 {
+		t.Errorf("Line: got %d, want 0", newPos.Line)
+	}
+
+	// CRITICAL: Column should map to 'extractUserID' in Go, not to 'tmp' or '='
+	// In Go: "\ttmp, err := extractUserID(r)"
+	//         ^            ^
+	//         0            13 (0-indexed)
+	//
+	// Currently FAILS because column is passed through as-is (11 → 11)
+	// which points to '=' in Go, not to 'extractUserID'
+	//
+	// Expected: col 13 (0-indexed) = start of 'extractUserID' in Go
+	expectedCol := uint32(13) // 0-indexed position of 'e' in extractUserID
+
+	if newPos.Character != expectedCol {
+		t.Errorf("Column: got %d, want %d (extractUserID position)", newPos.Character, expectedCol)
+		t.Logf("This test verifies column mapping for error propagation transforms.")
+		t.Logf("Dingo: '\\tuserID := extractUserID(r)?' - 'extractUserID' at col 11 (0-indexed)")
+		t.Logf("Go:    '\\ttmp, err := extractUserID(r)' - 'extractUserID' at col 13 (0-indexed)")
+		t.Logf("Without proper column mapping, hovering on extractUserID shows info for 'tmp' or '='")
+	}
+}
+
+// TestTranslatePositionErrorPropagationColumnMultipleIdentifiers tests column mapping
+// when there are multiple identifiers on a transformed line.
+func TestTranslatePositionErrorPropagationColumnMultipleIdentifiers(t *testing.T) {
+	// Dingo: "	_ := checkPermissions(r, user) ? |err| NewAppError(403, "denied", err)\n"
+	// Go:    "	tmp2, err2 := checkPermissions(r, user)\n"
+	//
+	// When hovering on 'checkPermissions' in Dingo, we should get 'checkPermissions' in Go,
+	// not 'tmp2' or 'err2'
+	dingoSrc := "\t_ := checkPermissions(r, user) ? |err| NewAppError(403, \"denied\", err)\n"
+	goSrc := "\ttmp2, err2 := checkPermissions(r, user)\n"
+
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "error_prop"},
+	}
+
+	// Column mapping for the function call expression
+	// Dingo: "\t_ := checkPermissions..." - checkPermissions at col 7 (1-indexed)
+	// Go:    "\ttmp2, err2 := checkPermissions..." - checkPermissions at col 16 (1-indexed)
+	// Offset = 16 - 7 = +9 (Go has 9 more leading chars)
+	columnMappings := []sourcemap.ColumnMapping{
+		{
+			DingoLine: 1,
+			DingoCol:  7,  // 1-indexed position of 'c' in checkPermissions
+			GoLine:    1,
+			GoCol:     16, // 1-indexed position of 'c' in checkPermissions
+			Length:    16, // length of "checkPermissions"
+			Kind:      "error_prop",
+		},
+	}
+
+	reader := createMockReaderWithColumns(t, dingoSrc, goSrc, mappings, columnMappings)
+	defer reader.Close()
+
+	goPath := "/test/file.go"
+	dingoPath := "/test/file.dingo"
+
+	cache := &mockSourceMapGetter{
+		readers: map[string]*dmap.Reader{
+			goPath: reader,
+		},
+	}
+
+	translator := NewTranslator(cache)
+	dingoURI := lspuri.File(dingoPath)
+
+	// In Dingo: "\t_ := checkPermissions(r, user) ? |err| NewAppError(403, \"denied\", err)"
+	//            ^    ^
+	//            0    6 (0-indexed, start of 'checkPermissions')
+	dingoPos := protocol.Position{Line: 0, Character: 6}
+
+	newURI, newPos, err := translator.TranslatePosition(dingoURI, dingoPos, DingoToGo)
+	if err != nil {
+		t.Fatalf("TranslatePosition failed: %v", err)
+	}
+
+	expectedURI := lspuri.File(goPath)
+	if newURI != expectedURI {
+		t.Errorf("URI: got %s, want %s", newURI, expectedURI)
+	}
+
+	// In Go: "\ttmp2, err2 := checkPermissions(r, user)"
+	//         ^              ^
+	//         0              15 (0-indexed, start of 'checkPermissions')
+	expectedCol := uint32(15)
+
+	if newPos.Character != expectedCol {
+		t.Errorf("Column: got %d, want %d (checkPermissions position)", newPos.Character, expectedCol)
+		t.Logf("Dingo: 'checkPermissions' at col 6 (0-indexed)")
+		t.Logf("Go:    'checkPermissions' at col 15 (0-indexed)")
+	}
+}
+
+// TestTranslatePositionSecondErrorPropagation tests that hovering on a function call
+// in the SECOND error propagation transform works correctly.
+// REGRESSION TEST for issue: hovering on loadUserFromDB showed fmt.Errorf info
+// because DingoLineToGoLine returned the wrong Go line (line with fmt.Errorf, not loadUserFromDB)
+func TestTranslatePositionSecondErrorPropagation(t *testing.T) {
+	// Simulate two consecutive error propagation transforms
+	// Line 1: first transform (extractUserID)
+	// Line 2: comment
+	// Line 3: second transform (loadUserFromDB) - THIS IS THE REGRESSION
+	dingoSrc := "\tuserID := extractUserID(r)?\n// comment\n\tuser := loadUserFromDB(userID) ? \"db error\"\n"
+
+	// Go output after transformation:
+	// Line 1: tmp, err := extractUserID(r)
+	// Line 2: if err != nil {
+	// Line 3: return err
+	// Line 4: }
+	// Line 5: userID := tmp
+	// Line 6: // comment
+	// Line 7: //line directive
+	// Line 8: tmp1, err1 := loadUserFromDB(userID)  <- loadUserFromDB is HERE
+	// Line 9: if err1 != nil {
+	// Line 10: return fmt.Errorf("db error: %w", err1)  <- NOT here!
+	// Line 11: }
+	// Line 12: user := tmp1
+	goSrc := "\ttmp, err := extractUserID(r)\n\tif err != nil {\n\t\treturn err\n\t}\n\tuserID := tmp\n// comment\n//line test.dingo:3:2\n\ttmp1, err1 := loadUserFromDB(userID)\n\tif err1 != nil {\n\t\treturn fmt.Errorf(\"db error: %w\", err1)\n\t}\n\tuser := tmp1\n"
+
+	// Line mappings: first transform spans Go lines 1-5, second spans Go lines 8-12
+	// CRITICAL: GoLineStart for the second transform should be 8 (where loadUserFromDB is),
+	// NOT 10 (where fmt.Errorf is)
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 5, Kind: "error_prop"},
+		{DingoLine: 3, GoLineStart: 8, GoLineEnd: 12, Kind: "error_prop"}, // GoLineStart=8, not 10!
+	}
+
+	// Column mapping for the second transform
+	// Dingo line 3: "\tuser := loadUserFromDB(userID) ? \"db error\""
+	//               ^        ^
+	//               1        10 (1-indexed, 'l' in loadUserFromDB)
+	// Go line 8: "\ttmp1, err1 := loadUserFromDB(userID)"
+	//            ^              ^
+	//            1              16 (1-indexed, 'l' in loadUserFromDB)
+	columnMappings := []sourcemap.ColumnMapping{
+		{
+			DingoLine: 3,
+			DingoCol:  10, // 1-indexed
+			GoLine:    8,  // MUST be the actual Go line with the function call
+			GoCol:     16, // 1-indexed
+			Length:    14, // "loadUserFromDB"
+			Kind:      "error_prop",
+		},
+	}
+
+	reader := createMockReaderWithColumns(t, dingoSrc, goSrc, mappings, columnMappings)
+	defer reader.Close()
+
+	goPath := "/test/file.go"
+	dingoPath := "/test/file.dingo"
+
+	cache := &mockSourceMapGetter{
+		readers: map[string]*dmap.Reader{
+			goPath: reader,
+		},
+	}
+
+	translator := NewTranslator(cache)
+	dingoURI := lspuri.File(dingoPath)
+
+	// Test: hovering on 'loadUserFromDB' in Dingo line 3 (0-indexed = 2), col 9 (0-indexed)
+	dingoPos := protocol.Position{Line: 2, Character: 9}
+
+	newURI, newPos, err := translator.TranslatePosition(dingoURI, dingoPos, DingoToGo)
+	if err != nil {
+		t.Fatalf("TranslatePosition failed: %v", err)
+	}
+
+	expectedURI := lspuri.File(goPath)
+	if newURI != expectedURI {
+		t.Errorf("URI: got %s, want %s", newURI, expectedURI)
+	}
+
+	// CRITICAL: Line should be 7 (0-indexed = Go line 8 where loadUserFromDB is)
+	// NOT line 9 (0-indexed = Go line 10 where fmt.Errorf is)
+	expectedLine := uint32(7) // 0-indexed Go line 8
+	if newPos.Line != expectedLine {
+		t.Errorf("Line: got %d, want %d", newPos.Line, expectedLine)
+		t.Logf("REGRESSION: If line is 9, it points to fmt.Errorf instead of loadUserFromDB")
+	}
+
+	// Column should be 15 (0-indexed = col 16 where 'l' in loadUserFromDB is)
+	expectedCol := uint32(15)
+	if newPos.Character != expectedCol {
+		t.Errorf("Column: got %d, want %d (loadUserFromDB position)", newPos.Character, expectedCol)
 	}
 }
 

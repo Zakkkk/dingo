@@ -1,16 +1,15 @@
 # Hover test spec for examples/01_error_propagation/http_handler.dingo
 #
-# Automated test results (2025-12-14 - after UTF-16/word boundary fixes):
-# - Function names work (2, 6, 8, 15)
-# - Arguments inside function calls work (3, 7, 9, 10, 13, 16)
-# - LHS variables at line start return empty (1, 5, 11, 14)
-# - Error prop operator returns empty (4)
+# IMPORTANT: Use explicit 'character:' positions from VS Code SQLite logs
+# to match VS Code behavior exactly. VS Code has a tab expansion offset
+# (visual column vs character position) that shifts positions by ~3 chars.
 #
-# After fixes:
-# - UTF-16 column encoding (LSP spec compliant)
-# - Word boundary checks (no partial matches)
-# - Proper file:// URI format (3 slashes)
-# - JSON-RPC error surfacing
+# To find exact positions:
+#   sqlite3 /tmp/dingo-lsp.db "SELECT msg FROM logs WHERE msg LIKE '%Hover%Request%' ORDER BY ts DESC LIMIT 10;"
+#
+# Current understanding (2025-12-14):
+# - VS Code sends character positions ~3-4 less than visual column when tabs present
+# - Our automated test must use same positions to validate VS Code output
 
 file: examples/01_error_propagation/http_handler.dingo
 

@@ -63,3 +63,6 @@ langingpage/review-reports
 dingo-lsp
 dingo-test
 dingo.claude/settings.local.json
+
+
+.gocache/
