@@ -51,10 +51,11 @@ type TranspileFunc func(source []byte, filename string) (TranspileResult, error)
 
 // TranspileResult contains the results of transpilation
 type TranspileResult struct {
-	GoCode       []byte
-	LineMappings []sourcemap.LineMapping
-	DingoFset    *token.FileSet
-	DingoFile    string
+	GoCode         []byte
+	LineMappings   []sourcemap.LineMapping
+	ColumnMappings []sourcemap.ColumnMapping // For accurate hover column translation
+	DingoFset      *token.FileSet
+	DingoFile      string
 }
 
 // Logger interface for the manager
@@ -226,6 +227,7 @@ func (m *Manager) rebuild(uri string, source []byte) {
 		goFset,
 		typesInfo,
 		result.LineMappings,
+		result.ColumnMappings,
 		source,
 		result.DingoFset,
 		result.DingoFile,

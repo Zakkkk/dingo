@@ -290,6 +290,7 @@ func buildSemanticMap(
 		goFset,
 		checker.Info(),
 		mappings,
+		nil, // columnMappings - not needed for basic tests
 		dingoSrc,
 		dingoFset,
 		dingoFile,
@@ -323,3 +324,60 @@ func findOperatorsOnLine(m *Map, line int) []SemanticEntity {
 	}
 	return operators
 }
+
+func TestVerifyIdentInSource(t *testing.T) {
+	// Sample Dingo source
+	source := []byte(`package main
+
+func handler() {
+	userID := extractUserID(r)?
+	name := getName()?
+}
+`)
+
+	builder := &Builder{
+		dingoSource: source,
+	}
+
+	tests := []struct {
+		name     string
+		ident    string
+		line     int
+		col      int
+		expected bool
+	}{
+		// Identifiers that exist at the correct position
+		{"userID at correct position", "userID", 4, 2, true},
+		{"name at correct position", "name", 5, 2, true},
+		{"extractUserID at correct position", "extractUserID", 4, 12, true},
+		{"getName at correct position", "getName", 5, 10, true},
+
+		// Identifiers at wrong positions (would be generated code)
+		{"tmp at userID position", "tmp", 4, 2, false},
+		{"err at userID position", "err", 4, 6, false},
+		{"wrong name at correct line", "foo", 4, 2, false},
+
+		// Edge cases
+		{"beyond line length", "userID", 4, 100, false},
+		{"line beyond source", "userID", 100, 1, false},
+		{"col zero", "userID", 4, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := builder.verifyIdentInSource(tt.ident, tt.line, tt.col)
+			assert.Equal(t, tt.expected, result, "verifyIdentInSource(%q, %d, %d)", tt.ident, tt.line, tt.col)
+		})
+	}
+}
+
+func TestVerifyIdentInSource_NoSource(t *testing.T) {
+	// When no source is available, should accept everything
+	builder := &Builder{
+		dingoSource: nil,
+	}
+
+	result := builder.verifyIdentInSource("anything", 1, 1)
+	assert.True(t, result, "Should accept when no source available")
+}
+

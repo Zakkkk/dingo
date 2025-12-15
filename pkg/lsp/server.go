@@ -108,10 +108,11 @@ func (s *Server) createTranspileFunc() semantic.TranspileFunc {
 
 		// Convert to semantic.TranspileResult format
 		return semantic.TranspileResult{
-			GoCode:       result.GoCode,
-			LineMappings: result.LineMappings,
-			DingoFset:    nil, // Not available from this pipeline
-			DingoFile:    filename,
+			GoCode:         result.GoCode,
+			LineMappings:   result.LineMappings,
+			ColumnMappings: result.ColumnMappings, // For accurate hover column translation
+			DingoFset:      nil,                   // Not available from this pipeline
+			DingoFile:      filename,
 		}, nil
 	}
 }
