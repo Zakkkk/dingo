@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/MadAppGang/dingo/pkg/lsp/semantic"
+	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
@@ -37,10 +39,13 @@ type Server struct {
 	ctx     context.Context // Store server context
 
 	// Diagnostic cache - stores diagnostics by source to allow merging
-	diagMu        sync.RWMutex
-	lintDiags     map[string][]protocol.Diagnostic // URI -> lint diagnostics
-	goplsDiags    map[string][]protocol.Diagnostic // URI -> gopls diagnostics
+	diagMu         sync.RWMutex
+	lintDiags      map[string][]protocol.Diagnostic // URI -> lint diagnostics
+	goplsDiags     map[string][]protocol.Diagnostic // URI -> gopls diagnostics
 	transpileDiags map[string][]protocol.Diagnostic // URI -> transpiler diagnostics
+
+	// Semantic manager for native hover (Phase 1)
+	semanticManager *semantic.Manager
 }
 
 // NewServer creates a new LSP server instance
@@ -79,10 +84,36 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	transpiler := NewAutoTranspiler(cfg.Logger, mapCache, gopls, server)
 	server.transpiler = transpiler
 
+	// Initialize semantic manager for native hover
+	// Create transpile wrapper function
+	transpileFunc := server.createTranspileFunc()
+	semanticManager := semantic.NewManager(cfg.Logger, transpileFunc)
+	server.semanticManager = semanticManager
+
 	// Set diagnostics handler for gopls -> IDE diagnostics forwarding
 	gopls.SetDiagnosticsHandler(server.handlePublishDiagnostics)
 
 	return server, nil
+}
+
+// createTranspileFunc creates a transpile function for the semantic manager
+// This wraps the transpiler to match the semantic.TranspileFunc signature
+func (s *Server) createTranspileFunc() semantic.TranspileFunc {
+	return func(source []byte, filename string) (semantic.TranspileResult, error) {
+		// Use pure pipeline directly - it handles source-based transpilation
+		result, err := transpiler.PureASTTranspileWithMappings(source, filename, true)
+		if err != nil {
+			return semantic.TranspileResult{}, err
+		}
+
+		// Convert to semantic.TranspileResult format
+		return semantic.TranspileResult{
+			GoCode:       result.GoCode,
+			LineMappings: result.LineMappings,
+			DingoFset:    nil, // Not available from this pipeline
+			DingoFile:    filename,
+		}, nil
+	}
 }
 
 // SetConn stores the connection and context in the server (thread-safe)

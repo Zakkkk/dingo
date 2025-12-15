@@ -306,6 +306,13 @@ func (ds *DocumentState) GetGoodAST() *goast.File {
 	return ds.parser.Tree().Root
 }
 
+// Content returns the current document content as bytes
+func (ds *DocumentState) Content() []byte {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.parser.Source()
+}
+
 // updateDiagnostics updates the diagnostics cache from parser errors
 func (ds *DocumentState) updateDiagnostics() {
 	errors := ds.parser.Errors()

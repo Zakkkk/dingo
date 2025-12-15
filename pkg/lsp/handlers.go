@@ -284,6 +284,22 @@ func (s *Server) handleHoverWithTranslation(
 		return reply(ctx, result, err)
 	}
 
+	// For .dingo files, use native hover implementation (Phase 1)
+	result, err := s.nativeHover(ctx, params)
+	if err != nil {
+		// Log error but don't fail - graceful degradation
+		s.config.Logger.Warnf("[Hover] Native hover failed: %v", err)
+		return reply(ctx, nil, nil)
+	}
+	if result != nil {
+		// Native hover succeeded - return result
+		s.config.Logger.Debugf("[Hover] Native hover succeeded")
+		return reply(ctx, result, nil)
+	}
+
+	// Native hover returned nil - fallback to gopls with position translation
+	s.config.Logger.Debugf("[Hover] Native hover returned nil, falling back to gopls")
+
 	// Translate Dingo position → Go position
 	goURI, goPos, err := s.translator.TranslatePosition(params.TextDocument.URI, params.Position, DingoToGo)
 	if err != nil {
@@ -300,7 +316,7 @@ func (s *Server) handleHoverWithTranslation(
 	params.Position = goPos
 
 	// Forward to gopls
-	result, err := s.gopls.Hover(ctx, params)
+	result, err = s.gopls.Hover(ctx, params)
 	if err != nil {
 		s.config.Logger.Warnf("[Hover] gopls error: %v", err)
 		// Handle "column is beyond end of line" gracefully - this happens when
