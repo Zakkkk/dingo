@@ -132,3 +132,11 @@ func (m *Map) FindNearest(line, col, maxDistance int) *SemanticEntity {
 func (m *Map) Count() int {
 	return len(m.entities)
 }
+
+// EntityAt returns the entity at the given index, or nil if out of bounds
+func (m *Map) EntityAt(i int) *SemanticEntity {
+	if i < 0 || i >= len(m.entities) {
+		return nil
+	}
+	return &m.entities[i]
+}

@@ -133,6 +133,10 @@ func (s *stdinoutCloser) Read(p []byte) (n int, err error) {
 
 func (s *stdinoutCloser) Write(p []byte) (n int, err error) {
 	n, err = s.stdout.Write(p)
+	if err == nil {
+		// Explicitly flush to ensure VS Code receives the response immediately
+		s.stdout.Sync()
+	}
 	s.logger.Debugf("stdinoutCloser.Write: n=%d, err=%v", n, err)
 	return n, err
 }

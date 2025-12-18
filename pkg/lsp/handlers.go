@@ -294,6 +294,11 @@ func (s *Server) handleHoverWithTranslation(
 	if result != nil {
 		// Native hover succeeded - return result
 		s.config.Logger.Debugf("[Hover] Native hover succeeded")
+		// Check if context was canceled during semantic build
+		if ctx.Err() != nil {
+			s.config.Logger.Warnf("[Hover] Context canceled before reply: %v", ctx.Err())
+			return ctx.Err()
+		}
 		return reply(ctx, result, nil)
 	}
 
