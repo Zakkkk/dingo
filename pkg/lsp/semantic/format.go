@@ -19,6 +19,9 @@ func FormatHover(entity *SemanticEntity, pkg *types.Package) *protocol.Hover {
 	// Handle operators separately
 	if entity.Kind == KindOperator && entity.Context != nil {
 		content = formatOperatorHover(entity, pkg)
+	} else if entity.Kind == KindLambda && entity.Context != nil {
+		// Lambda parameter
+		content = formatLambdaHover(entity, pkg)
 	} else if entity.Context != nil && entity.Context.Kind == ContextErrorProp {
 		// Error propagation context on a variable
 		content = formatErrorPropHover(entity, pkg)
@@ -80,11 +83,15 @@ func formatOperatorHover(entity *SemanticEntity, pkg *types.Package) string {
 	case ContextErrorProp:
 		b.WriteString("**`?` error propagation**\n\n")
 		if ctx.OriginalType != nil && ctx.UnwrappedType != nil {
+			// Result[T, E] pattern
 			b.WriteString(fmt.Sprintf("Unwraps `%s` to `%s`\n\n",
 				formatType(ctx.OriginalType, pkg),
 				formatType(ctx.UnwrappedType, pkg)))
+			b.WriteString("Returns early with error if result is `Err`")
+		} else {
+			// Go's (T, error) pattern
+			b.WriteString("Returns early if error is non-nil")
 		}
-		b.WriteString("Returns early with error if result is `Err`")
 
 	case ContextNullCoal:
 		b.WriteString("**`??` null coalescing**\n\n")
@@ -107,6 +114,18 @@ func formatOperatorHover(entity *SemanticEntity, pkg *types.Package) string {
 			b.WriteString(ctx.Description)
 		}
 	}
+
+	return b.String()
+}
+
+// formatLambdaHover formats hover for lambda parameters
+func formatLambdaHover(entity *SemanticEntity, pkg *types.Package) string {
+	var b strings.Builder
+
+	b.WriteString("```go\n")
+	b.WriteString("var err error")
+	b.WriteString("\n```\n\n")
+	b.WriteString("*Lambda parameter for error transformation*")
 
 	return b.String()
 }
