@@ -179,13 +179,6 @@ func (b *Builder) handleCallExpr(node *ast.CallExpr) *SemanticEntity {
 
 // handleSelectorExpr processes a selector expression (x.Field)
 func (b *Builder) handleSelectorExpr(node *ast.SelectorExpr) *SemanticEntity {
-	// Get selection information
-	sel := b.typesInfo.Selections[node]
-	if sel == nil {
-		// Not a selection (maybe a qualified identifier)
-		return nil
-	}
-
 	// Get the type of the selector
 	tv, ok := b.typesInfo.Types[node]
 	if !ok {
@@ -199,14 +192,37 @@ func (b *Builder) handleSelectorExpr(node *ast.SelectorExpr) *SemanticEntity {
 		return nil
 	}
 
+	// Verify selector exists in source (filter out generated code)
+	verified, actualCol := b.verifyIdentInSource(node.Sel.Name, dingoLine, dingoCol)
+	if !verified {
+		return nil
+	}
+
+	// Get the object for methods/fields/functions
+	var obj types.Object
+	if sel := b.typesInfo.Selections[node]; sel != nil {
+		// Method or field selection (e.g., user.Name, result.IsOk())
+		obj = sel.Obj()
+	} else if use := b.typesInfo.Uses[node.Sel]; use != nil {
+		// Qualified identifier (e.g., json.Marshal, fmt.Println)
+		obj = use
+	}
+
+	// If we couldn't find an object, let handleIdent handle this node instead
+	// handleIdent uses ObjectOf() which works for more cases
+	if obj == nil {
+		return nil
+	}
+
 	// Determine context
 	context := b.inferContext(node, tv.Type)
 
 	return &SemanticEntity{
 		Line:    dingoLine,
-		Col:     dingoCol,
-		EndCol:  dingoCol + len(node.Sel.Name),
+		Col:     actualCol,
+		EndCol:  actualCol + len(node.Sel.Name),
 		Kind:    KindField,
+		Object:  obj,
 		Type:    tv.Type,
 		Context: context,
 	}
