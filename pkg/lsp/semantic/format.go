@@ -149,6 +149,16 @@ func formatObjectHover(entity *SemanticEntity, pkg *types.Package) string {
 
 // formatTypeHover formats hover for expressions without objects
 func formatTypeHover(entity *SemanticEntity, pkg *types.Package) string {
+	// Check for dgo types first (Result, Option)
+	if dgoInfo := detectDgoType(entity.Type); dgoInfo != nil {
+		switch dgoInfo.TypeName {
+		case "Result":
+			return formatDgoResultHover(dgoInfo, pkg)
+		case "Option":
+			return formatDgoOptionHover(dgoInfo, pkg)
+		}
+	}
+
 	var b strings.Builder
 
 	b.WriteString("```go\n")
@@ -172,6 +182,15 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 
 	switch obj := obj.(type) {
 	case *types.Var:
+		// Check if variable has dgo type
+		if dgoInfo := detectDgoType(obj.Type()); dgoInfo != nil {
+			switch dgoInfo.TypeName {
+			case "Result":
+				return fmt.Sprintf("var %s %s", obj.Name(), formatDgoTypeShort(dgoInfo, pkg))
+			case "Option":
+				return fmt.Sprintf("var %s %s", obj.Name(), formatDgoTypeShort(dgoInfo, pkg))
+			}
+		}
 		if obj.IsField() {
 			return fmt.Sprintf("field %s %s", obj.Name(), formatType(obj.Type(), pkg))
 		}
@@ -185,11 +204,35 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 		return fmt.Sprintf("func %s%s", obj.Name(), formatSignatureType(sig, pkg))
 
 	case *types.TypeName:
+		// Check for dgo types (Result, Option)
+		if dgoInfo := detectDgoType(obj.Type()); dgoInfo != nil {
+			switch dgoInfo.TypeName {
+			case "Result":
+				return formatDgoResultHover(dgoInfo, pkg)
+			case "Option":
+				return formatDgoOptionHover(dgoInfo, pkg)
+			}
+		}
 		return fmt.Sprintf("type %s %s", obj.Name(), formatType(obj.Type().Underlying(), pkg))
 
 	default:
 		return obj.String()
 	}
+}
+
+// formatDgoTypeShort formats a dgo type in short form for variable signatures
+func formatDgoTypeShort(info *dgoTypeInfo, pkg *types.Package) string {
+	var b strings.Builder
+	b.WriteString(info.TypeName)
+	b.WriteString("[")
+	for i, arg := range info.TypeArgs {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(formatType(arg, pkg))
+	}
+	b.WriteString("]")
+	return b.String()
 }
 
 // formatSignatureType formats a function signature
@@ -287,4 +330,115 @@ func formatType(t types.Type, pkg *types.Package) string {
 	}
 
 	return types.TypeString(t, qualifier)
+}
+
+// dgoTypeInfo holds information about a dgo type (Result or Option)
+type dgoTypeInfo struct {
+	TypeName string       // "Result" or "Option"
+	TypeArgs []types.Type // [T, E] for Result, [T] for Option
+}
+
+// detectDgoType checks if a type is dgo.Result or dgo.Option
+func detectDgoType(t types.Type) *dgoTypeInfo {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+
+	typeName := named.Obj().Name()
+	if typeName != "Result" && typeName != "Option" {
+		return nil
+	}
+
+	pkg := named.Obj().Pkg()
+	if pkg == nil {
+		return nil
+	}
+
+	// Check for dgo package (handles various import paths)
+	if !strings.Contains(pkg.Path(), "dgo") && pkg.Name() != "dgo" {
+		return nil
+	}
+
+	// Extract type arguments
+	var typeArgs []types.Type
+	if args := named.TypeArgs(); args != nil {
+		for i := 0; i < args.Len(); i++ {
+			typeArgs = append(typeArgs, args.At(i))
+		}
+	}
+
+	return &dgoTypeInfo{
+		TypeName: typeName,
+		TypeArgs: typeArgs,
+	}
+}
+
+// formatDgoResultHover formats hover for Result[T, E]
+func formatDgoResultHover(info *dgoTypeInfo, pkg *types.Package) string {
+	var b strings.Builder
+
+	// Type signature
+	b.WriteString("```go\n")
+	b.WriteString("Result[")
+	tStr := "T"
+	eStr := "E"
+	if len(info.TypeArgs) >= 1 {
+		tStr = formatType(info.TypeArgs[0], pkg)
+		b.WriteString(tStr)
+	}
+	b.WriteString(", ")
+	if len(info.TypeArgs) >= 2 {
+		eStr = formatType(info.TypeArgs[1], pkg)
+		b.WriteString(eStr)
+	}
+	b.WriteString("]\n```\n\n")
+
+	// Description
+	b.WriteString("**Success OR failure container**\n\n")
+
+	// Methods table
+	b.WriteString("| Method | Returns |\n")
+	b.WriteString("|--------|--------|\n")
+	b.WriteString(fmt.Sprintf("| `.IsOk()` | `bool` |\n"))
+	b.WriteString(fmt.Sprintf("| `.IsErr()` | `bool` |\n"))
+	b.WriteString(fmt.Sprintf("| `.MustOk()` | `%s` |\n", tStr))
+	b.WriteString(fmt.Sprintf("| `.MustErr()` | `%s` |\n", eStr))
+	b.WriteString(fmt.Sprintf("| `.OkOr(default)` | `%s` |\n", tStr))
+
+	// Constructors
+	b.WriteString(fmt.Sprintf("\n*Constructors:* `Ok(value)`, `Err(err)`"))
+
+	return b.String()
+}
+
+// formatDgoOptionHover formats hover for Option[T]
+func formatDgoOptionHover(info *dgoTypeInfo, pkg *types.Package) string {
+	var b strings.Builder
+
+	// Type signature
+	b.WriteString("```go\n")
+	b.WriteString("Option[")
+	tStr := "T"
+	if len(info.TypeArgs) >= 1 {
+		tStr = formatType(info.TypeArgs[0], pkg)
+		b.WriteString(tStr)
+	}
+	b.WriteString("]\n```\n\n")
+
+	// Description
+	b.WriteString("**Optional value container** (Some or None)\n\n")
+
+	// Methods table
+	b.WriteString("| Method | Returns |\n")
+	b.WriteString("|--------|--------|\n")
+	b.WriteString("| `.IsSome()` | `bool` |\n")
+	b.WriteString("| `.IsNone()` | `bool` |\n")
+	b.WriteString(fmt.Sprintf("| `.MustSome()` | `%s` |\n", tStr))
+	b.WriteString(fmt.Sprintf("| `.SomeOr(default)` | `%s` |\n", tStr))
+
+	// Constructors
+	b.WriteString(fmt.Sprintf("\n*Constructors:* `Some(value)`, `None[%s]()`", tStr))
+
+	return b.String()
 }

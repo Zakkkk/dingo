@@ -80,6 +80,20 @@ func (b *Builder) Build() (*Map, error) {
 			if entity != nil {
 				entities = append(entities, *entity)
 			}
+
+		case *ast.IndexListExpr:
+			// Generic type instantiation: Result[User, DBError]
+			entity := b.handleIndexListExpr(node)
+			if entity != nil {
+				entities = append(entities, *entity)
+			}
+
+		case *ast.IndexExpr:
+			// Single-param generic type: Option[User]
+			entity := b.handleIndexExpr(node)
+			if entity != nil {
+				entities = append(entities, *entity)
+			}
 		}
 
 		return true
@@ -134,13 +148,20 @@ func (b *Builder) handleIdent(node *ast.Ident) *SemanticEntity {
 	// Determine context (error propagation, etc.)
 	context := b.inferContext(node, obj.Type())
 
+	// Get the type - prefer the expression type (includes instantiated generics)
+	// over the object type (generic definition)
+	entityType := obj.Type()
+	if tv, ok := b.typesInfo.Types[node]; ok && tv.Type != nil {
+		entityType = tv.Type
+	}
+
 	return &SemanticEntity{
 		Line:    dingoLine,
 		Col:     actualCol,
 		EndCol:  actualCol + len(node.Name),
 		Kind:    KindIdent,
 		Object:  obj,
-		Type:    obj.Type(),
+		Type:    entityType,
 		Context: context,
 	}
 }
@@ -188,6 +209,96 @@ func (b *Builder) handleSelectorExpr(node *ast.SelectorExpr) *SemanticEntity {
 		Kind:    KindField,
 		Type:    tv.Type,
 		Context: context,
+	}
+}
+
+// handleIndexListExpr processes generic type instantiation: Result[User, DBError]
+func (b *Builder) handleIndexListExpr(node *ast.IndexListExpr) *SemanticEntity {
+	if b.typesInfo == nil {
+		return nil
+	}
+
+	// Get the type of the full expression (instantiated generic)
+	tv, ok := b.typesInfo.Types[node]
+	if !ok || tv.Type == nil {
+		return nil
+	}
+
+	// Get the base identifier (e.g., "Result" from "Result[User, DBError]")
+	var baseIdent *ast.Ident
+	switch x := node.X.(type) {
+	case *ast.Ident:
+		baseIdent = x
+	case *ast.SelectorExpr:
+		baseIdent = x.Sel
+	default:
+		return nil
+	}
+
+	// Map Go position to Dingo position
+	goPos := baseIdent.Pos()
+	dingoLine, dingoCol, ok := b.goPosToDingoPos(goPos)
+	if !ok {
+		return nil
+	}
+
+	// Verify in source
+	verified, actualCol := b.verifyIdentInSource(baseIdent.Name, dingoLine, dingoCol)
+	if !verified {
+		return nil
+	}
+
+	return &SemanticEntity{
+		Line:   dingoLine,
+		Col:    actualCol,
+		EndCol: actualCol + len(baseIdent.Name),
+		Kind:   KindType,
+		Type:   tv.Type, // This is the instantiated type with type args
+	}
+}
+
+// handleIndexExpr processes single-param generic type: Option[User]
+func (b *Builder) handleIndexExpr(node *ast.IndexExpr) *SemanticEntity {
+	if b.typesInfo == nil {
+		return nil
+	}
+
+	// Get the type of the full expression (instantiated generic)
+	tv, ok := b.typesInfo.Types[node]
+	if !ok || tv.Type == nil {
+		return nil
+	}
+
+	// Get the base identifier (e.g., "Option" from "Option[User]")
+	var baseIdent *ast.Ident
+	switch x := node.X.(type) {
+	case *ast.Ident:
+		baseIdent = x
+	case *ast.SelectorExpr:
+		baseIdent = x.Sel
+	default:
+		return nil
+	}
+
+	// Map Go position to Dingo position
+	goPos := baseIdent.Pos()
+	dingoLine, dingoCol, ok := b.goPosToDingoPos(goPos)
+	if !ok {
+		return nil
+	}
+
+	// Verify in source
+	verified, actualCol := b.verifyIdentInSource(baseIdent.Name, dingoLine, dingoCol)
+	if !verified {
+		return nil
+	}
+
+	return &SemanticEntity{
+		Line:   dingoLine,
+		Col:    actualCol,
+		EndCol: actualCol + len(baseIdent.Name),
+		Kind:   KindType,
+		Type:   tv.Type, // This is the instantiated type with type args
 	}
 }
 

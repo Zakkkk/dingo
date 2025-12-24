@@ -13,8 +13,30 @@ type Map struct {
 	lineIndex map[int][]int
 }
 
+// entityPriority returns priority for deduplication (higher = preferred)
+// KindType has highest priority because it represents instantiated generics
+func entityPriority(kind SemanticKind) int {
+	switch kind {
+	case KindType:
+		return 100 // Highest: instantiated generic types like Result[User, DBError]
+	case KindOperator:
+		return 90 // Dingo operators
+	case KindLambda:
+		return 80 // Lambda parameters
+	case KindCall:
+		return 70 // Function calls
+	case KindField:
+		return 60 // Field access
+	case KindIdent:
+		return 50 // Regular identifiers (lowest among named entities)
+	default:
+		return 0
+	}
+}
+
 // NewMap creates a Map from a slice of entities
 // Entities are sorted by line, then column for efficient binary search
+// When entities overlap, prefers KindType (instantiated generics) over KindIdent
 func NewMap(entities []SemanticEntity) *Map {
 	if len(entities) == 0 {
 		return &Map{
@@ -27,13 +49,34 @@ func NewMap(entities []SemanticEntity) *Map {
 	sorted := make([]SemanticEntity, len(entities))
 	copy(sorted, entities)
 
-	// Sort by line, then by column
+	// Sort by line, then by column, then by kind priority
+	// KindType (instantiated generics) should come before KindIdent
 	sort.Slice(sorted, func(i, j int) bool {
 		if sorted[i].Line != sorted[j].Line {
 			return sorted[i].Line < sorted[j].Line
 		}
-		return sorted[i].Col < sorted[j].Col
+		if sorted[i].Col != sorted[j].Col {
+			return sorted[i].Col < sorted[j].Col
+		}
+		// Same position: prefer KindType over KindIdent (higher priority first)
+		return entityPriority(sorted[i].Kind) > entityPriority(sorted[j].Kind)
 	})
+
+	// Deduplicate: when entities have same Line and Col, keep highest priority
+	deduped := make([]SemanticEntity, 0, len(sorted))
+	for i, e := range sorted {
+		if i == 0 {
+			deduped = append(deduped, e)
+			continue
+		}
+		prev := deduped[len(deduped)-1]
+		// If same position, skip (we already have higher priority one)
+		if e.Line == prev.Line && e.Col == prev.Col {
+			continue
+		}
+		deduped = append(deduped, e)
+	}
+	sorted = deduped
 
 	// Build line index
 	lineIndex := make(map[int][]int)

@@ -191,6 +191,7 @@ func (m *Manager) rebuild(uri string, source []byte) {
 
 	// Step 2: Parse Go AST
 	goFset := token.NewFileSet()
+
 	goAST, err := goparser.ParseFile(goFset, uri+".go", result.GoCode, goparser.ParseComments)
 	if err != nil {
 		m.logger.Warnf("Go parsing failed for %s: %v", uri, err)
