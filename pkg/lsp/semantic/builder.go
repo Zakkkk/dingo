@@ -192,11 +192,13 @@ func (b *Builder) handleSelectorExpr(node *ast.SelectorExpr) *SemanticEntity {
 		return nil
 	}
 
-	// Verify selector exists in source (filter out generated code)
-	verified, actualCol := b.verifyIdentInSource(node.Sel.Name, dingoLine, dingoCol)
+	// Verify selector exists in source with fuzzy line matching
+	// go/printer can cause 1-2 line drift by reformatting comments
+	actualLine, actualCol, verified := b.verifyIdentFuzzy(node.Sel.Name, dingoLine, dingoCol)
 	if !verified {
 		return nil
 	}
+	dingoLine = actualLine
 
 	// Get the object for methods/fields/functions
 	var obj types.Object
@@ -481,6 +483,29 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// verifyIdentFuzzy tries to verify an identifier with fuzzy line matching.
+// go/printer can cause 1-2 line drift by reformatting comments, so we try
+// the exact line first, then ±1 and ±2 lines.
+//
+// Returns (actualLine, actualCol, found):
+//   - actualLine: the line where the identifier was found
+//   - actualCol: the column where the identifier was found
+//   - found: true if identifier was found
+func (b *Builder) verifyIdentFuzzy(name string, line, col int) (int, int, bool) {
+	// Try exact line first, then adjacent lines
+	for _, delta := range []int{0, -1, 1, -2, 2} {
+		tryLine := line + delta
+		if tryLine < 1 {
+			continue
+		}
+		found, actualCol := b.verifyIdentInSource(name, tryLine, col)
+		if found {
+			return tryLine, actualCol, true
+		}
+	}
+	return 0, 0, false
 }
 
 // verifyIdentInSource checks if the identifier name exists at the given
