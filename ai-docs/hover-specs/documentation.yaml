@@ -1,0 +1,21 @@
+# Test hover documentation for external stdlib functions
+# Verifies that hovering on stdlib functions shows their documentation
+
+file: examples/01_error_propagation/http_handler.dingo
+
+cases:
+  # Test: http.ListenAndServe should include documentation
+  - id: 1
+    line: 150
+    token: ListenAndServe
+    description: "stdlib function should show documentation"
+    expect:
+      contains: "ListenAndServe listens on the TCP network"
+
+  # Test: http package should show package info
+  - id: 2
+    line: 150
+    token: http
+    description: "package name hover"
+    expect:
+      contains: "http"

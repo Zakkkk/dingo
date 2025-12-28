@@ -81,8 +81,8 @@ func (s *Server) nativeHover(ctx context.Context, params protocol.HoverParams) (
 			entity.Line, entity.Col, entity.EndCol, entity.Kind)
 	}
 
-	// 6. Format hover response
-	hover := semantic.FormatHover(entity, doc.TypesPkg)
+	// 6. Format hover response with documentation for external symbols
+	hover := semantic.FormatHoverWithDocs(entity, doc.TypesPkg, s.semanticManager.DocProvider())
 	if hover != nil {
 		s.config.Logger.Debugf("[Native Hover] Returning hover: Kind=%s, ValueLen=%d",
 			hover.Contents.Kind, len(hover.Contents.Value))

@@ -43,6 +43,9 @@ type Manager struct {
 
 	// Transpiler function
 	transpiler TranspileFunc
+
+	// Documentation provider (shared across all documents)
+	docProvider *DocProvider
 }
 
 // TranspileFunc is the signature for transpilation
@@ -74,7 +77,13 @@ func NewManager(logger Logger, transpiler TranspileFunc) *Manager {
 		debounceTimers: make(map[string]*time.Timer),
 		debounceDelay:  500 * time.Millisecond,
 		transpiler:     transpiler,
+		docProvider:    NewDocProvider(),
 	}
+}
+
+// DocProvider returns the shared documentation provider.
+func (m *Manager) DocProvider() *DocProvider {
+	return m.docProvider
 }
 
 // Get returns the Document for a URI

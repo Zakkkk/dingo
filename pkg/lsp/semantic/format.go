@@ -10,6 +10,12 @@ import (
 
 // FormatHover creates LSP hover response from semantic entity
 func FormatHover(entity *SemanticEntity, pkg *types.Package) *protocol.Hover {
+	return FormatHoverWithDocs(entity, pkg, nil)
+}
+
+// FormatHoverWithDocs creates LSP hover response with optional documentation.
+// If docProvider is non-nil, external symbols will include their documentation.
+func FormatHoverWithDocs(entity *SemanticEntity, pkg *types.Package, docProvider *DocProvider) *protocol.Hover {
 	if entity == nil {
 		return nil
 	}
@@ -27,7 +33,7 @@ func FormatHover(entity *SemanticEntity, pkg *types.Package) *protocol.Hover {
 		content = formatErrorPropHover(entity, pkg)
 	} else if entity.Object != nil {
 		// Named entity (variable, function, etc.)
-		content = formatObjectHover(entity, pkg)
+		content = formatObjectHoverWithDocs(entity, pkg, docProvider)
 	} else if entity.Type != nil {
 		// Expression without object
 		content = formatTypeHover(entity, pkg)
@@ -132,11 +138,28 @@ func formatLambdaHover(entity *SemanticEntity, pkg *types.Package) string {
 
 // formatObjectHover formats hover for named objects (vars, funcs, etc.)
 func formatObjectHover(entity *SemanticEntity, pkg *types.Package) string {
+	return formatObjectHoverWithDocs(entity, pkg, nil)
+}
+
+// formatObjectHoverWithDocs formats hover with optional documentation.
+func formatObjectHoverWithDocs(entity *SemanticEntity, pkg *types.Package, docProvider *DocProvider) string {
 	var b strings.Builder
 
 	b.WriteString("```go\n")
 	b.WriteString(formatSignature(entity.Object, pkg))
 	b.WriteString("\n```")
+
+	// Add documentation for external symbols
+	if docProvider != nil && entity.Object != nil {
+		isExternal := IsExternalPackage(entity.Object, pkg)
+		if isExternal {
+			docStr := docProvider.GetDoc(entity.Object)
+			if docStr != "" {
+				b.WriteString("\n\n")
+				b.WriteString(docStr)
+			}
+		}
+	}
 
 	// Add context description if available
 	if entity.Context != nil && entity.Context.Description != "" {
