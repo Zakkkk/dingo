@@ -1,0 +1,38 @@
+# Test hover for selector expressions in user_settings.dingo
+# Line 55: return user.Settings.Theme.SomeOr("system")
+# Uses token: to automatically find positions
+
+file: examples/03_option/user_settings.dingo
+
+cases:
+  # Test 1: user variable
+  - id: 1
+    line: 55
+    token: user
+    description: "user variable - should show User type"
+    expect:
+      contains: "var user User"
+
+  # Test 2: Settings field
+  - id: 2
+    line: 55
+    token: Settings
+    description: "Settings field - should show UserSettings type"
+    expect:
+      contains: "Settings"
+
+  # Test 3: Theme field
+  - id: 3
+    line: 55
+    token: Theme
+    description: "Theme field - should show Option type info"
+    expect:
+      contains: "Theme"
+
+  # Test 4: SomeOr method
+  - id: 4
+    line: 55
+    token: SomeOr
+    description: "SomeOr method - should show function signature"
+    expect:
+      contains: "SomeOr"

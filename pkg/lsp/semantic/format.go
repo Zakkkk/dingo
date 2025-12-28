@@ -321,6 +321,9 @@ func formatType(t types.Type, pkg *types.Package) string {
 
 	// Use types.TypeString with custom qualifier
 	qualifier := func(other *types.Package) string {
+		if other == nil {
+			return ""
+		}
 		// Same package - no qualifier needed
 		if pkg != nil && other == pkg {
 			return ""
@@ -340,17 +343,26 @@ type dgoTypeInfo struct {
 
 // detectDgoType checks if a type is dgo.Result or dgo.Option
 func detectDgoType(t types.Type) *dgoTypeInfo {
+	if t == nil {
+		return nil
+	}
+
 	named, ok := t.(*types.Named)
 	if !ok {
 		return nil
 	}
 
-	typeName := named.Obj().Name()
+	obj := named.Obj()
+	if obj == nil {
+		return nil
+	}
+
+	typeName := obj.Name()
 	if typeName != "Result" && typeName != "Option" {
 		return nil
 	}
 
-	pkg := named.Obj().Pkg()
+	pkg := obj.Pkg()
 	if pkg == nil {
 		return nil
 	}
