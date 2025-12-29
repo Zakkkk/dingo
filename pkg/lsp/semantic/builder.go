@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"go/ast"
+	"go/scanner"
 	"go/token"
 	"go/types"
 	"strings"
@@ -19,6 +20,24 @@ type Builder struct {
 	dingoSource    []byte
 	dingoFset      *token.FileSet
 	dingoFile      string
+
+	// Computed during Build() for position mapping without //line directives
+	importLineOffset  int         // Go import lines - Dingo import lines
+	goImportEndLine   int         // Line after last import in Go
+	dingoImportEnd    int         // Line after last import in Dingo
+	dingoSourceFile   *token.File // For efficient line→offset conversion (CLAUDE.md compliant)
+
+	// Per-region line offsets computed from declaration positions
+	// This handles go/printer adding/removing lines throughout the file
+	// Each entry says: "from goLine onwards, use this offset"
+	regionOffsets []regionOffset // Sorted by goLine
+}
+
+// regionOffset represents the line offset for a region starting at goLine.
+// Offset = goLine - dingoLine, so dingoLine = goLine - offset.
+type regionOffset struct {
+	goLine int // First Go line where this offset applies
+	offset int // goLine - dingoLine at this declaration
 }
 
 // NewBuilder creates a Builder
@@ -46,11 +65,27 @@ func NewBuilder(
 }
 
 // Build creates a semantic Map by:
-// 1. Walking Go AST and collecting typed entities
-// 2. Mapping Go positions back to Dingo positions using lineMappings
-// 3. Detecting operators and enriching with context
-// 4. Building final sorted map
+// 1. Computing import line offset (Go imports - Dingo imports)
+// 2. Walking Go AST and collecting typed entities
+// 3. Mapping Go positions back to Dingo positions using the offset
+// 4. Detecting operators and enriching with context
+// 5. Building final sorted map
 func (b *Builder) Build() (*Map, error) {
+	// Initialize Dingo source file for line→offset conversion (CLAUDE.md compliant)
+	// This uses token.FileSet instead of manual newline counting
+	if len(b.dingoSource) > 0 {
+		fset := token.NewFileSet()
+		b.dingoSourceFile = fset.AddFile(b.dingoFile, fset.Base(), len(b.dingoSource))
+		b.dingoSourceFile.SetLinesForContent(b.dingoSource)
+	}
+
+	// Compute import expansion offset for position mapping
+	b.computeImportOffset()
+
+	// Compute per-region offsets using structural correspondence
+	// This handles go/printer adding/removing lines throughout the file
+	b.computeRegionOffsets()
+
 	var entities []SemanticEntity
 
 	// Walk Go AST and collect entities with type information
@@ -137,13 +172,14 @@ func (b *Builder) handleIdent(node *ast.Ident) *SemanticEntity {
 	}
 
 	// Verify the identifier exists in Dingo source at this position
+	// Use fuzzy matching because go/printer can cause line drift (reformatting comments)
 	// This filters out generated identifiers (like tmp, err from error propagation)
-	// that map to Dingo positions where different code exists
-	// Also get the actual adjusted column for entity storage
-	verified, actualCol := b.verifyIdentInSource(node.Name, dingoLine, dingoCol)
+	// Also get the actual adjusted line/column for entity storage
+	actualLine, actualCol, verified := b.verifyIdentFuzzy(node.Name, dingoLine, dingoCol)
 	if !verified {
 		return nil
 	}
+	dingoLine = actualLine
 
 	// Determine context (error propagation, etc.)
 	context := b.inferContext(node, obj.Type())
@@ -260,14 +296,14 @@ func (b *Builder) handleIndexListExpr(node *ast.IndexListExpr) *SemanticEntity {
 		return nil
 	}
 
-	// Verify in source
-	verified, actualCol := b.verifyIdentInSource(baseIdent.Name, dingoLine, dingoCol)
+	// Verify in source with fuzzy matching (go/printer can cause line drift)
+	actualLine, actualCol, verified := b.verifyIdentFuzzy(baseIdent.Name, dingoLine, dingoCol)
 	if !verified {
 		return nil
 	}
 
 	return &SemanticEntity{
-		Line:   dingoLine,
+		Line:   actualLine,
 		Col:    actualCol,
 		EndCol: actualCol + len(baseIdent.Name),
 		Kind:   KindType,
@@ -305,14 +341,14 @@ func (b *Builder) handleIndexExpr(node *ast.IndexExpr) *SemanticEntity {
 		return nil
 	}
 
-	// Verify in source
-	verified, actualCol := b.verifyIdentInSource(baseIdent.Name, dingoLine, dingoCol)
+	// Verify in source with fuzzy matching (go/printer can cause line drift)
+	actualLine, actualCol, verified := b.verifyIdentFuzzy(baseIdent.Name, dingoLine, dingoCol)
 	if !verified {
 		return nil
 	}
 
 	return &SemanticEntity{
-		Line:   dingoLine,
+		Line:   actualLine,
 		Col:    actualCol,
 		EndCol: actualCol + len(baseIdent.Name),
 		Kind:   KindType,
@@ -410,100 +446,292 @@ func (b *Builder) detectLambdaParams() []SemanticEntity {
 	return entities
 }
 
+// computeImportOffset calculates the line offset between Go and Dingo code.
+// This is needed because import expansion and comment processing shift line numbers.
+// Without //line directives, we must compute this offset.
+//
+// CLAUDE.md COMPLIANT: Uses go/scanner for tokenization instead of string manipulation.
+// Position information flows through the token system.
+//
+// Algorithm: Find the first non-import declaration in both files and compute
+// the difference. This is more robust than import-end comparison because it
+// accounts for comment processing differences too.
+func (b *Builder) computeImportOffset() {
+	// Find line of first non-import declaration in Go AST
+	b.goImportEndLine = 1
+	goFirstDeclLine := 0
+	if b.goAST != nil {
+		for _, decl := range b.goAST.Decls {
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if d.Tok == token.IMPORT {
+					// Track import end
+					endPos := b.goFset.Position(d.End())
+					if endPos.Line > b.goImportEndLine {
+						b.goImportEndLine = endPos.Line
+					}
+				} else {
+					// First non-import GenDecl (type, const, var)
+					if goFirstDeclLine == 0 {
+						goFirstDeclLine = b.goFset.Position(d.Pos()).Line
+					}
+				}
+			case *ast.FuncDecl:
+				// First function
+				if goFirstDeclLine == 0 {
+					goFirstDeclLine = b.goFset.Position(d.Pos()).Line
+				}
+			}
+		}
+	}
+
+	// Find line of first non-import declaration in Dingo source using go/scanner
+	// This is CLAUDE.md compliant - uses token system instead of string manipulation
+	b.dingoImportEnd = 1
+	dingoFirstDeclLine := 0
+	if b.dingoSourceFile != nil && len(b.dingoSource) > 0 {
+		var s scanner.Scanner
+		fset := token.NewFileSet()
+		file := fset.AddFile("", fset.Base(), len(b.dingoSource))
+		// Ignore errors - Dingo syntax extensions may cause scanner errors
+		s.Init(file, b.dingoSource, func(pos token.Position, msg string) {}, scanner.ScanComments)
+
+		inImportBlock := false
+		for {
+			pos, tok, _ := s.Scan()
+			if tok == token.EOF {
+				break
+			}
+
+			position := fset.Position(pos)
+
+			// Track import end
+			if tok == token.IMPORT {
+				b.dingoImportEnd = position.Line
+			}
+			if tok == token.LPAREN && b.dingoImportEnd == position.Line {
+				inImportBlock = true
+			}
+			if tok == token.RPAREN && inImportBlock {
+				inImportBlock = false
+				b.dingoImportEnd = position.Line
+			}
+
+			// Find first declaration keyword (type, func, const, var)
+			if !inImportBlock && dingoFirstDeclLine == 0 {
+				if tok == token.TYPE || tok == token.FUNC || tok == token.CONST || tok == token.VAR {
+					dingoFirstDeclLine = position.Line
+					break // Found the first declaration
+				}
+			}
+		}
+	}
+
+	// Compute offset using first declaration lines (most accurate)
+	// This accounts for both import expansion AND comment processing differences
+	if goFirstDeclLine > 0 && dingoFirstDeclLine > 0 {
+		b.importLineOffset = goFirstDeclLine - dingoFirstDeclLine
+	} else {
+		// Fallback to import-end calculation
+		b.importLineOffset = b.goImportEndLine - b.dingoImportEnd
+	}
+}
+
+// computeRegionOffsets builds per-region line offsets by matching declarations
+// between Go AST and Dingo source. This handles go/printer adding/removing
+// lines at various points in the file.
+//
+// CLAUDE.md COMPLIANT: Uses go/ast for Go positions and go/scanner for Dingo.
+// Position information flows through the token system.
+func (b *Builder) computeRegionOffsets() {
+	// Collect Go declaration names and lines from AST
+	goDecls := b.collectGoDeclarations()
+
+	// Collect Dingo declaration names and lines using go/scanner
+	dingoDecls := b.collectDingoDeclarations()
+
+	// Match declarations by name and compute offsets
+	// Start with the import offset as the first region
+	b.regionOffsets = []regionOffset{{
+		goLine: b.goImportEndLine + 1,
+		offset: b.importLineOffset,
+	}}
+
+	for _, goDecl := range goDecls {
+		if dingoLine, ok := dingoDecls[goDecl.name]; ok {
+			offset := goDecl.line - dingoLine
+			// Only add if offset differs from previous region
+			if len(b.regionOffsets) == 0 || b.regionOffsets[len(b.regionOffsets)-1].offset != offset {
+				b.regionOffsets = append(b.regionOffsets, regionOffset{
+					goLine: goDecl.line,
+					offset: offset,
+				})
+			}
+		}
+	}
+}
+
+// declInfo holds declaration name and line number
+type declInfo struct {
+	name string
+	line int
+}
+
+// collectGoDeclarations walks the Go AST to collect declaration names and lines.
+// Uses token.Pos from AST nodes (CLAUDE.md compliant).
+func (b *Builder) collectGoDeclarations() []declInfo {
+	var decls []declInfo
+
+	if b.goAST == nil {
+		return decls
+	}
+
+	for _, decl := range b.goAST.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			line := b.goFset.Position(d.Pos()).Line
+			decls = append(decls, declInfo{name: d.Name.Name, line: line})
+
+		case *ast.GenDecl:
+			if d.Tok == token.IMPORT {
+				continue // Skip imports
+			}
+			// Handle type, const, var declarations
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					line := b.goFset.Position(s.Pos()).Line
+					decls = append(decls, declInfo{name: s.Name.Name, line: line})
+				case *ast.ValueSpec:
+					for _, name := range s.Names {
+						line := b.goFset.Position(name.Pos()).Line
+						decls = append(decls, declInfo{name: name.Name, line: line})
+					}
+				}
+			}
+		}
+	}
+
+	return decls
+}
+
+// collectDingoDeclarations scans Dingo source to find declaration names and lines.
+// Uses go/scanner for tokenization (CLAUDE.md compliant).
+func (b *Builder) collectDingoDeclarations() map[string]int {
+	decls := make(map[string]int)
+
+	if b.dingoSource == nil || len(b.dingoSource) == 0 {
+		return decls
+	}
+
+	var s scanner.Scanner
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(b.dingoSource))
+	// Ignore errors - Dingo syntax extensions may cause scanner errors
+	s.Init(file, b.dingoSource, func(pos token.Position, msg string) {}, scanner.ScanComments)
+
+	// State machine for finding declarations
+	var prevTok token.Token
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// After "type", "func", "const", or "var", the next IDENT is a declaration name
+		if prevTok == token.TYPE || prevTok == token.FUNC || prevTok == token.CONST || prevTok == token.VAR {
+			if tok == token.IDENT {
+				line := fset.Position(pos).Line
+				decls[lit] = line
+			}
+		}
+
+		prevTok = tok
+	}
+
+	return decls
+}
+
 // goPosToDingoPos maps a Go AST position back to Dingo source position
-// FOLLOWS CLAUDE.MD: Uses token.FileSet and lineMappings, NOT byte arithmetic
+// Uses region-specific offsets computed from declaration matching.
 func (b *Builder) goPosToDingoPos(goPos token.Pos) (line, col int, ok bool) {
 	// Get Go position from FileSet
-	// NOTE: Due to //line directives, FileSet reports positions in terms of Dingo lines,
-	// not actual Go line numbers. So goLine here is actually the Dingo line.
 	goPosition := b.goFset.Position(goPos)
-	goLine := goPosition.Line // This is actually the Dingo line due to //line directives
+	goLine := goPosition.Line
 	goCol := goPosition.Column
 
 	// Check if //line directive has mapped this to a Dingo file
 	// If the filename ends with .dingo, we're already in Dingo coordinates
 	isDingoPos := strings.HasSuffix(goPosition.Filename, ".dingo")
-
-	// Check if this is a pass-through file (no transformations that shift lines)
-	// When the transpiler doesn't add //line directives (e.g., files with only type rewrites
-	// like Result[T,E] → dgo.Result[T,E]), the filename will be *.dingo.go
-	// IMPORTANT: We only use pass-through if line counts are similar.
-	// Import expansion (single-line → multi-line) can shift all subsequent lines.
-	isPassThroughFile := false
-	if strings.HasSuffix(goPosition.Filename, ".dingo.go") && len(b.lineMappings) == 0 {
-		// Count lines in Dingo source
-		dingoLineCount := 1
-		for _, c := range b.dingoSource {
-			if c == '\n' {
-				dingoLineCount++
-			}
-		}
-		// Get Go file line count from FileSet
-		// The Go AST file ends at b.goAST.End(), which gives us the last position
-		if b.goAST != nil {
-			goEndPos := b.goFset.Position(b.goAST.End())
-			goLineCount := goEndPos.Line
-			// Allow small difference (2 lines) for trailing whitespace
-			if abs(goLineCount-dingoLineCount) <= 2 {
-				isPassThroughFile = true
-			}
-		}
+	if isDingoPos {
+		return goLine, goCol, true
 	}
 
 	// Find the line mapping that covers this position (for transformed lines)
+	// Without //line directives, we check if goLine falls within [GoLineStart, GoLineEnd]
 	for _, mapping := range b.lineMappings {
-		if goLine == mapping.DingoLine {
-			// This position maps to this Dingo line
-			// Try to find precise column mapping
+		if goLine >= mapping.GoLineStart && goLine <= mapping.GoLineEnd {
 			dingoCol, _ := b.translateGoColumn(goLine, goCol)
 			return mapping.DingoLine, dingoCol, true
 		}
 	}
 
-	// No explicit mapping found
-	// If we're already in Dingo coordinates (//line directive applied), use identity mapping
-	if isDingoPos {
+	// No explicit line mappings - use region-specific offsets
+	// For positions before/in imports, use identity mapping
+	if goLine <= b.goImportEndLine {
+		// Within package/import block - identity mapping
 		return goLine, goCol, true
 	}
 
-	// For pass-through files (no transformations), use identity mapping
-	// The Go code is essentially identical to Dingo code except for type rewrites
-	if isPassThroughFile {
-		return goLine, goCol, true
+	// Find the applicable region offset using binary search
+	// Region offsets are sorted by goLine, find the last one where goLine >= offset.goLine
+	offset := b.importLineOffset // Default fallback
+	for i := len(b.regionOffsets) - 1; i >= 0; i-- {
+		if goLine >= b.regionOffsets[i].goLine {
+			offset = b.regionOffsets[i].offset
+			break
+		}
 	}
 
-	// Not in Dingo coordinates - this Go code is before any //line directive
-	// These are typically imports/package which map 1:1
-	return 0, 0, false
-}
-
-// abs returns the absolute value of x
-func abs(x int) int {
-	if x < 0 {
-		return -x
+	// Calculate cumulative expansion from error prop line mappings
+	// Each line mapping represents 1 Dingo line expanding to multiple Go lines
+	// We need to subtract this expansion to get the correct Dingo line
+	cumulativeExpansion := 0
+	for _, mapping := range b.lineMappings {
+		// Only count mappings that are BEFORE this Go line
+		if goLine > mapping.GoLineEnd {
+			// This error prop is before our position, count its expansion
+			// Expansion = (GoLineEnd - GoLineStart + 1) - 1 = GoLineEnd - GoLineStart
+			expansion := mapping.GoLineEnd - mapping.GoLineStart
+			cumulativeExpansion += expansion
+		}
 	}
-	return x
+
+	// For positions after imports, subtract both region offset and cumulative expansion
+	dingoLine := goLine - offset - cumulativeExpansion
+	if dingoLine < 1 {
+		dingoLine = 1
+	}
+	return dingoLine, goCol, true
 }
 
-// verifyIdentFuzzy tries to verify an identifier with fuzzy line matching.
-// go/printer can cause 1-2 line drift by reformatting comments, so we try
-// the exact line first, then ±1 and ±2 lines.
+// verifyIdentFuzzy verifies an identifier exists at the computed position.
+// With per-region offsets (computed from structural declaration matching),
+// line positions are accurate. We only apply column tolerance (±2) for
+// tab handling and minor transformation differences.
+//
+// CLAUDE.md COMPLIANT: No string-based line searching. Position accuracy
+// comes from token-based region offset computation.
 //
 // Returns (actualLine, actualCol, found):
-//   - actualLine: the line where the identifier was found
-//   - actualCol: the column where the identifier was found
-//   - found: true if identifier was found
+//   - actualLine: the line where the identifier was found (same as input line)
+//   - actualCol: the actual column where identifier was found
+//   - found: true if identifier was verified
 func (b *Builder) verifyIdentFuzzy(name string, line, col int) (int, int, bool) {
-	// Try exact line first, then adjacent lines
-	for _, delta := range []int{0, -1, 1, -2, 2} {
-		tryLine := line + delta
-		if tryLine < 1 {
-			continue
-		}
-		found, actualCol := b.verifyIdentInSource(name, tryLine, col)
-		if found {
-			return tryLine, actualCol, true
-		}
+	// With accurate region offsets, we check the exact line
+	found, actualCol := b.verifyIdentInSource(name, line, col)
+	if found {
+		return line, actualCol, true
 	}
 	return 0, 0, false
 }
@@ -511,6 +739,9 @@ func (b *Builder) verifyIdentFuzzy(name string, line, col int) (int, int, bool) 
 // verifyIdentInSource checks if the identifier name exists at the given
 // position in the Dingo source. This filters out generated code that maps
 // to Dingo positions where different text exists.
+//
+// CLAUDE.md COMPLIANT: Uses token.File.LineStart() for line→offset conversion
+// instead of manual newline counting. Position information flows through token system.
 //
 // For example, "tmp" generated by error propagation at Dingo line 55, col 1
 // would fail verification if the Dingo source has "userID" at that position.
@@ -527,24 +758,24 @@ func (b *Builder) verifyIdentInSource(name string, line, col int) (bool, int) {
 		return true, col
 	}
 
-	// Find the line in Dingo source (1-indexed)
-	lineStart := 0
-	currentLine := 1
-	for i, c := range b.dingoSource {
-		if currentLine == line {
-			lineStart = i
-			break
-		}
-		if c == '\n' {
-			currentLine++
-		}
+	// Use token.File for line→offset conversion (CLAUDE.md compliant)
+	// This avoids manual newline counting
+	if b.dingoSourceFile == nil {
+		// Fallback if not initialized
+		return true, col
 	}
-	if currentLine != line {
-		// Line not found - might be beyond source
+
+	// Check line bounds
+	lineCount := b.dingoSourceFile.LineCount()
+	if line < 1 || line > lineCount {
 		return false, 0
 	}
 
-	// Find line end
+	// Get line start offset using token system
+	lineStartPos := b.dingoSourceFile.LineStart(line)
+	lineStart := int(lineStartPos) - b.dingoSourceFile.Base()
+
+	// Find line end by scanning from lineStart
 	lineEnd := lineStart
 	for lineEnd < len(b.dingoSource) && b.dingoSource[lineEnd] != '\n' {
 		lineEnd++
@@ -574,20 +805,23 @@ func (b *Builder) verifyIdentInSource(name string, line, col int) (bool, int) {
 		}
 	}
 
-	// Not found within ±2 tolerance - try searching the entire line
-	// This handles error propagation lambdas where column positions don't match
-	// due to transformation (e.g., `? |err| NewAppError(...)` → `return NewAppError(...)`)
+	// Not found within ±2 column tolerance
+	// Fall back to searching the entire line for the identifier
+	// This is necessary for lambda bodies in error propagation:
+	// - Go line 72: return NewAppError(403, "permission denied", err2)
+	// - This line is within the error prop range [70, 74] mapping to Dingo line 63
+	// - But the column mapping only covers line 70, not 72
+	// - So we need to search the whole line to find NewAppError
 	//
-	// Safety: We only accept identifiers that go/types found in the generated Go,
-	// and //line directives ensure they map to the correct Dingo line.
-	// Searching the line is safe because we're looking for the SAME identifier.
-	foundIdx := findIdentifierInLine(lineContent, name)
-	if foundIdx >= 0 {
-		actualCol := foundIdx + 1 // Convert 0-indexed to 1-indexed
-		return true, actualCol
+	// We only do this for identifiers that are relatively unique (>=4 chars)
+	// to avoid false matches with short common names
+	if len(name) >= 4 {
+		foundIdx := findIdentifierInLine(lineContent, name)
+		if foundIdx >= 0 {
+			return true, foundIdx + 1 // Convert 0-indexed to 1-indexed
+		}
 	}
 
-	// Truly not found on this line
 	return false, 0
 }
 
@@ -628,10 +862,10 @@ func isIdentChar(c byte) bool {
 // This enables accurate hover when multiple Go entities map to the same Dingo line.
 func (b *Builder) translateGoColumn(goLine, goCol int) (dingoCol int, found bool) {
 	// Look for a column mapping that contains this position
-	// NOTE: goLine is the line as reported by Go FileSet, which equals DingoLine
-	// due to //line directives. So we match against DingoLine, not GoLine.
+	// NOTE: Without //line directives, goLine is the actual Go line number.
+	// We match against m.GoLine (the Go line in the mapping).
 	for _, m := range b.columnMappings {
-		if m.DingoLine == goLine {
+		if m.GoLine == goLine {
 			// Check if column falls within the mapped expression range
 			// The mapping covers [GoCol, GoCol + Length)
 			if goCol >= m.GoCol && goCol < m.GoCol+m.Length {
@@ -648,19 +882,16 @@ func (b *Builder) translateGoColumn(goLine, goCol int) (dingoCol int, found bool
 }
 
 // inferContext determines Dingo-specific context for an entity
+// NOTE: This no longer adds error propagation context just because a type is Option/Result.
+// Error propagation context is only added for:
+// 1. The ? operator (detected separately in detectOperators)
+// 2. Variables that are the RESULT of unwrapping via ? (TODO: track during transformation)
+//
+// A field of type Option[string] should show Option[string], not "string (from Option)"
 func (b *Builder) inferContext(node ast.Node, typ types.Type) *DingoContext {
-	// Check if this is an unwrapped Result/Option type
-	unwrapped, original, ok := b.extractResultType(typ)
-	if ok {
-		return &DingoContext{
-			Kind:          ContextErrorProp,
-			OriginalType:  original,
-			UnwrappedType: unwrapped,
-			Description:   "From error propagation",
-		}
-	}
-
-	// No special context
+	// Currently no automatic context inference
+	// Error propagation context is handled by detectOperators for ? operators
+	// Regular Option/Result fields should just show their actual type
 	return nil
 }
 

@@ -338,8 +338,14 @@ func handler() {
 }
 `)
 
+	// Create dingoSourceFile for token-based line/column lookup (CLAUDE.md compliant)
+	fset := token.NewFileSet()
+	file := fset.AddFile("test.dingo", fset.Base(), len(source))
+	file.SetLinesForContent(source)
+
 	builder := &Builder{
-		dingoSource: source,
+		dingoSource:     source,
+		dingoSourceFile: file,
 	}
 
 	tests := []struct {
@@ -361,10 +367,11 @@ func handler() {
 		{"wrong name at correct line", "foo", 4, 2, false},
 
 		// Edge cases
-		// "beyond line length" now succeeds due to whole-line search fallback
-		// This is intentional: enables hover on lambda bodies where column positions
-		// don't match. Safety: identifier name must match, so we're finding the SAME identifier.
-		{"beyond line length finds via line search", "userID", 4, 100, true},
+		// "beyond line length" now finds identifier via whole-line search fallback.
+		// This is needed for lambda bodies in error prop ranges where the column
+		// mapping doesn't apply (e.g., NewAppError in error prop lambda).
+		// Identifiers >=4 chars use line-wide search when column tolerance fails.
+		{"beyond line length finds via fallback", "userID", 4, 100, true},
 		{"line beyond source", "userID", 100, 1, false},
 		// col zero now finds userID at col 2 due to ±2 tolerance
 		{"col zero finds nearby", "userID", 4, 0, true},
