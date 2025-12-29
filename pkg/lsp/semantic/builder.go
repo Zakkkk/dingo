@@ -498,7 +498,7 @@ func (b *Builder) computeImportOffset() {
 
 		inImportBlock := false
 		for {
-			pos, tok, _ := s.Scan()
+			pos, tok, lit := s.Scan()
 			if tok == token.EOF {
 				break
 			}
@@ -517,9 +517,12 @@ func (b *Builder) computeImportOffset() {
 				b.dingoImportEnd = position.Line
 			}
 
-			// Find first declaration keyword (type, func, const, var)
+			// Find first declaration keyword (type, func, const, var, or enum)
+			// Note: "enum" is a Dingo keyword that Go's scanner sees as IDENT
 			if !inImportBlock && dingoFirstDeclLine == 0 {
-				if tok == token.TYPE || tok == token.FUNC || tok == token.CONST || tok == token.VAR {
+				isGoDecl := tok == token.TYPE || tok == token.FUNC || tok == token.CONST || tok == token.VAR
+				isDingoEnum := tok == token.IDENT && lit == "enum"
+				if isGoDecl || isDingoEnum {
 					dingoFirstDeclLine = position.Line
 					break // Found the first declaration
 				}
@@ -631,15 +634,21 @@ func (b *Builder) collectDingoDeclarations() map[string]int {
 	s.Init(file, b.dingoSource, func(pos token.Position, msg string) {}, scanner.ScanComments)
 
 	// State machine for finding declarations
+	// Track both token type and literal for Dingo-specific keywords like "enum"
 	var prevTok token.Token
+	var prevLit string
 	for {
 		pos, tok, lit := s.Scan()
 		if tok == token.EOF {
 			break
 		}
 
-		// After "type", "func", "const", or "var", the next IDENT is a declaration name
-		if prevTok == token.TYPE || prevTok == token.FUNC || prevTok == token.CONST || prevTok == token.VAR {
+		// After "type", "func", "const", "var", or "enum", the next IDENT is a declaration name
+		// Note: "enum" is a Dingo keyword that Go's scanner sees as IDENT
+		isGoDecl := prevTok == token.TYPE || prevTok == token.FUNC || prevTok == token.CONST || prevTok == token.VAR
+		isDingoEnum := prevTok == token.IDENT && prevLit == "enum"
+
+		if isGoDecl || isDingoEnum {
 			if tok == token.IDENT {
 				line := fset.Position(pos).Line
 				decls[lit] = line
@@ -647,6 +656,7 @@ func (b *Builder) collectDingoDeclarations() map[string]int {
 		}
 
 		prevTok = tok
+		prevLit = lit
 	}
 
 	return decls
