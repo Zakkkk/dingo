@@ -82,7 +82,7 @@ func (r *Runner) RunSpec(spec *Spec) ([]CaseResult, error) {
 			for _, line := range lines[start:] {
 				fmt.Println(line)
 			}
-			fmt.Println("=== End LSP Stderr ===\n")
+			fmt.Println("\n=== End LSP Stderr ===")
 		}
 	}
 

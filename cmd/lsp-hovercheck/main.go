@@ -20,7 +20,8 @@ import (
 )
 
 var (
-	specGlob   = flag.String("spec", "ai-docs/hover-specs/*.yaml", "Glob pattern for spec files")
+	specGlob   = flag.String("spec", "", "Glob pattern for YAML spec files (e.g., ai-docs/hover-specs/*.yaml)")
+	autoScan   = flag.String("auto-scan", "", "Glob pattern for .dingo files to auto-scan (e.g., examples/*/*.dingo)")
 	dingoLSP   = flag.String("dingo-lsp", "./editors/vscode/server/bin/dingo-lsp", "Path to dingo-lsp binary")
 	dingoBin   = flag.String("dingo", "./dingo", "Path to dingo binary")
 	timeout    = flag.Int("timeout", 30, "Timeout in seconds for LSP operations")
@@ -46,16 +47,24 @@ func main() {
 		return
 	}
 
-	// Find spec files
-	specFiles, err := filepath.Glob(*specGlob)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error finding spec files: %v\n", err)
+	// Require at least one of --spec or --auto-scan
+	if *specGlob == "" && *autoScan == "" {
+		fmt.Fprintf(os.Stderr, "Usage: lsp-hovercheck --spec <glob> [--auto-scan <glob>]\n")
+		fmt.Fprintf(os.Stderr, "  --spec ai-docs/hover-specs/*.yaml     Run YAML spec tests\n")
+		fmt.Fprintf(os.Stderr, "  --auto-scan examples/*/*.dingo        Auto-scan .dingo files\n")
+		fmt.Fprintf(os.Stderr, "  Both flags can be used together\n")
 		os.Exit(1)
 	}
 
-	if len(specFiles) == 0 {
-		fmt.Fprintf(os.Stderr, "No spec files found matching: %s\n", *specGlob)
-		os.Exit(1)
+	// Find YAML spec files
+	var specFiles []string
+	if *specGlob != "" {
+		var err error
+		specFiles, err = filepath.Glob(*specGlob)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error finding spec files: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Verify binaries exist
@@ -80,25 +89,81 @@ func main() {
 
 	if *verbose {
 		fmt.Printf("Workspace root: %s\n", workspaceRoot)
-		fmt.Printf("Spec files: %v\n", specFiles)
+		if len(specFiles) > 0 {
+			fmt.Printf("Spec files: %v\n", specFiles)
+		}
+		if *autoScan != "" {
+			fmt.Printf("Auto-scan pattern: %s\n", *autoScan)
+		}
 		fmt.Printf("dingo-lsp: %s\n", *dingoLSP)
 		fmt.Printf("dingo: %s\n", *dingoBin)
 		fmt.Println()
 	}
 
-	// Process each spec file
-	var allResults []CaseResult
-	var totalPassed, totalFailed int
+	// Collect all specs (from YAML files and auto-scan)
+	type specSource struct {
+		spec     *Spec
+		filename string // Source filename for display (YAML file or .dingo file)
+		isAuto   bool   // Whether from auto-scan
+	}
+	var allSpecs []specSource
 
+	// Load YAML specs
 	for _, specFile := range specFiles {
-		if *verbose {
-			fmt.Printf("=== Processing %s ===\n", specFile)
-		}
-
 		spec, err := LoadSpec(specFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading spec %s: %v\n", specFile, err)
 			continue
+		}
+		allSpecs = append(allSpecs, specSource{
+			spec:     spec,
+			filename: specFile,
+			isAuto:   false,
+		})
+	}
+
+	// Auto-scan .dingo files
+	var autoStats AutoScanStats
+	if *autoScan != "" {
+		scanner := &AutoScanner{
+			WorkspaceRoot: workspaceRoot,
+			Verbose:       *verbose,
+		}
+		autoSpecs, err := scanner.ScanFiles(*autoScan)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Auto-scan error: %v\n", err)
+		} else {
+			autoStats.TotalFiles = len(autoSpecs)
+			for _, spec := range autoSpecs {
+				autoStats.TotalIdentifiers += len(spec.Cases)
+				allSpecs = append(allSpecs, specSource{
+					spec:     spec,
+					filename: spec.File,
+					isAuto:   true,
+				})
+			}
+			if *verbose {
+				fmt.Printf("Auto-scan found %d files with %d identifiers\n\n",
+					autoStats.TotalFiles, autoStats.TotalIdentifiers)
+			}
+		}
+	}
+
+	if len(allSpecs) == 0 {
+		fmt.Fprintf(os.Stderr, "No specs to run (no YAML specs and no auto-scanned files)\n")
+		os.Exit(1)
+	}
+
+	// Process each spec
+	var allResults []CaseResult
+	var totalPassed, totalFailed int
+
+	for _, ss := range allSpecs {
+		spec := ss.spec
+		specFile := ss.filename
+
+		if *verbose {
+			fmt.Printf("=== Processing %s ===\n", specFile)
 		}
 
 		// Build the dingo file
@@ -136,18 +201,37 @@ func main() {
 		}
 
 		for _, r := range results {
+			if ss.isAuto {
+				autoStats.TestedCount++
+			}
+
 			if r.Passed {
 				totalPassed++
+				if ss.isAuto {
+					autoStats.PassedCount++
+				}
 				if !*jsonOutput {
 					fmt.Printf("%d: works\n", r.ID)
 				}
 			} else {
-				totalFailed++
-				if !*jsonOutput {
-					if r.Error != "" {
-						fmt.Printf("%d: error - %s\n", r.ID, r.Error)
-					} else {
-						fmt.Printf("%d: expected %q, got %q\n", r.ID, r.Expected, truncate(r.Got, 60))
+				// For auto-scan, empty hover is not a failure (some positions legitimately have no hover)
+				isNoHover := r.Got == "" && ss.isAuto
+				if isNoHover {
+					autoStats.NoHoverCount++
+					if !*jsonOutput && *verbose {
+						fmt.Printf("%d: no hover (not a failure)\n", r.ID)
+					}
+				} else {
+					totalFailed++
+					if ss.isAuto {
+						autoStats.FailedCount++
+					}
+					if !*jsonOutput {
+						if r.Error != "" {
+							fmt.Printf("%d: error - %s\n", r.ID, r.Error)
+						} else {
+							fmt.Printf("%d: expected %q, got %q\n", r.ID, r.Expected, truncate(r.Got, 60))
+						}
 					}
 				}
 			}
@@ -166,6 +250,11 @@ func main() {
 		fmt.Println()
 		fmt.Println(strings.Repeat("=", 60))
 		fmt.Printf("Total: %d passed, %d failed\n", totalPassed, totalFailed)
+
+		// Print auto-scan stats if used
+		if *autoScan != "" {
+			autoStats.PrintStats()
+		}
 
 		if totalFailed > 0 {
 			os.Exit(1)

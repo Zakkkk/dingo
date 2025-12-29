@@ -28,11 +28,12 @@ type TestCase struct {
 
 // Expectation defines what hover result to expect
 type Expectation struct {
-	Contains    string   `yaml:"contains"`    // Must contain this substring
-	ContainsAny []string `yaml:"containsAny"` // Must contain any of these
-	NotContains string   `yaml:"notContains"` // Must not contain this
-	AllowAny    bool     `yaml:"allowAny"`    // Accept any result (skip assertion)
-	Regex       string   `yaml:"regex"`       // Match against regex (optional)
+	Contains        string   `yaml:"contains"`        // Must contain this substring
+	ContainsAny     []string `yaml:"containsAny"`     // Must contain any of these
+	NotContains     string   `yaml:"notContains"`     // Must not contain this
+	AllowAny        bool     `yaml:"allowAny"`        // Accept any result (skip assertion)
+	RequireNonEmpty bool     `yaml:"requireNonEmpty"` // Require non-empty hover (for auto-scan)
+	Regex           string   `yaml:"regex"`           // Match against regex (optional)
 }
 
 // CaseResult holds the result of running a test case
@@ -78,6 +79,14 @@ func (e *Expectation) CheckExpectation(hoverText string) (bool, string) {
 
 	// Normalize hover text (remove extra whitespace, handle markdown)
 	normalized := normalizeHoverText(hoverText)
+
+	// RequireNonEmpty: just check that we got something
+	if e.RequireNonEmpty {
+		if normalized != "" {
+			return true, ""
+		}
+		return false, "non-empty hover"
+	}
 
 	if e.Contains != "" {
 		if strings.Contains(normalized, e.Contains) {
