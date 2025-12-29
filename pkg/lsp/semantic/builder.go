@@ -171,11 +171,30 @@ func (b *Builder) handleIdent(node *ast.Ident) *SemanticEntity {
 		return nil
 	}
 
+	// Get the name to verify in Dingo source
+	// For enum variants, Go uses "EnumVariant" but Dingo uses just "Variant"
+	verifyName := node.Name
+	isEnumVariant := false
+	if typeName, ok := obj.(*types.TypeName); ok {
+		if variantName := extractDingoVariantName(typeName.Type()); variantName != "" {
+			verifyName = variantName
+			isEnumVariant = true
+		}
+	}
+
 	// Verify the identifier exists in Dingo source at this position
 	// Use fuzzy matching because go/printer can cause line drift (reformatting comments)
 	// This filters out generated identifiers (like tmp, err from error propagation)
 	// Also get the actual adjusted line/column for entity storage
-	actualLine, actualCol, verified := b.verifyIdentFuzzy(node.Name, dingoLine, dingoCol)
+	var actualLine, actualCol int
+	var verified bool
+	if isEnumVariant {
+		// For enum variants, search the entire file because the Go enum expansion
+		// creates multiple types at different positions than the Dingo source
+		actualLine, actualCol, verified = b.findIdentInSource(verifyName)
+	} else {
+		actualLine, actualCol, verified = b.verifyIdentFuzzy(verifyName, dingoLine, dingoCol)
+	}
 	if !verified {
 		return nil
 	}
@@ -194,12 +213,56 @@ func (b *Builder) handleIdent(node *ast.Ident) *SemanticEntity {
 	return &SemanticEntity{
 		Line:    dingoLine,
 		Col:     actualCol,
-		EndCol:  actualCol + len(node.Name),
+		EndCol:  actualCol + len(verifyName),
 		Kind:    KindIdent,
 		Object:  obj,
 		Type:    entityType,
 		Context: context,
 	}
+}
+
+// extractDingoVariantName extracts the Dingo variant name from a Go enum variant type.
+// Go enum variants are named "<Enum><Variant>" but Dingo uses just "<Variant>".
+// Returns empty string if not an enum variant.
+func extractDingoVariantName(t types.Type) string {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return ""
+	}
+
+	// Must be a struct
+	if _, ok := named.Underlying().(*types.Struct); !ok {
+		return ""
+	}
+
+	// Check for marker method is<Enum>()
+	var enumName string
+	for i := 0; i < named.NumMethods(); i++ {
+		method := named.Method(i)
+		if strings.HasPrefix(method.Name(), "is") && len(method.Name()) > 2 {
+			sig := method.Type().(*types.Signature)
+			if sig.Params().Len() == 0 && sig.Results().Len() == 0 {
+				enumName = method.Name()[2:] // Strip "is" prefix
+				break
+			}
+		}
+	}
+
+	if enumName == "" {
+		return ""
+	}
+
+	// Strip enum prefix to get variant name
+	typeName := named.Obj().Name()
+	if !strings.HasPrefix(typeName, enumName) {
+		return ""
+	}
+	variantName := typeName[len(enumName):]
+	if variantName == "" {
+		return ""
+	}
+
+	return variantName
 }
 
 // handleCallExpr processes a function call expression
@@ -743,6 +806,38 @@ func (b *Builder) verifyIdentFuzzy(name string, line, col int) (int, int, bool) 
 	if found {
 		return line, actualCol, true
 	}
+	return 0, 0, false
+}
+
+// findIdentInSource searches the entire Dingo source for an identifier using go/scanner.
+// Used for enum variants where position mapping breaks down due to Go expansion.
+// Returns (line, col, found) where line/col are 1-indexed.
+//
+// CLAUDE.md COMPLIANT: Uses go/scanner for tokenization instead of string scanning.
+// Position information flows through the token system.
+func (b *Builder) findIdentInSource(name string) (int, int, bool) {
+	if b.dingoSource == nil || len(b.dingoSource) == 0 {
+		return 0, 0, false
+	}
+
+	// Use go/scanner to find the identifier token
+	var s scanner.Scanner
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(b.dingoSource))
+	// Ignore errors - Dingo syntax extensions may cause scanner errors
+	s.Init(file, b.dingoSource, func(pos token.Position, msg string) {}, scanner.ScanComments)
+
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok == token.IDENT && lit == name {
+			position := fset.Position(pos)
+			return position.Line, position.Column, true
+		}
+	}
+
 	return 0, 0, false
 }
 

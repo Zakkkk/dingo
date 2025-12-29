@@ -143,6 +143,28 @@ func formatObjectHover(entity *SemanticEntity, pkg *types.Package) string {
 
 // formatObjectHoverWithDocs formats hover with optional documentation.
 func formatObjectHoverWithDocs(entity *SemanticEntity, pkg *types.Package, docProvider *DocProvider) string {
+	// Check for types that have their own complete hover formatting
+	// These return full markdown including code fences
+	if typeName, ok := entity.Object.(*types.TypeName); ok {
+		// Check for dgo types (Result, Option)
+		if dgoInfo := detectDgoType(typeName.Type()); dgoInfo != nil {
+			switch dgoInfo.TypeName {
+			case "Result":
+				return formatDgoResultHover(dgoInfo, pkg)
+			case "Option":
+				return formatDgoOptionHover(dgoInfo, pkg)
+			}
+		}
+		// Check for Dingo enum types
+		if enumInfo := detectDingoEnumType(typeName.Type()); enumInfo != nil {
+			return formatDingoEnumHover(enumInfo)
+		}
+		// Check for Dingo enum variants
+		if variantInfo := detectDingoVariantType(typeName.Type(), pkg); variantInfo != nil {
+			return formatDingoVariantHover(variantInfo)
+		}
+	}
+
 	var b strings.Builder
 
 	b.WriteString("```go\n")
@@ -214,6 +236,10 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 				return fmt.Sprintf("var %s %s", obj.Name(), formatDgoTypeShort(dgoInfo, pkg))
 			}
 		}
+		// Check if variable has enum type
+		if enumInfo := detectDingoEnumType(obj.Type()); enumInfo != nil {
+			return fmt.Sprintf("var %s %s", obj.Name(), enumInfo.Name)
+		}
 		if obj.IsField() {
 			return fmt.Sprintf("field %s %s", obj.Name(), formatType(obj.Type(), pkg))
 		}
@@ -227,15 +253,8 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 		return fmt.Sprintf("func %s%s", obj.Name(), formatSignatureType(sig, pkg))
 
 	case *types.TypeName:
-		// Check for dgo types (Result, Option)
-		if dgoInfo := detectDgoType(obj.Type()); dgoInfo != nil {
-			switch dgoInfo.TypeName {
-			case "Result":
-				return formatDgoResultHover(dgoInfo, pkg)
-			case "Option":
-				return formatDgoOptionHover(dgoInfo, pkg)
-			}
-		}
+		// Note: dgo types, enums, and variants are handled in formatObjectHoverWithDocs
+		// before calling formatSignature, so they won't reach here.
 		return fmt.Sprintf("type %s %s", obj.Name(), formatType(obj.Type().Underlying(), pkg))
 
 	default:
@@ -474,6 +493,179 @@ func formatDgoOptionHover(info *dgoTypeInfo, pkg *types.Package) string {
 
 	// Constructors
 	b.WriteString(fmt.Sprintf("\n*Constructors:* `Some(value)`, `None[%s]()`", tStr))
+
+	return b.String()
+}
+
+// dingoEnumInfo holds information about a Dingo enum type
+type dingoEnumInfo struct {
+	Name     string   // Enum name (e.g., "Event")
+	Variants []string // Variant names (e.g., ["UserCreated", "UserDeleted", ...])
+}
+
+// dingoVariantInfo holds information about a Dingo enum variant
+type dingoVariantInfo struct {
+	EnumName    string            // Parent enum name (e.g., "Event")
+	VariantName string            // Variant name without prefix (e.g., "UserCreated")
+	Fields      []dingoFieldInfo  // Variant fields
+}
+
+// dingoFieldInfo holds information about a variant field
+type dingoFieldInfo struct {
+	Name string
+	Type string
+}
+
+// detectDingoEnumType checks if a type is a Dingo enum (interface with is<Name>() marker)
+func detectDingoEnumType(t types.Type) *dingoEnumInfo {
+	if t == nil {
+		return nil
+	}
+
+	// Get the named type
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+
+	// Get the underlying interface
+	iface, ok := named.Underlying().(*types.Interface)
+	if !ok {
+		return nil
+	}
+
+	// Check for the marker method pattern: is<EnumName>()
+	// Dingo enums have exactly one method: is<Name>()
+	if iface.NumMethods() != 1 {
+		return nil
+	}
+
+	method := iface.Method(0)
+	methodName := method.Name()
+
+	// Check if method name matches pattern "is<Name>"
+	enumName := named.Obj().Name()
+	expectedMethodName := "is" + enumName
+	if methodName != expectedMethodName {
+		return nil
+	}
+
+	// Verify method signature: no params, no returns
+	sig := method.Type().(*types.Signature)
+	if sig.Params().Len() != 0 || sig.Results().Len() != 0 {
+		return nil
+	}
+
+	return &dingoEnumInfo{
+		Name:     enumName,
+		Variants: nil, // We could populate variants by scanning the package, but skip for now
+	}
+}
+
+// formatDingoEnumHover formats hover for a Dingo enum type
+func formatDingoEnumHover(info *dingoEnumInfo) string {
+	var b strings.Builder
+
+	// Dingo-style enum declaration
+	b.WriteString("```dingo\n")
+	b.WriteString(fmt.Sprintf("enum %s\n", info.Name))
+	b.WriteString("```\n\n")
+
+	// Description
+	b.WriteString("**Sum type** (tagged union)\n\n")
+
+	// Usage hint
+	b.WriteString("Use `match` for exhaustive pattern matching")
+
+	return b.String()
+}
+
+// detectDingoVariantType checks if a type is a Dingo enum variant
+// Variants are structs with names like <Enum><Variant> that have a method is<Enum>()
+func detectDingoVariantType(t types.Type, pkg *types.Package) *dingoVariantInfo {
+	if t == nil {
+		return nil
+	}
+
+	// Get the named type
+	named, ok := t.(*types.Named)
+	if !ok {
+		return nil
+	}
+
+	// Must be a struct
+	structType, ok := named.Underlying().(*types.Struct)
+	if !ok {
+		return nil
+	}
+
+	// Check if it has a marker method is<Something>()
+	// This indicates it's an enum variant
+	var enumName string
+	for i := 0; i < named.NumMethods(); i++ {
+		method := named.Method(i)
+		if strings.HasPrefix(method.Name(), "is") && len(method.Name()) > 2 {
+			// Verify method signature: no params, no returns
+			sig := method.Type().(*types.Signature)
+			if sig.Params().Len() == 0 && sig.Results().Len() == 0 {
+				enumName = method.Name()[2:] // Strip "is" prefix
+				break
+			}
+		}
+	}
+
+	if enumName == "" {
+		return nil
+	}
+
+	// Variant name is the type name with enum prefix stripped
+	typeName := named.Obj().Name()
+	if !strings.HasPrefix(typeName, enumName) {
+		return nil
+	}
+	variantName := typeName[len(enumName):]
+	if variantName == "" {
+		return nil
+	}
+
+	// Collect fields
+	var fields []dingoFieldInfo
+	for i := 0; i < structType.NumFields(); i++ {
+		field := structType.Field(i)
+		fields = append(fields, dingoFieldInfo{
+			Name: field.Name(),
+			Type: formatType(field.Type(), pkg),
+		})
+	}
+
+	return &dingoVariantInfo{
+		EnumName:    enumName,
+		VariantName: variantName,
+		Fields:      fields,
+	}
+}
+
+// formatDingoVariantHover formats hover for a Dingo enum variant
+func formatDingoVariantHover(info *dingoVariantInfo) string {
+	var b strings.Builder
+
+	// Dingo-style variant declaration
+	b.WriteString("```dingo\n")
+	b.WriteString(fmt.Sprintf("%s.%s", info.EnumName, info.VariantName))
+	if len(info.Fields) > 0 {
+		b.WriteString(" { ")
+		for i, f := range info.Fields {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(fmt.Sprintf("%s: %s", f.Name, f.Type))
+		}
+		b.WriteString(" }")
+	}
+	b.WriteString("\n```\n\n")
+
+	// Description
+	b.WriteString(fmt.Sprintf("Variant of `enum %s`", info.EnumName))
 
 	return b.String()
 }
