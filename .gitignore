@@ -96,3 +96,6 @@ specs/tools
 
 # Claudemem database (ephemeral)
 .claudemem/
+
+# VS Code compiled output
+editors/vscode/out/
