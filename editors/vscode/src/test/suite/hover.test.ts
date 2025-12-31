@@ -6,6 +6,7 @@ import {
 	openDocument,
 	getHoverAt,
 	getHoverAtText,
+	getHoverAtToken,
 	normalizeHover,
 	sleep,
 } from './helpers';
@@ -510,6 +511,254 @@ suite('Go Native Hover Tests', () => {
 			this.timeout(10000);
 			const { hover, position } = await getHoverAtText(document, '"encoding/json"');
 			assert.ok(position, 'Should find import');
+		});
+	});
+});
+
+// ============================================================================
+// TRANSFORM POSITION TESTS (KNOWN FAILURES)
+// Tests for positions that are affected by Dingo -> Go transformations
+// These test specific positions that should have hover but currently don't
+// ============================================================================
+
+suite('Transform Position Tests', () => {
+	suiteSetup(async function () {
+		this.timeout(30000);
+		await waitForLSP(10000);
+	});
+
+	// These tests target known broken positions - they document bugs
+
+	suite('Result/Option Type Parameters', () => {
+		test('Result second type param - DBError in Result[User, DBError]', async function () {
+			this.timeout(20000);
+
+			// repository.dingo line 54: func FindUserByID(...) Result[User, DBError] {
+			const filePath = getExamplePath('02_result/repository.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Find "Result[User, DBError]" and position at "DBError" within it
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'Result[User, DBError]',
+				'DBError'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find DBError in Result[User, DBError]');
+			assert.ok(
+				normalized && (normalized.includes('DBError') || normalized.includes('struct') || normalized.includes('type')),
+				`DBError type param should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Result first type param - User in Result[User, DBError]', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('02_result/repository.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Find "Result[User, DBError]" and position at "User" within it
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'Result[User, DBError]',
+				'User'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find User in Result[User, DBError]');
+			assert.ok(
+				normalized && (normalized.includes('User') || normalized.includes('struct') || normalized.includes('type')),
+				`User type param should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Struct literal in transformed return - DBError{}', async function () {
+			this.timeout(20000);
+
+			// repository.dingo line 60: return DBError{Code: "NOT_FOUND", ...}
+			const filePath = getExamplePath('02_result/repository.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Find the DBError struct literal by its unique context
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'return DBError{Code:',
+				'DBError'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find DBError struct literal');
+			assert.ok(
+				normalized && (normalized.includes('DBError') || normalized.includes('struct')),
+				`DBError struct literal should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Struct field in literal - Code field', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('02_result/repository.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Find Code field in struct literal
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'DBError{Code: "NOT_FOUND"',
+				'Code'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find Code field');
+			assert.ok(
+				normalized && (normalized.includes('Code') || normalized.includes('field') || normalized.includes('string')),
+				`Code field should have hover, got: ${normalized}`
+			);
+		});
+	});
+
+	suite('Match Arm Variables', () => {
+		test('Destructured variable - userID in match arm', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('04_pattern_matching/event_handler.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Line 30: UserCreated(userID, email) =>
+			// Find userID specifically in the match arm pattern
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'UserCreated(userID, email)',
+				'userID'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find userID in match arm');
+			assert.ok(
+				normalized && (normalized.includes('userID') || normalized.includes('int') || normalized.includes('var')),
+				`userID should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Destructured variable - email in match arm', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('04_pattern_matching/event_handler.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Find email in the match arm pattern
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'UserCreated(userID, email)',
+				'email'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find email in match arm');
+			assert.ok(
+				normalized && (normalized.includes('email') || normalized.includes('string') || normalized.includes('var')),
+				`email should have hover, got: ${normalized}`
+			);
+		});
+	});
+
+	suite('Safe Navigation Fields', () => {
+		test('Database field in config?.Database', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('08_safe_navigation/config.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Line 63: config?.Database?.Host ?? "localhost"
+			// Position at "Database" within the safe nav chain
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'config?.Database?.Host',
+				'Database'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find Database field');
+			assert.ok(
+				normalized && (normalized.includes('Database') || normalized.includes('DatabaseConfig') || normalized.includes('field')),
+				`Database field should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Host field in config?.Database?.Host', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('08_safe_navigation/config.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Position at "Host" within the safe nav chain
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'config?.Database?.Host',
+				'Host'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find Host field');
+			assert.ok(
+				normalized && (normalized.includes('Host') || normalized.includes('string') || normalized.includes('field')),
+				`Host field should have hover, got: ${normalized}`
+			);
+		});
+	});
+
+	suite('Null Coalesce Variables', () => {
+		test('Host field before ??', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('10_null_coalesce/defaults.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Line 37: config?.Host ?? "localhost"
+			// Position at "Host" before the ??
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'config?.Host ?? "localhost"',
+				'Host'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find Host field');
+			assert.ok(
+				normalized && (normalized.includes('Host') || normalized.includes('string') || normalized.includes('field')),
+				`Host field should have hover, got: ${normalized}`
+			);
+		});
+
+		test('Port field before ??', async function () {
+			this.timeout(20000);
+
+			const filePath = getExamplePath('10_null_coalesce/defaults.dingo');
+			const document = await openDocument(filePath);
+			await sleep(2000);
+
+			// Line 42: config?.Port ?? 8080
+			const { hover, position } = await getHoverAtToken(
+				document,
+				'config?.Port ?? 8080',
+				'Port'
+			);
+			const normalized = normalizeHover(hover);
+
+			assert.ok(position, 'Should find Port field');
+			assert.ok(
+				normalized && (normalized.includes('Port') || normalized.includes('int') || normalized.includes('field')),
+				`Port field should have hover, got: ${normalized}`
+			);
 		});
 	});
 });

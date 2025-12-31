@@ -144,3 +144,41 @@ export async function getHoverAtText(
 	const hover = await getHoverAt(document, position.line, position.character);
 	return { hover, position };
 }
+
+// Find anchor text, then offset to a specific token within it
+// Example: getHoverAtToken(doc, "Result[User, DBError]", "DBError")
+// finds "Result[User, DBError]" then positions at "DBError" within it
+export async function getHoverAtToken(
+	document: vscode.TextDocument,
+	anchorText: string,
+	targetToken: string,
+	anchorOccurrence: number = 1
+): Promise<{ hover: string | null; position: vscode.Position | null }> {
+	// Find the anchor text first
+	const anchorPos = findTextPosition(document, anchorText, anchorOccurrence);
+	if (!anchorPos) {
+		console.log(`[TEST] Could not find anchor "${anchorText}" in document`);
+		return { hover: null, position: null };
+	}
+
+	// Find the token within the anchor text
+	const tokenOffset = anchorText.indexOf(targetToken);
+	if (tokenOffset === -1) {
+		console.log(`[TEST] Could not find token "${targetToken}" within anchor "${anchorText}"`);
+		return { hover: null, position: null };
+	}
+
+	// Calculate the actual position
+	const lineText = document.lineAt(anchorPos.line).text;
+	const actualChar = anchorPos.character + tokenOffset;
+	const position = new vscode.Position(anchorPos.line, actualChar);
+
+	// Show the actual line content and cursor position for verification
+	const marker = ' '.repeat(actualChar) + '^';
+	console.log(`[TEST] Found "${targetToken}" within "${anchorText}" at line ${position.line + 1}, col ${actualChar + 1}`);
+	console.log(`[TEST] Line: ${lineText}`);
+	console.log(`[TEST] Pos:  ${marker}`);
+
+	const hover = await getHoverAt(document, position.line, position.character);
+	return { hover, position };
+}
