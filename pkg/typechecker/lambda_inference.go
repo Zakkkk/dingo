@@ -86,7 +86,10 @@ func NewLambdaTypeInferrerWithConfig(fset *token.FileSet, file *ast.File, info *
 // Returns true if any changes were made.
 func (inf *LambdaTypeInferrer) Infer() bool {
 	inf.changed = false
+	// Layer 1-4: Infer types from call context
 	ast.Inspect(inf.file, inf.visit)
+	// Layer 5: Infer return types for standalone lambdas with typed parameters
+	inf.inferStandaloneLambdas()
 	return inf.changed
 }
 
@@ -1285,6 +1288,325 @@ func (inf *LambdaTypeInferrer) extractReturnExpression(body *ast.BlockStmt) ast.
 		}
 	}
 
+	return nil
+}
+
+// inferStandaloneLambdas is Layer 5 of type inference.
+// It handles standalone lambdas (assigned to variables) that have typed parameters
+// but unresolved 'any' return types.
+//
+// For example: add := |x: int, y: int| x + y
+// Generated:   add := func(x int, y int) any { return x + y }
+//
+// This method analyzes the return expression's type using go/types and rewrites
+// the 'any' return type to the inferred concrete type.
+func (inf *LambdaTypeInferrer) inferStandaloneLambdas() {
+	// Find all function literals that:
+	// 1. Have all parameters typed (not 'any')
+	// 2. Have 'any' as return type
+	// 3. Have a return expression we can analyze
+	ast.Inspect(inf.file, func(n ast.Node) bool {
+		funcLit, ok := n.(*ast.FuncLit)
+		if !ok {
+			return true
+		}
+
+		// Skip if no return type or return type is not 'any'
+		if funcLit.Type.Results == nil || len(funcLit.Type.Results.List) == 0 {
+			return true
+		}
+		if len(funcLit.Type.Results.List) != 1 {
+			// Multiple return values - skip for now
+			return true
+		}
+		if !inf.isAnyType(funcLit.Type.Results.List[0].Type) {
+			// Return type is already concrete
+			return true
+		}
+
+		// Check if all parameters are typed (not 'any')
+		if !inf.allParamsTyped(funcLit) {
+			return true
+		}
+
+		// Try to infer return type from body expression
+		returnType := inf.inferReturnTypeFromBody(funcLit)
+		if returnType != nil {
+			// Rewrite the return type
+			newTypeExpr := inf.typeToExpr(returnType)
+			if newTypeExpr != nil {
+				funcLit.Type.Results.List[0].Type = newTypeExpr
+				inf.changed = true
+			}
+		}
+
+		return true
+	})
+}
+
+// allParamsTyped checks if all parameters in a function literal have concrete types.
+func (inf *LambdaTypeInferrer) allParamsTyped(funcLit *ast.FuncLit) bool {
+	if funcLit.Type.Params == nil || len(funcLit.Type.Params.List) == 0 {
+		// No parameters - consider typed
+		return true
+	}
+
+	for _, field := range funcLit.Type.Params.List {
+		if inf.isAnyType(field.Type) {
+			return false
+		}
+	}
+	return true
+}
+
+// inferReturnTypeFromBody analyzes a function literal's body to determine the return type.
+// It uses go/types to type-check the return expression given the parameter types.
+func (inf *LambdaTypeInferrer) inferReturnTypeFromBody(funcLit *ast.FuncLit) types.Type {
+	// Extract the return expression
+	returnExpr := inf.extractReturnExpression(funcLit.Body)
+	if returnExpr == nil {
+		return nil
+	}
+
+	// Try to get the type from info.Types (already computed)
+	if tv, ok := inf.info.Types[returnExpr]; ok && tv.Type != nil {
+		// Handle untyped constants
+		if basic, ok := tv.Type.(*types.Basic); ok {
+			if name := untypedToTypedName(basic.Kind()); name != "" {
+				return types.Universe.Lookup(name).Type()
+			}
+		}
+		return tv.Type
+	}
+
+	// If the expression type isn't in info.Types, try analyzing the expression
+	// This handles cases where the initial type check failed due to 'any' return type
+	return inf.analyzeExpressionType(funcLit, returnExpr)
+}
+
+// analyzeExpressionType performs targeted type analysis on an expression
+// within a function literal context.
+func (inf *LambdaTypeInferrer) analyzeExpressionType(funcLit *ast.FuncLit, expr ast.Expr) types.Type {
+	// Build a map of parameter names to their types
+	paramTypes := make(map[string]types.Type)
+	if funcLit.Type.Params != nil {
+		for _, field := range funcLit.Type.Params.List {
+			// Get the parameter type
+			fieldType := inf.exprToType(field.Type)
+			if fieldType == nil {
+				continue
+			}
+			for _, name := range field.Names {
+				paramTypes[name.Name] = fieldType
+			}
+		}
+	}
+
+	// Analyze the expression based on its structure
+	return inf.evaluateExprType(expr, paramTypes)
+}
+
+// evaluateExprType recursively evaluates the type of an expression
+// given a context of known variable types.
+func (inf *LambdaTypeInferrer) evaluateExprType(expr ast.Expr, ctx map[string]types.Type) types.Type {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		// Variable reference - look up in context or info.Uses
+		if t, ok := ctx[e.Name]; ok {
+			return t
+		}
+		if obj := inf.info.Uses[e]; obj != nil {
+			return obj.Type()
+		}
+
+	case *ast.BasicLit:
+		// Literal value - infer type from literal kind
+		switch e.Kind {
+		case token.INT:
+			return types.Typ[types.Int]
+		case token.FLOAT:
+			return types.Typ[types.Float64]
+		case token.STRING:
+			return types.Typ[types.String]
+		case token.CHAR:
+			return types.Typ[types.Rune]
+		}
+
+	case *ast.BinaryExpr:
+		// Binary operation - type depends on operands and operator
+		leftType := inf.evaluateExprType(e.X, ctx)
+		rightType := inf.evaluateExprType(e.Y, ctx)
+
+		// For arithmetic/comparison operators, result type follows Go rules
+		switch e.Op {
+		case token.ADD, token.SUB, token.MUL, token.QUO, token.REM:
+			// Arithmetic - result is same as operand type
+			if leftType != nil {
+				return leftType
+			}
+			return rightType
+		case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+			// Comparison - result is bool
+			return types.Typ[types.Bool]
+		case token.LAND, token.LOR:
+			// Logical - result is bool
+			return types.Typ[types.Bool]
+		case token.AND, token.OR, token.XOR, token.SHL, token.SHR, token.AND_NOT:
+			// Bitwise - result is same as operand type
+			if leftType != nil {
+				return leftType
+			}
+			return rightType
+		}
+
+	case *ast.UnaryExpr:
+		// Unary operation
+		operandType := inf.evaluateExprType(e.X, ctx)
+		switch e.Op {
+		case token.NOT:
+			return types.Typ[types.Bool]
+		case token.SUB, token.ADD, token.XOR:
+			return operandType
+		}
+
+	case *ast.ParenExpr:
+		return inf.evaluateExprType(e.X, ctx)
+
+	case *ast.SelectorExpr:
+		// Field access - look up in info.Selections or info.Types
+		if sel, ok := inf.info.Selections[e]; ok {
+			return sel.Type()
+		}
+		if tv, ok := inf.info.Types[e]; ok {
+			return tv.Type
+		}
+
+	case *ast.CallExpr:
+		// Function call - look up return type
+		if tv, ok := inf.info.Types[e]; ok {
+			return tv.Type
+		}
+		// Try to get the function's return type
+		funType := inf.evaluateExprType(e.Fun, ctx)
+		if sig, ok := funType.(*types.Signature); ok {
+			if sig.Results() != nil && sig.Results().Len() > 0 {
+				return sig.Results().At(0).Type()
+			}
+		}
+
+	case *ast.IndexExpr:
+		// Index expression - element type of slice/array/map
+		containerType := inf.evaluateExprType(e.X, ctx)
+		if containerType != nil {
+			switch ct := containerType.Underlying().(type) {
+			case *types.Slice:
+				return ct.Elem()
+			case *types.Array:
+				return ct.Elem()
+			case *types.Map:
+				return ct.Elem()
+			}
+		}
+	}
+
+	// Fallback: check info.Types
+	if tv, ok := inf.info.Types[expr]; ok {
+		return tv.Type
+	}
+
+	return nil
+}
+
+// exprToType converts a type expression AST node to a types.Type.
+// Handles basic types, named types, and common composite types.
+func (inf *LambdaTypeInferrer) exprToType(expr ast.Expr) types.Type {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		// Basic type or named type
+		if basic := inf.lookupBasicType(e.Name); basic != nil {
+			return basic
+		}
+		// Look up named type in Uses
+		if obj := inf.info.Uses[e]; obj != nil {
+			return obj.Type()
+		}
+
+	case *ast.SelectorExpr:
+		// Qualified type: pkg.Type
+		if tv, ok := inf.info.Types[e]; ok {
+			return tv.Type
+		}
+		if obj := inf.info.Uses[e.Sel]; obj != nil {
+			return obj.Type()
+		}
+
+	case *ast.StarExpr:
+		// Pointer type
+		elemType := inf.exprToType(e.X)
+		if elemType != nil {
+			return types.NewPointer(elemType)
+		}
+
+	case *ast.ArrayType:
+		// Slice or array type
+		elemType := inf.exprToType(e.Elt)
+		if elemType != nil {
+			if e.Len == nil {
+				return types.NewSlice(elemType)
+			}
+			// Array - would need to evaluate length, skip for now
+		}
+	}
+
+	return nil
+}
+
+// lookupBasicType returns the basic type for a type name, or nil if not a basic type.
+func (inf *LambdaTypeInferrer) lookupBasicType(name string) types.Type {
+	switch name {
+	case "bool":
+		return types.Typ[types.Bool]
+	case "int":
+		return types.Typ[types.Int]
+	case "int8":
+		return types.Typ[types.Int8]
+	case "int16":
+		return types.Typ[types.Int16]
+	case "int32":
+		return types.Typ[types.Int32]
+	case "int64":
+		return types.Typ[types.Int64]
+	case "uint":
+		return types.Typ[types.Uint]
+	case "uint8":
+		return types.Typ[types.Uint8]
+	case "uint16":
+		return types.Typ[types.Uint16]
+	case "uint32":
+		return types.Typ[types.Uint32]
+	case "uint64":
+		return types.Typ[types.Uint64]
+	case "uintptr":
+		return types.Typ[types.Uintptr]
+	case "float32":
+		return types.Typ[types.Float32]
+	case "float64":
+		return types.Typ[types.Float64]
+	case "complex64":
+		return types.Typ[types.Complex64]
+	case "complex128":
+		return types.Typ[types.Complex128]
+	case "string":
+		return types.Typ[types.String]
+	case "byte":
+		return types.Typ[types.Byte]
+	case "rune":
+		return types.Typ[types.Rune]
+	case "any":
+		return types.Universe.Lookup("any").Type()
+	case "error":
+		return types.Universe.Lookup("error").Type()
+	}
 	return nil
 }
 
