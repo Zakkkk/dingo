@@ -108,18 +108,20 @@ func main() {
 	}
 	var allSpecs []specSource
 
-	// Load YAML specs
+	// Load YAML specs (supports multi-document YAML with --- separators)
 	for _, specFile := range specFiles {
-		spec, err := LoadSpec(specFile)
+		specs, err := LoadSpecs(specFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading spec %s: %v\n", specFile, err)
 			continue
 		}
-		allSpecs = append(allSpecs, specSource{
-			spec:     spec,
-			filename: specFile,
-			isAuto:   false,
-		})
+		for _, spec := range specs {
+			allSpecs = append(allSpecs, specSource{
+				spec:     spec,
+				filename: specFile,
+				isAuto:   false,
+			})
+		}
 	}
 
 	// Auto-scan .dingo files

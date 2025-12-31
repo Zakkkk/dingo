@@ -328,70 +328,75 @@ func findOperatorsOnLine(m *Map, line int) []SemanticEntity {
 	return operators
 }
 
-func TestVerifyIdentInSource(t *testing.T) {
-	// Sample Dingo source
-	source := []byte(`package main
+func TestBuilder_AllIdentifiersScannedFromDingo(t *testing.T) {
+	// Test that ALL identifiers in Dingo source are detected
+	// This verifies the new detectAllIdentifiers function works correctly
 
-func handler() {
-	userID := extractUserID(r)?
-	name := getName()?
-}
+	dingoSrc := []byte(`package main
+
+var x int = 1
+var y int = x + 2
 `)
 
-	// Create dingoSourceFile for token-based line/column lookup (CLAUDE.md compliant)
-	fset := token.NewFileSet()
-	file := fset.AddFile("test.dingo", fset.Base(), len(source))
-	file.SetLinesForContent(source)
+	goSrc := dingoSrc
 
-	builder := &Builder{
-		dingoSource:     source,
-		dingoSourceFile: file,
+	mappings := []sourcemap.LineMapping{
+		{DingoLine: 1, GoLineStart: 1, GoLineEnd: 1, Kind: "package"},
+		{DingoLine: 3, GoLineStart: 3, GoLineEnd: 3, Kind: "var"},
+		{DingoLine: 4, GoLineStart: 4, GoLineEnd: 4, Kind: "var"},
 	}
 
-	tests := []struct {
-		name     string
-		ident    string
-		line     int
-		col      int
-		expected bool
-	}{
-		// Identifiers that exist at the correct position
-		{"userID at correct position", "userID", 4, 2, true},
-		{"name at correct position", "name", 5, 2, true},
-		{"extractUserID at correct position", "extractUserID", 4, 12, true},
-		{"getName at correct position", "getName", 5, 10, true},
+	m := buildSemanticMap(t, dingoSrc, goSrc, mappings, "test.dingo")
 
-		// Identifiers at wrong positions (would be generated code)
-		{"tmp at userID position", "tmp", 4, 2, false},
-		{"err at userID position", "err", 4, 6, false},
-		{"wrong name at correct line", "foo", 4, 2, false},
+	// Should find x at line 3 (definition) and line 4 (usage)
+	// With the new architecture, we scan Dingo source and look up types by name
+	xDef := m.FindAt(3, 5)
+	require.NotNil(t, xDef, "Should find x definition")
+	assert.Equal(t, "x", xDef.Object.Name())
 
-		// Edge cases
-		// "beyond line length" now finds identifier via whole-line search fallback.
-		// This is needed for lambda bodies in error prop ranges where the column
-		// mapping doesn't apply (e.g., NewAppError in error prop lambda).
-		// Identifiers >=4 chars use line-wide search when column tolerance fails.
-		{"beyond line length finds via fallback", "userID", 4, 100, true},
-		{"line beyond source", "userID", 100, 1, false},
-		// col zero now finds userID at col 2 due to ±2 tolerance
-		{"col zero finds nearby", "userID", 4, 0, true},
-	}
+	// Should find x usage on line 4
+	xUse := m.FindAt(4, 13) // x is at column 13 in "var y int = x + 2"
+	require.NotNil(t, xUse, "Should find x usage")
+	assert.Equal(t, "x", xUse.Object.Name())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, _ := builder.verifyIdentInSource(tt.ident, tt.line, tt.col)
-			assert.Equal(t, tt.expected, result, "verifyIdentInSource(%q, %d, %d)", tt.ident, tt.line, tt.col)
-		})
-	}
+	// Should find y definition
+	yDef := m.FindAt(4, 5)
+	require.NotNil(t, yDef, "Should find y definition")
+	assert.Equal(t, "y", yDef.Object.Name())
 }
 
-func TestVerifyIdentInSource_NoSource(t *testing.T) {
-	// When no source is available, should accept everything
-	builder := &Builder{
-		dingoSource: nil,
-	}
+func TestBuilder_NoTypesInfo(t *testing.T) {
+	// Test that builder handles nil typesInfo gracefully
 
-	result, _ := builder.verifyIdentInSource("anything", 1, 1)
-	assert.True(t, result, "Should accept when no source available")
+	dingoSrc := []byte(`package main
+
+var x int = 1
+`)
+
+	// Parse Go source
+	goFset := token.NewFileSet()
+	goAST, err := parser.ParseFile(goFset, "test.go", dingoSrc, parser.ParseComments)
+	require.NoError(t, err)
+
+	// Create Dingo FileSet
+	dingoFset := token.NewFileSet()
+	dingoFset.AddFile("test.dingo", dingoFset.Base(), len(dingoSrc))
+
+	// Build semantic map with nil typesInfo
+	builder := NewBuilder(
+		goAST,
+		goFset,
+		nil, // No types info
+		nil,
+		nil,
+		dingoSrc,
+		dingoFset,
+		"test.dingo",
+	)
+
+	m, err := builder.Build()
+	require.NoError(t, err, "Build should succeed even without types info")
+
+	// Map should still be created (but may have fewer entities)
+	assert.NotNil(t, m, "Map should not be nil")
 }
-

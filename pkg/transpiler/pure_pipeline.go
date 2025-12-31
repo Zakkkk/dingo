@@ -5,18 +5,23 @@ import (
 	"fmt"
 	goparser "go/parser"
 	"go/printer"
+	"go/scanner"
 	"go/token"
 	"strings"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
 
 /*
-DINGO TRANSPILATION PIPELINE (v3 Architecture)
-==============================================
+DINGO TRANSPILATION PIPELINE (v4 Architecture - No //line directives)
+====================================================================
 
 This file implements the main transpilation pipeline from .dingo to .go.
+
+DESIGN PRINCIPLE: Generated Go code should look like human-written code.
+//line directives are NOT emitted - position mapping is handled via .dmap files.
 
 POSITION TRACKING FLOW:
 
@@ -34,35 +39,40 @@ POSITION TRACKING FLOW:
       - KEY: These positions are PRESERVED through all transforms
       |
       v
-  pkg/codegen/* (with //line directives)
+  pkg/codegen/* (clean Go output)
       - Transforms AST to Go code text
-      - Emits //line file.dingo:LINE:COL directives (Go 1.17+)
+      - NO //line directives - clean, human-readable output
       - Records transforms via PositionTracker using token.Pos
       |
       v
   go/parser + go/printer
-      - PRESERVES //line directives in output
-      - go/printer may reformat but directives survive
+      - Standard Go formatting
       |
       v
-  PositionTracker.Finalize()
-      - Resolves token.Pos to line:col using fset.Position()
-      - Generates v3 .dmap file with column-level mappings
+  .dmap file generation
+      - Contains bidirectional Dingo↔Go position mappings
+      - LSP uses this for hover, go-to-definition, diagnostics translation
 
-DIAGNOSTIC FLOW (why //line directives matter):
+LSP POSITION MAPPING (via .dmap files):
 
   gopls analyzes .go file
       |
       v
-  Sees //line file.dingo:42:5
+  Reports diagnostic at .go:LINE:COL
       |
       v
-  Reports diagnostic at file.dingo:42:5
+  pkg/lsp/translator.go translates using .dmap
       |
       v
   LSP client shows error in .dingo editor
 
-  → No remapping needed for diagnostics! //line directives handle it.
+WHY NO //line DIRECTIVES:
+
+  1. Generated code looks human-written (main principle)
+  2. .dmap files provide complete bidirectional mapping
+  3. LSP translator handles all position translation
+  4. Cleaner diffs in version control
+  5. Easier to read and debug generated code
 
 WHY token.Pos INSTEAD OF BYTE OFFSETS:
 
@@ -123,7 +133,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
 
 	// Step 1: Transform Dingo syntax to Go using token-based transformations
-	transformedSource, err := dingoast.TransformSource(source)
+	transformedSource, err := dingoast.TransformSource(source, filename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("transform error: %w", err)
 	}
@@ -168,15 +178,15 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	}
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
-	// Emits //line directives for gopls position mapping
-	transformedSource, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename)
+	// Note: //line directives are disabled - position mapping is handled via line/column mappings
+	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, "")
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
 
 	// Step 2.5: Transform guard statements (MUST run after error propagation, before expressions)
-	// Emits //line directives for gopls position mapping
-	transformedSource, err = transformGuardStatements(transformedSource, source, filename)
+	// Note: //line directives are disabled - position mapping is handled via .dmap files
+	transformedSource, err = transformGuardStatements(transformedSource, source, "")
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("guard transform error: %w", err)
 	}
@@ -184,11 +194,17 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	// Also pass original source for accurate position mapping (earlier transforms shift positions)
-	// Emits //line directives for gopls position mapping
-	transformedSource, err = transformASTExpressions(transformedSource, enumRegistry, source, filename)
+	// Note: //line directives are disabled - position mapping is handled via .dmap files
+	// Returns line mappings for multi-line transforms (safe nav, match, null coalesce)
+	var astLineMappings []sourcemap.LineMapping
+	transformedSource, astLineMappings, err = transformASTExpressions(transformedSource, enumRegistry, source, "")
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
+
+	// Merge AST line mappings with error prop line mappings
+	// Both are metadata - no machine comments in the generated code
+	lineMappings = append(lineMappings, astLineMappings...)
 
 	// Step 3: Parse the transformed Go source with standard go/parser
 	fset := token.NewFileSet()
@@ -308,28 +324,407 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("print error: %w", err)
 	}
 
+	// Final Go code - no //line directives, position mapping handled via mappings
 	finalGoCode := buf.Bytes()
 
-	// Extract line mappings using Go's scanner (token-based, not byte manipulation).
-	// The scanner finds //line directive COMMENT tokens and we get their positions
-	// from token.Pos. These mappings are used for .dmap files.
-	lineMappings := extractLineMappingsFromGoAST(finalGoCode, "error_prop")
+	// Step 5.5: Adjust line mappings for go/printer offset
+	// go/printer may reformat comments (e.g., removing empty comment lines),
+	// which shifts line numbers. We need to calculate the actual offset.
+	lineMappings, columnMappings = adjustLineMappingsForPrinterOffset(finalGoCode, source, lineMappings, columnMappings)
 
-	// Fix column mapping GoLine values using line mappings.
-	// Column mappings are created during transformation with GoLine = DingoLine (wrong).
-	// Now that we have line mappings, we can set the correct GoLine for each.
-	// For error propagation: GoLine = GoLineStart + 1 (the assignment line after the directive)
-	columnMappings = fixColumnMappingGoLines(columnMappings, lineMappings)
+	// Line mappings are generated during error propagation transformation.
+	// They provide Dingo→Go line translation for the LSP semantic builder.
+	// Column mappings provide column-level precision for hover/go-to-definition.
 
 	// Return complete transpilation result
 	return TranspileResult{
 		GoCode:         finalGoCode,
-		LineMappings:   lineMappings,
-		ColumnMappings: columnMappings,
+		LineMappings:   lineMappings,   // From error prop transform (adjusted)
+		ColumnMappings: columnMappings, // From error prop transform (adjusted)
 		DingoSource:    source,
 		GoAST:          goFile,
 		Metadata: &TranspileMetadata{
 			OriginalFile: filename,
 		},
 	}, nil
+}
+
+// fixLineDirectiveIndentation strips leading whitespace from //line directive lines.
+// Go's parser REQUIRES //line directives to start at column 1 (no indentation).
+// The go/printer adds indentation to comments (including //line), so we must fix them.
+//
+// Uses go/scanner to find COMMENT tokens - this is the token-based approach
+// required by CLAUDE.md (no byte heuristics for position tracking).
+func fixLineDirectiveIndentation(src []byte) []byte {
+	// Use go/scanner to find //line directive comments
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+
+	var s scanner.Scanner
+	s.Init(file, src, nil, scanner.ScanComments)
+
+	// Collect positions of //line directives that need fixing
+	type lineDirective struct {
+		lineStart int // byte offset of line start (after newline)
+		dirStart  int // byte offset of directive (after indentation)
+	}
+	var directives []lineDirective
+
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// Check if this is a //line directive comment
+		if tok == token.COMMENT && strings.HasPrefix(lit, "//line ") {
+			// Use token.FileSet to get position info (not byte scanning)
+			position := fset.Position(pos)
+			offset := file.Offset(pos)
+
+			// Calculate line start using column from FileSet
+			// Column is 1-indexed, so line start is offset - (column - 1)
+			lineStart := offset - (position.Column - 1)
+
+			// Only fix if there's indentation (directive not at column 1)
+			if position.Column > 1 {
+				directives = append(directives, lineDirective{
+					lineStart: lineStart,
+					dirStart:  offset,
+				})
+			}
+		}
+	}
+
+	// If no directives need fixing, return original
+	if len(directives) == 0 {
+		return src
+	}
+
+	// Build result by removing indentation before each directive
+	// Process in reverse order so earlier offsets remain valid
+	result := make([]byte, len(src))
+	copy(result, src)
+
+	// Track cumulative offset adjustment for reverse processing
+	for i := len(directives) - 1; i >= 0; i-- {
+		d := directives[i]
+		indentLen := d.dirStart - d.lineStart
+		// Remove bytes from lineStart to dirStart (the indentation)
+		// Before: result[:lineStart] contains up to line start
+		// After:  result[dirStart:] starts with //line directive
+		newResult := make([]byte, 0, len(result)-indentLen)
+		newResult = append(newResult, result[:d.lineStart]...)
+		newResult = append(newResult, result[d.dirStart:]...)
+		result = newResult
+	}
+
+	return result
+}
+
+// insertImportResetDirective adds a //line directive after the import block
+// to reset line numbering to the correct Dingo position.
+//
+// When the transpiler injects imports (e.g., "github.com/MadAppGang/dingo/dgo"),
+// or when imports expand from single-line to multi-line format, all subsequent
+// line numbers shift. This causes hover and diagnostics to point to wrong lines
+// in the .dingo file.
+//
+// Solution: Insert a //line directive after the import block that points to the
+// first line of actual code in the original Dingo source.
+//
+// Uses go/scanner to find the end of imports (token-based, not byte heuristics).
+func insertImportResetDirective(goCode []byte, filename string, dingoSource []byte) []byte {
+	// Use go/scanner to find import block boundaries
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(goCode))
+
+	var s scanner.Scanner
+	s.Init(file, goCode, nil, scanner.ScanComments)
+
+	// Find the last import statement
+	// Pattern: import ( ... ) or import "..."
+	// We need the position AFTER the closing paren or string literal
+	var lastImportEnd token.Pos
+	var inImportBlock bool
+	var importBlockDepth int
+
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// Track import keyword
+		if tok == token.IMPORT {
+			// Check next token - if it's LPAREN, we're in a multi-line import block
+			nextPos, nextTok, _ := s.Scan()
+			if nextTok == token.LPAREN {
+				inImportBlock = true
+				importBlockDepth = 1
+				lastImportEnd = nextPos
+			} else if nextTok == token.STRING {
+				// Single-line import: import "pkg"
+				lastImportEnd = nextPos
+			}
+			continue
+		}
+
+		// Track paren depth in import blocks
+		if inImportBlock {
+			if tok == token.LPAREN {
+				importBlockDepth++
+			} else if tok == token.RPAREN {
+				importBlockDepth--
+				if importBlockDepth == 0 {
+					inImportBlock = false
+					lastImportEnd = pos
+				}
+			}
+		}
+
+		// If we find a non-import declaration after imports ended, stop scanning
+		if !inImportBlock && lastImportEnd != token.NoPos {
+			// Check if this is a declaration keyword (type, func, var, const)
+			if tok == token.TYPE || tok == token.FUNC || tok == token.VAR || tok == token.CONST {
+				break
+			}
+		}
+	}
+
+	// If no imports found, nothing to do
+	if lastImportEnd == token.NoPos {
+		return goCode
+	}
+
+	// Calculate position after import block in Go code
+	importEndPosition := fset.Position(lastImportEnd)
+	importEndLine := importEndPosition.Line
+
+	// Calculate corresponding Dingo line
+	// Strategy: Count import statements in Dingo source to determine offset
+	dingoFset := token.NewFileSet()
+	dingoFile := dingoFset.AddFile("", dingoFset.Base(), len(dingoSource))
+	var dingoScanner scanner.Scanner
+	dingoScanner.Init(dingoFile, dingoSource, nil, scanner.ScanComments)
+
+	var dingoLastImportEnd token.Pos
+	var dingoInImportBlock bool
+	var dingoImportBlockDepth int
+
+	for {
+		pos, tok, _ := dingoScanner.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		if tok == token.IMPORT {
+			nextPos, nextTok, _ := dingoScanner.Scan()
+			if nextTok == token.LPAREN {
+				dingoInImportBlock = true
+				dingoImportBlockDepth = 1
+				dingoLastImportEnd = nextPos
+			} else if nextTok == token.STRING {
+				dingoLastImportEnd = nextPos
+			}
+			continue
+		}
+
+		if dingoInImportBlock {
+			if tok == token.LPAREN {
+				dingoImportBlockDepth++
+			} else if tok == token.RPAREN {
+				dingoImportBlockDepth--
+				if dingoImportBlockDepth == 0 {
+					dingoInImportBlock = false
+					dingoLastImportEnd = pos
+				}
+			}
+		}
+
+		if !dingoInImportBlock && dingoLastImportEnd != token.NoPos {
+			if tok == token.TYPE || tok == token.FUNC || tok == token.VAR || tok == token.CONST {
+				break
+			}
+		}
+	}
+
+	// If no imports in Dingo source, the first line of code is line 1 after package
+	dingoLineAfterImports := 1
+	if dingoLastImportEnd != token.NoPos {
+		dingoEndPosition := dingoFset.Position(dingoLastImportEnd)
+		// Find first non-blank line after import block in Dingo source
+		// IMPORTANT: //line directives set position for the NEXT line.
+		// If imports end at line 35, we need to find the first actual code line
+		// (e.g., line 37 if line 36 is blank) to emit the correct directive.
+		importEndLine := dingoEndPosition.Line
+		dingoLineAfterImports = findFirstNonBlankLine(dingoSource, importEndLine)
+	} else {
+		// No imports in Dingo - find package declaration line
+		dingoFset2 := token.NewFileSet()
+		dingoFile2 := dingoFset2.AddFile("", dingoFset2.Base(), len(dingoSource))
+		var pkgScanner scanner.Scanner
+		pkgScanner.Init(dingoFile2, dingoSource, nil, scanner.ScanComments)
+
+		for {
+			pos, tok, _ := pkgScanner.Scan()
+			if tok == token.EOF {
+				break
+			}
+			if tok == token.PACKAGE {
+				// Skip package name
+				pkgScanner.Scan()
+				pkgPos := dingoFset2.Position(pos)
+				dingoLineAfterImports = pkgPos.Line + 1
+				break
+			}
+		}
+	}
+
+	// Format //line directive
+	directive := fmt.Sprintf("//line %s:%d:1\n", filename, dingoLineAfterImports)
+
+	// Find newline after last import in Go code to insert directive
+	// Scan forward from importEndLine to find good insertion point
+	lines := bytes.Split(goCode, []byte("\n"))
+	if importEndLine > len(lines) {
+		importEndLine = len(lines)
+	}
+
+	// Find the blank line or first code line after imports
+	insertLine := importEndLine
+	for i := importEndLine; i < len(lines) && i < importEndLine+5; i++ {
+		trimmed := bytes.TrimSpace(lines[i])
+		// Insert before first non-empty, non-comment line
+		if len(trimmed) > 0 && !bytes.HasPrefix(trimmed, []byte("//")) {
+			insertLine = i
+			break
+		}
+	}
+
+	// Insert directive at the beginning of insertLine
+	var result bytes.Buffer
+	for i, line := range lines {
+		if i == insertLine {
+			result.WriteString(directive)
+		}
+		result.Write(line)
+		if i < len(lines)-1 {
+			result.WriteByte('\n')
+		}
+	}
+
+	return result.Bytes()
+}
+
+// findFirstNonBlankLine finds the first non-blank, non-comment line after startLine.
+// Returns startLine+1 if no non-blank line is found within a reasonable range.
+// Lines are 1-indexed to match Go's token.Position conventions.
+func findFirstNonBlankLine(source []byte, startLine int) int {
+	lines := bytes.Split(source, []byte("\n"))
+
+	// Search from startLine+1 (first line after the reference line)
+	for i := startLine; i < len(lines) && i < startLine+10; i++ {
+		trimmed := bytes.TrimSpace(lines[i])
+		// Skip blank lines
+		if len(trimmed) == 0 {
+			continue
+		}
+		// Skip comment-only lines
+		if bytes.HasPrefix(trimmed, []byte("//")) {
+			continue
+		}
+		// Found a non-blank, non-comment line
+		return i + 1 // Convert 0-indexed to 1-indexed
+	}
+
+	// Fallback: return next line after start
+	return startLine + 1
+}
+
+// adjustLineMappingsForPrinterOffset fixes line mappings after go/printer runs.
+//
+// go/printer may reformat comments, changing line numbers. For example:
+// - Dingo has "//\n" (empty comment) on line 16, package on line 17
+// - Go output has package on line 16 (empty comment removed)
+//
+// This function calculates the actual offset between Go and Dingo package lines
+// and adjusts all line mappings accordingly.
+//
+// CLAUDE.md COMPLIANT: Uses go/scanner for position tracking, not byte manipulation.
+func adjustLineMappingsForPrinterOffset(goCode, dingoSource []byte, lineMappings []sourcemap.LineMapping, columnMappings []sourcemap.ColumnMapping) ([]sourcemap.LineMapping, []sourcemap.ColumnMapping) {
+	if len(lineMappings) == 0 {
+		return lineMappings, columnMappings
+	}
+
+	// Find package line in Go output using go/scanner
+	goPackageLine := findPackageLineWithScanner(goCode)
+	if goPackageLine == 0 {
+		return lineMappings, columnMappings
+	}
+
+	// Find package line in Dingo source using go/scanner
+	dingoPackageLine := findPackageLineWithScanner(dingoSource)
+	if dingoPackageLine == 0 {
+		return lineMappings, columnMappings
+	}
+
+	// Calculate offset: how many lines were removed/added by go/printer
+	// Negative offset means Go has fewer lines before package (lines removed)
+	offset := goPackageLine - dingoPackageLine
+
+	// If no offset, nothing to adjust
+	if offset == 0 {
+		return lineMappings, columnMappings
+	}
+
+	// Adjust line mappings
+	adjustedLineMappings := make([]sourcemap.LineMapping, len(lineMappings))
+	for i, lm := range lineMappings {
+		adjustedLineMappings[i] = sourcemap.LineMapping{
+			DingoLine:   lm.DingoLine,
+			GoLineStart: lm.GoLineStart + offset,
+			GoLineEnd:   lm.GoLineEnd + offset,
+			Kind:        lm.Kind,
+		}
+	}
+
+	// Adjust column mappings
+	adjustedColumnMappings := make([]sourcemap.ColumnMapping, len(columnMappings))
+	for i, cm := range columnMappings {
+		adjustedColumnMappings[i] = sourcemap.ColumnMapping{
+			DingoLine: cm.DingoLine,
+			DingoCol:  cm.DingoCol,
+			GoLine:    cm.GoLine + offset,
+			GoCol:     cm.GoCol,
+			Length:    cm.Length,
+			Kind:      cm.Kind,
+		}
+	}
+
+	return adjustedLineMappings, adjustedColumnMappings
+}
+
+// findPackageLineWithScanner uses go/scanner to find the line number of the package declaration.
+// Returns 0 if no package declaration is found.
+//
+// CLAUDE.md COMPLIANT: Uses token system for position tracking.
+func findPackageLineWithScanner(source []byte) int {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(source))
+
+	var s scanner.Scanner
+	// Ignore errors - Dingo syntax extensions may cause scanner errors
+	s.Init(file, source, func(pos token.Position, msg string) {}, scanner.ScanComments)
+
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok == token.PACKAGE {
+			return fset.Position(pos).Line
+		}
+	}
+	return 0
 }

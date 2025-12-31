@@ -103,7 +103,9 @@ func main() {
 		Settings: UserSettings{
 			Theme:    dgo.Some("dark"),
 			FontSize: dgo.Some(18),
-			Language: dgo.None[string](), // Not set - will use system language
+			Language: dgo.None[string](),
+
+			// Not set - will use system language
 		},
 	}
 
@@ -113,8 +115,10 @@ func main() {
 		Name: "Bob",
 		Settings: UserSettings{
 			// All settings use defaults
-			Theme:    dgo.None[string](),
+			Theme: dgo.None[string](),
+
 			FontSize: dgo.None[int](),
+
 			Language: dgo.Some("es"),
 		},
 	}

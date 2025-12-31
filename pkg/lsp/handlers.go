@@ -276,8 +276,6 @@ func (s *Server) handleHoverWithTranslation(
 	s.config.Logger.Debugf("[Hover] Request for URI=%s, Line=%d, Char=%d",
 		params.TextDocument.URI.Filename(), params.Position.Line, params.Position.Character)
 
-	originalURI := params.TextDocument.URI
-
 	// If not a .dingo file, forward directly
 	if !isDingoFile(params.TextDocument.URI) {
 		result, err := s.gopls.Hover(ctx, params)
@@ -302,59 +300,13 @@ func (s *Server) handleHoverWithTranslation(
 		return reply(ctx, result, nil)
 	}
 
-	// Native hover returned nil - fallback to gopls with position translation
-	s.config.Logger.Debugf("[Hover] Native hover returned nil, falling back to gopls")
-
-	// Translate Dingo position → Go position
-	goURI, goPos, err := s.translator.TranslatePosition(params.TextDocument.URI, params.Position, DingoToGo)
-	if err != nil {
-		s.config.Logger.Warnf("[Hover] Position translation failed: %v", err)
-		result, err := s.gopls.Hover(ctx, params)
-		return reply(ctx, result, err)
-	}
-
-	s.config.Logger.Debugf("[Hover] Translated to Go: URI=%s, Line=%d, Char=%d",
-		goURI.Filename(), goPos.Line, goPos.Character)
-
-	// Update params with translated position
-	params.TextDocument.URI = goURI
-	params.Position = goPos
-
-	// Forward to gopls
-	result, err = s.gopls.Hover(ctx, params)
-	if err != nil {
-		s.config.Logger.Warnf("[Hover] gopls error: %v", err)
-		// Handle "column is beyond end of line" gracefully - this happens when
-		// line lengths differ between Dingo and Go files after transformation
-		if strings.Contains(err.Error(), "column is beyond") {
-			return reply(ctx, nil, nil) // Return empty result instead of error
-		}
-		return reply(ctx, nil, err)
-	}
-
-	// Debug: Log hover result from gopls
-	if result != nil {
-		s.config.Logger.Debugf("[Hover] gopls returned: Kind=%q, ValueLen=%d, Value=%q, HasRange=%v",
-			result.Contents.Kind, len(result.Contents.Value),
-			truncateStr(result.Contents.Value, 100), result.Range != nil)
-	} else {
-		s.config.Logger.Debugf("[Hover] gopls returned nil")
-	}
-
-	// Translate response: Go range → Dingo range
-	translatedResult, err := s.translator.TranslateHover(result, originalURI, GoToDingo)
-	if err != nil {
-		s.config.Logger.Warnf("Hover response translation failed: %v", err)
-		return reply(ctx, result, nil)
-	}
-
-	// Debug: Log translated hover
-	if translatedResult != nil {
-		s.config.Logger.Debugf("[Hover] Returning: Kind=%q, ValueLen=%d, HasRange=%v",
-			translatedResult.Contents.Kind, len(translatedResult.Contents.Value), translatedResult.Range != nil)
-	}
-
-	return reply(ctx, translatedResult, nil)
+	// Native hover returned nil - this means:
+	// 1. No semantic entity at this position, OR
+	// 2. Entity was filtered out (e.g., generated variable like tmp2)
+	// Don't fall back to gopls because it would show generated code info
+	// which confuses users. Just return empty hover.
+	s.config.Logger.Debugf("[Hover] Native hover returned nil, returning empty (no gopls fallback)")
+	return reply(ctx, nil, nil)
 }
 
 func truncateStr(s string, n int) string {

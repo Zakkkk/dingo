@@ -74,7 +74,6 @@ func loadConfig() (string, error) {
 
 func processConfig() (string, error) {
 	// Pattern 1: Basic ?
-	//line examples/101_combined/showcase.dingo:63:2
 	tmp, err := loadConfig()
 	if err != nil {
 		return "", err
@@ -82,7 +81,6 @@ func processConfig() (string, error) {
 	cfg := tmp
 
 	// Pattern 2: String context
-	//line examples/101_combined/showcase.dingo:66:2
 	tmp1, err1 := loadConfig()
 	if err1 != nil {
 		return "", fmt.Errorf("config load failed: %w", err1)
@@ -90,7 +88,6 @@ func processConfig() (string, error) {
 	cfg2 := tmp1
 
 	// Pattern 3: Lambda transform
-	//line examples/101_combined/showcase.dingo:69:2
 	tmp2, err2 := loadConfig()
 	if err2 != nil {
 		return "", fmt.Errorf("wrapped: %w", err2)
@@ -121,7 +118,6 @@ func getPoint() (int, int) {
 // === 11. GUARD ===
 func guardLetDemo() string {
 	// Guard with Option
-	//line examples/101_combined/showcase.dingo:120:2
 	tmp := findUser("Bob")
 	if tmp.IsNone() {
 
@@ -131,7 +127,6 @@ func guardLetDemo() string {
 	user := *tmp.Some
 
 	// Guard with Result
-	//line examples/101_combined/showcase.dingo:125:2
 	tmp1 := fetchUser(42)
 	if tmp1.IsErr() {
 		err := *tmp1.Err

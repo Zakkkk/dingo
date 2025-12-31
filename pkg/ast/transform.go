@@ -32,10 +32,12 @@ type tokenInfo struct {
 // - Safe navigation: x?.field → (future)
 //
 // Note: Previously returned []SourceMapping for byte-offset tracking, but this has
-// been removed. Position tracking now uses //line directives + LineMappings.
-func TransformSource(src []byte) ([]byte, error) {
+// been removed. Position tracking now uses .dmap files for position mapping.
+// //line directives are no longer emitted to keep generated Go code clean.
+func TransformSource(src []byte, filename string) ([]byte, error) {
 	// First pass: Transform enums (uses separate parser + codegen)
-	src, enumRegistry := TransformEnumSource(src)
+	// Note: Empty filename disables //line directive emission
+	src, enumRegistry := TransformEnumSource(src, "")
 
 	// Second pass: Transform enum constructor calls to NewVariant() pattern
 	src = TransformEnumConstructors(src, enumRegistry)

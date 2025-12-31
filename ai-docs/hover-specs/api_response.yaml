@@ -1,0 +1,314 @@
+# Hover tests for api_response.dingo
+# Tests hover for enum definitions, type switches, constructors
+
+file: examples/05_sum_types/api_response.dingo
+
+cases:
+  # Enum definitions
+  - id: 1
+    line: 19
+    token: APIResponse
+    description: "enum APIResponse"
+    expect:
+      contains: "APIResponse"
+
+  - id: 2
+    line: 20
+    token: Success
+    description: "Success variant"
+    expect:
+      contains: "Success"
+
+  - id: 3
+    line: 21
+    token: ValidationError
+    description: "ValidationError variant"
+    expect:
+      contains: "ValidationError"
+
+  - id: 4
+    line: 22
+    token: AuthError
+    description: "AuthError variant"
+    expect:
+      contains: "AuthError"
+
+  - id: 5
+    line: 23
+    token: RateLimited
+    description: "RateLimited variant"
+    expect:
+      contains: "RateLimited"
+
+  - id: 6
+    line: 24
+    token: ServerError
+    description: "ServerError variant"
+    expect:
+      contains: "ServerError"
+
+  # PaymentStatus enum
+  - id: 7
+    line: 28
+    token: PaymentStatus
+    description: "enum PaymentStatus"
+    expect:
+      contains: "PaymentStatus"
+
+  - id: 8
+    line: 29
+    token: Pending
+    description: "Pending variant"
+    expect:
+      contains: "Pending"
+
+  - id: 9
+    line: 30
+    token: Processing
+    description: "Processing variant"
+    expect:
+      contains: "Processing"
+
+  - id: 10
+    line: 31
+    token: Completed
+    description: "Completed variant"
+    expect:
+      contains: "Completed"
+
+  - id: 11
+    line: 32
+    token: Failed
+    description: "Failed variant"
+    expect:
+      contains: "Failed"
+
+  - id: 12
+    line: 33
+    token: Refunded
+    description: "Refunded variant"
+    expect:
+      contains: "Refunded"
+
+  # Functions
+  - id: 13
+    line: 38
+    token: HandleAPIResponse
+    description: "func HandleAPIResponse"
+    expect:
+      contains: "func"
+
+  - id: 14
+    line: 38
+    token: resp
+    description: "resp parameter"
+    expect:
+      contains: "resp"
+
+  # Type switch cases (Go uses APIResponseSuccess, but hover shows Dingo-friendly APIResponse.Success)
+  - id: 15
+    line: 40
+    token: APIResponseSuccess
+    description: "APIResponseSuccess in switch"
+    expect:
+      contains: "APIResponse.Success"
+
+  - id: 16
+    line: 42
+    token: APIResponseValidationError
+    description: "APIResponseValidationError in switch"
+    expect:
+      contains: "APIResponse.ValidationError"
+
+  - id: 17
+    line: 44
+    token: APIResponseAuthError
+    description: "APIResponseAuthError in switch"
+    expect:
+      contains: "APIResponse.AuthError"
+
+  - id: 18
+    line: 46
+    token: APIResponseRateLimited
+    description: "APIResponseRateLimited in switch"
+    expect:
+      contains: "APIResponse.RateLimited"
+
+  - id: 19
+    line: 48
+    token: APIResponseServerError
+    description: "APIResponseServerError in switch"
+    expect:
+      contains: "APIResponse.ServerError"
+
+  # Field access
+  - id: 20
+    line: 41
+    token: amount
+    description: "v.amount field access"
+    expect:
+      contains: "amount"
+
+  - id: 21
+    line: 41
+    token: transactionID
+    description: "v.transactionID field access"
+    expect:
+      contains: "transactionID"
+
+  # CanRetryPayment function
+  - id: 22
+    line: 55
+    token: CanRetryPayment
+    description: "func CanRetryPayment"
+    expect:
+      contains: "func"
+
+  - id: 23
+    line: 57
+    token: PaymentStatusFailed
+    description: "PaymentStatusFailed in switch"
+    expect:
+      contains: "PaymentStatus.Failed"
+
+  - id: 24
+    line: 59
+    token: PaymentStatusPending
+    description: "PaymentStatusPending in switch"
+    expect:
+      contains: "PaymentStatus.Pending"
+
+  # GetStatusMessage function
+  - id: 25
+    line: 67
+    token: GetStatusMessage
+    description: "func GetStatusMessage"
+    expect:
+      contains: "func"
+
+  - id: 26
+    line: 69
+    token: PaymentStatusPending
+    description: "PaymentStatusPending in GetStatusMessage"
+    expect:
+      contains: "PaymentStatus.Pending"
+
+  - id: 27
+    line: 71
+    token: PaymentStatusProcessing
+    description: "PaymentStatusProcessing in switch"
+    expect:
+      contains: "PaymentStatus.Processing"
+
+  - id: 28
+    line: 73
+    token: PaymentStatusCompleted
+    description: "PaymentStatusCompleted in switch"
+    expect:
+      contains: "PaymentStatus.Completed"
+
+  - id: 29
+    line: 75
+    token: PaymentStatusFailed
+    description: "PaymentStatusFailed in GetStatusMessage"
+    expect:
+      contains: "PaymentStatus.Failed"
+
+  - id: 30
+    line: 80
+    token: PaymentStatusRefunded
+    description: "PaymentStatusRefunded in switch"
+    expect:
+      contains: "PaymentStatus.Refunded"
+
+  # main function
+  - id: 31
+    line: 86
+    token: main
+    description: "func main"
+    expect:
+      contains: "main"
+
+  - id: 32
+    line: 88
+    token: responses
+    description: "responses slice"
+    expect:
+      contains: "responses"
+
+  - id: 33
+    line: 89
+    token: NewAPIResponseSuccess
+    description: "NewAPIResponseSuccess constructor"
+    expect:
+      contains: "NewAPIResponseSuccess"
+
+  - id: 34
+    line: 90
+    token: NewAPIResponseValidationError
+    description: "NewAPIResponseValidationError constructor"
+    expect:
+      contains: "NewAPIResponseValidationError"
+
+  - id: 35
+    line: 91
+    token: NewAPIResponseRateLimited
+    description: "NewAPIResponseRateLimited constructor"
+    expect:
+      contains: "NewAPIResponseRateLimited"
+
+  - id: 36
+    line: 96
+    token: HandleAPIResponse
+    description: "HandleAPIResponse call"
+    expect:
+      contains: "HandleAPIResponse"
+
+  - id: 37
+    line: 105
+    token: statuses
+    description: "statuses slice"
+    expect:
+      contains: "statuses"
+
+  - id: 38
+    line: 106
+    token: NewPaymentStatusPending
+    description: "NewPaymentStatusPending constructor"
+    expect:
+      contains: "NewPaymentStatusPending"
+
+  - id: 39
+    line: 107
+    token: NewPaymentStatusProcessing
+    description: "NewPaymentStatusProcessing constructor"
+    expect:
+      contains: "NewPaymentStatusProcessing"
+
+  - id: 40
+    line: 108
+    token: NewPaymentStatusFailed
+    description: "NewPaymentStatusFailed constructor"
+    expect:
+      contains: "NewPaymentStatusFailed"
+
+  - id: 41
+    line: 109
+    token: NewPaymentStatusCompleted
+    description: "NewPaymentStatusCompleted constructor"
+    expect:
+      contains: "NewPaymentStatusCompleted"
+
+  - id: 42
+    line: 114
+    token: GetStatusMessage
+    description: "GetStatusMessage call"
+    expect:
+      contains: "GetStatusMessage"
+
+  - id: 43
+    line: 116
+    token: CanRetryPayment
+    description: "CanRetryPayment call"
+    expect:
+      contains: "CanRetryPayment"

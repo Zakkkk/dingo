@@ -51,7 +51,6 @@ type User struct {
 func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 	// Pattern 1: Basic ? - propagate error as-is
 	// Use when the error is already descriptive enough
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:55:2
 	tmp, err := extractUserID(r)
 	if err != nil {
 		return err
@@ -60,7 +59,6 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 
 	// Pattern 2: String context ? "message" - add context with fmt.Errorf
 	// Use for simple context wrapping without custom error types
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:59:2
 	tmp1, err1 := loadUserFromDB(userID)
 	if err1 != nil {
 		return fmt.Errorf("database lookup failed: %w", err1)
@@ -69,7 +67,6 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 
 	// Pattern 3: Rust-style lambda ? |err| transform(err)
 	// Use for custom error types or complex transformations
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:63:2
 	tmp2, err2 := checkPermissions(r, user)
 	if err2 != nil {
 		return NewAppError(403, "permission denied", err2)
@@ -78,7 +75,6 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 
 	// Pattern 4: TypeScript-style lambda ? (e) => transform(e)
 	// Same as Pattern 3, just different syntax preference
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:67:2
 	tmp3, err3 := json.Marshal(user)
 	if err3 != nil {
 		return NewAppError(500, "serialization error", err3)
@@ -93,7 +89,6 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) error {
 // AdvancedHandler demonstrates more complex error handling scenarios
 func AdvancedHandler(userID string, orderID string) (Order, error) {
 	// Pattern 1: Basic - error is already descriptive
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:77:2
 	tmp4, err4 := getUser(userID)
 	if err4 != nil {
 		return Order{}, err4
@@ -101,7 +96,6 @@ func AdvancedHandler(userID string, orderID string) (Order, error) {
 	user := tmp4
 
 	// Pattern 2: String context - simple message wrapping
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:80:2
 	tmp5, err5 := getOrder(orderID)
 	if err5 != nil {
 		return Order{}, fmt.Errorf("failed to fetch order: %w", err5)
@@ -109,7 +103,6 @@ func AdvancedHandler(userID string, orderID string) (Order, error) {
 	order := tmp5
 
 	// Pattern 3: Rust lambda with captured variables
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:83:2
 	tmp6, err6 := validateOrder(order, user)
 	if err6 != nil {
 		return Order{}, fmt.Errorf("validation failed for user %s: %w", userID, err6)
@@ -117,7 +110,6 @@ func AdvancedHandler(userID string, orderID string) (Order, error) {
 	validated := tmp6
 
 	// Pattern 4: TypeScript lambda (single param, no parens)
-	//line /Users/jack/mag/dingo/examples/01_error_propagation/http_handler.dingo:86:2
 	tmp7, err7 := processOrder(validated)
 	if err7 != nil {
 		return Order{}, fmt.Errorf("processing error: %w", err7)

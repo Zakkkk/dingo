@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/MadAppGang/dingo/pkg/lsp/semantic"
@@ -100,8 +101,15 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 // This wraps the transpiler to match the semantic.TranspileFunc signature
 func (s *Server) createTranspileFunc() semantic.TranspileFunc {
 	return func(source []byte, filename string) (semantic.TranspileResult, error) {
+		// Strip file:// URI prefix for //line directives in generated Go code.
+		// Go's //line directive requires a filesystem path, not a URI.
+		fsPath := filename
+		if strings.HasPrefix(filename, "file://") {
+			fsPath = strings.TrimPrefix(filename, "file://")
+		}
+
 		// Use pure pipeline directly - it handles source-based transpilation
-		result, err := transpiler.PureASTTranspileWithMappings(source, filename, true)
+		result, err := transpiler.PureASTTranspileWithMappings(source, fsPath, true)
 		if err != nil {
 			return semantic.TranspileResult{}, err
 		}

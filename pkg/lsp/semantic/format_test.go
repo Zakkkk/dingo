@@ -1,6 +1,7 @@
 package semantic
 
 import (
+	"go/token"
 	"go/types"
 	"strings"
 	"testing"
@@ -489,5 +490,50 @@ func TestFormatHover_WithContextDescription(t *testing.T) {
 
 	if !strings.Contains(content, "This is a test variable") {
 		t.Errorf("Expected context description, got: %s", content)
+	}
+}
+
+func TestFindEnumVariants(t *testing.T) {
+	// Create a fake package with enum types
+	pkg := types.NewPackage("test", "test")
+	scope := pkg.Scope()
+
+	// Create enum interface: type Event interface { isEvent() }
+	enumSig := types.NewSignatureType(nil, nil, nil, nil, nil, false)
+	enumMethod := types.NewFunc(token.NoPos, pkg, "isEvent", enumSig)
+	enumIface := types.NewInterfaceType([]*types.Func{enumMethod}, nil)
+	enumIface.Complete()
+	enumTypeName := types.NewTypeName(token.NoPos, pkg, "Event", nil)
+	enumNamed := types.NewNamed(enumTypeName, enumIface, nil)
+	scope.Insert(enumTypeName)
+	t.Logf("Created enum Event interface")
+
+	// Create variant: type EventUserCreated struct {}
+	createVariant := func(name string) {
+		structType := types.NewStruct(nil, nil)
+		variantTypeName := types.NewTypeName(token.NoPos, pkg, name, nil)
+		variantNamed := types.NewNamed(variantTypeName, structType, nil)
+		// Add isEvent() method
+		methodSig := types.NewSignatureType(types.NewVar(token.NoPos, pkg, "", variantNamed), nil, nil, nil, nil, false)
+		method := types.NewFunc(token.NoPos, pkg, "isEvent", methodSig)
+		variantNamed.AddMethod(method)
+		scope.Insert(variantTypeName)
+		t.Logf("Created variant %s", name)
+	}
+
+	createVariant("EventUserCreated")
+	createVariant("EventUserDeleted")
+	createVariant("EventOrderPlaced")
+
+	// Test detection
+	t.Logf("Scope names: %v", scope.Names())
+	enumInfo := detectDingoEnumType(enumNamed, pkg)
+	if enumInfo == nil {
+		t.Fatal("detectDingoEnumType returned nil")
+	}
+
+	t.Logf("Found enum: %s, variants: %v", enumInfo.Name, enumInfo.Variants)
+	if len(enumInfo.Variants) != 3 {
+		t.Errorf("expected 3 variants, got %d: %v", len(enumInfo.Variants), enumInfo.Variants)
 	}
 }

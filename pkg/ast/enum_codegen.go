@@ -3,6 +3,7 @@ package ast
 import (
 	"bytes"
 	"fmt"
+	"go/token"
 )
 
 // EnumCodeGen generates Go code from EnumDecl AST nodes.
@@ -17,9 +18,16 @@ func NewEnumCodeGen() *EnumCodeGen {
 }
 
 // Generate produces Go code for an EnumDecl.
+// If filename and position are provided, emits //line directive at start.
 // Returns the generated Go code as bytes.
-func (g *EnumCodeGen) Generate(decl *EnumDecl) []byte {
+func (g *EnumCodeGen) Generate(decl *EnumDecl, filename string, line, col int) []byte {
 	g.buf.Reset()
+
+	// Emit //line directive at start (all enum code maps to declaration line)
+	if filename != "" && line > 0 && col > 0 {
+		directive := FormatLineDirective(filename, line, col)
+		g.buf.WriteString(directive)
+	}
 
 	enumName := decl.Name.Name
 	interfaceMethod := "is" + enumName
@@ -197,7 +205,8 @@ func ExtractEnumRegistry(src []byte) map[string]string {
 
 // TransformEnumSource transforms Dingo source containing enums to Go source.
 // This is the main entry point that replaces the old regex-based transformEnum.
-func TransformEnumSource(src []byte) ([]byte, map[string]string) {
+// If filename is provided, emits //line directives for accurate error reporting.
+func TransformEnumSource(src []byte, filename string) ([]byte, map[string]string) {
 	enumPositions := FindEnumDeclarations(src)
 	if len(enumPositions) == 0 {
 		return src, nil
@@ -232,10 +241,31 @@ func TransformEnumSource(src []byte) ([]byte, map[string]string) {
 			// registry[decl.Name.Name+v.Name.Name] = decl.Name.Name  // REMOVED
 		}
 
-		// Generate Go code
+		// Calculate line:col from enumStart using token.FileSet
+		line, col := offsetToLineCol(src, enumStart)
+
+		// Generate Go code with position info
 		codegen := NewEnumCodeGen()
-		goCode := codegen.Generate(decl)
+		goCode := codegen.Generate(decl, filename, line, col)
 		result = append(result, goCode...)
+
+		// Emit a reset //line directive after the enum block.
+		// This restores correct line numbering for code that follows the enum.
+		// The enum expansion adds many lines, shifting subsequent positions.
+		//
+		// IMPORTANT: //line directives set the position for the NEXT line.
+		// The enum ends at endLine (e.g., line 24). The next line after the enum
+		// is endLine+1 (e.g., line 25). So we emit //line:25:1 to make the
+		// following line in Go map to Dingo line 25.
+		if filename != "" {
+			// Calculate what line the code after the enum should be on
+			endLine, endCol := offsetToLineCol(src, enumStart+endOffset)
+			if endLine > 0 && endCol > 0 {
+				// endLine is the line of closing }, so next line is endLine+1
+				resetDirective := FormatLineDirective(filename, endLine+1, 1)
+				result = append(result, resetDirective...)
+			}
+		}
 
 		lastPos = enumStart + endOffset
 	}
@@ -244,4 +274,29 @@ func TransformEnumSource(src []byte) ([]byte, map[string]string) {
 	result = append(result, src[lastPos:]...)
 
 	return result, registry
+}
+
+// offsetToLineCol converts a byte offset in source to 1-indexed line:col.
+// Returns (0, 0) if offset is invalid.
+//
+// This uses Go's token.FileSet which handles line counting internally.
+// The FileSet is the proper token-based approach for position tracking.
+func offsetToLineCol(src []byte, offset int) (line, col int) {
+	if offset < 0 || offset >= len(src) {
+		return 0, 0
+	}
+
+	// Create a FileSet and add the source file
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+
+	// SetLinesForContent scans the source and records newline positions
+	// This is the token-based way to set up line info
+	file.SetLinesForContent(src)
+
+	// Convert byte offset to token.Pos, then to Position (line:col)
+	pos := file.Pos(offset)
+	position := fset.Position(pos)
+
+	return position.Line, position.Column
 }

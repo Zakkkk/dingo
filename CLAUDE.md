@@ -280,6 +280,43 @@ Key files:
 - `pkg/sourcemap/dmap/format.go` - v3 format with column mappings
 - `pkg/transpiler/pure_pipeline.go` - Main pipeline (see header comment)
 
+## LSP Semantic Map Architecture
+
+**Core Principle: Build entities from Dingo source, not Go position mapping.**
+
+The semantic map provides hover/completion for Dingo. The correct architecture:
+
+1. **Dingo positions from Dingo source** - Scan with go/scanner (CLAUDE.md compliant)
+2. **Type info from Go type checker** - After transformation
+3. **NO position mapping from Go → Dingo** - This breaks with transformations
+
+Why Go→Dingo position mapping is fundamentally broken:
+- Match expressions: 1 Dingo arm → 3+ Go lines (case + bindings)
+- Error propagation: 1 Dingo line → 5 Go lines (if block)
+- Enums: 1 Dingo enum → 50+ Go lines (interface + structs + methods)
+
+**Anti-pattern** (what NOT to do):
+```go
+// WRONG: Try to compute Dingo line from Go line using offsets
+dingoLine := goLine - regionOffset - cumulativeExpansion
+// This is fundamentally fragile because transformations change line structure
+```
+
+**Correct pattern** (what TO do):
+```go
+// RIGHT: Scan Dingo source for identifiers, use Go types for enrichment
+// See: detectEnumVariantOccurrences, detectOperators, detectLambdaParams
+for {
+    pos, tok, lit := scanner.Scan()
+    if tok == token.IDENT && isKnownIdentifier(lit) {
+        entities = append(entities, SemanticEntity{
+            Line: fset.Position(pos).Line,  // Dingo position (always correct)
+            Type: lookupGoType(lit),        // Go type info (for hover)
+        })
+    }
+}
+```
+
 ## Key Files
 
 - Entry: `pkg/transpiler/pure_pipeline.go` → `PureASTTranspile()`
@@ -324,10 +361,47 @@ For `dingo run`, the mascot is automatically disabled (no flag needed):
 ./dingo run examples/03_option/user_settings.dingo
 ```
 
+## Building Binaries
+
+### ⚠️ CRITICAL: LSP Binary Location
+
+**VS Code uses `dingo-lsp` from `$PATH`, NOT from `editors/vscode/server/bin/`!**
+
+When rebuilding the LSP server, you MUST update the binary in `$PATH`:
+
+```bash
+# Build AND install to $PATH (REQUIRED for VS Code to use it)
+go build -o /Users/jack/go/bin/dingo-lsp ./cmd/dingo-lsp
+
+# Or build locally then copy
+go build -o editors/vscode/server/bin/dingo-lsp ./cmd/dingo-lsp
+cp editors/vscode/server/bin/dingo-lsp /Users/jack/go/bin/dingo-lsp
+```
+
+**After updating the binary, restart VS Code** to pick up the new version.
+
+To verify VS Code is using the correct binary:
+```bash
+# Check which binary is in PATH
+which dingo-lsp
+md5 $(which dingo-lsp)
+
+# Compare with local build
+md5 editors/vscode/server/bin/dingo-lsp
+```
+
+### All Binaries
+
+| Binary | Build Command | Install Location |
+|--------|---------------|------------------|
+| `dingo` | `go build -o dingo ./cmd/dingo` | Local or `$PATH` |
+| `dingo-lsp` | `go build -o /Users/jack/go/bin/dingo-lsp ./cmd/dingo-lsp` | **Must be in `$PATH`** |
+| `lsp-hovercheck` | `go build -o lsp-hovercheck ./cmd/lsp-hovercheck` | Local (test tool) |
+
 ## References
 
 - Research: `ai-docs/claude-research.md`, `ai-docs/gemini_research.md`
 - Architecture: `ai-docs/dingo-vs-borgo.md`
 
 ---
-**Last Updated**: 2025-12-14
+**Last Updated**: 2025-12-18

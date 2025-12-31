@@ -15,12 +15,12 @@ import "fmt"
 
 func main() {
 	// Expression lambdas with explicit types - should compile
-	add := func(x int, y int) any { return x + y }
+	add := func(x int, y int) int { return x + y }
 	result := add(5, 3)
 	fmt.Println("5 + 3 =", result)
 
 	// Lambda that uses interface{} operations - should compile
-	identity := func(x any) any { return x }
+	identity := func(x int) int { return x }
 	val := identity(42)
 	fmt.Println("identity(42) =", val)
 

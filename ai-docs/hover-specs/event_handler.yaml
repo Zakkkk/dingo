@@ -1,0 +1,115 @@
+# Hover test spec for pattern matching with enums
+# Tests enum declarations, variant declarations, and variant usages in match expressions
+
+file: examples/04_pattern_matching/event_handler.dingo
+
+cases:
+  # Enum declaration
+  - id: 1
+    line: 17
+    token: Event
+    description: "enum declaration"
+    expect:
+      contains: "enum Event"
+
+  # Enum variant declarations inside the enum block
+  - id: 2
+    line: 18
+    token: UserCreated
+    description: "variant declaration UserCreated"
+    expect:
+      contains: "Event.UserCreated"
+
+  - id: 3
+    line: 19
+    token: UserDeleted
+    description: "variant declaration UserDeleted"
+    expect:
+      contains: "Event.UserDeleted"
+
+  - id: 4
+    line: 20
+    token: OrderPlaced
+    description: "variant declaration OrderPlaced"
+    expect:
+      contains: "Event.OrderPlaced"
+
+  # Variant usage in match pattern (line 30)
+  - id: 10
+    line: 30
+    token: UserCreated
+    description: "variant in match pattern - UserCreated"
+    expect:
+      contains: "Event.UserCreated"
+
+  - id: 11
+    line: 33
+    token: UserDeleted
+    description: "variant in match pattern - UserDeleted"
+    expect:
+      contains: "Event.UserDeleted"
+
+  - id: 12
+    line: 36
+    token: OrderPlaced
+    description: "variant in match pattern - OrderPlaced with guard"
+    expect:
+      contains: "Event.OrderPlaced"
+
+  - id: 13
+    line: 42
+    token: OrderShipped
+    description: "variant in match pattern - OrderShipped"
+    expect:
+      contains: "Event.OrderShipped"
+
+  - id: 14
+    line: 45
+    token: PaymentReceived
+    description: "variant in match pattern - PaymentReceived"
+    expect:
+      contains: "Event.PaymentReceived"
+
+  - id: 15
+    line: 48
+    token: PaymentFailed
+    description: "variant in match pattern - PaymentFailed"
+    expect:
+      contains: "Event.PaymentFailed"
+
+  # Match arm body - regular code
+  - id: 16
+    line: 31
+    token: fmt
+    description: "fmt package in match arm body"
+    expect:
+      contains: "fmt"
+
+  - id: 17
+    line: 31
+    token: Sprintf
+    description: "Sprintf function in match arm body"
+    expect:
+      contains: "Sprintf"
+
+  - id: 18
+    line: 31
+    token: userID
+    description: "destructured variable in match arm body"
+    expect:
+      contains: "int"
+
+  # Constructor calls in main()
+  - id: 20
+    line: 81
+    token: UserCreated
+    description: "constructor call Event.UserCreated"
+    expect:
+      contains: "UserCreated"
+
+  - id: 21
+    line: 82
+    token: OrderPlaced
+    description: "constructor call Event.OrderPlaced"
+    expect:
+      contains: "OrderPlaced"

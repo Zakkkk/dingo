@@ -52,19 +52,6 @@ func (s *Server) nativeHover(ctx context.Context, params protocol.HoverParams) (
 	s.config.Logger.Debugf("[Native Hover] Looking up semantic entity at Dingo position: line=%d, col=%d", line, col)
 
 	// 5. Look up semantic entity at position
-	// Debug: log all entities on this line
-	s.config.Logger.Debugf("[Native Hover] Entities on line %d:", line)
-	for i := 0; i < doc.SemanticMap.Count(); i++ {
-		e := doc.SemanticMap.EntityAt(i)
-		if e != nil && e.Line == line {
-			name := ""
-			if e.Object != nil {
-				name = e.Object.Name()
-			}
-			s.config.Logger.Debugf("[Native Hover]   - Col=%d-%d, Kind=%d, Name=%q",
-				e.Col, e.EndCol, e.Kind, name)
-		}
-	}
 
 	entity := doc.SemanticMap.FindAt(line, col)
 	if entity == nil {

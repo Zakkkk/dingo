@@ -82,10 +82,21 @@ func (s *Scanner) Next() rune {
 }
 
 // SkipBytes advances N bytes (for known byte counts like "//" or "/*")
+// IMPORTANT: Also updates column counter for accurate position tracking
 func (s *Scanner) SkipBytes(n int) {
 	end := s.pos + n
 	if end > len(s.src) {
 		end = len(s.src)
+	}
+	// Update column for each byte skipped (handle newlines)
+	for i := s.pos; i < end; i++ {
+		if s.src[i] == '\n' {
+			s.line++
+			s.column = 1
+			s.lineStart = i + 1
+		} else {
+			s.column++
+		}
 	}
 	s.pos = end
 }

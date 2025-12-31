@@ -20,7 +20,7 @@ func main() {
 	fmt.Println("5 + 3 =", result)
 
 	// Lambda that uses interface{} operations - should compile
-	identity := |x| x
+	identity := |x: int| x
 	val := identity(42)
 	fmt.Println("identity(42) =", val)
 

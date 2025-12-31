@@ -1,0 +1,408 @@
+# Comprehensive hover tests for Dingo syntax transformations
+# These tests specifically target positions that are transformed by the transpiler
+# and verify that hover works correctly after transformation
+#
+# Tests use token-based positioning (occurrence field specifies which match to use)
+
+# =============================================================================
+# 02_result/repository.dingo - Result type transformations
+# =============================================================================
+---
+file: examples/02_result/repository.dingo
+cases:
+  # Line 54: func FindUserByID(db *sql.DB, id int) Result[User, DBError] {
+  - id: 1
+    line: 54
+    token: Result
+    description: "Result type keyword in function return"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  - id: 2
+    line: 54
+    token: User
+    description: "User type in Result[User, DBError] - first type param"
+    expect:
+      containsAny: ["User", "struct", "type"]
+
+  - id: 3
+    line: 54
+    token: DBError
+    description: "DBError type in Result[User, DBError] - second type param"
+    expect:
+      containsAny: ["DBError", "struct", "type"]
+
+  # Line 60: return DBError{Code: "NOT_FOUND", Message: "user not found"}
+  - id: 4
+    line: 60
+    token: DBError
+    description: "DBError struct literal (wrapped in dgo.Err)"
+    expect:
+      containsAny: ["DBError", "struct", "type"]
+
+  - id: 5
+    line: 60
+    token: Code
+    description: "Code field in DBError literal"
+    expect:
+      containsAny: ["Code", "field", "string"]
+
+  - id: 6
+    line: 60
+    token: Message
+    description: "Message field in DBError literal"
+    expect:
+      containsAny: ["Message", "field", "string"]
+
+  # Line 70: func TransferFunds(...) Result[bool, DBError] {
+  - id: 7
+    line: 70
+    token: Result
+    description: "Result in TransferFunds signature"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  - id: 8
+    line: 70
+    token: bool
+    description: "bool type parameter in Result[bool, DBError]"
+    expect:
+      containsAny: ["bool", "type"]
+
+  - id: 9
+    line: 54
+    token: FindUserByID
+    description: "Function declaration"
+    expect:
+      containsAny: ["func", "FindUserByID"]
+
+  - id: 10
+    line: 70
+    token: TransferFunds
+    description: "Function declaration"
+    expect:
+      containsAny: ["func", "TransferFunds"]
+
+---
+# =============================================================================
+# 03_option/user_settings.dingo - Option type transformations
+# =============================================================================
+file: examples/03_option/user_settings.dingo
+cases:
+  # Line 34: Theme       Option[string]
+  - id: 1
+    line: 34
+    token: Option
+    description: "Option type in Theme struct field"
+    expect:
+      containsAny: ["Option", "dgo", "type"]
+
+  - id: 2
+    line: 34
+    token: string
+    description: "string type parameter in Option[string]"
+    expect:
+      containsAny: ["string", "type"]
+
+  - id: 3
+    line: 35
+    token: Option
+    description: "Option type in FontSize field"
+    expect:
+      containsAny: ["Option", "dgo", "type"]
+
+  - id: 4
+    line: 35
+    token: int
+    description: "int type parameter in Option[int]"
+    expect:
+      containsAny: ["int", "type"]
+
+---
+# =============================================================================
+# 11_result_propagation/user_service.dingo - Result with error propagation
+# =============================================================================
+file: examples/11_result_propagation/user_service.dingo
+cases:
+  # Line 91: func FindUser(db *sql.DB, id int) Result[User, ServiceError] {
+  - id: 1
+    line: 91
+    token: Result
+    description: "Result type in FindUser"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  - id: 2
+    line: 91
+    token: User
+    description: "User type parameter in Result[User, ServiceError]"
+    expect:
+      containsAny: ["User", "struct", "type"]
+
+  - id: 3
+    line: 91
+    token: ServiceError
+    description: "ServiceError type parameter in Result[User, ServiceError]"
+    expect:
+      containsAny: ["ServiceError", "struct", "type"]
+
+  # Line 106: func FindOrdersByUser(...) Result[[]Order, ServiceError]
+  - id: 4
+    line: 106
+    token: Result
+    description: "Result in FindOrdersByUser"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  # Line 129: func GetUserOrderTotal(...) Result[float64, ServiceError]
+  - id: 5
+    line: 129
+    token: Result
+    description: "Result in GetUserOrderTotal"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+---
+# =============================================================================
+# 12_guard/user_service.dingo - Result with guard clauses
+# =============================================================================
+file: examples/12_guard/user_service.dingo
+cases:
+  # Line 25: func findUser(id int) Result[User, string] {
+  - id: 1
+    line: 25
+    token: Result
+    description: "Result in findUser"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  - id: 2
+    line: 25
+    token: User
+    description: "User type parameter in Result[User, string]"
+    expect:
+      containsAny: ["User", "struct", "type"]
+
+  # Line 39: func getCoords() Result[Point, string] {
+  - id: 3
+    line: 39
+    token: Result
+    description: "Result in getCoords"
+    expect:
+      containsAny: ["Result", "dgo", "type"]
+
+  - id: 4
+    line: 39
+    token: Point
+    description: "Point type parameter in Result[Point, string]"
+    expect:
+      containsAny: ["Point", "struct", "type"]
+
+---
+# =============================================================================
+# 01_error_propagation/http_handler.dingo - Error prop transforms
+# =============================================================================
+file: examples/01_error_propagation/http_handler.dingo
+cases:
+  # Lambda parameters in error propagation
+  - id: 1
+    line: 63
+    token: err
+    description: "Lambda param in |err| transform"
+    expect:
+      containsAny: ["err", "error", "Lambda"]
+
+  - id: 2
+    line: 63
+    token: NewAppError
+    description: "Function call in lambda body"
+    expect:
+      containsAny: ["func", "NewAppError", "error"]
+
+  - id: 3
+    line: 67
+    token: NewAppError
+    description: "Function call in TS lambda body"
+    expect:
+      containsAny: ["func", "NewAppError", "error"]
+
+  # Struct types
+  - id: 4
+    line: 27
+    token: AppError
+    description: "AppError struct declaration"
+    expect:
+      containsAny: ["AppError", "struct", "type"]
+
+  - id: 5
+    line: 44
+    token: User
+    description: "User struct declaration"
+    expect:
+      containsAny: ["User", "struct", "type"]
+
+  - id: 6
+    line: 93
+    token: Order
+    description: "Order struct declaration"
+    expect:
+      containsAny: ["Order", "struct", "type"]
+
+---
+# =============================================================================
+# 04_pattern_matching/event_handler.dingo - Enum and match transforms
+# =============================================================================
+file: examples/04_pattern_matching/event_handler.dingo
+cases:
+  # Enum declaration
+  - id: 1
+    line: 17
+    token: Event
+    description: "Event enum declaration"
+    expect:
+      containsAny: ["Event", "interface", "type"]
+
+  # Enum variants
+  - id: 2
+    line: 18
+    token: UserCreated
+    description: "UserCreated variant"
+    expect:
+      containsAny: ["UserCreated", "struct", "type"]
+
+  - id: 3
+    line: 19
+    token: UserDeleted
+    description: "UserDeleted variant"
+    expect:
+      containsAny: ["UserDeleted", "struct", "type"]
+
+  # Match arm variables (destructured)
+  - id: 4
+    line: 30
+    token: userID
+    description: "Destructured userID in match"
+    expect:
+      containsAny: ["userID", "int", "var"]
+
+  - id: 5
+    line: 30
+    token: email
+    description: "Destructured email in match"
+    expect:
+      containsAny: ["email", "string", "var"]
+
+  # Enum constructor
+  - id: 6
+    line: 81
+    token: UserCreated
+    description: "Event.UserCreated constructor"
+    expect:
+      containsAny: ["UserCreated", "func", "Event"]
+
+---
+# =============================================================================
+# 06_lambdas/data_pipeline.dingo - Lambda transforms
+# =============================================================================
+file: examples/06_lambdas/data_pipeline.dingo
+cases:
+  # Lambda parameters should have hover
+  - id: 1
+    line: 32
+    token: u
+    occurrence: 1
+    description: "Lambda param u in (u) => ..."
+    expect:
+      containsAny: ["u", "User", "var"]
+
+  - id: 2
+    line: 36
+    token: u
+    occurrence: 1
+    description: "Lambda param u in |u| ..."
+    expect:
+      containsAny: ["u", "User", "var"]
+
+  - id: 3
+    line: 40
+    token: acc
+    description: "Lambda param acc in (acc, u) => ..."
+    expect:
+      containsAny: ["acc", "string", "var"]
+
+  # Field access inside lambda
+  - id: 4
+    line: 32
+    token: Active
+    description: "u.Active field access"
+    expect:
+      containsAny: ["Active", "bool", "field"]
+
+  - id: 5
+    line: 32
+    token: Premium
+    description: "u.Premium field access"
+    expect:
+      containsAny: ["Premium", "bool", "field"]
+
+---
+# =============================================================================
+# 08_safe_navigation/config.dingo - Safe nav transforms
+# =============================================================================
+file: examples/08_safe_navigation/config.dingo
+cases:
+  # Fields in safe nav chain should have hover
+  - id: 1
+    line: 63
+    token: Database
+    description: "Database field in config?.Database"
+    expect:
+      containsAny: ["Database", "DatabaseConfig", "field"]
+
+  - id: 2
+    line: 63
+    token: Host
+    description: "Host field in ?.Host"
+    expect:
+      containsAny: ["Host", "string", "field"]
+
+  - id: 3
+    line: 68
+    token: SSL
+    description: "SSL field in ?.SSL"
+    expect:
+      containsAny: ["SSL", "SSLConfig", "field"]
+
+  - id: 4
+    line: 68
+    token: CertPath
+    description: "CertPath field in ?.CertPath"
+    expect:
+      containsAny: ["CertPath", "string", "field"]
+
+---
+# =============================================================================
+# 10_null_coalesce/defaults.dingo - Null coalesce transforms
+# =============================================================================
+file: examples/10_null_coalesce/defaults.dingo
+cases:
+  - id: 1
+    line: 37
+    token: Host
+    description: "Host field before ??"
+    expect:
+      containsAny: ["Host", "string", "field"]
+
+  - id: 2
+    line: 42
+    token: Port
+    description: "Port field before ??"
+    expect:
+      containsAny: ["Port", "int", "field"]
+
+  - id: 3
+    line: 98
+    token: primary
+    description: "primary param in chained ??"
+    expect:
+      containsAny: ["primary", "string", "var"]

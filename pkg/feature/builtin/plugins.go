@@ -47,7 +47,8 @@ func (p *EnumPlugin) Detect(src []byte) []feature.SyntaxLocation {
 }
 func (p *EnumPlugin) Transform(src []byte, ctx *feature.Context) ([]byte, error) {
 	// Call the AST-based enum transformer directly
-	transformedSrc, enumRegistry := dingoast.TransformEnumSource(src)
+	// Pass empty filename since this is the plugin path (not full transpile with position tracking)
+	transformedSrc, enumRegistry := dingoast.TransformEnumSource(src, "")
 
 	// Store enum registry in context for enum_constructors plugin
 	if ctx != nil && ctx.Registry != nil && enumRegistry != nil {

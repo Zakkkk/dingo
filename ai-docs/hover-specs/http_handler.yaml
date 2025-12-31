@@ -110,6 +110,20 @@ cases:
     expect:
       contains: "var user"
 
+  - id: 14
+    line: 63
+    token: err
+    description: "Rust-style lambda param |err|"
+    expect:
+      contains: "Lambda parameter"
+
+  - id: 100
+    line: 63
+    token: NewAppError
+    description: "Lambda function in error propagation"
+    expect:
+      contains: "func NewAppError"
+
   # ============================================================
   # Line 67: response := json.Marshal(user) ? (e) => NewAppError(...)
   # Pattern 4: TypeScript-style lambda
@@ -141,6 +155,48 @@ cases:
     expect:
       contains: "var user"
 
+  - id: 15
+    line: 67
+    token: e
+    occurrence: 1
+    description: "TypeScript-style lambda param (e)"
+    expect:
+      contains: "Lambda parameter"
+
+  - id: 16
+    line: 67
+    token: NewAppError
+    description: "Function in TS-style lambda body"
+    expect:
+      contains: "func NewAppError"
+
+  # ============================================================
+  # Line 75: func AdvancedHandler(userID string, orderID string) (Order, error) {
+  # AdvancedHandler function signature
+  # ============================================================
+
+  - id: 17
+    line: 75
+    token: AdvancedHandler
+    description: "Function name in signature"
+    expect:
+      contains: "func AdvancedHandler"
+
+  - id: 18
+    line: 75
+    token: userID
+    occurrence: 1
+    description: "First parameter in signature"
+    expect:
+      contains: "userID"
+
+  - id: 19
+    line: 75
+    token: Order
+    description: "Return type in signature"
+    expect:
+      contains: "Order"
+
   # ============================================================
   # Line 77: user := getUser(userID)?
   # AdvancedHandler - Basic pattern
@@ -154,14 +210,14 @@ cases:
     expect:
       allowAny: true
 
-  - id: 15
+  - id: 20
     line: 77
     token: getUser
     description: "Function name - works!"
     expect:
       contains: "func getUser"
 
-  - id: 16
+  - id: 21
     line: 77
     token: userID
     occurrence: 1

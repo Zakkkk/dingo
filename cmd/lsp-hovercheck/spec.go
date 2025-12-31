@@ -49,26 +49,57 @@ type CaseResult struct {
 	Description string `json:"description,omitempty"`
 }
 
-// LoadSpec loads a spec from a YAML file
+// LoadSpec loads a spec from a YAML file (single document only)
+// For multi-document YAML files, use LoadSpecs instead
 func LoadSpec(path string) (*Spec, error) {
-	data, err := os.ReadFile(path)
+	specs, err := LoadSpecs(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading spec file: %w", err)
+		return nil, err
 	}
-
-	var spec Spec
-	if err := yaml.Unmarshal(data, &spec); err != nil {
-		return nil, fmt.Errorf("parsing spec YAML: %w", err)
+	if len(specs) == 0 {
+		return nil, fmt.Errorf("no specs found in %s", path)
 	}
+	return specs[0], nil
+}
 
-	// Set defaults
-	for i := range spec.Cases {
-		if spec.Cases[i].Occurrence == 0 {
-			spec.Cases[i].Occurrence = 1
+// LoadSpecs loads all specs from a multi-document YAML file
+// Each document separated by --- is a separate Spec targeting a different file
+func LoadSpecs(path string) ([]*Spec, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening spec file: %w", err)
+	}
+	defer f.Close()
+
+	decoder := yaml.NewDecoder(f)
+	var specs []*Spec
+
+	for {
+		var spec Spec
+		err := decoder.Decode(&spec)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return nil, fmt.Errorf("parsing spec YAML: %w", err)
 		}
+
+		// Skip empty documents (comments-only sections)
+		if spec.File == "" && len(spec.Cases) == 0 {
+			continue
+		}
+
+		// Set defaults
+		for i := range spec.Cases {
+			if spec.Cases[i].Occurrence == 0 {
+				spec.Cases[i].Occurrence = 1
+			}
+		}
+
+		specs = append(specs, &spec)
 	}
 
-	return &spec, nil
+	return specs, nil
 }
 
 // CheckExpectation checks if the hover result matches the expectation
