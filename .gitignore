@@ -66,3 +66,33 @@ dingo.claude/settings.local.json
 
 
 .gocache/
+specs/tools
+
+# Compiled example binaries (built with dingo build)
+/http_handler
+/api_response
+/config
+/data_pipeline
+/defaults
+/event_handler
+/functional
+/geometry
+/lambda_void_fix
+/match_contexts
+/permissions
+/repository
+/showcase
+/user_service
+/user_settings
+/test_full_types
+/test_hover_lambda
+/test_return_match
+/test_two_match
+/tests/test_enum
+/tests/test_result
+
+# LSP testing tool
+/lsp-hovercheck
+
+# Claudemem database (ephemeral)
+.claudemem/

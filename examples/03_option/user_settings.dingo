@@ -85,7 +85,7 @@ func ShouldSendNotification(user User, notificationType string) bool {
 func FindUserByLanguage(users []User, lang string) Option[User] {
 	for _, user := range users {
 		if user.Settings.Language.IsSome() && user.Settings.Language.MustSome() == lang {
-			return Some[User](user)
+			return Some(user)
 		}
 	}
 	return None
@@ -99,7 +99,7 @@ func main() {
 		Settings: UserSettings{
 			Theme:    Some("dark"),
 			FontSize: Some(18),
-			Language: None[string](), // Not set - will use system language
+			Language: None, // Not set - will use system language
 		},
 	}
 
@@ -109,8 +109,8 @@ func main() {
 		Name:     "Bob",
 		Settings: UserSettings{
 			// All settings use defaults
-			Theme:    None[string](),
-			FontSize: None[int](),
+			Theme:    None,
+			FontSize: None,
 			Language: Some("es"),
 		},
 	}
