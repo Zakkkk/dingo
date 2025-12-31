@@ -39,14 +39,18 @@ func DetectOperators(dingoSource []byte, fset *token.FileSet, filename string) [
 
 	var operators []OperatorInfo
 
-	for _, t := range tokens {
+	for i, t := range tokens {
 		var kind ContextKind
 
 		switch t.Kind {
 		case tokenizer.QUESTION:
-			// Single ? (error propagation)
-			// Only if not followed by ? or . (handled by tokenizer as separate tokens)
-			kind = ContextErrorProp
+			// Single ? could be ternary (? :) or error propagation
+			// Check if there's a COLON on the same line after this QUESTION
+			if isTernaryQuestion(tokens, i) {
+				kind = ContextTernary
+			} else {
+				kind = ContextErrorProp
+			}
 
 		case tokenizer.QUESTION_QUESTION:
 			// ?? (null coalescing)
@@ -69,7 +73,7 @@ func DetectOperators(dingoSource []byte, fset *token.FileSet, filename string) [
 		if t.Lit == "" {
 			// For operators, literal may be empty - use kind to determine width
 			switch kind {
-			case ContextErrorProp:
+			case ContextErrorProp, ContextTernary:
 				endCol = t.Column + 1 // "?" is 1 char
 			case ContextNullCoal:
 				endCol = t.Column + 2 // "??" is 2 chars
@@ -87,6 +91,38 @@ func DetectOperators(dingoSource []byte, fset *token.FileSet, filename string) [
 	}
 
 	return operators
+}
+
+// isTernaryQuestion checks if a QUESTION token at index i is part of a ternary expression.
+// Returns true if there's a COLON on the same line after the QUESTION that isn't part of
+// a type annotation or slice expression.
+func isTernaryQuestion(tokens []tokenizer.Token, questionIdx int) bool {
+	questionLine := tokens[questionIdx].Line
+	depth := 0 // Track parentheses/bracket depth
+
+	for j := questionIdx + 1; j < len(tokens); j++ {
+		t := tokens[j]
+
+		// Stop at end of line (but continue if inside parens/brackets)
+		if t.Line != questionLine && depth == 0 {
+			break
+		}
+
+		// Track nesting
+		switch t.Kind {
+		case tokenizer.LPAREN, tokenizer.LBRACKET, tokenizer.LBRACE:
+			depth++
+		case tokenizer.RPAREN, tokenizer.RBRACKET, tokenizer.RBRACE:
+			depth--
+		case tokenizer.COLON:
+			// COLON at depth 0 means ternary (not inside a map/slice literal)
+			if depth == 0 {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // DetectLambdaParams finds all lambda parameters and their usages in Dingo source
@@ -203,4 +239,99 @@ func DetectLambdaParams(dingoSource []byte, fset *token.FileSet, filename string
 	}
 
 	return params
+}
+
+// OptionConstructorIdentifier holds information about a None/Some identifier
+type OptionConstructorIdentifier struct {
+	Line        int    // 1-indexed
+	Col         int    // 1-indexed
+	EndCol      int    // 1-indexed (exclusive)
+	Name        string // "None" or "Some"
+	Description string // Hover description
+}
+
+// isKeywordOrBuiltin checks if an identifier is a Go keyword or built-in
+func isKeywordOrBuiltin(name string) bool {
+	switch name {
+	case "break", "case", "chan", "const", "continue", "default", "defer",
+		"else", "fallthrough", "for", "func", "go", "goto", "if", "import",
+		"interface", "map", "package", "range", "return", "select", "struct",
+		"switch", "type", "var", "true", "false", "nil", "iota", "append",
+		"cap", "close", "complex", "copy", "delete", "imag", "len", "make",
+		"new", "panic", "print", "println", "real", "recover":
+		return true
+	}
+	return false
+}
+
+// GuardKeywordInfo holds information about a guard keyword occurrence
+type GuardKeywordInfo struct {
+	Line   int // 1-indexed
+	Col    int // 1-indexed
+	EndCol int // 1-indexed (exclusive)
+}
+
+// DetectGuardKeywords finds all guard keywords in Dingo source.
+// FOLLOWS CLAUDE.md RULES: Uses Dingo tokenizer for position tracking.
+func DetectGuardKeywords(dingoSource []byte, fset *token.FileSet, filename string) []GuardKeywordInfo {
+	tok := tokenizer.NewWithFileSet(dingoSource, fset, filename)
+	tokens, err := tok.Tokenize()
+	if err != nil {
+		return nil
+	}
+
+	var guards []GuardKeywordInfo
+
+	for _, t := range tokens {
+		if t.Kind == tokenizer.GUARD {
+			guards = append(guards, GuardKeywordInfo{
+				Line:   t.Line,
+				Col:    t.Column,
+				EndCol: t.Column + len("guard"),
+			})
+		}
+	}
+
+	return guards
+}
+
+// DetectOptionConstructorIdentifiers finds bare None and Some identifiers in Dingo source.
+// These become dgo.None[T]() or dgo.Some(value) in Go, but may appear in areas
+// without line mappings (e.g., struct literals).
+//
+// FOLLOWS CLAUDE.md RULES: Uses Dingo tokenizer for position tracking.
+func DetectOptionConstructorIdentifiers(dingoSource []byte, fset *token.FileSet, filename string) []OptionConstructorIdentifier {
+	tok := tokenizer.NewWithFileSet(dingoSource, fset, filename)
+	tokens, err := tok.Tokenize()
+	if err != nil {
+		return nil
+	}
+
+	var idents []OptionConstructorIdentifier
+
+	for _, t := range tokens {
+		if t.Kind != tokenizer.IDENT {
+			continue
+		}
+
+		var desc string
+		switch t.Lit {
+		case "None":
+			desc = "```dingo\nNone\n```\n\n**Option constructor** - creates an empty Option value\n\nEquivalent to `dgo.None[T]()`"
+		case "Some":
+			desc = "```dingo\nSome(value)\n```\n\n**Option constructor** - wraps a value in Some\n\nEquivalent to `dgo.Some(value)`"
+		default:
+			continue
+		}
+
+		idents = append(idents, OptionConstructorIdentifier{
+			Line:        t.Line,
+			Col:         t.Column,
+			EndCol:      t.Column + len(t.Lit),
+			Name:        t.Lit,
+			Description: desc,
+		})
+	}
+
+	return idents
 }

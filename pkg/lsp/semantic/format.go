@@ -3,6 +3,7 @@ package semantic
 import (
 	"fmt"
 	"go/types"
+	"sort"
 	"strings"
 
 	"go.lsp.dev/protocol"
@@ -31,6 +32,9 @@ func FormatHoverWithDocs(entity *SemanticEntity, pkg *types.Package, docProvider
 	} else if entity.Context != nil && entity.Context.Kind == ContextErrorProp {
 		// Error propagation context on a variable
 		content = formatErrorPropHover(entity, pkg)
+	} else if entity.Context != nil && entity.Context.Description != "" {
+		// Entity with only context description (e.g., Option constructors like None/Some)
+		content = entity.Context.Description
 	} else if entity.Object != nil {
 		// Named entity (variable, function, etc.)
 		content = formatObjectHoverWithDocs(entity, pkg, docProvider)
@@ -96,7 +100,10 @@ func formatOperatorHover(entity *SemanticEntity, pkg *types.Package) string {
 			b.WriteString("Returns early with error if result is `Err`")
 		} else {
 			// Go's (T, error) pattern
-			b.WriteString("Returns early if error is non-nil")
+			b.WriteString("Unwraps Go's `(T, error)` pattern.\n\n")
+			b.WriteString("- If `error` is **non-nil**: returns early from the function\n")
+			b.WriteString("- If `error` is **nil**: continues with the unwrapped value\n\n")
+			b.WriteString("*Equivalent to:*\n```go\nval, err := expr\nif err != nil {\n    return ..., err\n}\n```")
 		}
 
 	case ContextNullCoal:
@@ -115,6 +122,17 @@ func formatOperatorHover(entity *SemanticEntity, pkg *types.Package) string {
 		}
 		b.WriteString("Returns `nil` if receiver is `nil`, otherwise accesses field")
 
+	case ContextTernary:
+		b.WriteString("**`? :` ternary conditional**\n\n")
+		b.WriteString("```dingo\ncondition ? valueIfTrue : valueIfFalse\n```\n\n")
+		b.WriteString("Returns first value if condition is true, otherwise second value")
+
+	case ContextGuard:
+		b.WriteString("**`guard` statement**\n\n")
+		b.WriteString("```dingo\nguard value := expr else { return ... }\n```\n\n")
+		b.WriteString("Unwraps an `Option` or `Result`, executing the else block if `None`/`Err`.\n\n")
+		b.WriteString("Similar to Swift's guard-let statement.")
+
 	default:
 		if ctx.Description != "" {
 			b.WriteString(ctx.Description)
@@ -128,10 +146,16 @@ func formatOperatorHover(entity *SemanticEntity, pkg *types.Package) string {
 func formatLambdaHover(entity *SemanticEntity, pkg *types.Package) string {
 	var b strings.Builder
 
-	b.WriteString("```go\n")
-	b.WriteString("var err error")
+	// Get the actual parameter name from context
+	name := "x" // fallback
+	if entity.Context != nil && entity.Context.Name != "" {
+		name = entity.Context.Name
+	}
+
+	b.WriteString("```dingo\n")
+	b.WriteString(name)
 	b.WriteString("\n```\n\n")
-	b.WriteString("*Lambda parameter for error transformation*")
+	b.WriteString("*Lambda parameter* — type inferred by Go compiler")
 
 	return b.String()
 }
@@ -156,12 +180,24 @@ func formatObjectHoverWithDocs(entity *SemanticEntity, pkg *types.Package, docPr
 			}
 		}
 		// Check for Dingo enum types
-		if enumInfo := detectDingoEnumType(typeName.Type()); enumInfo != nil {
+		// Use the object's package to find variants (not the document package)
+		objPkg := typeName.Pkg()
+		if objPkg == nil {
+			objPkg = pkg // Fall back to document package
+		}
+		if enumInfo := detectDingoEnumType(typeName.Type(), objPkg); enumInfo != nil {
 			return formatDingoEnumHover(enumInfo)
 		}
 		// Check for Dingo enum variants
 		if variantInfo := detectDingoVariantType(typeName.Type(), pkg); variantInfo != nil {
 			return formatDingoVariantHover(variantInfo)
+		}
+	}
+
+	// Check for dgo constructor functions (None, Some, Ok, Err)
+	if fn, ok := entity.Object.(*types.Func); ok {
+		if hover := formatDgoConstructorHover(fn, pkg); hover != "" {
+			return hover
 		}
 	}
 
@@ -204,6 +240,13 @@ func formatTypeHover(entity *SemanticEntity, pkg *types.Package) string {
 		}
 	}
 
+	// Check for dgo constructor signatures (instantiated generic constructors like Err[User])
+	if sig, ok := entity.Type.(*types.Signature); ok {
+		if hover := formatDgoConstructorSignatureHover(sig, pkg); hover != "" {
+			return hover
+		}
+	}
+
 	var b strings.Builder
 
 	b.WriteString("```go\n")
@@ -237,7 +280,7 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 			}
 		}
 		// Check if variable has enum type
-		if enumInfo := detectDingoEnumType(obj.Type()); enumInfo != nil {
+		if enumInfo := detectDingoEnumType(obj.Type(), pkg); enumInfo != nil {
 			return fmt.Sprintf("var %s %s", obj.Name(), enumInfo.Name)
 		}
 		if obj.IsField() {
@@ -255,6 +298,10 @@ func formatSignature(obj types.Object, pkg *types.Package) string {
 	case *types.TypeName:
 		// Note: dgo types, enums, and variants are handled in formatObjectHoverWithDocs
 		// before calling formatSignature, so they won't reach here.
+		// Check for tuple types (structs with First, Second, Third... fields)
+		if tupleStr := formatTupleType(obj.Type().Underlying()); tupleStr != "" {
+			return fmt.Sprintf("type %s = %s", obj.Name(), tupleStr)
+		}
 		return fmt.Sprintf("type %s %s", obj.Name(), formatType(obj.Type().Underlying(), pkg))
 
 	default:
@@ -352,6 +399,37 @@ func formatSignatureType(sig *types.Signature, pkg *types.Package) string {
 		b.WriteString(")")
 	}
 
+	return b.String()
+}
+
+// tupleFieldNames are the expected field names for Dingo tuple types
+var tupleFieldNames = []string{"First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"}
+
+// formatTupleType checks if a type is a Dingo tuple (struct with First, Second, etc. fields)
+// and returns the Dingo tuple syntax, e.g., "(float64, float64)"
+func formatTupleType(t types.Type) string {
+	st, ok := t.(*types.Struct)
+	if !ok || st.NumFields() == 0 || st.NumFields() > len(tupleFieldNames) {
+		return ""
+	}
+
+	// Check that all fields match tuple naming pattern
+	for i := 0; i < st.NumFields(); i++ {
+		if st.Field(i).Name() != tupleFieldNames[i] {
+			return ""
+		}
+	}
+
+	// Format as Dingo tuple: (T1, T2, ...)
+	var b strings.Builder
+	b.WriteString("(")
+	for i := 0; i < st.NumFields(); i++ {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(types.TypeString(st.Field(i).Type(), nil))
+	}
+	b.WriteString(")")
 	return b.String()
 }
 
@@ -497,6 +575,232 @@ func formatDgoOptionHover(info *dgoTypeInfo, pkg *types.Package) string {
 	return b.String()
 }
 
+// formatDgoConstructorHover formats hover for dgo constructor functions (None, Some, Ok, Err)
+func formatDgoConstructorHover(fn *types.Func, pkg *types.Package) string {
+	// Check if this is a dgo package function
+	fnPkg := fn.Pkg()
+	if fnPkg == nil {
+		return ""
+	}
+	// Accept both the original dgo package and our local copy
+	pkgPath := fnPkg.Path()
+	if pkgPath != "github.com/nicksrandall/dgo" && pkgPath != "github.com/MadAppGang/dingo/pkg/dgo" {
+		return ""
+	}
+
+	sig := fn.Type().(*types.Signature)
+	results := sig.Results()
+
+	switch fn.Name() {
+	case "None":
+		// func None[T]() Option[T]
+		var b strings.Builder
+		tStr := "T"
+		if results.Len() > 0 {
+			if dgoInfo := detectDgoType(results.At(0).Type()); dgoInfo != nil && len(dgoInfo.TypeArgs) > 0 {
+				tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+			}
+		}
+
+		b.WriteString("```go\n")
+		b.WriteString(fmt.Sprintf("func None[%s]() Option[%s]\n", tStr, tStr))
+		b.WriteString("```\n\n")
+		b.WriteString("**Creates an empty Option** (no value present)\n\n")
+		b.WriteString("| Method | Returns |\n")
+		b.WriteString("|--------|--------|\n")
+		b.WriteString("| `.IsSome()` | `false` |\n")
+		b.WriteString("| `.IsNone()` | `true` |\n")
+		b.WriteString(fmt.Sprintf("| `.MustSome()` | *panics* |\n"))
+		b.WriteString(fmt.Sprintf("| `.SomeOr(default)` | `default` |\n"))
+		return b.String()
+
+	case "Some":
+		// func Some[T](value T) Option[T]
+		var b strings.Builder
+		tStr := "T"
+		if results.Len() > 0 {
+			if dgoInfo := detectDgoType(results.At(0).Type()); dgoInfo != nil && len(dgoInfo.TypeArgs) > 0 {
+				tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+			}
+		}
+
+		b.WriteString("```go\n")
+		b.WriteString(fmt.Sprintf("func Some[%s](value %s) Option[%s]\n", tStr, tStr, tStr))
+		b.WriteString("```\n\n")
+		b.WriteString("**Creates an Option containing a value**\n\n")
+		b.WriteString("| Method | Returns |\n")
+		b.WriteString("|--------|--------|\n")
+		b.WriteString("| `.IsSome()` | `true` |\n")
+		b.WriteString("| `.IsNone()` | `false` |\n")
+		b.WriteString(fmt.Sprintf("| `.MustSome()` | `%s` |\n", tStr))
+		b.WriteString(fmt.Sprintf("| `.SomeOr(default)` | `%s` |\n", tStr))
+		return b.String()
+
+	case "Ok":
+		// func Ok[T, E](value T) Result[T, E]
+		var b strings.Builder
+		tStr := "T"
+		eStr := "E"
+		if results.Len() > 0 {
+			if dgoInfo := detectDgoType(results.At(0).Type()); dgoInfo != nil {
+				if len(dgoInfo.TypeArgs) > 0 {
+					tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+				}
+				if len(dgoInfo.TypeArgs) > 1 {
+					eStr = formatType(dgoInfo.TypeArgs[1], pkg)
+				}
+			}
+		}
+
+		b.WriteString("```go\n")
+		b.WriteString(fmt.Sprintf("func Ok[%s, %s](value %s) Result[%s, %s]\n", tStr, eStr, tStr, tStr, eStr))
+		b.WriteString("```\n\n")
+		b.WriteString("**Creates a successful Result**\n\n")
+		b.WriteString("| Method | Returns |\n")
+		b.WriteString("|--------|--------|\n")
+		b.WriteString("| `.IsOk()` | `true` |\n")
+		b.WriteString("| `.IsErr()` | `false` |\n")
+		b.WriteString(fmt.Sprintf("| `.MustOk()` | `%s` |\n", tStr))
+		b.WriteString("| `.MustErr()` | *panics* |\n")
+		b.WriteString(fmt.Sprintf("| `.OkOr(default)` | `%s` |\n", tStr))
+		return b.String()
+
+	case "Err":
+		// func Err[T, E](err E) Result[T, E]
+		var b strings.Builder
+		tStr := "T"
+		eStr := "E"
+		if results.Len() > 0 {
+			if dgoInfo := detectDgoType(results.At(0).Type()); dgoInfo != nil {
+				if len(dgoInfo.TypeArgs) > 0 {
+					tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+				}
+				if len(dgoInfo.TypeArgs) > 1 {
+					eStr = formatType(dgoInfo.TypeArgs[1], pkg)
+				}
+			}
+		}
+
+		b.WriteString("```go\n")
+		b.WriteString(fmt.Sprintf("func Err[%s, %s](err %s) Result[%s, %s]\n", tStr, eStr, eStr, tStr, eStr))
+		b.WriteString("```\n\n")
+		b.WriteString("**Creates a failed Result**\n\n")
+		b.WriteString("| Method | Returns |\n")
+		b.WriteString("|--------|--------|\n")
+		b.WriteString("| `.IsOk()` | `false` |\n")
+		b.WriteString("| `.IsErr()` | `true` |\n")
+		b.WriteString("| `.MustOk()` | *panics* |\n")
+		b.WriteString(fmt.Sprintf("| `.MustErr()` | `%s` |\n", eStr))
+		b.WriteString(fmt.Sprintf("| `.OkOr(default)` | `default` |\n"))
+		return b.String()
+	}
+
+	return ""
+}
+
+// formatDgoConstructorSignatureHover formats hover for instantiated dgo constructor signatures
+// This handles cases like Err[User] which become func(err string) Result[User, string]
+func formatDgoConstructorSignatureHover(sig *types.Signature, pkg *types.Package) string {
+	results := sig.Results()
+	if results.Len() != 1 {
+		return ""
+	}
+
+	dgoInfo := detectDgoType(results.At(0).Type())
+	if dgoInfo == nil {
+		return ""
+	}
+
+	params := sig.Params()
+
+	switch dgoInfo.TypeName {
+	case "Option":
+		tStr := "T"
+		if len(dgoInfo.TypeArgs) > 0 {
+			tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+		}
+
+		// Detect if this is None (no params) or Some (one param)
+		if params.Len() == 0 {
+			// None[T]() signature
+			var b strings.Builder
+			b.WriteString("```go\n")
+			b.WriteString(fmt.Sprintf("func None[%s]() Option[%s]\n", tStr, tStr))
+			b.WriteString("```\n\n")
+			b.WriteString("**Creates an empty Option** (no value present)\n\n")
+			b.WriteString("| Method | Returns |\n")
+			b.WriteString("|--------|--------|\n")
+			b.WriteString("| `.IsSome()` | `false` |\n")
+			b.WriteString("| `.IsNone()` | `true` |\n")
+			b.WriteString("| `.MustSome()` | *panics* |\n")
+			b.WriteString("| `.SomeOr(default)` | `default` |\n")
+			return b.String()
+		} else if params.Len() == 1 {
+			// Some[T](value T) signature
+			var b strings.Builder
+			b.WriteString("```go\n")
+			b.WriteString(fmt.Sprintf("func Some[%s](value %s) Option[%s]\n", tStr, tStr, tStr))
+			b.WriteString("```\n\n")
+			b.WriteString("**Creates an Option containing a value**\n\n")
+			b.WriteString("| Method | Returns |\n")
+			b.WriteString("|--------|--------|\n")
+			b.WriteString("| `.IsSome()` | `true` |\n")
+			b.WriteString("| `.IsNone()` | `false` |\n")
+			b.WriteString(fmt.Sprintf("| `.MustSome()` | `%s` |\n", tStr))
+			b.WriteString(fmt.Sprintf("| `.SomeOr(default)` | `%s` |\n", tStr))
+			return b.String()
+		}
+
+	case "Result":
+		tStr := "T"
+		eStr := "E"
+		if len(dgoInfo.TypeArgs) > 0 {
+			tStr = formatType(dgoInfo.TypeArgs[0], pkg)
+		}
+		if len(dgoInfo.TypeArgs) > 1 {
+			eStr = formatType(dgoInfo.TypeArgs[1], pkg)
+		}
+
+		if params.Len() == 1 {
+			paramType := formatType(params.At(0).Type(), pkg)
+			// Determine if this is Ok or Err based on parameter type
+			if paramType == tStr {
+				// Ok[T, E](value T) signature
+				var b strings.Builder
+				b.WriteString("```go\n")
+				b.WriteString(fmt.Sprintf("func Ok[%s, %s](value %s) Result[%s, %s]\n", tStr, eStr, tStr, tStr, eStr))
+				b.WriteString("```\n\n")
+				b.WriteString("**Creates a successful Result**\n\n")
+				b.WriteString("| Method | Returns |\n")
+				b.WriteString("|--------|--------|\n")
+				b.WriteString("| `.IsOk()` | `true` |\n")
+				b.WriteString("| `.IsErr()` | `false` |\n")
+				b.WriteString(fmt.Sprintf("| `.MustOk()` | `%s` |\n", tStr))
+				b.WriteString("| `.MustErr()` | *panics* |\n")
+				b.WriteString(fmt.Sprintf("| `.OkOr(default)` | `%s` |\n", tStr))
+				return b.String()
+			} else if paramType == eStr {
+				// Err[T, E](err E) signature
+				var b strings.Builder
+				b.WriteString("```go\n")
+				b.WriteString(fmt.Sprintf("func Err[%s, %s](err %s) Result[%s, %s]\n", tStr, eStr, eStr, tStr, eStr))
+				b.WriteString("```\n\n")
+				b.WriteString("**Creates a failed Result**\n\n")
+				b.WriteString("| Method | Returns |\n")
+				b.WriteString("|--------|--------|\n")
+				b.WriteString("| `.IsOk()` | `false` |\n")
+				b.WriteString("| `.IsErr()` | `true` |\n")
+				b.WriteString("| `.MustOk()` | *panics* |\n")
+				b.WriteString(fmt.Sprintf("| `.MustErr()` | `%s` |\n", eStr))
+				b.WriteString("| `.OkOr(default)` | `default` |\n")
+				return b.String()
+			}
+		}
+	}
+
+	return ""
+}
+
 // dingoEnumInfo holds information about a Dingo enum type
 type dingoEnumInfo struct {
 	Name     string   // Enum name (e.g., "Event")
@@ -517,7 +821,7 @@ type dingoFieldInfo struct {
 }
 
 // detectDingoEnumType checks if a type is a Dingo enum (interface with is<Name>() marker)
-func detectDingoEnumType(t types.Type) *dingoEnumInfo {
+func detectDingoEnumType(t types.Type, pkg *types.Package) *dingoEnumInfo {
 	if t == nil {
 		return nil
 	}
@@ -556,19 +860,84 @@ func detectDingoEnumType(t types.Type) *dingoEnumInfo {
 		return nil
 	}
 
+	// Find all variants by scanning the package for structs implementing this interface
+	variants := findEnumVariants(enumName, pkg)
+
 	return &dingoEnumInfo{
 		Name:     enumName,
-		Variants: nil, // We could populate variants by scanning the package, but skip for now
+		Variants: variants,
 	}
+}
+
+// findEnumVariants scans the package for structs that implement the enum interface
+func findEnumVariants(enumName string, pkg *types.Package) []string {
+	if pkg == nil {
+		return nil
+	}
+
+	var variants []string
+	markerMethod := "is" + enumName
+
+	scope := pkg.Scope()
+	for _, name := range scope.Names() {
+		obj := scope.Lookup(name)
+		typeName, ok := obj.(*types.TypeName)
+		if !ok {
+			continue
+		}
+
+		// Check if it's a struct with the expected prefix
+		if !strings.HasPrefix(name, enumName) || name == enumName {
+			continue
+		}
+
+		// Must be a named type with a struct underlying
+		named, ok := typeName.Type().(*types.Named)
+		if !ok {
+			continue
+		}
+		if _, ok := named.Underlying().(*types.Struct); !ok {
+			continue
+		}
+
+		// Check if it has the marker method
+		for i := 0; i < named.NumMethods(); i++ {
+			method := named.Method(i)
+			if method.Name() == markerMethod {
+				// Verify signature: no params, no returns
+				sig := method.Type().(*types.Signature)
+				if sig.Params().Len() == 0 && sig.Results().Len() == 0 {
+					// Extract variant name by stripping enum prefix
+					variantName := name[len(enumName):]
+					if variantName != "" {
+						variants = append(variants, variantName)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Sort variants for consistent display
+	sort.Strings(variants)
+	return variants
 }
 
 // formatDingoEnumHover formats hover for a Dingo enum type
 func formatDingoEnumHover(info *dingoEnumInfo) string {
 	var b strings.Builder
 
-	// Dingo-style enum declaration
+	// Dingo-style enum declaration with variants
 	b.WriteString("```dingo\n")
-	b.WriteString(fmt.Sprintf("enum %s\n", info.Name))
+	if len(info.Variants) > 0 {
+		b.WriteString(fmt.Sprintf("enum %s {\n", info.Name))
+		for _, variant := range info.Variants {
+			b.WriteString(fmt.Sprintf("    %s\n", variant))
+		}
+		b.WriteString("}\n")
+	} else {
+		b.WriteString(fmt.Sprintf("enum %s\n", info.Name))
+	}
 	b.WriteString("```\n\n")
 
 	// Description

@@ -41,6 +41,7 @@ type DingoContext struct {
 	OriginalType  types.Type // For error_prop: the Result[T, E] type
 	UnwrappedType types.Type // For error_prop: the T type
 	Description   string     // Human-readable description
+	Name          string     // For lambdas: parameter name
 }
 
 // ContextKind identifies the Dingo construct type
@@ -49,8 +50,10 @@ type ContextKind int
 const (
 	ContextNone      ContextKind = iota
 	ContextErrorProp             // Error propagation (?)
+	ContextTernary               // Ternary conditional (? :)
 	ContextSafeNav               // Safe navigation (?.)
 	ContextNullCoal              // Null coalescing (??)
 	ContextLambda                // Lambda expression
 	ContextMatch                 // Match expression
+	ContextGuard                 // Guard statement
 )

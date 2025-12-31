@@ -1,0 +1,27 @@
+# Hover test spec for guard keyword
+file: examples/12_guard/user_service.dingo
+
+cases:
+  # Line 47: guard user := findUser(id) else |err| {
+  - id: 1
+    line: 47
+    token: guard
+    description: "guard keyword in Result unwrap"
+    expect:
+      contains: "guard"
+
+  # Line 57: guard theme := getTheme(id) else {
+  - id: 2
+    line: 57
+    token: guard
+    description: "guard keyword in Option unwrap"
+    expect:
+      contains: "guard"
+
+  # Line 69: guard user = findUser(id) else |err| {
+  - id: 3
+    line: 69
+    token: guard
+    description: "guard keyword with reassignment"
+    expect:
+      contains: "guard"

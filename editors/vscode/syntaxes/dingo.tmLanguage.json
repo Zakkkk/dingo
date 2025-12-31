@@ -79,7 +79,7 @@
       "patterns": [
         {
           "name": "keyword.control.dingo",
-          "match": "\\b(if|else|for|while|loop|break|continue|return|defer|go|select|case|default)\\b"
+          "match": "\\b(if|else|for|while|loop|break|continue|return|defer|go|select|case|default|guard)\\b"
         },
         {
           "name": "keyword.control.match.dingo",

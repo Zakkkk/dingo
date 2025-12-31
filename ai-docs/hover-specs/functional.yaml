@@ -1,0 +1,19 @@
+# Hover test spec for functional example lambdas
+file: examples/14_functional/functional.dingo
+
+cases:
+  # Line 60: doubled := dgo.Map(numbers, |x| x * 2)
+  - id: 1
+    line: 60
+    token: x
+    description: "lambda param in Map"
+    expect:
+      contains: "Lambda"
+
+  # Line 69: evens := dgo.Filter(numbers, |x| x % 2 == 0)
+  - id: 2
+    line: 69
+    token: x
+    description: "lambda param in Filter"
+    expect:
+      contains: "Lambda"
