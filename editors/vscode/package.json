@@ -69,7 +69,9 @@
           "strings": false
         },
         "editor.suggest.snippetsPreventQuickSuggestions": false,
-        "editor.wordBasedSuggestions": false
+        "editor.wordBasedSuggestions": false,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "dingo.dingo"
       }
     },
     "grammars": [
