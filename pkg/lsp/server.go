@@ -7,8 +7,10 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MadAppGang/dingo/pkg/lsp/semantic"
+	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -48,6 +50,17 @@ type Server struct {
 
 	// Semantic manager for native hover (Phase 1)
 	semanticManager *semantic.Manager
+
+	// Debounced transpilation for responsive diagnostics
+	transpileDebounce    map[string]*transpileDebounceState
+	transpileDebounceMu  sync.Mutex
+	transpileDebounceMs  int // Debounce delay in milliseconds (default: 300)
+}
+
+// transpileDebounceState tracks debounced transpilation for a single file
+type transpileDebounceState struct {
+	timer   *time.Timer
+	content string // Latest buffer content
 }
 
 // NewServer creates a new LSP server instance
@@ -72,15 +85,17 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 	// Create server first (without transpiler)
 	server := &Server{
-		config:         cfg,
-		gopls:          gopls,
-		mapCache:       mapCache,
-		translator:     translator,
-		docManager:     docManager,
-		lintDiags:      make(map[string][]protocol.Diagnostic),
-		goplsDiags:     make(map[string][]protocol.Diagnostic),
-		transpileDiags: make(map[string][]protocol.Diagnostic),
-		parseDiags:     make(map[string][]protocol.Diagnostic),
+		config:              cfg,
+		gopls:               gopls,
+		mapCache:            mapCache,
+		translator:          translator,
+		docManager:          docManager,
+		lintDiags:           make(map[string][]protocol.Diagnostic),
+		goplsDiags:          make(map[string][]protocol.Diagnostic),
+		transpileDiags:      make(map[string][]protocol.Diagnostic),
+		parseDiags:          make(map[string][]protocol.Diagnostic),
+		transpileDebounce:   make(map[string]*transpileDebounceState),
+		transpileDebounceMs: 300, // 300ms debounce for responsive typing
 	}
 
 	// Initialize auto-transpiler with server reference
@@ -379,22 +394,18 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 			// Get parse diagnostics
 			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
 
-			// Clear stale transpile diagnostics when file is being edited.
-			// The transpile result is only valid for the saved version, not the
-			// current buffer content. We'll get fresh transpile errors on save.
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", []protocol.Diagnostic{})
-
-			// Clear stale gopls diagnostics when file is being edited.
-			// Gopls diagnostics are for the last transpiled .go file, which is now
-			// out of sync with the current buffer content. Fresh gopls diagnostics
-			// will arrive after the next successful transpilation and sync.
-			// Without this, stale gopls diagnostics (like "expected declaration, found 'package'")
-			// can persist and be merged with new parse diagnostics.
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "gopls", []protocol.Diagnostic{})
-
-			// Publish parse diagnostics separately (under "parse" source)
-			// This allows us to distinguish parse errors from transpile errors
+			// Publish parse diagnostics immediately (these are fast)
 			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
+
+			// Schedule debounced transpilation for responsive gopls diagnostics.
+			// This provides type errors, unused variable warnings, etc. while typing
+			// with a 300ms delay after the user stops typing.
+			if s.config.AutoTranspile {
+				content := s.docManager.GetContent(string(params.TextDocument.URI))
+				if content != "" {
+					s.scheduleTranspileFromBuffer(params.TextDocument.URI, content)
+				}
+			}
 		}
 
 		return reply(ctx, nil, nil)
@@ -657,4 +668,90 @@ func (s *Server) forwardToGopls(ctx context.Context, reply jsonrpc2.Replier, req
 	// This is a simplified forwarding - full implementation would use gopls connection directly
 	s.config.Logger.Debugf("Method %s not implemented, returning error", req.Method())
 	return reply(ctx, nil, fmt.Errorf("method not implemented: %s", req.Method()))
+}
+
+// scheduleTranspileFromBuffer schedules a debounced transpilation from in-memory buffer content.
+// This provides responsive diagnostics while typing without overwhelming the system.
+func (s *Server) scheduleTranspileFromBuffer(uri protocol.DocumentURI, content string) {
+	uriStr := string(uri)
+
+	s.transpileDebounceMu.Lock()
+	defer s.transpileDebounceMu.Unlock()
+
+	// Cancel existing timer if any
+	if state, exists := s.transpileDebounce[uriStr]; exists {
+		state.timer.Stop()
+		state.content = content
+	} else {
+		s.transpileDebounce[uriStr] = &transpileDebounceState{content: content}
+	}
+
+	state := s.transpileDebounce[uriStr]
+
+	// Start new timer
+	state.timer = time.AfterFunc(time.Duration(s.transpileDebounceMs)*time.Millisecond, func() {
+		s.executeTranspileFromBuffer(uri, state.content)
+	})
+
+	s.config.Logger.Debugf("[Debounce] Scheduled transpile for %s in %dms", uriStr, s.transpileDebounceMs)
+}
+
+// executeTranspileFromBuffer performs the actual transpilation from buffer content.
+// Called after debounce timer fires.
+func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content string) {
+	dingoPath := uri.Filename()
+
+	s.config.Logger.Debugf("[Debounce] Executing transpile for %s", dingoPath)
+
+	// Use PureASTTranspileWithMappings for in-memory transpilation
+	result, err := transpiler.PureASTTranspileWithMappings([]byte(content), dingoPath, false)
+	if err != nil {
+		// Transpilation failed - publish error diagnostic
+		s.config.Logger.Debugf("[Debounce] Transpile failed: %v", err)
+
+		diagnostic := ParseTranspileError(dingoPath, err)
+		if diagnostic != nil {
+			s.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
+		}
+		return
+	}
+
+	// Transpilation succeeded - clear transpile diagnostics
+	s.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{})
+
+	// Write transpiled Go code to disk for gopls
+	goPath := dingoToGoPath(dingoPath)
+	if err := os.WriteFile(goPath, result.GoCode, 0644); err != nil {
+		s.config.Logger.Warnf("[Debounce] Failed to write Go file: %v", err)
+		return
+	}
+
+	// Write dmap file for position mapping
+	dmapPath := goPath + ".dmap"
+	writer := dmap.NewWriter(result.DingoSource, result.GoCode)
+	if err := writer.WriteFile(dmapPath, result.LineMappings, result.ColumnMappings); err != nil {
+		s.config.Logger.Warnf("[Debounce] Failed to write dmap: %v", err)
+	}
+
+	// Invalidate source map cache
+	s.mapCache.Invalidate(goPath)
+
+	// Sync gopls with new Go file content
+	ctx := s.getServerContext()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if err := s.transpiler.SyncGoplsWithGoFile(ctx, goPath); err != nil {
+		s.config.Logger.Warnf("[Debounce] Failed to sync gopls: %v", err)
+	}
+
+	s.config.Logger.Debugf("[Debounce] Transpile complete for %s", dingoPath)
+}
+
+// getServerContext safely retrieves the server context
+func (s *Server) getServerContext() context.Context {
+	s.connMu.RLock()
+	defer s.connMu.RUnlock()
+	return s.ctx
 }

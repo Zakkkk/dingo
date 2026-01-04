@@ -113,14 +113,14 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 
 	// CRITICAL FIX: Synchronize gopls with new .go file content
 	// This ensures gopls has the latest transpiled content in memory
-	if err := at.syncGoplsWithGoFile(ctx, goPath); err != nil {
+	if err := at.SyncGoplsWithGoFile(ctx, goPath); err != nil {
 		at.logger.Warnf("Failed to sync gopls with .go file: %v", err)
 	}
 }
 
-// syncGoplsWithGoFile sends the new .go file content to gopls via didChange
+// SyncGoplsWithGoFile sends the new .go file content to gopls via didChange
 // This ensures gopls has the latest transpiled content in memory
-func (at *AutoTranspiler) syncGoplsWithGoFile(ctx context.Context, goPath string) error {
+func (at *AutoTranspiler) SyncGoplsWithGoFile(ctx context.Context, goPath string) error {
 	at.logger.Debugf("Synchronizing gopls with updated .go file: %s", goPath)
 	return at.gopls.SyncFileContent(ctx, goPath)
 }

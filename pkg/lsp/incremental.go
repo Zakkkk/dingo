@@ -194,6 +194,19 @@ func (m *IncrementalDocumentManager) GetHoverInfo(uri string, pos protocol.Posit
 	return doc.GetHoverInfo(parserPos)
 }
 
+// GetContent returns the current content of a document
+func (m *IncrementalDocumentManager) GetContent(uri string) string {
+	m.mu.RLock()
+	doc := m.documents[uri]
+	m.mu.RUnlock()
+
+	if doc == nil {
+		return ""
+	}
+
+	return string(doc.Content())
+}
+
 // convertSeverity converts parser diagnostic severity to LSP severity
 func convertSeverity(severity parser.DiagnosticSeverity) protocol.DiagnosticSeverity {
 	switch severity {
