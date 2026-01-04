@@ -3,6 +3,7 @@ package format
 import (
 	"bytes"
 	"fmt"
+	"os"
 
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 )
@@ -52,10 +53,35 @@ func (f *Formatter) Format(src []byte) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// FormatFile is a convenience method that reads, formats, and writes back
-// This will be used by the CLI
-func (f *Formatter) FormatFile(filename string) error {
-	// Implementation will be in CLI layer
-	// This is just the signature
-	return fmt.Errorf("not implemented")
+// FormatFile is a convenience method that reads, formats, and writes back a file.
+// I3: Implement the method instead of returning "not implemented"
+// Returns (changed bool, err error) where changed indicates if the file was modified.
+func (f *Formatter) FormatFile(filename string) (changed bool, err error) {
+	src, err := os.ReadFile(filename)
+	if err != nil {
+		return false, fmt.Errorf("read file: %w", err)
+	}
+
+	formatted, err := f.Format(src)
+	if err != nil {
+		// Syntax error: return original unchanged (graceful degradation)
+		return false, nil
+	}
+
+	// Only write if content changed
+	if bytes.Equal(src, formatted) {
+		return false, nil
+	}
+
+	// Preserve file permissions (I4 pattern applied here too)
+	info, err := os.Stat(filename)
+	if err != nil {
+		return false, fmt.Errorf("stat file: %w", err)
+	}
+
+	if err := os.WriteFile(filename, formatted, info.Mode().Perm()); err != nil {
+		return false, fmt.Errorf("write file: %w", err)
+	}
+
+	return true, nil
 }

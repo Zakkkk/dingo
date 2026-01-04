@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/format"
 )
@@ -16,6 +19,8 @@ func fmtCmd() *cobra.Command {
 	var (
 		writeBack bool
 		check     bool
+		showDiff  bool
+		list      bool
 	)
 
 	cmd := &cobra.Command{
@@ -26,6 +31,9 @@ func fmtCmd() *cobra.Command {
 By default, formatted output is written to stdout.
 Use -w to write back to files in-place.
 Use --check to verify files are formatted without modifying them.
+Use --diff to show unified diff of changes.
+
+Reads from stdin when no files are specified or when "-" is given.
 
 Configuration is loaded from dingo.toml if present.
 
@@ -33,32 +41,64 @@ Examples:
   dingo fmt main.dingo                   # Format to stdout
   dingo fmt -w main.dingo                # Format in-place
   dingo fmt -w ./...                     # Format all .dingo files in workspace
-  dingo fmt --check main.dingo           # Check if file needs formatting`,
-		Args: cobra.MinimumNArgs(1),
+  dingo fmt --check main.dingo           # Check if file needs formatting
+  dingo fmt --diff main.dingo            # Show unified diff
+  dingo fmt -l main.dingo                # List files needing formatting
+  echo "let x=1" | dingo fmt             # Format from stdin
+  cat file.dingo | dingo fmt -           # Format stdin explicitly`,
+		Args: cobra.ArbitraryArgs, // Allow zero args for stdin mode
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFormat(args, writeBack, check)
+			return runFormat(args, writeBack, check, showDiff, list)
 		},
 	}
 
 	cmd.Flags().BoolVarP(&writeBack, "write", "w", false, "Write result to source file instead of stdout")
 	cmd.Flags().BoolVar(&check, "check", false, "Exit with non-zero status if files are not formatted")
+	cmd.Flags().BoolVarP(&showDiff, "diff", "d", false, "Display diffs instead of rewriting files")
+	cmd.Flags().BoolVarP(&list, "list", "l", false, "List files whose formatting differs")
 
 	return cmd
 }
 
 // runFormat executes the formatter on the specified files/directories
-func runFormat(paths []string, writeBack, check bool) error {
-	// Validate flags
-	if writeBack && check {
-		return fmt.Errorf("--write and --check are mutually exclusive")
+func runFormat(paths []string, writeBack, check, showDiff, list bool) error {
+	// Validate flags - mutually exclusive options
+	exclusiveFlags := 0
+	if writeBack {
+		exclusiveFlags++
+	}
+	if check {
+		exclusiveFlags++
+	}
+	if showDiff {
+		exclusiveFlags++
+	}
+	if list {
+		exclusiveFlags++
+	}
+	if exclusiveFlags > 1 {
+		return fmt.Errorf("--write, --check, --diff, and --list are mutually exclusive")
 	}
 
-	// Load configuration
-	cfg := format.DefaultConfig()
-	// TODO: Load from dingo.toml when format config is fully implemented
+	// Load configuration from dingo.toml
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "."
+	}
+	cfg, err := format.LoadConfig(cwd)
+	if err != nil {
+		// Log warning but continue with defaults
+		fmt.Fprintf(os.Stderr, "Warning: failed to load format config: %v\n", err)
+		cfg = format.DefaultConfig()
+	}
 
 	// Create formatter
 	formatter := format.New(cfg)
+
+	// Check for stdin mode: no paths or single "-" argument
+	if len(paths) == 0 || (len(paths) == 1 && paths[0] == "-") {
+		return runFormatStdin(formatter, showDiff)
+	}
 
 	// Expand paths to find all .dingo files
 	dingoFiles, err := expandPathsForFormat(paths)
@@ -89,16 +129,17 @@ func runFormat(paths []string, writeBack, check bool) error {
 
 		formatted, err := formatter.Format(src)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s Failed to format %s: %v\n",
-				errorStyle.Render("✗"),
-				file,
-				err)
-			continue
+			// C4: Report syntax errors in check mode instead of silent suppression
+			fmt.Fprintf(os.Stderr, "Warning: syntax error in %s: %v\n", file, err)
+			formatted = src
 		}
+
+		// I7: Use bytes.Equal to avoid unnecessary string allocations
+		changed := !bytes.Equal(src, formatted)
 
 		if check {
 			// Check mode: compare formatted output with original
-			if string(formatted) != string(src) {
+			if changed {
 				needsFormatting = append(needsFormatting, file)
 				fmt.Printf("%s %s\n",
 					errorStyle.Render("✗"),
@@ -108,11 +149,43 @@ func runFormat(paths []string, writeBack, check bool) error {
 					successStyle.Render("✓"),
 					fileStyle.Render(file))
 			}
+		} else if list {
+			// List mode: only print files that need formatting
+			if changed {
+				needsFormatting = append(needsFormatting, file)
+				fmt.Println(file)
+			}
+		} else if showDiff {
+			// Diff mode: show unified diff
+			if changed {
+				diff := difflib.UnifiedDiff{
+					A:        difflib.SplitLines(string(src)),
+					B:        difflib.SplitLines(string(formatted)),
+					FromFile: file,
+					ToFile:   file,
+					Context:  3,
+				}
+				// I5: Check diff generation errors instead of silently ignoring
+				text, diffErr := difflib.GetUnifiedDiffString(diff)
+				if diffErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to generate diff for %s: %v\n", file, diffErr)
+					continue
+				}
+				fmt.Print(text)
+			}
 		} else if writeBack {
 			// Write mode: save formatted output to file
-			if string(formatted) != string(src) {
-				// Only write if content changed
-				if err := os.WriteFile(file, formatted, 0644); err != nil {
+			if changed {
+				// I4: Preserve original file permissions instead of hardcoded 0644
+				info, statErr := os.Stat(file)
+				if statErr != nil {
+					fmt.Fprintf(os.Stderr, "%s Failed to stat %s: %v\n",
+						errorStyle.Render("✗"),
+						file,
+						statErr)
+					continue
+				}
+				if err := os.WriteFile(file, formatted, info.Mode().Perm()); err != nil {
 					fmt.Fprintf(os.Stderr, "%s Failed to write %s: %v\n",
 						errorStyle.Render("✗"),
 						file,
@@ -141,12 +214,53 @@ func runFormat(paths []string, writeBack, check bool) error {
 		}
 	}
 
-	// In check mode, exit non-zero if any files need formatting
-	if check && len(needsFormatting) > 0 {
-		fmt.Fprintf(os.Stderr, "\n%d file(s) need formatting\n", len(needsFormatting))
-		os.Exit(1)
+	// C2: Return error instead of os.Exit(1) to enable testing and proper cleanup
+	if (check || list) && len(needsFormatting) > 0 {
+		if check {
+			fmt.Fprintf(os.Stderr, "\n%d file(s) need formatting\n", len(needsFormatting))
+		}
+		return fmt.Errorf("%d file(s) need formatting", len(needsFormatting))
 	}
 
+	return nil
+}
+
+// runFormatStdin reads from stdin and writes formatted output to stdout
+func runFormatStdin(formatter *format.Formatter, showDiff bool) error {
+	src, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return fmt.Errorf("failed to read stdin: %w", err)
+	}
+
+	formatted, err := formatter.Format(src)
+	if err != nil {
+		// Syntax error: return original content unchanged (per user decision)
+		os.Stdout.Write(src)
+		return nil
+	}
+
+	if showDiff {
+		// Diff mode for stdin
+		// I7: Use bytes.Equal instead of string comparison
+		if !bytes.Equal(formatted, src) {
+			diff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(string(src)),
+				B:        difflib.SplitLines(string(formatted)),
+				FromFile: "<stdin>",
+				ToFile:   "<stdin>",
+				Context:  3,
+			}
+			// I5: Check diff generation errors instead of silently ignoring
+			text, diffErr := difflib.GetUnifiedDiffString(diff)
+			if diffErr != nil {
+				return fmt.Errorf("failed to generate diff: %w", diffErr)
+			}
+			fmt.Print(text)
+		}
+		return nil
+	}
+
+	os.Stdout.Write(formatted)
 	return nil
 }
 

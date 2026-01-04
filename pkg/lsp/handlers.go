@@ -1,11 +1,15 @@
 package lsp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/token"
+	"os"
 	"strings"
 
+	"github.com/MadAppGang/dingo/pkg/format"
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
 	"go.lsp.dev/uri"
@@ -376,4 +380,93 @@ func (s *Server) handlePublishDiagnostics(
 
 	s.config.Logger.Debugf("[Diagnostic Handler] SUCCESS: Published diagnostics to IDE")
 	return nil
+}
+
+// handleFormatting processes textDocument/formatting requests for .dingo files
+// This enables format-on-save and manual formatting in IDEs
+func (s *Server) handleFormatting(
+	ctx context.Context,
+	reply jsonrpc2.Replier,
+	req jsonrpc2.Request,
+) error {
+	var params protocol.DocumentFormattingParams
+	if err := json.Unmarshal(req.Params(), &params); err != nil {
+		return reply(ctx, nil, err)
+	}
+
+	s.config.Logger.Debugf("[Formatting] Request for URI=%s", params.TextDocument.URI.Filename())
+
+	// Only handle .dingo files
+	if !isDingoFile(params.TextDocument.URI) {
+		// Forward to gopls for Go files
+		s.config.Logger.Debugf("[Formatting] Not a .dingo file, forwarding to gopls")
+		return s.forwardToGopls(ctx, reply, req)
+	}
+
+	// C1: Use document buffer instead of disk read for unsaved changes
+	path := params.TextDocument.URI.Filename()
+	docContent := s.docManager.GetContent(string(params.TextDocument.URI))
+	var content []byte
+	if docContent != "" {
+		// Use in-memory buffer (handles unsaved changes)
+		content = []byte(docContent)
+	} else {
+		// Fallback to disk for unopened files
+		diskContent, err := os.ReadFile(path)
+		if err != nil {
+			s.config.Logger.Errorf("[Formatting] Failed to read file: %v", err)
+			return reply(ctx, nil, fmt.Errorf("failed to read file: %w", err))
+		}
+		content = diskContent
+	}
+
+	// I1: Load config from dingo.toml for consistent behavior with CLI
+	cfg, cfgErr := format.LoadConfig(s.workspacePath)
+	if cfgErr != nil {
+		s.config.Logger.Warnf("[Formatting] Failed to load config: %v", cfgErr)
+		cfg = format.DefaultConfig()
+	}
+
+	// Format using pkg/format (returns original on syntax errors - graceful degradation)
+	formatter := format.New(cfg)
+	formatted, err := formatter.Format(content)
+	if err != nil {
+		// Formatter returns error only for non-syntax issues (e.g., nil input)
+		// Syntax errors return the original content unchanged
+		s.config.Logger.Warnf("[Formatting] Formatter error: %v", err)
+		// Return empty edits on error (graceful degradation)
+		return reply(ctx, []protocol.TextEdit{}, nil)
+	}
+
+	// No changes needed - return empty edits
+	if bytes.Equal(content, formatted) {
+		s.config.Logger.Debugf("[Formatting] No changes needed")
+		return reply(ctx, []protocol.TextEdit{}, nil)
+	}
+
+	// Return single TextEdit replacing entire document
+	// LSP TextEdit uses 0-indexed line/character positions
+	lineCount := countLines(content)
+	edits := []protocol.TextEdit{{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: uint32(lineCount), Character: 0},
+		},
+		NewText: string(formatted),
+	}}
+
+	s.config.Logger.Debugf("[Formatting] Returning %d edits (replaced %d lines)", len(edits), lineCount)
+	return reply(ctx, edits, nil)
+}
+
+// countLines counts the number of lines in source content using token.FileSet
+// C3: Uses token.FileSet instead of manual byte iteration per CLAUDE.md requirements
+func countLines(src []byte) int {
+	if len(src) == 0 {
+		return 0
+	}
+	fset := token.NewFileSet()
+	f := fset.AddFile("", fset.Base(), len(src))
+	f.SetLinesForContent(src)
+	return f.LineCount()
 }

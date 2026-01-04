@@ -191,6 +191,8 @@ func (s *Server) handleRequest(ctx context.Context, reply jsonrpc2.Replier, req 
 		return s.handleHover(ctx, reply, req)
 	case "textDocument/codeAction":
 		return s.handleCodeAction(ctx, reply, req)
+	case "textDocument/formatting":
+		return s.handleFormatting(ctx, reply, req)
 	default:
 		// Unknown method - try forwarding to gopls
 		s.config.Logger.Debugf("Forwarding unknown method to gopls: %s", req.Method())
@@ -247,8 +249,9 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 			CompletionProvider: &protocol.CompletionOptions{
 				TriggerCharacters: []string{".", ":", " "},
 			},
-			HoverProvider:      goplsResult.Capabilities.HoverProvider,
-			DefinitionProvider: goplsResult.Capabilities.DefinitionProvider,
+			HoverProvider:              goplsResult.Capabilities.HoverProvider,
+			DefinitionProvider:         goplsResult.Capabilities.DefinitionProvider,
+			DocumentFormattingProvider: true,
 			CodeActionProvider: &protocol.CodeActionOptions{
 				CodeActionKinds: []protocol.CodeActionKind{
 					protocol.QuickFix,
