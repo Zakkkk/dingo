@@ -44,6 +44,7 @@ type Server struct {
 	lintDiags      map[string][]protocol.Diagnostic // URI -> lint diagnostics
 	goplsDiags     map[string][]protocol.Diagnostic // URI -> gopls diagnostics
 	transpileDiags map[string][]protocol.Diagnostic // URI -> transpiler diagnostics
+	parseDiags     map[string][]protocol.Diagnostic // URI -> incremental parser diagnostics
 
 	// Semantic manager for native hover (Phase 1)
 	semanticManager *semantic.Manager
@@ -79,6 +80,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		lintDiags:      make(map[string][]protocol.Diagnostic),
 		goplsDiags:     make(map[string][]protocol.Diagnostic),
 		transpileDiags: make(map[string][]protocol.Diagnostic),
+		parseDiags:     make(map[string][]protocol.Diagnostic),
 	}
 
 	// Initialize auto-transpiler with server reference
@@ -316,9 +318,9 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 		} else {
 			s.config.Logger.Debugf("[didOpen] Incremental parser initialized")
 
-			// Publish initial diagnostics from parser (using transpile source since these are parse errors)
+			// Publish initial diagnostics from parser
 			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", diagnostics)
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
 		}
 
 		// Check if .go file exists, if not auto-transpile
@@ -374,9 +376,25 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 		} else {
 			s.config.Logger.Debugf("[didChange] Incremental parse succeeded")
 
-			// Publish updated diagnostics (using transpile source since these are parse errors)
+			// Get parse diagnostics
 			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", diagnostics)
+
+			// Clear stale transpile diagnostics when file is being edited.
+			// The transpile result is only valid for the saved version, not the
+			// current buffer content. We'll get fresh transpile errors on save.
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "transpile", []protocol.Diagnostic{})
+
+			// Clear stale gopls diagnostics when file is being edited.
+			// Gopls diagnostics are for the last transpiled .go file, which is now
+			// out of sync with the current buffer content. Fresh gopls diagnostics
+			// will arrive after the next successful transpilation and sync.
+			// Without this, stale gopls diagnostics (like "expected declaration, found 'package'")
+			// can persist and be merged with new parse diagnostics.
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "gopls", []protocol.Diagnostic{})
+
+			// Publish parse diagnostics separately (under "parse" source)
+			// This allows us to distinguish parse errors from transpile errors
+			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
 		}
 
 		return reply(ctx, nil, nil)
@@ -405,10 +423,11 @@ func (s *Server) handleDidSave(ctx context.Context, reply jsonrpc2.Replier, req 
 		go s.runLintOnSave(ctx, params.TextDocument.URI)
 
 		// Auto-transpile if enabled
+		// Note: The file watcher also triggers transpilation with 500ms debounce.
+		// We trigger here too for immediate feedback, but the transpiler has internal
+		// locking to prevent concurrent transpilations of the same file.
 		if s.config.AutoTranspile {
 			s.config.Logger.Debugf("Auto-transpile on save: %s", dingoPath)
-
-			// Trigger transpilation (AutoTranspiler will notify gopls after completion)
 			go s.transpiler.OnFileChange(ctx, dingoPath)
 		}
 
@@ -507,6 +526,10 @@ func (s *Server) openGoFileWithGopls(ctx context.Context, dingoPath string) erro
 		return fmt.Errorf("gopls didOpen failed: %w", err)
 	}
 
+	// Initialize version counter for this file to 1 (matching didOpen version)
+	// This ensures SyncFileContent uses version 2, 3, etc. (not version 1 which conflicts with didOpen)
+	s.gopls.InitFileVersion(string(params.TextDocument.URI), 1)
+
 	s.config.Logger.Debugf("[Diagnostic Fix] Successfully opened .go file with gopls: %s", goPath)
 	return nil
 }
@@ -572,7 +595,7 @@ func (s *Server) publishDingoDiagnostics(uri protocol.DocumentURI, diagnostics [
 }
 
 // updateAndPublishDiagnostics updates cached diagnostics for a source and publishes merged result
-// source can be "lint", "gopls", or "transpile"
+// source can be "lint", "gopls", "transpile", or "parse"
 func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source string, diagnostics []protocol.Diagnostic) {
 	s.diagMu.Lock()
 	uriStr := string(uri)
@@ -585,6 +608,8 @@ func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source st
 		s.goplsDiags[uriStr] = diagnostics
 	case "transpile":
 		s.transpileDiags[uriStr] = diagnostics
+	case "parse":
+		s.parseDiags[uriStr] = diagnostics
 	}
 
 	// Merge all diagnostics for this URI
@@ -592,6 +617,7 @@ func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source st
 	merged = append(merged, s.lintDiags[uriStr]...)
 	merged = append(merged, s.goplsDiags[uriStr]...)
 	merged = append(merged, s.transpileDiags[uriStr]...)
+	merged = append(merged, s.parseDiags[uriStr]...)
 
 	s.diagMu.Unlock()
 
@@ -621,9 +647,9 @@ func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source st
 		return
 	}
 
-	s.config.Logger.Debugf("[Diagnostics] Published %d merged diagnostics for %s (lint=%d, gopls=%d, transpile=%d)",
+	s.config.Logger.Debugf("[Diagnostics] Published %d merged diagnostics for %s (lint=%d, gopls=%d, transpile=%d, parse=%d)",
 		len(merged), uri,
-		len(s.lintDiags[uriStr]), len(s.goplsDiags[uriStr]), len(s.transpileDiags[uriStr]))
+		len(s.lintDiags[uriStr]), len(s.goplsDiags[uriStr]), len(s.transpileDiags[uriStr]), len(s.parseDiags[uriStr]))
 }
 
 // forwardToGopls forwards unknown requests directly to gopls

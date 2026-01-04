@@ -22,7 +22,7 @@ func TestParseError_Error(t *testing.T) {
 				Column:  5,
 				Message: "unexpected token",
 			},
-			wantMsg: "parse error at 10:5: unexpected token",
+			wantMsg: "unexpected token",
 		},
 		{
 			name: "error at line 1",
@@ -32,7 +32,7 @@ func TestParseError_Error(t *testing.T) {
 				Column:  1,
 				Message: "missing semicolon",
 			},
-			wantMsg: "parse error at 1:1: missing semicolon",
+			wantMsg: "missing semicolon",
 		},
 	}
 

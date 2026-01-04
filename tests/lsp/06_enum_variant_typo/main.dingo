@@ -1,0 +1,15 @@
+package main
+
+// Test: Enum variant - bare variant name should work
+// This file should compile without errors
+
+enum Status {
+    Active,
+    Inactive,
+}
+
+func test() Status {
+    return Actve  // Bare variant name - transpiler adds NewStatusActive()
+}
+
+func main() {}

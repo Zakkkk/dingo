@@ -60,6 +60,7 @@ type OutputConfig struct {
 // GetDatabaseHost safely accesses nested database host
 // Without safe nav: if config.Database != nil { return config.Database.Host }
 func GetDatabaseHost(config *ServerConfig) string {
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:63:9
 	if config != nil && config.Database != nil {
 		return config.Database.Host
 	}
@@ -68,6 +69,7 @@ func GetDatabaseHost(config *ServerConfig) string {
 
 // GetSSLCertPath navigates 3 levels deep safely
 func GetSSLCertPath(config *ServerConfig) string {
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:68:9
 	if config != nil && config.Database != nil && config.Database.SSL != nil {
 		return config.Database.SSL.CertPath
 	}
@@ -77,6 +79,7 @@ func GetSSLCertPath(config *ServerConfig) string {
 // GetCAPath handles optional *string at the end
 func GetCAPath(config *ServerConfig) string {
 	// Chain ends with *string, need to dereference if present
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:74:10
 	var path *string
 	if config != nil && config.Database != nil && config.Database.SSL != nil {
 		path = config.Database.SSL.CAPath
@@ -89,6 +92,7 @@ func GetCAPath(config *ServerConfig) string {
 
 // GetRedisPassword safely accesses deeply nested optional password
 func GetRedisPassword(config *ServerConfig) string {
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:83:14
 	var password *string
 	if config != nil && config.Cache != nil && config.Cache.Redis != nil {
 		password = config.Cache.Redis.Password
@@ -101,6 +105,7 @@ func GetRedisPassword(config *ServerConfig) string {
 
 // GetLogFile combines safe navigation with null coalescing
 func GetLogFile(config *ServerConfig) string {
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:92:10
 	var file *string
 	if config != nil && config.Logging != nil && config.Logging.Output != nil {
 		file = config.Logging.Output.File
@@ -114,6 +119,7 @@ func GetLogFile(config *ServerConfig) string {
 // IsSSLEnabled shows safe navigation with method-like checks
 func IsSSLEnabled(config *ServerConfig) bool {
 	// If any part is nil, returns false (zero value)
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:102:9
 	if config != nil && config.Database != nil && config.Database.SSL != nil {
 		return config.Database.SSL.Enabled
 	}
@@ -122,6 +128,7 @@ func IsSSLEnabled(config *ServerConfig) bool {
 
 // GetReplicaCount safely accesses array length
 func GetReplicaCount(config *ServerConfig) int {
+	//line /Users/jack/mag/dingo/examples/08_safe_navigation/config.dingo:107:14
 	var replicas []*DatabaseConfig
 	if config != nil && config.Database != nil {
 		replicas = config.Database.Replicas

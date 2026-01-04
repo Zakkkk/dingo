@@ -134,15 +134,6 @@ func TestTranspileResultHelpers(t *testing.T) {
 	}
 }
 
-// TranspileError is a simple error type for testing
-type TranspileError struct {
-	Message string
-}
-
-func (e *TranspileError) Error() string {
-	return e.Message
-}
-
 func TestASTTranspilePipeline(t *testing.T) {
 	// Test that all pipeline stages execute
 	source := []byte("package main\n\nfunc main() {\n\tvalue := 42\n\t_ = value\n}")

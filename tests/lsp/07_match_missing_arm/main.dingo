@@ -1,0 +1,20 @@
+package main
+
+// Test: Match expression with valid syntax
+// This should transpile successfully (no error)
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+func getName(c Color) string {
+    return match c {
+        Red => "red"
+        Green => "green"
+        Blue => "blue"
+    }
+}
+
+func main() {}

@@ -2,8 +2,11 @@ package lsp
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"go/token"
+	"os"
+	"sync"
 
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
@@ -17,6 +20,11 @@ type AutoTranspiler struct {
 	gopls      *GoplsClient
 	transpiler *transpiler.Transpiler
 	server     *Server // For publishing Dingo-specific diagnostics
+
+	// File-level locking to prevent concurrent transpilations of the same file
+	// This prevents race conditions when both didSave and file watcher trigger transpilation
+	fileLocksMu sync.Mutex
+	fileLocks   map[string]*sync.Mutex
 }
 
 // NewAutoTranspiler creates an auto-transpiler instance
@@ -34,6 +42,7 @@ func NewAutoTranspiler(logger Logger, mapCache *SourceMapCache, gopls *GoplsClie
 		gopls:      gopls,
 		transpiler: t,
 		server:     server,
+		fileLocks:  make(map[string]*sync.Mutex),
 	}
 }
 
@@ -55,8 +64,29 @@ func (at *AutoTranspiler) TranspileFile(ctx context.Context, dingoPath string) e
 	return nil
 }
 
-// OnFileChange handles a .dingo file change (called by watcher)
+// getFileLock returns the mutex for a specific file, creating one if needed
+func (at *AutoTranspiler) getFileLock(path string) *sync.Mutex {
+	at.fileLocksMu.Lock()
+	defer at.fileLocksMu.Unlock()
+
+	if lock, ok := at.fileLocks[path]; ok {
+		return lock
+	}
+
+	lock := &sync.Mutex{}
+	at.fileLocks[path] = lock
+	return lock
+}
+
+// OnFileChange handles a .dingo file change (called by watcher and didSave)
+// Uses per-file locking to prevent concurrent transpilations of the same file,
+// which can cause race conditions with gopls version tracking.
 func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
+	// Acquire file-specific lock to prevent concurrent transpilations
+	fileLock := at.getFileLock(dingoPath)
+	fileLock.Lock()
+	defer fileLock.Unlock()
+
 	uri := protocol.DocumentURI(lspuri.File(dingoPath))
 
 	// Transpile the file
@@ -64,7 +94,7 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 		at.logger.Errorf("Auto-transpile failed for %s: %v", dingoPath, err)
 
 		// Publish Dingo-specific diagnostic for transpilation error
-		diagnostic := ParseTranspileError(dingoPath, err.Error())
+		diagnostic := ParseTranspileError(dingoPath, err)
 		if diagnostic != nil && at.server != nil {
 			at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
 		}
@@ -95,54 +125,93 @@ func (at *AutoTranspiler) syncGoplsWithGoFile(ctx context.Context, goPath string
 	return at.gopls.SyncFileContent(ctx, goPath)
 }
 
-// ParseTranspileError parses transpiler output into LSP diagnostic
-// Returns nil if output is not an error
-func ParseTranspileError(dingoPath, output string) *protocol.Diagnostic {
-	// Simple heuristic: check for common error patterns
-	// Format: "file.dingo:10:5: error message"
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, dingoPath) && strings.Contains(line, ":") {
-			parts := strings.SplitN(line, ":", 4)
-			if len(parts) >= 4 {
-				// Try to extract line:col:message
-				var lineNum, colNum int
-				_, err1 := fmt.Sscanf(parts[1], "%d", &lineNum)
-				_, err2 := fmt.Sscanf(parts[2], "%d", &colNum)
-				if err1 == nil && err2 == nil {
-					message := strings.TrimSpace(parts[3])
-					return &protocol.Diagnostic{
-						Range: protocol.Range{
-							Start: protocol.Position{
-								Line:      uint32(lineNum - 1), // 0-based
-								Character: uint32(colNum - 1),  // 0-based
-							},
-							End: protocol.Position{
-								Line:      uint32(lineNum - 1),
-								Character: uint32(colNum - 1),
-							},
-						},
-						Severity: protocol.DiagnosticSeverityError,
-						Source:   "dingo",
-						Message:  message,
-					}
-				}
-			}
+// ParseTranspileError converts a transpiler error into an LSP diagnostic.
+// Uses structured TranspileError when available, avoiding string parsing.
+func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
+	if err == nil {
+		return nil
+	}
+
+	// Try to unwrap to structured TranspileError
+	var transpileErr *transpiler.TranspileError
+	if errors.As(err, &transpileErr) {
+		// Structured error with position information
+		startChar, endChar := 0, 1
+		if transpileErr.Line > 0 {
+			startChar, endChar = getLineRange(dingoPath, transpileErr.Line)
+		}
+
+		return &protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{
+					Line:      uint32(max(0, transpileErr.Line-1)), // 0-based
+					Character: uint32(startChar),
+				},
+				End: protocol.Position{
+					Line:      uint32(max(0, transpileErr.Line-1)),
+					Character: uint32(endChar),
+				},
+			},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "dingo",
+			Message:  transpileErr.Message,
 		}
 	}
 
 	// Fallback: generic error at top of file
-	if strings.Contains(output, "error") || strings.Contains(output, "failed") {
-		return &protocol.Diagnostic{
-			Range: protocol.Range{
-				Start: protocol.Position{Line: 0, Character: 0},
-				End:   protocol.Position{Line: 0, Character: 0},
-			},
-			Severity: protocol.DiagnosticSeverityError,
-			Source:   "dingo",
-			Message:  strings.TrimSpace(output),
+	return &protocol.Diagnostic{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: 0, Character: 0},
+		},
+		Severity: protocol.DiagnosticSeverityError,
+		Source:   "dingo",
+		Message:  err.Error(),
+	}
+}
+
+// getLineRange returns the start and end character positions for a line.
+// Uses token.FileSet for line extraction per CLAUDE.md guidelines.
+// Returns (startChar, endChar) where startChar is the first non-whitespace character
+// and endChar is the end of the line (for highlighting the meaningful content).
+func getLineRange(filePath string, lineNum int) (int, int) {
+	src, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0, 1 // Fallback to first character
+	}
+
+	// Use token.FileSet to get line boundaries
+	fset := token.NewFileSet()
+	file := fset.AddFile(filePath, fset.Base(), len(src))
+	file.SetLinesForContent(src)
+
+	if lineNum < 1 || lineNum > file.LineCount() {
+		return 0, 1
+	}
+
+	// Get line content using FileSet
+	lineStart := file.Offset(file.LineStart(lineNum))
+	lineEnd := len(src)
+	if lineNum < file.LineCount() {
+		lineEnd = file.Offset(file.LineStart(lineNum + 1))
+	}
+
+	lineContent := src[lineStart:lineEnd]
+
+	// Remove trailing newline from length
+	lineLen := len(lineContent)
+	if lineLen > 0 && lineContent[lineLen-1] == '\n' {
+		lineLen--
+	}
+
+	// Find first non-whitespace character
+	startChar := 0
+	for i := 0; i < lineLen; i++ {
+		if lineContent[i] != ' ' && lineContent[i] != '\t' {
+			startChar = i
+			break
 		}
 	}
 
-	return nil
+	return startChar, lineLen
 }

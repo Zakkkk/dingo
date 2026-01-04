@@ -64,8 +64,8 @@ func (p *StmtParser) parseEnumDecl() ast.Decl {
 	rbracePos := p.curToken.Pos
 	p.nextToken() // consume '}'
 
-	// Store the Dingo EnumDecl for later use by transformation pipeline
-	_ = &dingoast.EnumDecl{
+	// Store the Dingo EnumDecl for lint analyzers and transformation pipeline
+	enumDecl := &dingoast.EnumDecl{
 		Enum:       enumPos,
 		Name:       name,
 		TypeParams: typeParams,
@@ -74,8 +74,14 @@ func (p *StmtParser) parseEnumDecl() ast.Decl {
 		RBrace:     rbracePos,
 	}
 
-	// Return BadDecl as placeholder
-	// TODO: Replace with proper Dingo AST node storage mechanism
+	// Collect in DingoNodes for lint analyzers (D001 exhaustiveness, D103 naming)
+	// Note: EnumDecl appends directly (not via callback) because parseEnumDecl
+	// is on StmtParser which owns DingoNodes. Expressions use OnDingoNode callback
+	// because they're parsed by PrattParser which doesn't own the slice.
+	p.DingoNodes = append(p.DingoNodes, enumDecl)
+
+	// Return BadDecl as placeholder for go/ast.Decl slice
+	// The actual EnumDecl is stored in DingoNodes for Dingo-specific processing
 	return &ast.BadDecl{From: enumPos, To: rbracePos + 1}
 
 	// Alternative: Could use ast.GenDecl with TYPE token and specs

@@ -36,8 +36,8 @@ type tokenInfo struct {
 // //line directives are no longer emitted to keep generated Go code clean.
 func TransformSource(src []byte, filename string) ([]byte, error) {
 	// First pass: Transform enums (uses separate parser + codegen)
-	// Note: Empty filename disables //line directive emission
-	src, enumRegistry := TransformEnumSource(src, "")
+	// Pass filename to enable //line directive emission for proper position tracking
+	src, enumRegistry := TransformEnumSource(src, filename)
 
 	// Second pass: Transform enum constructor calls to NewVariant() pattern
 	src = TransformEnumConstructors(src, enumRegistry)

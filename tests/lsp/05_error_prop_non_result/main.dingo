@@ -1,0 +1,15 @@
+package main
+
+// Test: Error propagation on non-Result type
+// Expected: Error - cannot use ? on int
+
+func getInt() int {
+    return 42
+}
+
+func test() int {
+    x := getInt()?
+    return x
+}
+
+func main() {}

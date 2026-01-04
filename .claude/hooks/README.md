@@ -17,6 +17,10 @@ Verifies that transformation code doesn't use forbidden byte manipulation patter
 - `pkg/transpiler/*.go` (excluding tests)
 - `pkg/codegen/*.go` (excluding tests)
 - `pkg/ast/*_codegen.go`
+- `pkg/ast/stmt_finder.go` (error_prop statement finding)
+- `pkg/lsp/translator.go` (position translation)
+- `pkg/lsp/handlers.go` (LSP request handlers)
+- `pkg/lsp/server.go` (LSP server core)
 
 **Forbidden patterns:**
 - `bytes.Index`, `bytes.HasPrefix`, `bytes.Contains`

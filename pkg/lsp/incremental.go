@@ -14,15 +14,15 @@ import (
 type IncrementalDocumentManager struct {
 	documents map[string]*parser.DocumentState
 	mu        sync.RWMutex
-	fset      *token.FileSet
 	logger    Logger
+	// Note: Each DocumentState has its own token.FileSet to avoid position conflicts
+	// when multiple documents are open simultaneously.
 }
 
 // NewIncrementalDocumentManager creates a new document manager
 func NewIncrementalDocumentManager(logger Logger) *IncrementalDocumentManager {
 	return &IncrementalDocumentManager{
 		documents: make(map[string]*parser.DocumentState),
-		fset:      token.NewFileSet(),
 		logger:    logger,
 	}
 }
@@ -34,8 +34,13 @@ func (m *IncrementalDocumentManager) OpenDocument(uri string, content string) er
 
 	m.logger.Debugf("[IncrementalDocMgr] Opening document: %s", uri)
 
+	// Create a fresh FileSet for this document to avoid position conflicts
+	// when multiple documents are open. Each document gets its own FileSet
+	// so line numbers are always relative to the document itself.
+	fset := token.NewFileSet()
+
 	// Create document state with incremental parser
-	docState, err := parser.NewDocumentState(uri, []byte(content), m.fset, uri)
+	docState, err := parser.NewDocumentState(uri, []byte(content), fset, uri)
 	if err != nil {
 		return fmt.Errorf("failed to create document state: %w", err)
 	}

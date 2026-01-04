@@ -16,6 +16,17 @@ func (p *PrattParser) parseMatchExpr() ast.Expr {
 	// Move to scrutinee
 	p.nextToken()
 
+	// Check for missing scrutinee (match directly followed by '{')
+	if p.curTokenIs(tokenizer.LBRACE) {
+		p.errors = append(p.errors, ParseError{
+			Pos:     p.curToken.Pos,
+			Line:    p.curToken.Line,
+			Column:  p.curToken.Column,
+			Message: "match expression requires a subject before '{'\n\n  Example: match value { pattern => result }",
+		})
+		return nil
+	}
+
 	// Parse scrutinee expression (everything until '{')
 	scrutinee := p.parseScrutinee()
 	if scrutinee == nil {
@@ -37,7 +48,7 @@ func (p *PrattParser) parseMatchExpr() ast.Expr {
 	}
 	closeBrace := p.curToken.Pos
 
-	return &ast.MatchExpr{
+	matchExpr := &ast.MatchExpr{
 		Match:      matchPos,
 		Scrutinee:  scrutinee,
 		OpenBrace:  openBrace,
@@ -47,6 +58,11 @@ func (p *PrattParser) parseMatchExpr() ast.Expr {
 		MatchID:    0,     // Will be assigned during transformation
 		Comments:   comments,
 	}
+
+	// Collect in DingoNodes for lint analyzers
+	p.collectDingoNode(matchExpr)
+
+	return matchExpr
 }
 
 // parseScrutinee parses the expression being matched

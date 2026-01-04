@@ -1,0 +1,14 @@
+# Diagnostics test spec: Go type errors propagated via gopls
+#
+# These tests verify that Go compiler errors are correctly
+# translated from .go positions to .dingo positions.
+
+file: examples/test_diag/undefined_var.dingo
+description: Go type errors (undefined variable)
+
+expected:
+  - description: "Undefined variable error from Go compiler"
+    line: 7
+    severity: error
+    source: compiler
+    contains: "undefinedVar"

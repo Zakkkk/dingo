@@ -39,6 +39,10 @@ CHECK_DIRS=(
     "pkg/transpiler/*.go"
     "pkg/codegen/*.go"
     "pkg/ast/*_codegen.go"
+    "pkg/ast/stmt_finder.go"
+    "pkg/lsp/translator.go"
+    "pkg/lsp/handlers.go"
+    "pkg/lsp/server.go"
 )
 
 # Find violations

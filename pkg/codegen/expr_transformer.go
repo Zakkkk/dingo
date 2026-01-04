@@ -97,6 +97,15 @@ func TransformExpr(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 		return ast.NewCodeGenResult([]byte(e.Text))
 
 	case *ast.DingoIdent:
+		// Check if this identifier is an enum variant that needs transformation
+		// e.g., "Active" → "NewStatusActive()" when Active is a variant of Status enum
+		if ctx != nil && ctx.EnumRegistry != nil {
+			if enumName, ok := ctx.EnumRegistry[e.Name]; ok {
+				// Transform to constructor call: NewEnumVariant()
+				constructor := "New" + enumName + e.Name + "()"
+				return ast.NewCodeGenResult([]byte(constructor))
+			}
+		}
 		return ast.NewCodeGenResult([]byte(e.Name))
 
 	default:

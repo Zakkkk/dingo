@@ -10,6 +10,26 @@ import (
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
 
+// TranspileError represents a structured transpilation error with position information.
+// This allows LSP and other tools to display errors at the correct location without
+// parsing error message strings.
+type TranspileError struct {
+	File    string // Source file path
+	Line    int    // 1-indexed line number (0 means unknown)
+	Col     int    // 1-indexed column number (0 means unknown)
+	Message string // Error message
+}
+
+func (e *TranspileError) Error() string {
+	if e.Line > 0 && e.Col > 0 {
+		return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Col, e.Message)
+	}
+	if e.Line > 0 {
+		return fmt.Sprintf("%s:%d: %s", e.File, e.Line, e.Message)
+	}
+	return fmt.Sprintf("%s: %s", e.File, e.Message)
+}
+
 // Transpiler handles transpilation of .dingo files to .go files
 type Transpiler struct {
 	config *config.Config

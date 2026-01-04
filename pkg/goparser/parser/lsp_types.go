@@ -156,12 +156,15 @@ func (ds *DocumentState) buildLineOffsets() {
 
 // parse parses the current content
 func (ds *DocumentState) parse() error {
-	// Use the Dingo parser to transform and parse
-	file, err := ParseFile(ds.fset, ds.filename, ds.content, ParseComments)
+	// Use ParseFileWithFset which returns a fresh FileSet containing only the
+	// successfully parsed file. This avoids position accumulation from failed
+	// parse attempts (go/parser adds files even when parsing fails).
+	file, fset, err := ParseFileWithFset(ds.filename, ds.content, ParseComments)
 	if err != nil {
 		return err
 	}
 	ds.file = file
+	ds.fset = fset
 	return nil
 }
 
@@ -377,7 +380,7 @@ func (ds *DocumentState) analyzeNodeContext(node ast.Node, offset int) (kind Exp
 	}
 
 	// Check if we're in a comment by looking at the file's comments
-	if ds.file != nil && ds.file.Comments != nil {
+	if ds.file != nil && ds.file.Comments != nil && ds.fset != nil {
 		for _, cg := range ds.file.Comments {
 			for _, c := range cg.List {
 				file := ds.fset.File(c.Pos())
@@ -462,7 +465,7 @@ func (ds *DocumentState) extractTokensFromAST(node ast.Node) (current, preceding
 
 // findNodeAtPosition finds the AST node at a given byte offset
 func (ds *DocumentState) findNodeAtPosition(offset int) ast.Node {
-	if ds.file == nil {
+	if ds.file == nil || ds.fset == nil {
 		return nil
 	}
 
@@ -576,6 +579,9 @@ func (ds *DocumentState) GetHoverInfo(pos Position) *HoverInfo {
 
 // nodeToRange converts an AST node's position to an LSP Range
 func (ds *DocumentState) nodeToRange(node ast.Node) Range {
+	if ds.fset == nil {
+		return Range{}
+	}
 	file := ds.fset.File(node.Pos())
 	if file == nil {
 		return Range{}

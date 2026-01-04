@@ -1,0 +1,10 @@
+package main
+
+// Test: Go type error - type mismatch
+// Expected: Error at line 6, wrong return type
+
+func getString() string {
+    return 42
+}
+
+func main() {}

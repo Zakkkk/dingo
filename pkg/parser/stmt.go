@@ -18,6 +18,9 @@ type StmtParser struct {
 	// Parsed Dingo-specific statements (for pipeline integration)
 	TupleDestructures []*dingoast.TupleDestructure
 	TupleLiterals     []*dingoast.TupleLiteral
+
+	// Collect all Dingo-specific nodes during parsing (for lint analyzers)
+	DingoNodes []dingoast.DingoNode
 }
 
 // NewStmtParser creates a new StmtParser with statement parsing support
@@ -34,6 +37,11 @@ func NewStmtParser(t *tokenizer.Tokenizer, fset *token.FileSet) *StmtParser {
 	// Register callback to collect tuple literals during parsing
 	pratt.OnTupleLiteral = func(t *dingoast.TupleLiteral) {
 		stmtParser.TupleLiterals = append(stmtParser.TupleLiterals, t)
+	}
+
+	// Register callback to collect Dingo nodes during parsing
+	pratt.OnDingoNode = func(node dingoast.DingoNode) {
+		stmtParser.DingoNodes = append(stmtParser.DingoNodes, node)
 	}
 
 	return stmtParser

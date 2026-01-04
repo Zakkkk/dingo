@@ -68,8 +68,11 @@ func (p *astParser) ParseFile(fset *token.FileSet, filename string, src []byte) 
 		return nil, err
 	}
 
-	// Wrap in Dingo file
-	return &dingoast.File{File: goFile}, nil
+	// Wrap in Dingo file with collected DingoNodes from parsing
+	return &dingoast.File{
+		File:       goFile,
+		DingoNodes: stmtParser.DingoNodes,
+	}, nil
 }
 
 func (p *astParser) ParseExpr(fset *token.FileSet, expr string) (dingoast.DingoNode, error) {

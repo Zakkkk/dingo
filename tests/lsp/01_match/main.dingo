@@ -1,0 +1,9 @@
+ package main
+
+  func broken() string {
+      return match {
+          // Missing subject - syntax error
+      }
+  }
+
+  func main() {}

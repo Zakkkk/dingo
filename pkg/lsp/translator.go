@@ -2,7 +2,11 @@ package lsp
 
 import (
 	"fmt"
+	"go/scanner"
+	"go/token"
 	"log"
+	"os"
+	"strconv"
 	"strings"
 
 	"go.lsp.dev/protocol"
@@ -107,13 +111,29 @@ func (t *Translator) TranslatePosition(
 		var kind string
 		newLine, kind = reader.GoLineToDingoLine(line)
 
+		// If no explicit mapping found (kind == ""), try //line directives
+		// This handles:
+		// - Enum expansion which adds lines but doesn't create dmap entries
+		// - Code between transforms (e.g., function signature before match body)
+		// - Any line not covered by an explicit transform mapping
+		// The //line directives in the generated Go file provide the correct
+		// Dingo position via Go's auto-increment from the last directive.
+		if kind == "" {
+			if directiveLine, found := translateUsingLineDirectives(goPath, line); found {
+				newLine = directiveLine
+				kind = "line_directive"
+			}
+		}
+
 		// Apply column translation for transformed lines (reverse direction)
 		var colFound bool
 		newCol, colFound = reader.TranslateGoColumn(line, col)
 		if colFound {
 			log.Printf("[LSP Translator] GoToDingo: column translated %d -> %d", col, newCol)
 		} else {
-			newCol = col // Fallback to identity mapping
+			// No explicit column mapping - apply tab expansion
+			// Go files use tabs, Dingo files use 4 spaces
+			newCol = expandTabsInColumn(goPath, line, col)
 		}
 
 		// Always clamp column to Dingo line bounds when column exceeds line length.
@@ -121,10 +141,11 @@ func (t *Translator) TranslatePosition(
 		// (e.g., tuple literal expansion: "(x,y)" -> "tuples.Tuple2[...]{...}")
 		// We do this unconditionally because even with stale/empty source maps,
 		// the column should never exceed the line length in the Dingo file.
+		// Note: Allow lineLen+1 for exclusive end positions in LSP ranges.
 		lineLen := reader.DingoLineLength(newLine)
-		if lineLen >= 0 && newCol > lineLen {
-			// Clamp to end of line (reasonable fallback for expanded lines)
-			newCol = lineLen
+		if lineLen >= 0 && newCol > lineLen+1 {
+			// Clamp to end of line + 1 (for exclusive range ends)
+			newCol = lineLen + 1
 			log.Printf("[LSP Translator] GoToDingo: clamped column %d -> %d (line length %d, kind=%q)", col, newCol, lineLen, kind)
 		}
 
@@ -194,6 +215,27 @@ func (t *Translator) TranslateRange(
 		}
 	}
 
+	// WORKAROUND: Ensure start <= end after translation
+	//
+	// Column translations can produce inverted ranges when:
+	// 1. Go code structure differs significantly from Dingo (error_prop, safe_nav, etc.)
+	// 2. Column mappings in .dmap are computed from byte offsets before go/printer reformats
+	//
+	// ROOT CAUSE: error_prop uses byte-level StmtLocation (pkg/ast/stmt_finder.go) instead of
+	// token.Pos from the Dingo parser. This violates CLAUDE.md's "no byte arithmetic" principle.
+	//
+	// PROPER FIX: Integrate error_prop codegen with PositionTracker.RecordTransform() which:
+	// 1. Stores token.Pos from Dingo AST during codegen
+	// 2. Resolves to line/col AFTER go/printer reformats (via Finalize())
+	// 3. Produces accurate column mappings for the .dmap file
+	//
+	// Until then, swapping ensures the diagnostic range is at least valid for display.
+	if newStart.Line == newEnd.Line && newStart.Character > newEnd.Character {
+		newStart.Character, newEnd.Character = newEnd.Character, newStart.Character
+		log.Printf("[LSP Translator] TranslateRange: swapped inverted range %d-%d (see TODO in translator.go)",
+			newStart.Character, newEnd.Character)
+	}
+
 	newRange := protocol.Range{
 		Start: newStart,
 		End:   newEnd,
@@ -240,4 +282,178 @@ func goToDingoPath(goPath string) string {
 		return goPath
 	}
 	return strings.TrimSuffix(goPath, ".go") + ".dingo"
+}
+
+// expandTabsInColumn adjusts a column position from Go (tabs) to Dingo (spaces).
+// Go files use tabs for indentation, Dingo files use 4 spaces.
+// LSP counts tabs as 1 character, so we need to expand: goCol + (tabs * 3)
+//
+// CLAUDE.md compliance note:
+// - Uses token.FileSet for line extraction (compliant)
+// - The tab counting loop operates on FINAL generated .go (not source .dingo)
+// - This is visual column adjustment, not position tracking in source
+// - Tabs here are actual indentation, not transformed code
+func expandTabsInColumn(goPath string, line, col int) int {
+	src, err := os.ReadFile(goPath)
+	if err != nil {
+		return col // Can't read file, return unchanged
+	}
+
+	// Use token.FileSet to get line boundaries (CLAUDE.md compliant)
+	fset := token.NewFileSet()
+	file := fset.AddFile(goPath, fset.Base(), len(src))
+	file.SetLinesForContent(src)
+
+	if line < 1 || line > file.LineCount() {
+		return col // Line out of range
+	}
+
+	// Get line start and end offsets using FileSet
+	lineStart := file.Offset(file.LineStart(line))
+	lineEnd := len(src)
+	if line < file.LineCount() {
+		lineEnd = file.Offset(file.LineStart(line + 1))
+	}
+
+	// Extract line content using FileSet-derived offsets
+	lineContent := src[lineStart:lineEnd]
+
+	// Count tabs before the column position
+	// This is checking indentation characters, not parsing positions
+	tabCount := 0
+	limit := col - 1
+	if limit > len(lineContent) {
+		limit = len(lineContent)
+	}
+	for i := 0; i < limit; i++ {
+		if lineContent[i] == '\t' {
+			tabCount++
+		}
+	}
+
+	// Each tab expands from 1 char to 4 chars, so add 3 per tab
+	expandedCol := col + (tabCount * 3)
+	if tabCount > 0 {
+		log.Printf("[LSP Translator] Tab expansion: col %d -> %d (%d tabs)", col, expandedCol, tabCount)
+	}
+
+	return expandedCol
+}
+
+// lineDirectiveEntry represents a parsed //line directive
+type lineDirectiveEntry struct {
+	goLine    int    // Line number in Go file where directive appears (1-indexed)
+	dingoLine int    // Target Dingo line from the directive
+	filename  string // Target filename (may be empty for relative)
+}
+
+// parseLineDirectives reads a Go file and extracts all //line directives using go/scanner.
+// This follows CLAUDE.md architectural guidelines: use go/scanner for Go source analysis.
+func parseLineDirectives(goPath string) ([]lineDirectiveEntry, error) {
+	src, err := os.ReadFile(goPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create two file sets:
+	// 1. scannerFset - used by the scanner (will be modified by //line directives)
+	// 2. lookupFset - for looking up physical line numbers (stays pristine)
+	scannerFset := token.NewFileSet()
+	scannerFile := scannerFset.AddFile(goPath, scannerFset.Base(), len(src))
+	scannerFile.SetLinesForContent(src)
+
+	lookupFset := token.NewFileSet()
+	lookupFile := lookupFset.AddFile(goPath, lookupFset.Base(), len(src))
+	lookupFile.SetLinesForContent(src)
+
+	var s scanner.Scanner
+	s.Init(scannerFile, src, nil, scanner.ScanComments)
+
+	var entries []lineDirectiveEntry
+
+	for {
+		pos, tok, lit := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// Look for //line directives in COMMENT tokens
+		if tok == token.COMMENT && strings.HasPrefix(lit, "//line ") {
+			// Get offset from scanner's position, then lookup physical line in pristine file
+			offset := scannerFile.Offset(pos)
+			goLine := lookupFset.Position(lookupFile.Pos(offset)).Line
+
+			// Parse the directive: //line filename:line:col or //line filename:line
+			// Format: "//line filename:line:col"
+			content := strings.TrimPrefix(lit, "//line ")
+
+			// Find the last two colons (for line:col)
+			// Work backwards to handle filenames with colons
+			lastColon := strings.LastIndex(content, ":")
+			if lastColon == -1 {
+				continue
+			}
+
+			// Check if there's a second-to-last colon (line:col format)
+			secondLastColon := strings.LastIndex(content[:lastColon], ":")
+			if secondLastColon == -1 {
+				continue
+			}
+
+			// Parse line number (between second-to-last and last colon)
+			lineStr := content[secondLastColon+1 : lastColon]
+			dingoLine, err := strconv.Atoi(lineStr)
+			if err != nil || dingoLine <= 0 {
+				continue
+			}
+
+			filename := content[:secondLastColon]
+
+			entries = append(entries, lineDirectiveEntry{
+				goLine:    goLine,
+				dingoLine: dingoLine,
+				filename:  filename,
+			})
+		}
+	}
+
+	return entries, nil
+}
+
+// translateUsingLineDirectives translates a Go line to Dingo line using //line directives
+// Returns (dingoLine, found) where found indicates if a directive-based translation was used
+func translateUsingLineDirectives(goPath string, goLine int) (int, bool) {
+	entries, err := parseLineDirectives(goPath)
+	if err != nil || len(entries) == 0 {
+		return goLine, false
+	}
+
+	// Find the last directive that affects this line
+	// //line directives affect the NEXT line, so we look for directive at goLine-1 or earlier
+	var activeEntry *lineDirectiveEntry
+	for i := range entries {
+		if entries[i].goLine < goLine {
+			activeEntry = &entries[i]
+		} else {
+			break
+		}
+	}
+
+	if activeEntry == nil {
+		return goLine, false
+	}
+
+	// Calculate Dingo line:
+	// If directive is at Go line D and sets Dingo line to L,
+	// then Go line D+1 → Dingo line L
+	// So Go line G → Dingo line L + (G - D - 1)
+	dingoLine := activeEntry.dingoLine + (goLine - activeEntry.goLine - 1)
+	if dingoLine < 1 {
+		dingoLine = 1
+	}
+
+	log.Printf("[LSP Translator] LineDirective: Go line %d → Dingo line %d (directive at Go line %d sets Dingo line %d)",
+		goLine, dingoLine, activeEntry.goLine, activeEntry.dingoLine)
+
+	return dingoLine, true
 }

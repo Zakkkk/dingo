@@ -31,6 +31,10 @@ type GoplsClient struct {
 	shuttingDown        bool           // CRITICAL FIX C2: Track shutdown state
 	closeMu             sync.Mutex     // CRITICAL FIX C2: Protect shutdown flag
 	diagnosticsHandler  DiagnosticsHandler // Callback for diagnostics
+
+	// Version tracking for gopls sync - prevents version conflicts
+	versionMu   sync.Mutex
+	fileVersion map[string]int32 // URI -> current version
 }
 
 // NewGoplsClient creates and starts a gopls subprocess
@@ -44,6 +48,7 @@ func NewGoplsClient(goplsPath string, logger Logger) (*GoplsClient, error) {
 		logger:      logger,
 		goplsPath:   goplsPath,
 		maxRestarts: 3,
+		fileVersion: make(map[string]int32),
 	}
 
 	if err := client.start(); err != nil {
@@ -277,8 +282,22 @@ func (c *GoplsClient) DidClose(ctx context.Context, params protocol.DidCloseText
 	return c.conn.Notify(ctx, "textDocument/didClose", params)
 }
 
+// InitFileVersion initializes the version counter for a file.
+// Call this after didOpen to ensure subsequent didChange uses version 2+
+func (c *GoplsClient) InitFileVersion(uri string, version int32) {
+	c.versionMu.Lock()
+	defer c.versionMu.Unlock()
+	c.fileVersion[uri] = version
+}
+
 // SyncFileContent synchronizes gopls with the current content of a .go file
 // This is critical for keeping gopls in sync after transpilation
+//
+// CRITICAL FIX: We use didClose + didOpen instead of didChange because:
+// The go.lsp.dev/protocol library's TextDocumentContentChangeEvent has
+// Range without omitempty, so JSON always includes {"range": {"start":{"line":0,"character":0},...}}.
+// An empty range (0,0→0,0) is interpreted by gopls as "insert at 0:0" not "replace all",
+// causing content to be prepended instead of replaced, leading to duplicate package declarations.
 func (c *GoplsClient) SyncFileContent(ctx context.Context, goPath string) error {
 	c.logger.Debugf("Reading .go file for sync: %s", goPath)
 
@@ -288,29 +307,40 @@ func (c *GoplsClient) SyncFileContent(ctx context.Context, goPath string) error 
 		return fmt.Errorf("failed to read .go file: %w", err)
 	}
 
-	// Send didChange notification with full new content
 	fileURI := protocol.DocumentURI(uri.File(goPath))
-	params := protocol.DidChangeTextDocumentParams{
-		TextDocument: protocol.VersionedTextDocumentIdentifier{
-			TextDocumentIdentifier: protocol.TextDocumentIdentifier{
-				URI: fileURI,
-			},
-			Version: int32(time.Now().Unix()), // Use timestamp as version
+	uriStr := string(fileURI)
+
+	// Close the file first to reset gopls's internal state
+	closeParams := protocol.DidCloseTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{
+			URI: fileURI,
 		},
-		ContentChanges: []protocol.TextDocumentContentChangeEvent{
-			{
-				// Full document update (no range specified)
-				Text: string(content),
-			},
+	}
+	if err := c.conn.Notify(ctx, "textDocument/didClose", closeParams); err != nil {
+		c.logger.Warnf("gopls didClose failed (continuing anyway): %v", err)
+	}
+
+	// Reset version to 1 for the fresh open
+	c.versionMu.Lock()
+	c.fileVersion[uriStr] = 1
+	c.versionMu.Unlock()
+
+	// Reopen with new content
+	openParams := protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:        fileURI,
+			LanguageID: "go",
+			Version:    1,
+			Text:       string(content),
 		},
 	}
 
-	c.logger.Debugf("Sending didChange to gopls with %d bytes for %s", len(content), goPath)
-	if err := c.conn.Notify(ctx, "textDocument/didChange", params); err != nil {
-		return fmt.Errorf("failed to send didChange to gopls: %w", err)
+	c.logger.Debugf("Sending didClose + didOpen to gopls with %d bytes for %s", len(content), goPath)
+	if err := c.conn.Notify(ctx, "textDocument/didOpen", openParams); err != nil {
+		return fmt.Errorf("failed to send didOpen to gopls: %w", err)
 	}
 
-	c.logger.Debugf("gopls synchronized with .go file: %s", goPath)
+	c.logger.Debugf("gopls synchronized with .go file: %s (via close+open)", goPath)
 	return nil
 }
 

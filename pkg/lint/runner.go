@@ -26,6 +26,8 @@ func NewRunner(cfg *Config) *Runner {
 	analyzers := []analyzer.Analyzer{
 		// Correctness analyzers
 		&analyzer.ExhaustivenessAnalyzer{},
+		// Style analyzers
+		&analyzer.NamingAnalyzer{},
 		// Refactoring suggestions
 		refactor.NewRefactoringAnalyzer(),
 	}
@@ -34,7 +36,6 @@ func NewRunner(cfg *Config) *Runner {
 	// &analyzer.ErrorPropAnalyzer{},
 	// &analyzer.OptionResultAnalyzer{},
 	// &analyzer.PatternAnalyzer{},
-	// &analyzer.NamingAnalyzer{},
 	// &analyzer.StyleAnalyzer{},
 
 	if len(analyzers) == 0 {

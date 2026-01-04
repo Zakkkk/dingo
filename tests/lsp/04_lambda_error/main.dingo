@@ -1,0 +1,11 @@
+package main
+
+// Test: Lambda syntax error - missing arrow
+// Expected: Error pointing to malformed lambda
+
+func test() {
+    fn := |x: int| x + 1
+    _ = fn
+}
+
+func main() {}

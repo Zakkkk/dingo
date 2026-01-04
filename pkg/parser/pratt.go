@@ -67,6 +67,9 @@ type PrattParser struct {
 
 	// Callback for collecting tuple literals during parsing
 	OnTupleLiteral func(*ast.TupleLiteral)
+
+	// Callback for collecting Dingo expression nodes during parsing
+	OnDingoNode func(ast.DingoNode)
 }
 
 // ParseError represents a parser error
@@ -78,7 +81,7 @@ type ParseError struct {
 }
 
 func (e ParseError) Error() string {
-	return fmt.Sprintf("parse error at %d:%d: %s", e.Line, e.Column, e.Message)
+	return e.Message
 }
 
 // Parse function types
@@ -474,6 +477,7 @@ func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 			MessagePos: p.curToken.Pos,
 		}
 		p.nextToken() // consume string
+		p.collectDingoNode(expr)
 		return expr
 	}
 
@@ -483,6 +487,7 @@ func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 		if lambda != nil {
 			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
 		}
+		p.collectDingoNode(expr)
 		return expr
 	}
 
@@ -492,6 +497,7 @@ func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 		if lambda != nil {
 			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
 		}
+		p.collectDingoNode(expr)
 		return expr
 	}
 
@@ -501,10 +507,12 @@ func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 		if lambda != nil {
 			expr.ErrorTransform = lambda.(*ast.LambdaExpr)
 		}
+		p.collectDingoNode(expr)
 		return expr
 	}
 
 	// Pattern 5: basic ? (no transformation)
+	p.collectDingoNode(expr)
 	return expr
 }
 
@@ -521,11 +529,13 @@ func (p *PrattParser) parseNullCoalescing(left ast.Expr) ast.Expr {
 	// This makes a ?? b ?? c parse as a ?? (b ?? c)
 	right := p.ParseExpression(precedence)
 
-	return &ast.NullCoalesceExpr{
+	expr := &ast.NullCoalesceExpr{
 		Left:  left,
 		OpPos: opPos,
 		Right: right,
 	}
+	p.collectDingoNode(expr)
+	return expr
 }
 
 // parseSafeNavigation handles the postfix ?. operator (x?.field or x?.method(args))
@@ -574,20 +584,24 @@ func (p *PrattParser) parseSafeNavigation(left ast.Expr) ast.Expr {
 			return nil
 		}
 
-		return &ast.SafeNavCallExpr{
+		callExpr := &ast.SafeNavCallExpr{
 			X:     left,
 			OpPos: opPos,
 			Fun:   sel,
 			Args:  args,
 		}
+		p.collectDingoNode(callExpr)
+		return callExpr
 	}
 
 	// Field access: x?.field
-	return &ast.SafeNavExpr{
+	navExpr := &ast.SafeNavExpr{
 		X:     left,
 		OpPos: opPos,
 		Sel:   sel,
 	}
+	p.collectDingoNode(navExpr)
+	return navExpr
 }
 
 // Error handling
@@ -615,6 +629,22 @@ func (p *PrattParser) peekError(t tokenizer.TokenKind) {
 // Errors returns all parse errors encountered
 func (p *PrattParser) Errors() []ParseError {
 	return p.errors
+}
+
+// collectDingoNode notifies the callback to collect a Dingo expression node.
+// If expr implements DingoNode directly, it's passed as-is.
+// Otherwise, it's wrapped in an ExprWrapper.
+func (p *PrattParser) collectDingoNode(expr ast.Expr) {
+	if p.OnDingoNode == nil {
+		return
+	}
+	// First check if expr directly implements DingoNode
+	if node, ok := expr.(ast.DingoNode); ok {
+		p.OnDingoNode(node)
+		return
+	}
+	// Otherwise wrap in ExprWrapper
+	p.OnDingoNode(&ast.ExprWrapper{DingoExpr: expr})
 }
 
 // parseSelectorExpr handles the infix DOT operator (x.field or pkg.Func)
@@ -821,19 +851,23 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 
 	// Pattern 1: ? followed by terminator = error propagation
 	if p.isExpressionTerminator() {
-		return &ast.ErrorPropExpr{
+		expr := &ast.ErrorPropExpr{
 			Question: questionPos,
 			Operand:  left,
 		}
+		p.collectDingoNode(expr)
+		return expr
 	}
 
 	// Pattern 1b: ? followed by another ? = first is error propagation, second will be ternary
 	// Example: getData()? ? "valid" : "invalid"
 	if p.curTokenIs(tokenizer.QUESTION) {
-		return &ast.ErrorPropExpr{
+		expr := &ast.ErrorPropExpr{
 			Question: questionPos,
 			Operand:  left,
 		}
+		p.collectDingoNode(expr)
+		return expr
 	}
 
 	// Pattern 2: ? "string" - could be error propagation OR ternary
@@ -895,13 +929,15 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 		// the next ternary to bind: (PrecTernary - 1) < PrecTernary = true
 		falseExpr := p.ParseExpression(PrecTernary - 1)
 
-		return &ast.TernaryExpr{
+		ternaryExpr := &ast.TernaryExpr{
 			Cond:     left,
 			Question: questionPos,
 			True:     trueExpr,
 			Colon:    colonPos,
 			False:    falseExpr,
 		}
+		p.collectDingoNode(ternaryExpr)
+		return ternaryExpr
 	}
 
 	// No colon found - this is error propagation without context

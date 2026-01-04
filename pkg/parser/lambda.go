@@ -205,7 +205,7 @@ func (p *PrattParser) parseRustLambda() ast.Expr {
 	// Parse body
 	body, isBlock := p.parseLambdaBody()
 
-	return &ast.LambdaExpr{
+	lambdaExpr := &ast.LambdaExpr{
 		LambdaPos:  lambdaPos,
 		Style:      ast.RustStyle,
 		Params:     params,
@@ -213,6 +213,11 @@ func (p *PrattParser) parseRustLambda() ast.Expr {
 		Body:       body,
 		IsBlock:    isBlock,
 	}
+
+	// Collect LambdaExpr for lint analyzers
+	p.collectDingoNode(lambdaExpr)
+
+	return lambdaExpr
 }
 
 // parseTSLambda parses TypeScript-style lambda: (params) => body or (params): RetType => body
@@ -280,7 +285,8 @@ func (p *PrattParser) parseTSLambda() ast.Expr {
 
 	// Parse body
 	body, isBlock := p.parseLambdaBody()
-	return &ast.LambdaExpr{
+
+	lambdaExpr := &ast.LambdaExpr{
 		LambdaPos:  lambdaPos,
 		Style:      ast.TypeScriptStyle,
 		Params:     params,
@@ -288,6 +294,11 @@ func (p *PrattParser) parseTSLambda() ast.Expr {
 		Body:       body,
 		IsBlock:    isBlock,
 	}
+
+	// Collect LambdaExpr for lint analyzers
+	p.collectDingoNode(lambdaExpr)
+
+	return lambdaExpr
 }
 
 // parseTSSingleParamLambda parses TypeScript single-param lambda without parens: x => expr
@@ -318,7 +329,7 @@ func (p *PrattParser) parseTSSingleParamLambda() ast.Expr {
 	// Parse body
 	body, isBlock := p.parseLambdaBody()
 
-	return &ast.LambdaExpr{
+	lambdaExpr := &ast.LambdaExpr{
 		LambdaPos:  lambdaPos,
 		Style:      ast.TypeScriptStyle,
 		Params:     params,
@@ -326,6 +337,11 @@ func (p *PrattParser) parseTSSingleParamLambda() ast.Expr {
 		Body:       body,
 		IsBlock:    isBlock,
 	}
+
+	// Collect LambdaExpr for lint analyzers
+	p.collectDingoNode(lambdaExpr)
+
+	return lambdaExpr
 }
 
 // parseLambdaParams parses lambda parameters until endToken

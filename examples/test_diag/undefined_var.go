@@ -1,0 +1,12 @@
+package main
+
+import "fmt"
+
+func testGoError() {
+	// This undefined variable will trigger a Go type error
+	fmt.Println(undefinedVar)
+}
+
+func main() {
+	testGoError()
+}

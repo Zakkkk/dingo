@@ -25,11 +25,10 @@ const (
 	AllErrors
 )
 
-// ParseFile parses a Dingo source file and returns a Go AST.
-// Uses the AST-based parser from pkg/parser/.
-//
-// If the Dingo parser fails (e.g., for plain Go files), falls back to go/parser.
-func ParseFile(fset *gotoken.FileSet, filename string, src []byte, mode Mode) (*ast.File, error) {
+// ParseFileWithFset parses a Dingo source file and returns a Go AST along with
+// the FileSet containing the file's positions. This avoids FileSet pollution
+// from failed parse attempts.
+func ParseFileWithFset(filename string, src []byte, mode Mode) (*ast.File, *gotoken.FileSet, error) {
 	// Convert mode flags for go/parser
 	var goMode goparser.Mode
 	if mode&ParseComments != 0 {
@@ -41,13 +40,16 @@ func ParseFile(fset *gotoken.FileSet, filename string, src []byte, mode Mode) (*
 
 	// First, try the standard Go parser for valid Go syntax
 	// This handles cases where the input is already valid Go
-	goFile, goErr := goparser.ParseFile(fset, filename, src, goMode)
+	goFset := gotoken.NewFileSet()
+	goFile, goErr := goparser.ParseFile(goFset, filename, src, goMode)
 	if goErr == nil {
-		return goFile, nil
+		return goFile, goFset, nil
 	}
 
 	// If Go parser failed, try the Dingo AST parser
 	// This handles Dingo-specific syntax (?, let, match, enum, etc.)
+	dingoFset := gotoken.NewFileSet()
+
 	var dingoMode dingoparser.Mode
 	if mode&ParseComments != 0 {
 		dingoMode |= dingoparser.ParseComments
@@ -59,14 +61,24 @@ func ParseFile(fset *gotoken.FileSet, filename string, src []byte, mode Mode) (*
 		dingoMode |= dingoparser.AllErrors
 	}
 
-	dingoFile, dingoErr := dingoparser.ParseFile(fset, filename, src, dingoMode)
+	dingoFile, dingoErr := dingoparser.ParseFile(dingoFset, filename, src, dingoMode)
 	if dingoErr != nil {
 		// Both parsers failed - return the Go parser error as it's more common
-		return nil, fmt.Errorf("parse error: %w", goErr)
+		return nil, nil, fmt.Errorf("parse error: %w", goErr)
 	}
 
 	// The Dingo parser returns a Go AST file wrapped in a Dingo file
-	return dingoFile.File, nil
+	return dingoFile.File, dingoFset, nil
+}
+
+// ParseFile parses a Dingo source file and returns a Go AST.
+// Uses the AST-based parser from pkg/parser/.
+//
+// If the Dingo parser fails (e.g., for plain Go files), falls back to go/parser.
+// DEPRECATED: Use ParseFileWithFset instead to avoid FileSet pollution issues.
+func ParseFile(fset *gotoken.FileSet, filename string, src []byte, mode Mode) (*ast.File, error) {
+	file, _, err := ParseFileWithFset(filename, src, mode)
+	return file, err
 }
 
 // ParseExpr parses a Dingo expression and returns a Go AST expression.

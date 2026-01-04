@@ -1,0 +1,15 @@
+package main
+
+// Test: Safe navigation on non-pointer type
+// Expected: Error - cannot use ?. on non-pointer
+
+type User struct {
+    Name string
+}
+
+func test() string {
+    var u User
+    return u?.Name
+}
+
+func main() {}

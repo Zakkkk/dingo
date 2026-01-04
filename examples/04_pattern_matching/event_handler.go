@@ -13,6 +13,8 @@ import (
 )
 
 // Event sum type - all possible events in the system
+//
+//line /Users/jack/mag/dingo/examples/04_pattern_matching/event_handler.dingo:17:1
 type Event interface{ isEvent() }
 
 type EventUserCreated struct {
@@ -71,9 +73,12 @@ func NewEventPaymentFailed(orderID string, reason string) Event {
 	return EventPaymentFailed{orderID: orderID, reason: reason}
 }
 
+//line /Users/jack/mag/dingo/examples/04_pattern_matching/event_handler.dingo:25:1
+
 // ProcessEvent handles all event types with exhaustive matching
 // The compiler ensures every Event variant is handled
 func ProcessEvent(event Event) string {
+	//line /Users/jack/mag/dingo/examples/04_pattern_matching/event_handler.dingo:29:9
 	val3 := event
 	switch v4 := val3.(type) {
 	case EventUserCreated:
@@ -110,6 +115,7 @@ func ProcessEvent(event Event) string {
 
 // GetEventPriority uses guards for complex conditions
 func GetEventPriority(event Event) int {
+	//line /Users/jack/mag/dingo/examples/04_pattern_matching/event_handler.dingo:55:9
 	val1 := event
 	switch v2 := val1.(type) {
 	case EventPaymentFailed:
@@ -131,6 +137,7 @@ func GetEventPriority(event Event) int {
 func FilterUserEvents(events []Event) []Event {
 	var userEvents []Event
 	for _, event := range events {
+		//line /Users/jack/mag/dingo/examples/04_pattern_matching/event_handler.dingo:67:18
 		var isUserEvent bool
 		val := event
 		switch val.(type) {

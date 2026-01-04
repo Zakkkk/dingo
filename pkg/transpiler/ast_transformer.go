@@ -264,7 +264,14 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 			if loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav {
 				continue
 			}
-			return nil, nil, fmt.Errorf("parse expression at byte %d: %w", loc.Start, parseErr)
+			// Return structured error with position info for LSP diagnostics
+			pos := srcFset.Position(srcFile.Pos(loc.Start))
+			return nil, nil, &TranspileError{
+				File:    filename,
+				Line:    pos.Line,
+				Col:     pos.Column,
+				Message: parseErr.Error(),
+			}
 		}
 
 		// Extract the actual Expr from DingoNode wrapper
@@ -274,7 +281,13 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 		} else if astExpr, ok := dingoNode.(ast.Expr); ok {
 			expr = astExpr
 		} else {
-			return nil, nil, fmt.Errorf("unexpected node type at byte %d: %T", loc.Start, dingoNode)
+			pos := srcFset.Position(srcFile.Pos(loc.Start))
+			return nil, nil, &TranspileError{
+				File:    filename,
+				Line:    pos.Line,
+				Col:     pos.Column,
+				Message: fmt.Sprintf("unexpected node type: %T", dingoNode),
+			}
 		}
 
 		// Set IsExpr flag on MatchExpr based on context
@@ -480,10 +493,25 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 				srcLine := srcFile.Line(srcFile.Pos(loc.Start))
 				goStartLine := srcLine + cumulativeLineDelta
 
+				// If a //line directive was emitted, the actual code starts one line later.
+				// The directive occupies the first line of the replacement, so we add 1 to
+				// GoLineStart to point to where the actual transformed code begins.
+				// We also subtract 1 from the line count since the directive isn't part of
+				// the transformed code range.
+				// This fixes off-by-one errors where code before the transform (e.g., function
+				// declaration) was incorrectly included in the line mapping range.
+				directiveEmitted := len(genResult.StatementOutput) > 0 && loc.StatementEnd > loc.StatementStart &&
+					filename != "" && originalSrc != nil && len(originalSrc) > 0
+				codeLineCount := generatedLineCount
+				if directiveEmitted {
+					goStartLine++
+					codeLineCount-- // Exclude directive from code range
+				}
+
 				lineMappings = append(lineMappings, sourcemap.LineMapping{
 					DingoLine:   dingoLine,
 					GoLineStart: goStartLine,
-					GoLineEnd:   goStartLine + generatedLineCount - 1,
+					GoLineEnd:   goStartLine + codeLineCount - 1,
 					Kind:        loc.Kind.String(),
 				})
 			}
@@ -784,11 +812,22 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			// Expression length (function call without the ? operator)
 			exprLen := t.loc.ExprEnd - t.loc.ExprStart - 1 // -1 for ?
 
+			// Calculate tab adjustment for go/printer's space→tab conversion.
+			// Dingo uses 4 spaces for indentation, go/printer converts to tabs.
+			// LSP counts tabs as 1 character, so we need to adjust GoCol.
+			//
+			// Example: Dingo "    x := getInt()?" (4 spaces = column 5)
+			//          Go    "\ttmp, err := getInt()" (1 tab = column 2)
+			// The leading 4 spaces become 1 tab = 3 characters shorter.
+			leadingSpaces := dingoCol - 1                  // Characters before first non-space (0-indexed)
+			leadingTabs := (leadingSpaces + 3) / 4         // Ceiling division: tabs after go/printer
+			indentAdjust := leadingSpaces - leadingTabs    // Characters "saved" by tab compression
+
 			columnMappings = append(columnMappings, sourcemap.ColumnMapping{
 				DingoLine: dingoLine,
 				DingoCol:  dingoCol + t.dingoLHSLen, // Column where expression starts
 				GoLine:    goLineStart,              // First line of generated Go code
-				GoCol:     dingoCol + t.dingoLHSLen + colOffset,
+				GoCol:     dingoCol + t.dingoLHSLen + colOffset - indentAdjust,
 				Length:    exprLen,
 				Kind:      "error_prop",
 			})
@@ -1289,7 +1328,12 @@ func transformGuardStatements(src []byte, originalSrc []byte, filename string) (
 		// HasBinding (|err|) is a strong signal for Result type
 		exprType, err := codegen.InferExprTypeWithBinding(loc.ExprText, loc.HasBinding)
 		if err != nil {
-			return nil, fmt.Errorf("line %d: cannot infer type: %w", loc.Line, err)
+			return nil, &TranspileError{
+				File:    filename,
+				Line:    loc.Line,
+				Col:     loc.Column,
+				Message: fmt.Sprintf("cannot infer type: %v", err),
+			}
 		}
 
 		// Generate code with source context and shared counter
