@@ -656,11 +656,14 @@ func findFirstNonBlankLine(source []byte, startLine int) int {
 
 // adjustLineMappingsForPrinterOffset fixes line mappings after go/printer runs.
 //
-// For match/safe_nav/null_coalesce/ternary transforms, we use the //line directives
-// in the final Go output to determine the correct line positions. This is more
-// accurate than calculating offsets from intermediate source positions, because:
-// 1. go/printer reformats the AST, changing line numbers unpredictably
-// 2. The //line directives are in the final output with correct positions
+// go/printer may reformat the code, changing line numbers. This function adjusts
+// the line mappings to match the final Go output. It handles two cases:
+//
+// 1. If //line directives are present, use them for accurate mapping
+// 2. If no //line directives, calculate the header offset from line counts
+//
+// The header offset accounts for lines removed/added by go/printer before the
+// first transform (e.g., empty comment lines removed from the header).
 //
 // CLAUDE.md COMPLIANT: Uses go/scanner for position tracking, not byte manipulation.
 func adjustLineMappingsForPrinterOffset(goCode, dingoSource []byte, lineMappings []sourcemap.LineMapping, columnMappings []sourcemap.ColumnMapping) ([]sourcemap.LineMapping, []sourcemap.ColumnMapping) {
@@ -671,34 +674,66 @@ func adjustLineMappingsForPrinterOffset(goCode, dingoSource []byte, lineMappings
 	// Build a map of Dingo line → Go line from //line directives in final output
 	directiveMap := findLineDirectivePositions(goCode)
 
-	// Adjust line mappings using directive positions
+	// If we have directives, use them for accurate mapping
+	if len(directiveMap) > 0 {
+		return adjustWithDirectives(directiveMap, lineMappings, columnMappings)
+	}
+
+	// No directives - calculate header offset from the first mapping
+	// The header offset is the difference between expected and actual Go line
+	// for the first transform. This accounts for lines removed by go/printer.
+	headerOffset := calculateHeaderOffset(goCode, dingoSource, lineMappings)
+
+	// Adjust all mappings by the header offset
 	adjustedLineMappings := make([]sourcemap.LineMapping, 0, len(lineMappings))
 	for _, lm := range lineMappings {
-		// Look for a //line directive that sets this Dingo line
+		adjustedLineMappings = append(adjustedLineMappings, sourcemap.LineMapping{
+			DingoLine:   lm.DingoLine,
+			GoLineStart: lm.GoLineStart + headerOffset,
+			GoLineEnd:   lm.GoLineEnd + headerOffset,
+			Kind:        lm.Kind,
+		})
+	}
+
+	adjustedColumnMappings := make([]sourcemap.ColumnMapping, 0, len(columnMappings))
+	for _, cm := range columnMappings {
+		adjustedColumnMappings = append(adjustedColumnMappings, sourcemap.ColumnMapping{
+			DingoLine: cm.DingoLine,
+			DingoCol:  cm.DingoCol,
+			GoLine:    cm.GoLine + headerOffset,
+			GoCol:     cm.GoCol,
+			Length:    cm.Length,
+			Kind:      cm.Kind,
+		})
+	}
+
+	return adjustedLineMappings, adjustedColumnMappings
+}
+
+// adjustWithDirectives uses //line directives for accurate line mapping.
+func adjustWithDirectives(directiveMap map[int]int, lineMappings []sourcemap.LineMapping, columnMappings []sourcemap.ColumnMapping) ([]sourcemap.LineMapping, []sourcemap.ColumnMapping) {
+	adjustedLineMappings := make([]sourcemap.LineMapping, 0, len(lineMappings))
+	for _, lm := range lineMappings {
 		if goLine, found := directiveMap[lm.DingoLine]; found {
-			// The directive is at goLine, so the actual code starts at goLine+1
-			// The code length is GoLineEnd - GoLineStart + 1 (from original mapping)
 			codeLength := lm.GoLineEnd - lm.GoLineStart + 1
 			adjustedLineMappings = append(adjustedLineMappings, sourcemap.LineMapping{
 				DingoLine:   lm.DingoLine,
-				GoLineStart: goLine + 1, // Code starts after directive
+				GoLineStart: goLine + 1,
 				GoLineEnd:   goLine + codeLength,
 				Kind:        lm.Kind,
 			})
 		} else {
-			// No directive found - keep original mapping
 			adjustedLineMappings = append(adjustedLineMappings, lm)
 		}
 	}
 
-	// Adjust column mappings similarly
 	adjustedColumnMappings := make([]sourcemap.ColumnMapping, 0, len(columnMappings))
 	for _, cm := range columnMappings {
 		if goLine, found := directiveMap[cm.DingoLine]; found {
 			adjustedColumnMappings = append(adjustedColumnMappings, sourcemap.ColumnMapping{
 				DingoLine: cm.DingoLine,
 				DingoCol:  cm.DingoCol,
-				GoLine:    goLine + 1, // Code starts after directive
+				GoLine:    goLine + 1,
 				GoCol:     cm.GoCol,
 				Length:    cm.Length,
 				Kind:      cm.Kind,
@@ -709,6 +744,49 @@ func adjustLineMappingsForPrinterOffset(goCode, dingoSource []byte, lineMappings
 	}
 
 	return adjustedLineMappings, adjustedColumnMappings
+}
+
+// calculateHeaderOffset determines the line offset between Dingo and Go sources
+// caused by go/printer reformatting (e.g., removing empty comment lines).
+//
+// The algorithm counts lines before "package" in both sources. If Dingo has
+// more lines before "package" than Go, those extra lines are the header offset.
+//
+// Returns negative offset if Go has fewer lines (common case).
+func calculateHeaderOffset(goCode, dingoSource []byte, lineMappings []sourcemap.LineMapping) int {
+	// Use go/scanner to find "package" keyword in both sources
+	goPackageLine := findPackageLine(goCode)
+	dingoPackageLine := findPackageLine(dingoSource)
+
+	if goPackageLine == 0 || dingoPackageLine == 0 {
+		return 0 // Can't determine offset
+	}
+
+	// Header offset = Go package line - Dingo package line
+	// If Dingo has 17 lines before package and Go has 16, offset = -1
+	// This means Go line N corresponds to Dingo line N+1
+	return goPackageLine - dingoPackageLine
+}
+
+// findPackageLine returns the 1-indexed line number of the "package" keyword.
+// Uses go/scanner for CLAUDE.md compliant position tracking.
+func findPackageLine(source []byte) int {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(source))
+
+	var s scanner.Scanner
+	s.Init(file, source, nil, scanner.ScanComments)
+
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok == token.PACKAGE {
+			return fset.Position(pos).Line
+		}
+	}
+	return 0
 }
 
 // findLineDirectivePositions scans Go source for //line directives and returns

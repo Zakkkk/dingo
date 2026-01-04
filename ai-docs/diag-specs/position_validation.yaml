@@ -1,0 +1,21 @@
+# Diagnostics Position Validation Tests
+#
+# These tests verify that diagnostics from gopls are correctly
+# translated from Go positions to Dingo positions.
+#
+# The key test is that the "unused parameter: user" warning on
+# checkPermissions should appear on the correct line in Dingo.
+
+---
+file: examples/01_error_propagation/http_handler.dingo
+description: Position validation for error propagation transforms
+
+expected:
+  - description: "Unused parameter 'user' on checkPermissions line 114"
+    line: 114
+    severity: info
+    contains: "user"
+
+  # The function starts at Dingo line 114:
+  # func checkPermissions(r *http.Request, user *User) (bool, error)
+  # The "user" parameter is unused, so gopls should report it here.
