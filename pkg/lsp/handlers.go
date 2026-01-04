@@ -106,6 +106,249 @@ func (t *Translator) TranslateDefinitionLocations(
 	return translatedLocations, nil
 }
 
+// TranslateDocumentSymbols translates document symbols and their ranges from Go → Dingo.
+// This handles the recursive Children array in DocumentSymbol.
+func (t *Translator) TranslateDocumentSymbols(
+	symbols []protocol.DocumentSymbol,
+	goURI protocol.DocumentURI,
+	dir Direction,
+) ([]protocol.DocumentSymbol, error) {
+	if len(symbols) == 0 {
+		return symbols, nil
+	}
+
+	translatedSymbols := make([]protocol.DocumentSymbol, 0, len(symbols))
+	for _, sym := range symbols {
+		translatedSym, err := t.translateDocumentSymbol(sym, goURI, dir)
+		if err != nil {
+			// Skip symbols that can't be translated
+			continue
+		}
+		translatedSymbols = append(translatedSymbols, translatedSym)
+	}
+
+	return translatedSymbols, nil
+}
+
+// translateDocumentSymbol translates a single DocumentSymbol including its children
+func (t *Translator) translateDocumentSymbol(
+	sym protocol.DocumentSymbol,
+	goURI protocol.DocumentURI,
+	dir Direction,
+) (protocol.DocumentSymbol, error) {
+	// Translate main Range
+	_, newRange, err := t.TranslateRange(goURI, sym.Range, dir)
+	if err != nil {
+		return sym, err
+	}
+	sym.Range = newRange
+
+	// Translate SelectionRange
+	_, newSelectionRange, err := t.TranslateRange(goURI, sym.SelectionRange, dir)
+	if err != nil {
+		return sym, err
+	}
+	sym.SelectionRange = newSelectionRange
+
+	// Recursively translate children
+	if len(sym.Children) > 0 {
+		translatedChildren, err := t.TranslateDocumentSymbols(sym.Children, goURI, dir)
+		if err != nil {
+			// Propagate error - don't return partially translated symbol
+			return sym, fmt.Errorf("child translation failed: %w", err)
+		}
+		sym.Children = translatedChildren
+	}
+
+	return sym, nil
+}
+
+// TranslateSymbolInformation translates workspace symbol information locations.
+// Unlike DocumentSymbol, SymbolInformation has a Location (URI + Range) per symbol.
+func (t *Translator) TranslateSymbolInformation(
+	symbols []protocol.SymbolInformation,
+	dir Direction,
+) ([]protocol.SymbolInformation, error) {
+	if len(symbols) == 0 {
+		return symbols, nil
+	}
+
+	translatedSymbols := make([]protocol.SymbolInformation, 0, len(symbols))
+	for _, sym := range symbols {
+		translatedLoc, err := t.TranslateLocation(sym.Location, dir)
+		if err != nil {
+			// Keep unchanged for symbols that can't be translated (e.g., stdlib)
+			translatedSymbols = append(translatedSymbols, sym)
+			continue
+		}
+		sym.Location = translatedLoc
+		translatedSymbols = append(translatedSymbols, sym)
+	}
+
+	return translatedSymbols, nil
+}
+
+// TranslateCallHierarchyItem translates a call hierarchy item's range and selection range.
+// The item's URI is also updated based on direction.
+func (t *Translator) TranslateCallHierarchyItem(
+	item protocol.CallHierarchyItem,
+	dir Direction,
+) (protocol.CallHierarchyItem, error) {
+	// Translate Range
+	newURI, newRange, err := t.TranslateRange(item.URI, item.Range, dir)
+	if err != nil {
+		return item, err
+	}
+	item.URI = newURI
+	item.Range = newRange
+
+	// Translate SelectionRange
+	_, newSelectionRange, err := t.TranslateRange(newURI, item.SelectionRange, dir)
+	if err != nil {
+		// Keep original selection range on error but update main range
+		return item, nil
+	}
+	item.SelectionRange = newSelectionRange
+
+	return item, nil
+}
+
+// TranslateCallHierarchyItems translates a slice of CallHierarchyItems
+func (t *Translator) TranslateCallHierarchyItems(
+	items []protocol.CallHierarchyItem,
+	dir Direction,
+) ([]protocol.CallHierarchyItem, error) {
+	if len(items) == 0 {
+		return items, nil
+	}
+
+	translatedItems := make([]protocol.CallHierarchyItem, 0, len(items))
+	for _, item := range items {
+		translatedItem, err := t.TranslateCallHierarchyItem(item, dir)
+		if err != nil {
+			// Skip items that can't be translated
+			continue
+		}
+		translatedItems = append(translatedItems, translatedItem)
+	}
+
+	return translatedItems, nil
+}
+
+// TranslateCallHierarchyIncomingCall translates an incoming call entry.
+// The From field contains the CallHierarchyItem of the caller.
+// FromRanges contains the call sites within the caller.
+func (t *Translator) TranslateCallHierarchyIncomingCall(
+	call protocol.CallHierarchyIncomingCall,
+	dir Direction,
+) (protocol.CallHierarchyIncomingCall, error) {
+	// Translate the From item (the caller)
+	translatedFrom, err := t.TranslateCallHierarchyItem(call.From, dir)
+	if err != nil {
+		return call, err
+	}
+	call.From = translatedFrom
+
+	// Translate FromRanges (call sites within the caller)
+	// These ranges are relative to the caller's file (call.From.URI after translation)
+	if len(call.FromRanges) > 0 {
+		translatedRanges := make([]protocol.Range, 0, len(call.FromRanges))
+		for _, rng := range call.FromRanges {
+			// Use the translated URI for the caller's file
+			_, newRange, err := t.TranslateRange(call.From.URI, rng, dir)
+			if err != nil {
+				// Skip ranges that can't be translated
+				continue
+			}
+			translatedRanges = append(translatedRanges, newRange)
+		}
+		call.FromRanges = translatedRanges
+	}
+
+	return call, nil
+}
+
+// TranslateCallHierarchyIncomingCalls translates a slice of incoming calls
+func (t *Translator) TranslateCallHierarchyIncomingCalls(
+	calls []protocol.CallHierarchyIncomingCall,
+	dir Direction,
+) ([]protocol.CallHierarchyIncomingCall, error) {
+	if len(calls) == 0 {
+		return calls, nil
+	}
+
+	translatedCalls := make([]protocol.CallHierarchyIncomingCall, 0, len(calls))
+	for _, call := range calls {
+		translatedCall, err := t.TranslateCallHierarchyIncomingCall(call, dir)
+		if err != nil {
+			// Keep unchanged for calls that can't be translated (e.g., from stdlib)
+			translatedCalls = append(translatedCalls, call)
+			continue
+		}
+		translatedCalls = append(translatedCalls, translatedCall)
+	}
+
+	return translatedCalls, nil
+}
+
+// TranslateCallHierarchyOutgoingCall translates an outgoing call entry.
+// The To field contains the CallHierarchyItem of the callee.
+// FromRanges contains the call sites within the current function.
+func (t *Translator) TranslateCallHierarchyOutgoingCall(
+	call protocol.CallHierarchyOutgoingCall,
+	callerURI protocol.DocumentURI,
+	dir Direction,
+) (protocol.CallHierarchyOutgoingCall, error) {
+	// Translate the To item (the callee)
+	translatedTo, err := t.TranslateCallHierarchyItem(call.To, dir)
+	if err != nil {
+		return call, err
+	}
+	call.To = translatedTo
+
+	// Translate FromRanges (call sites within the current function)
+	// These ranges are relative to the caller's file (the file we're looking at)
+	if len(call.FromRanges) > 0 {
+		translatedRanges := make([]protocol.Range, 0, len(call.FromRanges))
+		for _, rng := range call.FromRanges {
+			_, newRange, err := t.TranslateRange(callerURI, rng, dir)
+			if err != nil {
+				// Skip ranges that can't be translated
+				continue
+			}
+			translatedRanges = append(translatedRanges, newRange)
+		}
+		call.FromRanges = translatedRanges
+	}
+
+	return call, nil
+}
+
+// TranslateCallHierarchyOutgoingCalls translates a slice of outgoing calls.
+// callerURI is the URI of the file containing the caller (for translating FromRanges).
+func (t *Translator) TranslateCallHierarchyOutgoingCalls(
+	calls []protocol.CallHierarchyOutgoingCall,
+	callerURI protocol.DocumentURI,
+	dir Direction,
+) ([]protocol.CallHierarchyOutgoingCall, error) {
+	if len(calls) == 0 {
+		return calls, nil
+	}
+
+	translatedCalls := make([]protocol.CallHierarchyOutgoingCall, 0, len(calls))
+	for _, call := range calls {
+		translatedCall, err := t.TranslateCallHierarchyOutgoingCall(call, callerURI, dir)
+		if err != nil {
+			// Keep unchanged for calls that can't be translated (e.g., to stdlib)
+			translatedCalls = append(translatedCalls, call)
+			continue
+		}
+		translatedCalls = append(translatedCalls, translatedCall)
+	}
+
+	return translatedCalls, nil
+}
+
 // TranslateDiagnostics translates diagnostic positions from Go → Dingo
 func (t *Translator) TranslateDiagnostics(
 	diagnostics []protocol.Diagnostic,

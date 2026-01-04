@@ -55,6 +55,9 @@ type Server struct {
 	transpileDebounce    map[string]*transpileDebounceState
 	transpileDebounceMu  sync.Mutex
 	transpileDebounceMs  int // Debounce delay in milliseconds (default: 300)
+
+	// Call hierarchy context for stateful call hierarchy protocol
+	callHierarchyCtx *CallHierarchyContext
 }
 
 // transpileDebounceState tracks debounced transpilation for a single file
@@ -96,6 +99,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		parseDiags:          make(map[string][]protocol.Diagnostic),
 		transpileDebounce:   make(map[string]*transpileDebounceState),
 		transpileDebounceMs: 300, // 300ms debounce for responsive typing
+		callHierarchyCtx:    NewCallHierarchyContext(),
 	}
 
 	// Initialize auto-transpiler with server reference
@@ -193,6 +197,21 @@ func (s *Server) handleRequest(ctx context.Context, reply jsonrpc2.Replier, req 
 		return s.handleCodeAction(ctx, reply, req)
 	case "textDocument/formatting":
 		return s.handleFormatting(ctx, reply, req)
+	// Code navigation methods
+	case "textDocument/references":
+		return s.handleReferences(ctx, reply, req)
+	case "textDocument/implementation":
+		return s.handleImplementation(ctx, reply, req)
+	case "textDocument/documentSymbol":
+		return s.handleDocumentSymbol(ctx, reply, req)
+	case "workspace/symbol":
+		return s.handleWorkspaceSymbol(ctx, reply, req)
+	case "callHierarchy/prepare":
+		return s.handlePrepareCallHierarchy(ctx, reply, req)
+	case "callHierarchy/incomingCalls":
+		return s.handleIncomingCalls(ctx, reply, req)
+	case "callHierarchy/outgoingCalls":
+		return s.handleOutgoingCalls(ctx, reply, req)
 	default:
 		// Unknown method - try forwarding to gopls
 		s.config.Logger.Debugf("Forwarding unknown method to gopls: %s", req.Method())
@@ -259,6 +278,12 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 					protocol.RefactorRewrite,
 				},
 			},
+			// Code navigation capabilities (new)
+			ReferencesProvider:      true,
+			ImplementationProvider:  true,
+			DocumentSymbolProvider:  true,
+			WorkspaceSymbolProvider: &protocol.WorkspaceSymbolOptions{},
+			CallHierarchyProvider:   &protocol.CallHierarchyOptions{},
 		},
 		ServerInfo: &protocol.ServerInfo{
 			Name:    "dingo-lsp",
@@ -470,6 +495,14 @@ func (s *Server) handleDidClose(ctx context.Context, reply jsonrpc2.Replier, req
 
 		// Close incremental parser for this document
 		s.docManager.CloseDocument(string(params.TextDocument.URI))
+
+		// Cancel any pending debounced transpilation for this document
+		s.transpileDebounceMu.Lock()
+		if state, exists := s.transpileDebounce[string(params.TextDocument.URI)]; exists {
+			state.timer.Stop()
+			delete(s.transpileDebounce, string(params.TextDocument.URI))
+		}
+		s.transpileDebounceMu.Unlock()
 
 		// Close corresponding .go file with gopls
 		if err := s.closeGoFileWithGopls(ctx, params.TextDocument.URI.Filename()); err != nil {

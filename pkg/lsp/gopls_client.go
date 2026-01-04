@@ -262,6 +262,78 @@ func (c *GoplsClient) Hover(ctx context.Context, params protocol.HoverParams) (*
 	return &result, nil
 }
 
+// References forwards references request to gopls
+func (c *GoplsClient) References(ctx context.Context, params protocol.ReferenceParams) ([]protocol.Location, error) {
+	var result []protocol.Location
+	_, err := c.conn.Call(ctx, "textDocument/references", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls references failed: %w", err)
+	}
+	return result, nil
+}
+
+// Implementation forwards implementation request to gopls
+func (c *GoplsClient) Implementation(ctx context.Context, params protocol.ImplementationParams) ([]protocol.Location, error) {
+	var result []protocol.Location
+	_, err := c.conn.Call(ctx, "textDocument/implementation", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls implementation failed: %w", err)
+	}
+	return result, nil
+}
+
+// DocumentSymbol forwards document symbol request to gopls.
+// Returns []any because gopls may return either []DocumentSymbol or []SymbolInformation
+// depending on client capabilities.
+func (c *GoplsClient) DocumentSymbol(ctx context.Context, params protocol.DocumentSymbolParams) ([]any, error) {
+	var result []any
+	_, err := c.conn.Call(ctx, "textDocument/documentSymbol", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls documentSymbol failed: %w", err)
+	}
+	return result, nil
+}
+
+// WorkspaceSymbol forwards workspace symbol request to gopls
+func (c *GoplsClient) WorkspaceSymbol(ctx context.Context, params protocol.WorkspaceSymbolParams) ([]protocol.SymbolInformation, error) {
+	var result []protocol.SymbolInformation
+	_, err := c.conn.Call(ctx, "workspace/symbol", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls workspaceSymbol failed: %w", err)
+	}
+	return result, nil
+}
+
+// PrepareCallHierarchy forwards call hierarchy prepare request to gopls
+func (c *GoplsClient) PrepareCallHierarchy(ctx context.Context, params protocol.CallHierarchyPrepareParams) ([]protocol.CallHierarchyItem, error) {
+	var result []protocol.CallHierarchyItem
+	_, err := c.conn.Call(ctx, "textDocument/prepareCallHierarchy", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls prepareCallHierarchy failed: %w", err)
+	}
+	return result, nil
+}
+
+// IncomingCalls forwards incoming calls request to gopls
+func (c *GoplsClient) IncomingCalls(ctx context.Context, params protocol.CallHierarchyIncomingCallsParams) ([]protocol.CallHierarchyIncomingCall, error) {
+	var result []protocol.CallHierarchyIncomingCall
+	_, err := c.conn.Call(ctx, "callHierarchy/incomingCalls", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls incomingCalls failed: %w", err)
+	}
+	return result, nil
+}
+
+// OutgoingCalls forwards outgoing calls request to gopls
+func (c *GoplsClient) OutgoingCalls(ctx context.Context, params protocol.CallHierarchyOutgoingCallsParams) ([]protocol.CallHierarchyOutgoingCall, error) {
+	var result []protocol.CallHierarchyOutgoingCall
+	_, err := c.conn.Call(ctx, "callHierarchy/outgoingCalls", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls outgoingCalls failed: %w", err)
+	}
+	return result, nil
+}
+
 // DidOpen notifies gopls of opened file
 func (c *GoplsClient) DidOpen(ctx context.Context, params protocol.DidOpenTextDocumentParams) error {
 	return c.conn.Notify(ctx, "textDocument/didOpen", params)
