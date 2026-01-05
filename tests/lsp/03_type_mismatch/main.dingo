@@ -8,3 +8,4 @@ func getString() string {
 }
 
 func main() {}
+

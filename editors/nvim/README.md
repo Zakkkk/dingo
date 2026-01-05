@@ -534,7 +534,7 @@ This will verify:
 
 2. Verify tree-sitter is loaded:
    ```vim
-   :lua =vim.treesitter.language.require_language("dingo", true)
+   :lua =vim.treesitter.language.add("dingo", true)
    ```
 
 3. Inspect parsed tree:

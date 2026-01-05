@@ -3,7 +3,7 @@ package main
 // Test: Match expression with valid syntax
 // This should transpile successfully (no error)
 
-//line tests/lsp/07_match_missing_arm/main.dingo:6:1
+//line /Users/jack/mag/dingo/tests/lsp/07_match_missing_arm/main.dingo:6:1
 type Color interface{ isColor() }
 
 type ColorRed struct{}
@@ -21,10 +21,10 @@ type ColorBlue struct{}
 func (ColorBlue) isColor() {}
 func NewColorBlue() Color  { return ColorBlue{} }
 
-//line tests/lsp/07_match_missing_arm/main.dingo:11:1
+//line /Users/jack/mag/dingo/tests/lsp/07_match_missing_arm/main.dingo:11:1
 
 func getName(c Color) string {
-	//line tests/lsp/07_match_missing_arm/main.dingo:13:12
+	//line /Users/jack/mag/dingo/tests/lsp/07_match_missing_arm/main.dingo:13:12
 	val := c
 	switch val.(type) {
 	case ColorRed:

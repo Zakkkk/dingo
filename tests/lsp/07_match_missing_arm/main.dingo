@@ -10,7 +10,7 @@ enum Color {
 }
 
 func getName(c Color) string {
-    return match c {
+    return match {
         Red => "red"
         Green => "green"
         Blue => "blue"
@@ -18,3 +18,4 @@ func getName(c Color) string {
 }
 
 func main() {}
+
