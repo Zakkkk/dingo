@@ -1,0 +1,61 @@
+<idea-plugin>
+    <id>com.madappgang.dingo</id>
+    <name>Dingo Language Support</name>
+    <version>0.1.1</version>
+    <vendor email="support@madappgang.com" url="https://dingolang.com">MadAppGang</vendor>
+
+    <description><![CDATA[
+        <h2>Dingo Language Support</h2>
+        <p>Language support for Dingo - a modern meta-language for Go that adds
+        Result/Option types, pattern matching, error propagation, and more.</p>
+
+        <h3>Features</h3>
+        <ul>
+            <li>Syntax highlighting</li>
+            <li>Code completion</li>
+            <li>Hover information with types</li>
+            <li>Error diagnostics</li>
+            <li>Go to definition</li>
+            <li>Find references</li>
+        </ul>
+
+        <h3>Requirements</h3>
+        <ul>
+            <li>Install dingo-lsp: <code>go install github.com/MadAppGang/dingo/cmd/dingo-lsp@latest</code></li>
+            <li>Ensure <code>gopls</code> is installed</li>
+        </ul>
+
+        <p>Learn more at <a href="https://dingolang.com">dingolang.com</a></p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <h3>0.1.0</h3>
+        <ul>
+            <li>Initial release</li>
+            <li>Syntax highlighting via TextMate grammar</li>
+            <li>LSP integration for completion, hover, diagnostics</li>
+        </ul>
+    ]]></change-notes>
+
+    <!-- Minimum IDE build: 2024.1 for stable LSP and TextMate APIs -->
+    <idea-version since-build="241.0"/>
+
+    <!-- Dependencies -->
+    <depends>com.intellij.modules.platform</depends>
+
+    <!-- Optional: LSP module (only in commercial IDEs) -->
+    <depends optional="true" config-file="lsp-support.xml">com.intellij.modules.ultimate</depends>
+
+    <!-- TextMate support (bundled) -->
+    <depends>org.jetbrains.plugins.textmate</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File icon for .dingo files -->
+        <iconProvider
+            implementation="com.madappgang.dingo.DingoIconProvider"/>
+
+        <!-- TextMate bundle for syntax highlighting -->
+        <textmate.bundleProvider
+            implementation="com.madappgang.dingo.DingoTextMateBundle"/>
+    </extensions>
+</idea-plugin>

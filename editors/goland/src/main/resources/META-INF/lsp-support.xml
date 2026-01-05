@@ -1,0 +1,7 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- LSP server provider - only loaded in commercial IDEs -->
+        <platform.lsp.serverSupportProvider
+            implementation="com.madappgang.dingo.lsp.DingoLspServerSupportProvider"/>
+    </extensions>
+</idea-plugin>

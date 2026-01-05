@@ -1,0 +1,22 @@
+{
+  "name": "dingo",
+  "displayName": "Dingo",
+  "version": "0.1.0",
+  "publisher": "MadAppGang",
+  "contributes": {
+    "languages": [
+      {
+        "id": "Dingo",
+        "aliases": ["Dingo", "dingo"],
+        "extensions": [".dingo"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "Dingo",
+        "scopeName": "source.dingo",
+        "path": "./syntaxes/dingo.tmLanguage.json"
+      }
+    ]
+  }
+}
