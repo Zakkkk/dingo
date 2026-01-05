@@ -987,6 +987,11 @@ func (p *PrattParser) consumePeekNewlinesAndComments() int {
 // returns a BinaryExpr to preserve the AST structure for codegen.
 // Otherwise, returns a RawExpr for simpler processing.
 func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
+	// Handle nil left operand (parse error occurred)
+	if left == nil {
+		return nil
+	}
+
 	opToken := p.curToken
 	precedence := p.curPrecedence()
 
@@ -996,6 +1001,11 @@ func (p *PrattParser) parseBinaryExpr(left ast.Expr) ast.Expr {
 	// This prevents same-precedence operators from binding on the right
 	// and allows lower-precedence operators (like ternary) to bind at top level
 	right := p.ParseExpression(precedence + 1)
+
+	// Handle nil right operand (parse error occurred)
+	if right == nil {
+		return nil
+	}
 
 	// If either operand contains Dingo expressions, preserve AST structure
 	// This enables proper code generation for nested expressions

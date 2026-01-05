@@ -1,11 +1,12 @@
 package main
 
-// Test: Lambda syntax error - missing arrow
-// Expected: Error pointing to malformed lambda
+// Test: Lambda syntax error - missing type after colon
+// Expected: Error "expected type after ':'"
 
 func test() {
-    fn := |x: int| x + 1
+    fn := | x: | x + 1
     _ = fn
 }
 
 func main() {}
+

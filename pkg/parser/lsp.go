@@ -99,6 +99,9 @@ type DocumentState struct {
 	fset     *token.FileSet
 	filename string
 
+	// Raw content fallback (used when parser fails to initialize)
+	rawContent []byte
+
 	// Pending changes (for batching)
 	pendingChanges []TextDocumentContentChangeEvent
 
@@ -143,9 +146,23 @@ func (ds *DocumentState) ApplyChange(change TextDocumentContentChangeEvent) erro
 		// Full document update - recreate parser
 		newParser, err := NewIncrementalParser([]byte(change.Text), ds.fset, ds.filename)
 		if err != nil {
-			return fmt.Errorf("failed to reparse full document: %w", err)
+			// Parse failed - still update the content for transpilation
+			// Create a minimal parser that just stores the content
+			ds.rawContent = []byte(change.Text)
+			ds.diagnostics = []Diagnostic{{
+				Range: Range{
+					Start: Position{Line: 0, Character: 0},
+					End:   Position{Line: 0, Character: 0},
+				},
+				Severity: SeverityError,
+				Message:  fmt.Sprintf("Parse error: %v", err),
+				Source:   "dingo-parser",
+			}}
+			ds.Version++
+			return nil // Don't fail the LSP operation - transpiler will catch detailed errors
 		}
 		ds.parser = newParser
+		ds.rawContent = nil // Clear raw content when parser succeeds
 		ds.Version++
 		ds.updateDiagnostics()
 		return nil
@@ -170,6 +187,7 @@ func (ds *DocumentState) ApplyChange(change TextDocumentContentChangeEvent) erro
 
 	// Successful parse - update last good tree
 	ds.lastGood = copyParseTree(ds.parser.Tree())
+	ds.rawContent = nil // Clear raw content when parser succeeds
 	ds.Version++
 	ds.updateDiagnostics()
 
@@ -310,6 +328,10 @@ func (ds *DocumentState) GetGoodAST() *goast.File {
 func (ds *DocumentState) Content() []byte {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
+	// Return raw content if parser failed to initialize
+	if ds.rawContent != nil {
+		return ds.rawContent
+	}
 	return ds.parser.Source()
 }
 

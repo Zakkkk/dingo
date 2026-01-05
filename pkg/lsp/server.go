@@ -392,6 +392,12 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 			s.config.Logger.Infof("[didOpen] Successfully opened .go file with gopls")
 		}
 
+		// Schedule transpilation from buffer to get initial transpile diagnostics
+		// This catches syntax errors that the parser might miss
+		if s.config.AutoTranspile {
+			s.scheduleTranspileFromBuffer(params.TextDocument.URI, params.TextDocument.Text)
+		}
+
 		return reply(ctx, nil, nil)
 	}
 
@@ -427,15 +433,15 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 
 			// Publish parse diagnostics immediately (these are fast)
 			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
+		}
 
-			// Schedule debounced transpilation for responsive gopls diagnostics.
-			// This provides type errors, unused variable warnings, etc. while typing
-			// with a 300ms delay after the user stops typing.
-			if s.config.AutoTranspile {
-				content := s.docManager.GetContent(string(params.TextDocument.URI))
-				if content != "" {
-					s.scheduleTranspileFromBuffer(params.TextDocument.URI, content)
-				}
+		// Always schedule debounced transpilation for diagnostics.
+		// This runs even if incremental parsing failed - the full transpiler
+		// will catch errors and publish transpile diagnostics.
+		if s.config.AutoTranspile {
+			content := s.docManager.GetContent(string(params.TextDocument.URI))
+			if content != "" {
+				s.scheduleTranspileFromBuffer(params.TextDocument.URI, content)
 			}
 		}
 
@@ -710,7 +716,7 @@ func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source st
 		return
 	}
 
-	s.config.Logger.Debugf("[Diagnostics] Published %d merged diagnostics for %s (lint=%d, gopls=%d, transpile=%d, parse=%d)",
+	s.config.Logger.Infof("[Diagnostics] Published %d merged diagnostics for %s (lint=%d, gopls=%d, transpile=%d, parse=%d)",
 		len(merged), uri,
 		len(s.lintDiags[uriStr]), len(s.goplsDiags[uriStr]), len(s.transpileDiags[uriStr]), len(s.parseDiags[uriStr]))
 }
@@ -759,11 +765,15 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 	result, err := transpiler.PureASTTranspileWithMappings([]byte(content), dingoPath, false)
 	if err != nil {
 		// Transpilation failed - publish error diagnostic
-		s.config.Logger.Debugf("[Debounce] Transpile failed: %v", err)
+		s.config.Logger.Infof("[Debounce] Transpile FAILED for %s: %v", dingoPath, err)
 
 		diagnostic := ParseTranspileError(dingoPath, err)
 		if diagnostic != nil {
+			s.config.Logger.Infof("[Debounce] Publishing transpile diagnostic: line=%d, msg=%s",
+				diagnostic.Range.Start.Line, diagnostic.Message)
 			s.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
+		} else {
+			s.config.Logger.Warnf("[Debounce] ParseTranspileError returned nil for: %v", err)
 		}
 		return
 	}
