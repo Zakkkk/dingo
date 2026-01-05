@@ -220,10 +220,12 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Step 3.2: Transform tuples - Pass 2 (resolve types and generate final structs)
 	// This must happen AFTER go/types has analyzed the AST
 	if typeErr == nil && typeChecker != nil {
-		tuplePass2Result, tupleErr := transformTuplePass2(fset, goFile, typeChecker, transformedSource)
+		tuplePass2Result, tupleLineMappings, tupleErr := transformTuplePass2(fset, goFile, typeChecker, transformedSource)
 		if tupleErr == nil {
 			// Update the transformed source with type-resolved tuple code
 			transformedSource = tuplePass2Result
+			// Merge tuple line mappings with other line mappings
+			lineMappings = append(lineMappings, tupleLineMappings...)
 			// Re-parse with updated source
 			goFile, err = goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 			if err != nil {

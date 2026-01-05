@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 )
 
 // TupleTypeResolver uses go/types to resolve tuple marker functions to generic types.
@@ -33,11 +34,12 @@ import (
 // 5. Track type aliases to use alias names in generated code
 // 6. Generate source mappings
 type TupleTypeResolver struct {
-	info        *types.Info
-	fset        *token.FileSet
-	typeAliases map[string]string // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
-	tplCounter  int               // Counter for unique tpl variable names per scope
-	needsImport bool              // Whether runtime/tuples import is needed
+	info         *types.Info
+	fset         *token.FileSet
+	typeAliases  map[string]string              // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
+	tplCounter   int                            // Counter for unique tpl variable names per scope
+	needsImport  bool                           // Whether runtime/tuples import is needed
+	lineMappings []sourcemap.LineMapping        // Line mappings for tuple destructures
 }
 
 // TupleFieldNames maps tuple indices to human-readable field names
@@ -111,6 +113,10 @@ func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 		return replacements[i].start > replacements[j].start
 	})
 
+	// Build line mappings from destructure replacements BEFORE applying replacements
+	// We need to track how lines shift as we apply replacements from end to start
+	r.buildLineMappings(replacements, src)
+
 	// Apply byte-level replacements
 	result := src
 	for _, repl := range replacements {
@@ -129,7 +135,24 @@ func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 		if err != nil {
 			return ast.CodeGenResult{}, fmt.Errorf("failed to parse result for import: %w", err)
 		}
-		addTuplesImport(fileFinal)
+
+		// Check if import already exists
+		importExists := false
+		for _, imp := range fileFinal.Imports {
+			if imp.Path.Value == `"github.com/MadAppGang/dingo/runtime/tuples"` {
+				importExists = true
+				break
+			}
+		}
+
+		if !importExists {
+			addTuplesImport(fileFinal)
+			// Adding import adds 1 line - adjust all line mappings
+			for i := range r.lineMappings {
+				r.lineMappings[i].GoLineStart++
+				r.lineMappings[i].GoLineEnd++
+			}
+		}
 
 		// Format back to bytes
 		var buf bytes.Buffer
@@ -144,11 +167,62 @@ func (r *TupleTypeResolver) Resolve(src []byte) (ast.CodeGenResult, error) {
 	}, nil
 }
 
+// LineMappings returns the line mappings built during resolution.
+// These should be merged with other line mappings in the main pipeline.
+func (r *TupleTypeResolver) LineMappings() []sourcemap.LineMapping {
+	return r.lineMappings
+}
+
+// buildLineMappings builds line mappings from replacement info.
+// Replacements are sorted descending by position (end to start).
+// We process them in reverse (start to end) to calculate cumulative line shifts.
+func (r *TupleTypeResolver) buildLineMappings(replacements []markerReplacement, src []byte) {
+	// Only track destructures that expand to multiple lines
+	var destructures []markerReplacement
+	for _, repl := range replacements {
+		if repl.isDestructure && repl.goLineCount > 1 {
+			destructures = append(destructures, repl)
+		}
+	}
+
+	if len(destructures) == 0 {
+		return
+	}
+
+	// Sort by dingoLine ascending (start to end)
+	sort.Slice(destructures, func(i, j int) bool {
+		return destructures[i].dingoLine < destructures[j].dingoLine
+	})
+
+	// Calculate cumulative line delta for each mapping
+	// Each destructure adds (goLineCount - 1) extra lines
+	cumulativeDelta := 0
+	for _, d := range destructures {
+		// The Dingo line maps to a range of Go lines
+		// goLineStart = dingoLine + cumulativeDelta (from earlier transforms)
+		goLineStart := d.dingoLine + cumulativeDelta
+		goLineEnd := goLineStart + d.goLineCount - 1
+
+		r.lineMappings = append(r.lineMappings, sourcemap.LineMapping{
+			DingoLine:   d.dingoLine,
+			GoLineStart: goLineStart,
+			GoLineEnd:   goLineEnd,
+			Kind:        "tuple_destructure",
+		})
+
+		// Add the extra lines to cumulative delta
+		cumulativeDelta += d.goLineCount - 1
+	}
+}
+
 // markerReplacement represents a marker to be replaced with its position and replacement text.
 type markerReplacement struct {
-	start       int
-	end         int
-	replacement []byte
+	start         int
+	end           int
+	replacement   []byte
+	dingoLine     int  // Original Dingo line number (for line mapping)
+	goLineCount   int  // Number of Go lines generated (for line mapping)
+	isDestructure bool // True if this is a destructure that expands to multiple lines
 }
 
 // collectMarkerReplacements walks the AST and collects all marker replacements.
@@ -419,6 +493,9 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 	start := fset.Position(stmt.Pos()).Offset
 	end := fset.Position(stmt.End()).Offset
 
+	// Get line number of this statement (for line mapping)
+	dingoLine := fset.Position(stmt.Pos()).Line
+
 	// Last arg is the expression being destructured
 	valueExpr := call.Args[len(call.Args)-1]
 	valueStart := fset.Position(valueExpr.Pos()).Offset
@@ -448,6 +525,7 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 	// vs. a Dingo tuple struct expression
 	if r.isGoMultiReturnCall(valueExpr) {
 		// Generate Go multi-return assignment: x, y := func()
+		// No line expansion - stays 1 line
 		return r.generateGoMultiReturnReplacement(start, end, bindings, valueSrc)
 	}
 
@@ -482,10 +560,16 @@ func (r *TupleTypeResolver) generateDestructureReplacement(fset *token.FileSet, 
 	// Remove trailing newline
 	result := strings.TrimRight(buf.String(), "\n")
 
+	// Count lines generated: 1 (tpl assignment) + len(bindings) (variable assignments)
+	goLineCount := 1 + len(bindings)
+
 	return &markerReplacement{
-		start:       start,
-		end:         end,
-		replacement: []byte(result),
+		start:         start,
+		end:           end,
+		replacement:   []byte(result),
+		dingoLine:     dingoLine,
+		goLineCount:   goLineCount,
+		isDestructure: true,
 	}
 }
 

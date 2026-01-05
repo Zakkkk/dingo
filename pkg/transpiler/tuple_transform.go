@@ -11,6 +11,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/codegen"
 	"github.com/MadAppGang/dingo/pkg/parser"
+	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
 )
@@ -764,26 +765,27 @@ func (n tupleNodeWithPos) Pos() gotoken.Pos {
 //   - __tupleDest2__("x", "y", point) → tmp := point; x := tmp._0; y := tmp._1
 //   - __tupleType2__(int, string) → Tuple2IntString
 //
-// Returns the transformed source with markers replaced by actual Go code.
-func transformTuplePass2(fset *gotoken.FileSet, file *goast.File, checker *typechecker.Checker, src []byte) ([]byte, error) {
+// Returns the transformed source with markers replaced by actual Go code,
+// along with line mappings for tuple destructures.
+func transformTuplePass2(fset *gotoken.FileSet, file *goast.File, checker *typechecker.Checker, src []byte) ([]byte, []sourcemap.LineMapping, error) {
 	// Quick check: do we have any tuple markers?
 	// If not, skip the transformation entirely to avoid overhead
 	if !bytes.Contains(src, []byte("__tuple")) {
-		return src, nil
+		return src, nil, nil
 	}
 
 	// Create a type resolver from the marker-infused source
 	resolver, err := codegen.NewTupleTypeResolver(src)
 	if err != nil {
-		return nil, fmt.Errorf("create tuple resolver: %w", err)
+		return nil, nil, fmt.Errorf("create tuple resolver: %w", err)
 	}
 
 	// Resolve markers to final Go code
 	result, err := resolver.Resolve(src)
 	if err != nil {
-		return nil, fmt.Errorf("resolve tuple markers: %w", err)
+		return nil, nil, fmt.Errorf("resolve tuple markers: %w", err)
 	}
 
-	return result.Output, nil
+	return result.Output, resolver.LineMappings(), nil
 }
 
