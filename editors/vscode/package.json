@@ -2,8 +2,10 @@
   "name": "dingo",
   "displayName": "Dingo Language Support",
   "description": "Syntax highlighting and language support for Dingo - a modern meta-language for Go",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "MadAppGang",
+  "icon": "dingo-logo.png",
+  "homepage": "https://dingolang.com",
   "repository": {
     "type": "git",
     "url": "https://github.com/MadAppGang/dingo"

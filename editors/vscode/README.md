@@ -1,6 +1,8 @@
 # Dingo Language Support for VS Code
 
-Syntax highlighting and language support for [Dingo](https://github.com/yourusername/dingo) - a modern meta-language for Go with Result types, error propagation, pattern matching, and more.
+Syntax highlighting and language support for [Dingo](https://dingolang.com) - a modern meta-language for Go with Result types, error propagation, pattern matching, and more.
+
+![Dingo LSP Demo](dingo-lsp-demo.gif)
 
 ## Features
 
