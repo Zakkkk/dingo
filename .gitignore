@@ -91,8 +91,9 @@ specs/tools
 /tests/test_enum
 /tests/test_result
 
-# LSP testing tool
+# LSP testing tools
 /lsp-hovercheck
+/lsp-diagcheck
 
 # Claudemem database (ephemeral)
 .claudemem/
