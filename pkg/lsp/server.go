@@ -3,6 +3,7 @@ package lsp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -24,6 +25,18 @@ type ServerConfig struct {
 	AutoTranspile bool
 }
 
+// EditorType represents the detected LSP client/editor
+type EditorType int
+
+const (
+	EditorUnknown EditorType = iota
+	EditorVSCode
+	EditorNeovim
+	EditorJetBrains // WebStorm, GoLand, IntelliJ, etc.
+	EditorSublime
+	EditorEmacs
+)
+
 // Server implements the LSP proxy server
 type Server struct {
 	config        ServerConfig
@@ -35,6 +48,7 @@ type Server struct {
 	docManager    *IncrementalDocumentManager // Incremental parser manager
 	workspacePath string
 	initialized   bool
+	editorType    EditorType // Detected editor for formatting
 
 	// CRITICAL FIX (Qwen): Protect connection and context with mutex
 	connMu  sync.RWMutex
@@ -47,6 +61,10 @@ type Server struct {
 	goplsDiags     map[string][]protocol.Diagnostic // URI -> gopls diagnostics
 	transpileDiags map[string][]protocol.Diagnostic // URI -> transpiler diagnostics
 	parseDiags     map[string][]protocol.Diagnostic // URI -> incremental parser diagnostics
+
+	// Structured error cache - stores TranspileError for rich hover
+	lastErrorMu sync.RWMutex
+	lastErrors  map[string]*transpiler.TranspileError // URI -> structured error
 
 	// Semantic manager for native hover (Phase 1)
 	semanticManager *semantic.Manager
@@ -97,6 +115,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		goplsDiags:          make(map[string][]protocol.Diagnostic),
 		transpileDiags:      make(map[string][]protocol.Diagnostic),
 		parseDiags:          make(map[string][]protocol.Diagnostic),
+		lastErrors:          make(map[string]*transpiler.TranspileError),
 		transpileDebounce:   make(map[string]*transpileDebounceState),
 		transpileDebounceMs: 300, // 300ms debounce for responsive typing
 		callHierarchyCtx:    NewCallHierarchyContext(),
@@ -231,6 +250,10 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 		return reply(ctx, nil, fmt.Errorf("invalid initialize params: %w", err))
 	}
 	s.config.Logger.Debugf("handleInitialize: Params unmarshaled")
+
+	// Detect editor type from clientInfo for formatting decisions
+	s.editorType = s.detectEditorType(params.ClientInfo)
+	s.config.Logger.Infof("Detected editor: %s", s.editorTypeName())
 
 	// Extract workspace path
 	if params.RootURI != "" {
@@ -762,12 +785,23 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 	s.config.Logger.Debugf("[Debounce] Executing transpile for %s", dingoPath)
 
 	// Use PureASTTranspileWithMappings for in-memory transpilation
-	result, err := transpiler.PureASTTranspileWithMappings([]byte(content), dingoPath, false)
+	// inferTypes=true enables lambda type inference and helpful error messages
+	// for unresolved lambda types (e.g., "add explicit type annotation")
+	result, err := transpiler.PureASTTranspileWithMappings([]byte(content), dingoPath, true)
 	if err != nil {
 		// Transpilation failed - publish error diagnostic
 		s.config.Logger.Infof("[Debounce] Transpile FAILED for %s: %v", dingoPath, err)
 
-		diagnostic := ParseTranspileError(dingoPath, err)
+		// Store structured error for rich hover
+		uriStr := string(uri)
+		if te := extractTranspileError(err); te != nil {
+			s.lastErrorMu.Lock()
+			s.lastErrors[uriStr] = te
+			s.lastErrorMu.Unlock()
+		}
+
+		formatter := GetFormatterForEditor(s.editorType)
+		diagnostic := ParseTranspileError(dingoPath, err, formatter)
 		if diagnostic != nil {
 			s.config.Logger.Infof("[Debounce] Publishing transpile diagnostic: line=%d, msg=%s",
 				diagnostic.Range.Start.Line, diagnostic.Message)
@@ -778,8 +812,12 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 		return
 	}
 
-	// Transpilation succeeded - clear transpile diagnostics
+	// Transpilation succeeded - clear transpile diagnostics and stored error
 	s.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{})
+	uriStr := string(uri)
+	s.lastErrorMu.Lock()
+	delete(s.lastErrors, uriStr)
+	s.lastErrorMu.Unlock()
 
 	// Write transpiled Go code to disk for gopls
 	goPath := dingoToGoPath(dingoPath)
@@ -811,9 +849,85 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 	s.config.Logger.Debugf("[Debounce] Transpile complete for %s", dingoPath)
 }
 
+// extractTranspileError unwraps errors to find a TranspileError if present
+func extractTranspileError(err error) *transpiler.TranspileError {
+	if err == nil {
+		return nil
+	}
+	// Direct type assertion
+	if te, ok := err.(*transpiler.TranspileError); ok {
+		return te
+	}
+	// Unwrap wrapped errors
+	if unwrapped := errors.Unwrap(err); unwrapped != nil {
+		return extractTranspileError(unwrapped)
+	}
+	return nil
+}
+
 // getServerContext safely retrieves the server context
 func (s *Server) getServerContext() context.Context {
 	s.connMu.RLock()
 	defer s.connMu.RUnlock()
 	return s.ctx
 }
+
+// detectEditorType identifies the LSP client from clientInfo
+// Used to format diagnostic messages appropriately for each editor
+func (s *Server) detectEditorType(clientInfo *protocol.ClientInfo) EditorType {
+	if clientInfo == nil {
+		return EditorUnknown
+	}
+
+	name := strings.ToLower(clientInfo.Name)
+
+	// VS Code variants
+	if strings.Contains(name, "visual studio code") || strings.Contains(name, "vscode") {
+		return EditorVSCode
+	}
+
+	// Neovim
+	if strings.Contains(name, "neovim") || strings.Contains(name, "nvim") {
+		return EditorNeovim
+	}
+
+	// JetBrains IDEs (WebStorm, GoLand, IntelliJ, PyCharm, etc.)
+	jetbrainsIdes := []string{"webstorm", "goland", "intellij", "pycharm", "phpstorm",
+		"rubymine", "clion", "rider", "datagrip", "dataspell", "rustrover"}
+	for _, ide := range jetbrainsIdes {
+		if strings.Contains(name, ide) {
+			return EditorJetBrains
+		}
+	}
+
+	// Sublime Text
+	if strings.Contains(name, "sublime") {
+		return EditorSublime
+	}
+
+	// Emacs
+	if strings.Contains(name, "emacs") || strings.Contains(name, "eglot") {
+		return EditorEmacs
+	}
+
+	return EditorUnknown
+}
+
+// editorTypeName returns a human-readable name for the editor type
+func (s *Server) editorTypeName() string {
+	switch s.editorType {
+	case EditorVSCode:
+		return "VS Code"
+	case EditorNeovim:
+		return "Neovim"
+	case EditorJetBrains:
+		return "JetBrains"
+	case EditorSublime:
+		return "Sublime Text"
+	case EditorEmacs:
+		return "Emacs"
+	default:
+		return "Unknown"
+	}
+}
+

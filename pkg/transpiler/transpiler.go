@@ -10,14 +10,57 @@ import (
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 )
 
+// ErrorKind identifies the type of transpilation error for structured formatting.
+type ErrorKind int
+
+const (
+	ErrorKindGeneric ErrorKind = iota
+	ErrorKindUnresolvedLambda  // Lambda type inference failed
+	ErrorKindParsing           // Syntax/parsing error
+	ErrorKindTypeCheck         // Type checking error
+	ErrorKindNullCoalesce      // Null coalescing operator error
+	ErrorKindSafeNavigation    // Safe navigation error
+	ErrorKindMatchExpression   // Match expression error
+	ErrorKindEnumDefinition    // Enum definition error
+	ErrorKindErrorPropagation  // Error propagation (?) error
+)
+
+// UnresolvedLambdaErrorData contains structured data for lambda inference errors.
+// The LSP server uses this to format editor-specific messages.
+type UnresolvedLambdaErrorData struct {
+	ParamNames   []string // Parameter names that couldn't be inferred
+	HasAnyReturn bool     // Whether return type couldn't be inferred
+}
+
+// ParsingErrorData contains structured data for syntax/parsing errors.
+type ParsingErrorData struct {
+	Expected string // What was expected (e.g., ")", "}")
+	Found    string // What was found instead
+	Context  string // Surrounding code context
+}
+
+// NullCoalesceErrorData contains structured data for ?? operator errors.
+type NullCoalesceErrorData struct {
+	Expression string // The expression that had the error
+}
+
+// ErrorPropagationErrorData contains structured data for ? operator errors.
+type ErrorPropagationErrorData struct {
+	Expression   string // The expression
+	ExpectedType string // Expected Result/Option type
+	ActualType   string // Actual type found
+}
+
 // TranspileError represents a structured transpilation error with position information.
 // This allows LSP and other tools to display errors at the correct location without
 // parsing error message strings.
 type TranspileError struct {
-	File    string // Source file path
-	Line    int    // 1-indexed line number (0 means unknown)
-	Col     int    // 1-indexed column number (0 means unknown)
-	Message string // Error message
+	File    string    // Source file path
+	Line    int       // 1-indexed line number (0 means unknown)
+	Col     int       // 1-indexed column number (0 means unknown)
+	Message string    // Fallback message for CLI and simple contexts
+	Kind    ErrorKind // Error type for structured formatting
+	Data    any       // Type-specific error data (e.g., UnresolvedLambdaErrorData)
 }
 
 func (e *TranspileError) Error() string {
