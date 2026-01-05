@@ -3,10 +3,10 @@
   "displayName": "Dingo Language Support",
   "description": "Syntax highlighting and language support for Dingo - a modern meta-language for Go",
   "version": "0.2.2",
-  "publisher": "dingo",
+  "publisher": "MadAppGang",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/dingo"
+    "url": "https://github.com/MadAppGang/dingo"
   },
   "engines": {
     "vscode": "^1.80.0"
