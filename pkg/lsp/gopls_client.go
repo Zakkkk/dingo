@@ -252,6 +252,16 @@ func (c *GoplsClient) Definition(ctx context.Context, params protocol.Definition
 	return result, nil
 }
 
+// TypeDefinition forwards type definition request to gopls
+func (c *GoplsClient) TypeDefinition(ctx context.Context, params protocol.TypeDefinitionParams) ([]protocol.Location, error) {
+	var result []protocol.Location
+	_, err := c.conn.Call(ctx, "textDocument/typeDefinition", params, &result)
+	if err != nil {
+		return nil, fmt.Errorf("gopls typeDefinition failed: %w", err)
+	}
+	return result, nil
+}
+
 // Hover forwards hover request to gopls
 func (c *GoplsClient) Hover(ctx context.Context, params protocol.HoverParams) (*protocol.Hover, error) {
 	var result protocol.Hover

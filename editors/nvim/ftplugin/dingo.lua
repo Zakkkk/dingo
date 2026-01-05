@@ -6,7 +6,13 @@ vim.bo.shiftwidth = 4
 vim.bo.expandtab = false  -- Use tabs like Go
 vim.bo.smartindent = true
 
--- Set up tree-sitter if available
-if vim.treesitter.language.require_language then
-  pcall(vim.treesitter.language.require_language, "dingo")
+-- Use Dingo tree-sitter for syntax highlighting
+-- Falls back to Go parser if Dingo parser not available
+local ok = pcall(function()
+  vim.treesitter.start(0, "dingo")
+end)
+if not ok then
+  pcall(function()
+    vim.treesitter.start(0, "go")
+  end)
 end

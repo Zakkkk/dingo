@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/scanner"
 	"go/token"
 	"os"
 	"sync"
 
+	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
-	"github.com/MadAppGang/dingo/pkg/transpiler"
 )
 
 // AutoTranspiler handles automatic transpilation of .dingo files
@@ -126,7 +127,10 @@ func (at *AutoTranspiler) SyncGoplsWithGoFile(ctx context.Context, goPath string
 }
 
 // ParseTranspileError converts a transpiler error into an LSP diagnostic.
-// Uses structured TranspileError when available, avoiding string parsing.
+// Handles multiple error types:
+// - *transpiler.TranspileError: Structured errors from Dingo transpiler
+// - scanner.ErrorList: Errors from Go parser (wrapped by pure_pipeline.go)
+// - Generic errors: Fall back to line 0
 func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
 	if err == nil {
 		return nil
@@ -155,6 +159,43 @@ func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "dingo",
 			Message:  transpileErr.Message,
+		}
+	}
+
+	// Try to unwrap to scanner.ErrorList (from Go parser)
+	// This handles errors wrapped by fmt.Errorf in pure_pipeline.go
+	var scannerErrors scanner.ErrorList
+	if errors.As(err, &scannerErrors) && len(scannerErrors) > 0 {
+		// Take the first error (most relevant)
+		firstErr := scannerErrors[0]
+		line := firstErr.Pos.Line
+		col := firstErr.Pos.Column
+
+		// Get the range for highlighting the error location
+		startChar, endChar := 0, 1
+		if line > 0 {
+			_, endChar = getLineRange(dingoPath, line)
+		}
+
+		// Use the column from the error if available (1-based to 0-based)
+		if col > 0 {
+			startChar = col - 1
+		}
+
+		return &protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{
+					Line:      uint32(max(0, line-1)), // 0-based
+					Character: uint32(startChar),
+				},
+				End: protocol.Position{
+					Line:      uint32(max(0, line-1)),
+					Character: uint32(endChar),
+				},
+			},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "dingo",
+			Message:  firstErr.Msg,
 		}
 	}
 

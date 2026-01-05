@@ -1,4 +1,7 @@
-; Keywords
+; Tree-sitter highlights for Dingo
+; Only uses nodes that are defined in the grammar
+
+; Keywords (only those defined in the grammar)
 [
   "package"
   "import"
@@ -15,10 +18,6 @@
   "case"
   "default"
   "select"
-  "break"
-  "continue"
-  "goto"
-  "fallthrough"
   "defer"
   "go"
   "if"
@@ -32,8 +31,6 @@
   "enum"
   "match"
   "let"
-  "guard"
-  "where"
 ] @keyword
 
 ; Operators
@@ -82,7 +79,7 @@
 
 ; Match patterns
 (match_expression "match" @keyword.control)
-(match_arm pattern: (variant_pattern name: (identifier) @constructor))
+(variant_pattern type: (identifier) @constructor)
 (wildcard_pattern) @variable.builtin
 
 ; Functions
@@ -90,8 +87,8 @@
 (call_expression function: (identifier) @function.call)
 (call_expression function: (selector_expression field: (identifier) @function.method.call))
 
-; Parameters
-(parameter name: (identifier) @variable.parameter)
+; Parameters (using correct node name)
+(parameter_declaration name: (identifier) @variable.parameter)
 (lambda_parameter name: (identifier) @variable.parameter)
 
 ; Variables

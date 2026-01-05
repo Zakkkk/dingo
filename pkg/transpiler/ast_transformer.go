@@ -265,11 +265,21 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 				continue
 			}
 			// Return structured error with position info for LSP diagnostics
-			pos := srcFset.Position(srcFile.Pos(loc.Start))
+			// Use original source position when available (src may have enum expansion that shifts lines)
+			var errLine, errCol int
+			if originalPos >= 0 && originalSrcFile != nil {
+				origPos := originalSrcFile.Position(originalSrcFile.Pos(originalPos))
+				errLine = origPos.Line
+				errCol = origPos.Column
+			} else {
+				pos := srcFset.Position(srcFile.Pos(loc.Start))
+				errLine = pos.Line
+				errCol = pos.Column
+			}
 			return nil, nil, &TranspileError{
 				File:    filename,
-				Line:    pos.Line,
-				Col:     pos.Column,
+				Line:    errLine,
+				Col:     errCol,
 				Message: parseErr.Error(),
 			}
 		}
@@ -281,11 +291,21 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 		} else if astExpr, ok := dingoNode.(ast.Expr); ok {
 			expr = astExpr
 		} else {
-			pos := srcFset.Position(srcFile.Pos(loc.Start))
+			// Use original source position when available (src may have enum expansion that shifts lines)
+			var errLine, errCol int
+			if originalPos >= 0 && originalSrcFile != nil {
+				origPos := originalSrcFile.Position(originalSrcFile.Pos(originalPos))
+				errLine = origPos.Line
+				errCol = origPos.Column
+			} else {
+				pos := srcFset.Position(srcFile.Pos(loc.Start))
+				errLine = pos.Line
+				errCol = pos.Column
+			}
 			return nil, nil, &TranspileError{
 				File:    filename,
-				Line:    pos.Line,
-				Col:     pos.Column,
+				Line:    errLine,
+				Col:     errCol,
 				Message: fmt.Sprintf("unexpected node type: %T", dingoNode),
 			}
 		}

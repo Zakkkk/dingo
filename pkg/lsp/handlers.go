@@ -509,6 +509,67 @@ func (s *Server) handleDefinitionWithTranslation(
 	return reply(ctx, translatedResult, nil)
 }
 
+// handleTypeDefinitionWithTranslation processes type definition with full bidirectional translation
+func (s *Server) handleTypeDefinitionWithTranslation(
+	ctx context.Context,
+	reply jsonrpc2.Replier,
+	req jsonrpc2.Request,
+) error {
+	var params protocol.TypeDefinitionParams
+	if err := json.Unmarshal(req.Params(), &params); err != nil {
+		return reply(ctx, nil, err)
+	}
+
+	s.config.Logger.Debugf("[TypeDefinition] Request for URI=%s, Line=%d, Char=%d",
+		params.TextDocument.URI.Filename(), params.Position.Line, params.Position.Character)
+
+	// If not a .dingo file, forward directly
+	if !isDingoFile(params.TextDocument.URI) {
+		result, err := s.gopls.TypeDefinition(ctx, params)
+		return reply(ctx, result, err)
+	}
+
+	// Translate Dingo position → Go position
+	goURI, goPos, err := s.translator.TranslatePosition(params.TextDocument.URI, params.Position, DingoToGo)
+	if err != nil {
+		s.config.Logger.Warnf("Position translation failed: %v", err)
+		result, err := s.gopls.TypeDefinition(ctx, params)
+		return reply(ctx, result, err)
+	}
+
+	s.config.Logger.Debugf("[TypeDefinition] Translated to Go: URI=%s, Line=%d, Char=%d",
+		goURI.Filename(), goPos.Line, goPos.Character)
+
+	// Update params with translated position
+	params.TextDocument.URI = goURI
+	params.Position = goPos
+
+	// Forward to gopls
+	result, err := s.gopls.TypeDefinition(ctx, params)
+	if err != nil {
+		s.config.Logger.Warnf("[TypeDefinition] gopls error: %v", err)
+		return reply(ctx, nil, err)
+	}
+
+	s.config.Logger.Debugf("[TypeDefinition] gopls returned %d locations", len(result))
+	for i, loc := range result {
+		s.config.Logger.Debugf("[TypeDefinition]   [%d] URI=%s, Range=L%d:C%d-L%d:C%d",
+			i, loc.URI.Filename(), loc.Range.Start.Line, loc.Range.Start.Character,
+			loc.Range.End.Line, loc.Range.End.Character)
+	}
+
+	// Translate response: Go locations → Dingo locations
+	translatedResult, err := s.translator.TranslateDefinitionLocations(result, GoToDingo)
+	if err != nil {
+		s.config.Logger.Warnf("TypeDefinition response translation failed: %v", err)
+		return reply(ctx, nil, fmt.Errorf("position translation failed: %w (try re-transpiling file)", err))
+	}
+
+	s.config.Logger.Debugf("[TypeDefinition] Returning %d translated locations", len(translatedResult))
+
+	return reply(ctx, translatedResult, nil)
+}
+
 // handleHoverWithTranslation processes hover with full bidirectional translation
 func (s *Server) handleHoverWithTranslation(
 	ctx context.Context,

@@ -191,6 +191,8 @@ func (s *Server) handleRequest(ctx context.Context, reply jsonrpc2.Replier, req 
 		return s.handleCompletion(ctx, reply, req)
 	case "textDocument/definition":
 		return s.handleDefinition(ctx, reply, req)
+	case "textDocument/typeDefinition":
+		return s.handleTypeDefinition(ctx, reply, req)
 	case "textDocument/hover":
 		return s.handleHover(ctx, reply, req)
 	case "textDocument/codeAction":
@@ -270,6 +272,7 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 			},
 			HoverProvider:              goplsResult.Capabilities.HoverProvider,
 			DefinitionProvider:         goplsResult.Capabilities.DefinitionProvider,
+			TypeDefinitionProvider:     goplsResult.Capabilities.TypeDefinitionProvider,
 			DocumentFormattingProvider: true,
 			CodeActionProvider: &protocol.CodeActionOptions{
 				CodeActionKinds: []protocol.CodeActionKind{
@@ -532,6 +535,12 @@ func (s *Server) handleDefinition(ctx context.Context, reply jsonrpc2.Replier, r
 	return s.handleDefinitionWithTranslation(ctx, reply, req)
 }
 
+// handleTypeDefinition processes type definition requests with position translation
+func (s *Server) handleTypeDefinition(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
+	// Use enhanced handler with full response translation
+	return s.handleTypeDefinitionWithTranslation(ctx, reply, req)
+}
+
 // handleHover processes hover requests with position translation
 func (s *Server) handleHover(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
 	// Use enhanced handler with full response translation
@@ -615,6 +624,12 @@ func (s *Server) publishDingoDiagnostics(uri protocol.DocumentURI, diagnostics [
 		return
 	}
 
+	// Ensure diagnostics is never nil (JSON null vs empty array)
+	// Neovim's LSP client crashes on null diagnostics
+	if diagnostics == nil {
+		diagnostics = []protocol.Diagnostic{}
+	}
+
 	// Prepare params
 	params := protocol.PublishDiagnosticsParams{
 		URI:         uri,
@@ -660,7 +675,8 @@ func (s *Server) updateAndPublishDiagnostics(uri protocol.DocumentURI, source st
 	}
 
 	// Merge all diagnostics for this URI
-	var merged []protocol.Diagnostic
+	// Initialize as empty slice, not nil (Neovim crashes on JSON null)
+	merged := []protocol.Diagnostic{}
 	merged = append(merged, s.lintDiags[uriStr]...)
 	merged = append(merged, s.goplsDiags[uriStr]...)
 	merged = append(merged, s.transpileDiags[uriStr]...)
