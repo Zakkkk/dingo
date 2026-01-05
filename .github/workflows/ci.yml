@@ -46,7 +46,8 @@ jobs:
     - name: Transpile examples
       run: |
         # All examples should now work with dgo signature registry
-        for dingo_file in $(find examples -name "*.dingo"); do
+        # Exclude test_diag directory which contains intentionally failing test files
+        for dingo_file in $(find examples -name "*.dingo" -not -path "*/test_diag/*"); do
           echo "Transpiling $dingo_file"
           ./dingo build "$dingo_file"
         done
@@ -54,7 +55,8 @@ jobs:
     - name: Build examples
       run: |
         # Build all examples - lambda type inference now works via dgo signature registry
-        go build $(go list ./examples/...)
+        # Exclude test_diag directory which contains intentionally failing test files
+        go build $(go list ./examples/... | grep -v test_diag)
 
     - name: Run unit tests
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v /scripts)
