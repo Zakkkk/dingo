@@ -576,12 +576,11 @@ func (r *Reader) DingoLineToGoLine(dingoLine int) int {
 	for _, m := range r.lineMappings {
 		if int(m.DingoLine) < dingoLine {
 			// Each transform expansion adds extra Go lines:
-			// - 1 line for the //line directive (at GoLineStart - 1)
-			// - (GoLineEnd - GoLineStart) extra lines beyond the 1 Dingo line
+			// 1 Dingo line expands to (GoLineEnd - GoLineStart + 1) Go lines
+			// Extra lines = total Go lines - 1 (the original Dingo line)
 			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
 			dingoLines := 1
-			directiveLine := 1 // The //line directive adds one more Go line
-			transformShift += (goLines - dingoLines) + directiveLine
+			transformShift += goLines - dingoLines
 		}
 	}
 	return dingoLine + baseOffset + transformShift
@@ -646,12 +645,11 @@ func (r *Reader) CalculateLineShift(dingoLine int) int {
 		// Only count mappings BEFORE the target line
 		if int(m.DingoLine) < dingoLine {
 			// Each transform expansion adds extra Go lines:
-			// - 1 line for the //line directive (at GoLineStart - 1)
-			// - (GoLineEnd - GoLineStart) extra lines beyond the 1 Dingo line
+			// 1 Dingo line expands to (GoLineEnd - GoLineStart + 1) Go lines
+			// Extra lines = total Go lines - 1 (the original Dingo line)
 			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
 			dingoLines := 1
-			directiveLine := 1 // The //line directive adds one more Go line
-			transformShift += (goLines - dingoLines) + directiveLine
+			transformShift += goLines - dingoLines
 		}
 	}
 	return baseOffset + transformShift
@@ -708,37 +706,25 @@ func (r *Reader) TranslateGoColumn(goLine, goCol int) (dingoCol int, found bool)
 // Returns negative if Go has fewer lines, positive if Go has more lines.
 func (r *Reader) calculateBaseOffset() int {
 	// If we have line mappings, use the first mapping to compute header offset.
-	// The //line directive forces GoLineStart = DingoLine, but lines BEFORE
-	// the directive may have an offset due to removed/added lines during formatting.
+	// The first mapping tells us: Dingo line D maps to Go line G.
+	// For lines BEFORE the first transform, content should align 1:1 plus offset.
 	if len(r.lineMappings) > 0 {
 		first := r.lineMappings[0]
 
-		// Check if this is an identity/simple mapping (no //line directive)
+		// Check if this is an identity/simple mapping (no expansion)
 		// Identity mappings have no expansion: GoLineEnd == GoLineStart
 		// Transformed code has expansion: GoLineEnd > GoLineStart
 		if first.GoLineEnd == first.GoLineStart {
-			// No expansion means no //line directive was emitted, so no header offset
+			// No expansion - simple identity mapping
 			return 0
 		}
 
-		// For transformed code with //line directive:
-		// The //line directive appears at Go line (GoLineStart - 1) and says:
-		//   "the next line (GoLineStart) is Dingo line DingoLine"
-		// The directive line itself doesn't correspond to any Dingo line.
-		//
-		// For lines BEFORE the directive, the content at Go line N should be
-		// Dingo line (N + offset) if there's an offset.
-		//
-		// If there's no header offset:
-		//   - Go line (GoLineStart - 2) = Dingo line (DingoLine - 1) content
-		//   - So Dingo line N maps to Go line N
-		// If header offset is -1 (Go has 1 fewer line):
-		//   - Go line (GoLineStart - 3) = Dingo line (DingoLine - 1) content
-		//   - So Dingo line N maps to Go line (N - 1)
-		//
-		// Formula: headerOffset = (GoLineStart - 2) - (DingoLine - 1) = GoLineStart - DingoLine - 1
-		// This gives the offset to ADD to Dingo line to get Go line.
-		headerOffset := int(first.GoLineStart) - int(first.DingoLine) - 1
+		// For transformed code:
+		// The first mapping tells us Dingo line D expands to Go lines starting at G.
+		// Header offset = GoLineStart - DingoLine
+		// If Go has 1 fewer header line: offset = -1
+		// If Go has same header lines: offset = 0
+		headerOffset := int(first.GoLineStart) - int(first.DingoLine)
 
 		return headerOffset
 	}
