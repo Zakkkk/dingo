@@ -410,10 +410,21 @@ When releasing a new version, update this single file. Both `dingo` and `dingo-l
 - `dingo version` - shows version
 - `dingo-lsp --version` - shows version
 
+## Editor Plugins
+
+| Editor | Repository | Installation |
+|--------|------------|--------------|
+| **Neovim** | [MadAppGang/dingo.nvim](https://github.com/MadAppGang/dingo.nvim) | `{ "MadAppGang/dingo.nvim" }` |
+| **VS Code** | `editors/vscode/` (this repo) | See `editors/vscode/INSTALL.md` |
+| **GoLand** | `editors/goland/` (this repo) | See `editors/goland/README.md` |
+
+**Note**: The Neovim plugin lives in a **separate repository** at `github.com/MadAppGang/dingo.nvim`.
+Local development path: `/Users/jack/mag/dingo.nvim`
+
 ## References
 
 - Research: `ai-docs/claude-research.md`, `ai-docs/gemini_research.md`
 - Architecture: `ai-docs/dingo-vs-borgo.md`
 
 ---
-**Last Updated**: 2025-12-18
+**Last Updated**: 2026-01-07
