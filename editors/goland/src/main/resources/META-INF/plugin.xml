@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.madappgang.dingo</id>
     <name>Dingo Language Support</name>
-    <version>0.1.1</version>
+    <version>0.2.0</version>
     <vendor email="support@madappgang.com" url="https://dingolang.com">MadAppGang</vendor>
 
     <description><![CDATA[
@@ -29,6 +29,14 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>0.2.0</h3>
+        <ul>
+            <li>Rich HTML-formatted error messages in hover tooltips</li>
+            <li>Contextual help with code examples for common errors</li>
+            <li>Improved unresolved lambda type inference error messages</li>
+            <li>Better null coalescing and parsing error descriptions</li>
+        </ul>
+
         <h3>0.1.0</h3>
         <ul>
             <li>Initial release</li>
