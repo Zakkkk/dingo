@@ -21,12 +21,15 @@ Neovim plugin for the [Dingo](https://github.com/MadAppGang/dingo) programming l
 ```lua
 {
   "MadAppGang/dingo",
+  subdir = "editors/nvim",  -- Required: plugin is in subdirectory
   ft = "dingo",
   config = function()
     require("dingo").setup()
   end,
 }
 ```
+
+> **Note**: The `subdir` option is required because the Neovim plugin lives in `editors/nvim/` within the main Dingo repository.
 
 #### With Mason for Automatic Tool Installation
 
@@ -47,6 +50,7 @@ Neovim plugin for the [Dingo](https://github.com/MadAppGang/dingo) programming l
 -- Then the Dingo plugin
 {
   "MadAppGang/dingo",
+  subdir = "editors/nvim",
   ft = "dingo",
   dependencies = {
     "williamboman/mason.nvim",
@@ -80,6 +84,7 @@ return {
   -- Dingo language support
   {
     "MadAppGang/dingo",
+    subdir = "editors/nvim",
     ft = "dingo",
     dependencies = {
       "williamboman/mason.nvim",
@@ -128,7 +133,11 @@ The plugin includes a ready-to-use lazy.nvim spec with full configuration:
 ```lua
 -- In your lazy.nvim setup (init.lua or lua/config/lazy.lua)
 require("lazy").setup({
-  { import = "dingo.lazy" },  -- Full spec with keybindings and Mason
+  {
+    "MadAppGang/dingo",
+    subdir = "editors/nvim",
+    import = "dingo.lazy",  -- Import full spec with keybindings and Mason
+  },
   -- your other plugins...
 })
 ```
@@ -148,6 +157,7 @@ If you're using [LazyVim](https://www.lazyvim.org/), add this to your plugins:
 return {
   {
     "MadAppGang/dingo",
+    subdir = "editors/nvim",
     ft = "dingo",
     opts = {
       lsp = { enabled = true },
@@ -177,6 +187,7 @@ return {
 ```lua
 use {
   "MadAppGang/dingo",
+  rtp = "editors/nvim",  -- Required: plugin is in subdirectory
   ft = "dingo",
   requires = {
     "williamboman/mason.nvim",
@@ -190,10 +201,12 @@ use {
 
 ### Using vim-plug
 
+vim-plug doesn't support subdirectory plugins well. Use the `rtp` option:
+
 ```vim
 Plug 'williamboman/mason.nvim'
 Plug 'williamboman/mason-lspconfig.nvim'
-Plug 'MadAppGang/dingo', { 'for': 'dingo' }
+Plug 'MadAppGang/dingo', { 'for': 'dingo', 'rtp': 'editors/nvim' }
 
 lua << EOF
 require("mason").setup()
@@ -203,6 +216,8 @@ require("mason-lspconfig").setup({
 require("dingo").setup()
 EOF
 ```
+
+> **Note**: If `rtp` doesn't work, consider using lazy.nvim which has better subdirectory support.
 
 ### Local Development Installation
 

@@ -12,13 +12,17 @@ function M.register()
   parser_config.dingo = {
     install_info = {
       url = "https://github.com/MadAppGang/dingo",
-      files = { "editors/nvim/tree-sitter-dingo/src/parser.c" },
+      location = "editors/nvim/tree-sitter-dingo",
+      files = { "src/parser.c" },
       branch = "main",
       generate_requires_npm = true,
     },
     filetype = "dingo",
     maintainers = { "@MadAppGang" },
   }
+
+  -- Register language mapping (parser name -> filetype)
+  vim.treesitter.language.register("dingo", "dingo")
 
   -- For local development, use:
   -- :TSInstallFromGrammar dingo

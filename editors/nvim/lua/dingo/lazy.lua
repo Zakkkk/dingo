@@ -1,16 +1,22 @@
 -- lazy.nvim plugin spec for dingo.nvim
--- This file can be used directly as a lazy.nvim plugin spec
+-- This file provides the complete plugin specification for lazy.nvim
 --
 -- Usage in your lazy.nvim config:
 --   require("lazy").setup({
---     { import = "dingo.lazy" },
+--     {
+--       "MadAppGang/dingo",
+--       subdir = "editors/nvim",
+--       import = "dingo.lazy",  -- Import this spec for keybindings and integration
+--     },
 --     -- your other plugins...
 --   })
 
 return {
-  -- Dingo language support
+  -- Main Dingo plugin configuration
+  -- Note: The plugin itself should be specified with subdir in user config
   {
     "MadAppGang/dingo",
+    subdir = "editors/nvim",
     name = "dingo.nvim",
     ft = "dingo",
     dependencies = {
