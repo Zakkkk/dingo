@@ -72,17 +72,9 @@ type PrattParser struct {
 	OnDingoNode func(ast.DingoNode)
 }
 
-// ParseError represents a parser error
-type ParseError struct {
-	Pos     token.Pos
-	Line    int
-	Column  int
-	Message string
-}
-
-func (e ParseError) Error() string {
-	return e.Message
-}
+// ParseError is an alias for SpanError for backward compatibility
+// New code should use SpanError directly for full span information
+type ParseError = SpanError
 
 // Parse function types
 type (
@@ -94,9 +86,9 @@ type (
 func NewPrattParser(t *tokenizer.Tokenizer) *PrattParser {
 	p := &PrattParser{
 		tokenizer:      t,
-		errors:         []ParseError{},
-		prefixParseFns: make(map[tokenizer.TokenKind]prefixParseFn),
-		infixParseFns:  make(map[tokenizer.TokenKind]infixParseFn),
+		errors:         make([]ParseError, 0, 8),                        // Pre-allocate for typical error count
+		prefixParseFns: make(map[tokenizer.TokenKind]prefixParseFn, 16), // Pre-allocate for registered handlers
+		infixParseFns:  make(map[tokenizer.TokenKind]infixParseFn, 16),  // Pre-allocate for registered handlers
 	}
 
 	// Register prefix parse functions
@@ -520,6 +512,8 @@ func (p *PrattParser) parseErrorPropagation(left ast.Expr) ast.Expr {
 // Right-associative: a ?? b ?? c is parsed as a ?? (b ?? c)
 func (p *PrattParser) parseNullCoalescing(left ast.Expr) ast.Expr {
 	opPos := p.curToken.Pos
+	opLine := p.curToken.Line
+	opColumn := p.curToken.Column
 	precedence := p.curPrecedence()
 
 	// Move to right operand
@@ -528,6 +522,19 @@ func (p *PrattParser) parseNullCoalescing(left ast.Expr) ast.Expr {
 	// Right-associative: use same precedence (not precedence + 1)
 	// This makes a ?? b ?? c parse as a ?? (b ?? c)
 	right := p.ParseExpression(precedence)
+
+	// Check for missing right operand
+	if right == nil {
+		p.errors = append(p.errors, SpanError{
+			Pos:     opPos,
+			Line:    opLine,
+			Column:  opColumn,
+			Code:    ErrMissingOperand,
+			Message: "expected expression after '??' (null coalescing operator requires a default value)",
+			Hint:    "provide a default value: expr ?? defaultValue",
+		})
+		return left // Return left to allow partial recovery
+	}
 
 	expr := &ast.NullCoalesceExpr{
 		Left:  left,
@@ -607,21 +614,67 @@ func (p *PrattParser) parseSafeNavigation(left ast.Expr) ast.Expr {
 // Error handling
 
 func (p *PrattParser) noPrefixParseFnError(t tokenizer.TokenKind) {
-	msg := fmt.Sprintf("no prefix parse function for %s", t)
-	p.errors = append(p.errors, ParseError{
+	hint := GetHintForToken(t)
+	p.errors = append(p.errors, SpanError{
 		Pos:     p.curToken.Pos,
+		EndPos:  p.curToken.End,
+		Line:    p.curToken.Line,
+		Column:  p.curToken.Column,
+		Code:    ErrUnexpectedToken,
+		Message: fmt.Sprintf("unexpected token '%s' at start of expression", t),
+		Hint:    hint,
+	})
+}
+
+// addSpanError adds an error with start/end positions
+func (p *PrattParser) addSpanError(startPos, endPos token.Pos, msg, hint string) {
+	p.errors = append(p.errors, SpanError{
+		Pos:     startPos,
+		EndPos:  endPos,
 		Line:    p.curToken.Line,
 		Column:  p.curToken.Column,
 		Message: msg,
+		Hint:    hint,
 	})
+}
+
+// addErrorWithCode adds an error with an error code
+func (p *PrattParser) addErrorWithCode(code, msg, hint string) {
+	p.errors = append(p.errors, SpanError{
+		Pos:     p.curToken.Pos,
+		EndPos:  p.curToken.End,
+		Line:    p.curToken.Line,
+		Column:  p.curToken.Column,
+		Code:    code,
+		Message: msg,
+		Hint:    hint,
+	})
+}
+
+// synchronize advances tokens until a sync point is found
+// Used for error recovery to continue parsing after an error
+func (p *PrattParser) synchronize(syncSet SyncSet) {
+	for !p.curTokenIs(tokenizer.EOF) {
+		// Check if current token is a sync point
+		if syncSet.Contains(p.curToken.Kind) {
+			return
+		}
+		// Check if peek token starts a new construct
+		if p.peekTokenIs(tokenizer.MATCH) || p.peekTokenIs(tokenizer.FUNC) {
+			return
+		}
+		p.nextToken()
+	}
 }
 
 func (p *PrattParser) peekError(t tokenizer.TokenKind) {
 	msg := fmt.Sprintf("expected next token to be %s, got %s instead", t, p.peekToken.Kind)
-	p.errors = append(p.errors, ParseError{
+	p.errors = append(p.errors, SpanError{
 		Pos:     p.peekToken.Pos,
+		EndPos:  p.peekToken.End,
 		Line:    p.peekToken.Line,
 		Column:  p.peekToken.Column,
+		Code:    ErrUnexpectedToken,
 		Message: msg,
 	})
 }
@@ -814,8 +867,9 @@ func (p *PrattParser) parseIndexExpr(left ast.Expr) ast.Expr {
 
 // addError is a helper to add errors with current token position
 func (p *PrattParser) addError(msg string) {
-	p.errors = append(p.errors, ParseError{
+	p.errors = append(p.errors, SpanError{
 		Pos:     p.curToken.Pos,
+		EndPos:  p.curToken.End,
 		Line:    p.curToken.Line,
 		Column:  p.curToken.Column,
 		Message: msg,
@@ -823,25 +877,17 @@ func (p *PrattParser) addError(msg string) {
 }
 
 // parseQuestionOperator handles both error propagation (?) and ternary (? :)
-// Disambiguates by looking ahead after parsing the first expression following ?
+// Uses structured decision table from classifyQuestionOperator for clean disambiguation
 //
 // Patterns:
 //   - expr?                        -> error propagation (postfix)
 //   - expr ? "message"             -> error propagation with context
-//   - expr ? |err| transform       -> error propagation with transform
+//   - expr ? |err| transform       -> error propagation with Rust-style lambda
+//   - expr ? (e) => transform      -> error propagation with TS-style lambda
+//   - expr ? e => transform        -> error propagation with TS single-param lambda
 //   - cond ? trueVal : falseVal    -> ternary operator
-//
-// Disambiguation strategy:
-// 1. If ? is followed by terminator -> error propagation
-// 2. If ? is followed by string literal -> error propagation with context
-// 3. If ? is followed by pipe (|) -> error propagation with lambda
-// 4. Otherwise, parse expression and check for colon
-//    - If colon found -> ternary
-//    - If no colon -> error propagation
 func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	questionPos := p.curToken.Pos
-
-	// Save parser state for potential backtracking
 	state := p.saveState()
 
 	p.nextToken() // consume ?
@@ -849,8 +895,30 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 	// Skip newlines and comments after ?
 	p.consumeNewlinesAndComments()
 
-	// Pattern 1: ? followed by terminator = error propagation
-	if p.isExpressionTerminator() {
+	// Classify using decision table
+	result := p.classifyQuestionOperator()
+
+	switch result.kind {
+	case qkErrorPropPostfix:
+		// Basic error propagation: expr?
+		expr := &ast.ErrorPropExpr{
+			Question: questionPos,
+			Operand:  left,
+		}
+		p.collectDingoNode(expr)
+		return expr
+
+	case qkErrorWithContext, qkErrorWithRustLambda, qkErrorWithTSLambda:
+		// All error propagation variants handled by parseErrorPropagation
+		p.restoreState(state)
+		return p.parseErrorPropagation(left)
+
+	case qkTernary:
+		// Ternary: cond ? trueVal : falseVal
+		return p.parseTernary(left, questionPos)
+
+	default:
+		// Fallback to error propagation
 		expr := &ast.ErrorPropExpr{
 			Question: questionPos,
 			Operand:  left,
@@ -858,92 +926,48 @@ func (p *PrattParser) parseQuestionOperator(left ast.Expr) ast.Expr {
 		p.collectDingoNode(expr)
 		return expr
 	}
+}
 
-	// Pattern 1b: ? followed by another ? = first is error propagation, second will be ternary
-	// Example: getData()? ? "valid" : "invalid"
-	if p.curTokenIs(tokenizer.QUESTION) {
-		expr := &ast.ErrorPropExpr{
-			Question: questionPos,
-			Operand:  left,
-		}
-		p.collectDingoNode(expr)
-		return expr
-	}
-
-	// Pattern 2: ? "string" - could be error propagation OR ternary
-	// Disambiguate by checking if there's a colon after the string
-	if p.curTokenIs(tokenizer.STRING) {
-		// Lookahead: is there a colon after this string?
-		savedState2 := p.saveState()
-		p.nextToken() // move past string - now ON the next token
-		p.consumeNewlinesAndComments() // Skip newlines/comments at current position
-		hasColon := p.curTokenIs(tokenizer.COLON) // Check current, not peek
-		p.restoreState(savedState2) // restore to string token
-
-		if !hasColon {
-			// No colon = error propagation with context
-			p.restoreState(state)
-			return p.parseErrorPropagation(left)
-		}
-		// Has colon = ternary, fall through to ternary parsing below
-	}
-
-	// Pattern 3: ? | = error propagation with lambda transform
-	if p.curTokenIs(tokenizer.PIPE) {
-		p.restoreState(state)
-		return p.parseErrorPropagation(left)
-	}
-
-	// Pattern 4: ? ( where ( starts a lambda = error propagation with lambda
-	if p.curTokenIs(tokenizer.LPAREN) && p.isTypeScriptLambda() {
-		p.restoreState(state)
-		return p.parseErrorPropagation(left)
-	}
-
-	// Pattern 5: ? ident => = error propagation with single-param lambda
-	if p.curTokenIs(tokenizer.IDENT) && p.peekTokenIs(tokenizer.ARROW) {
-		p.restoreState(state)
-		return p.parseErrorPropagation(left)
-	}
-
-	// Try parsing as ternary: parse true branch expression
+// parseTernary handles cond ? trueVal : falseVal
+// Called after ? is consumed and ternary is confirmed via classification
+func (p *PrattParser) parseTernary(cond ast.Expr, questionPos token.Pos) ast.Expr {
+	// Parse true branch with higher precedence
 	// Use higher precedence (PrecTernary + 1) to prevent consuming the colon
-	// This ensures the true branch doesn't try to parse as another ternary
 	trueExpr := p.ParseExpression(PrecTernary + 1)
 
 	// Skip newlines and comments before checking for colon
 	p.consumePeekNewlinesAndComments()
 
-	// Check for colon to confirm ternary
-	if p.peekTokenIs(tokenizer.COLON) {
-		p.nextToken() // move to :
-		colonPos := p.curToken.Pos
-		p.nextToken() // consume :
-
-		// Skip newlines and comments after :
-		p.consumeNewlinesAndComments()
-
-		// Right-associative: parse false branch at lower precedence
-		// This makes a ? b : c ? d : e parse as a ? b : (c ? d : e)
-		// Use PrecTernary - 1 so the loop condition (minPrec < peekPrec) allows
-		// the next ternary to bind: (PrecTernary - 1) < PrecTernary = true
-		falseExpr := p.ParseExpression(PrecTernary - 1)
-
-		ternaryExpr := &ast.TernaryExpr{
-			Cond:     left,
-			Question: questionPos,
-			True:     trueExpr,
-			Colon:    colonPos,
-			False:    falseExpr,
-		}
-		p.collectDingoNode(ternaryExpr)
-		return ternaryExpr
+	// Expect colon
+	if !p.peekTokenIs(tokenizer.COLON) {
+		p.addErrorWithCode(ErrMissingColon,
+			"ternary operator missing ':'",
+			"ternary syntax: condition ? trueValue : falseValue")
+		return nil
 	}
 
-	// No colon found - this is error propagation without context
-	// Backtrack and parse as error propagation
-	p.restoreState(state)
-	return p.parseErrorPropagation(left)
+	p.nextToken() // move to :
+	colonPos := p.curToken.Pos
+	p.nextToken() // consume :
+
+	// Skip newlines and comments after :
+	p.consumeNewlinesAndComments()
+
+	// Right-associative: parse false branch at lower precedence
+	// This makes a ? b : c ? d : e parse as a ? b : (c ? d : e)
+	// Use PrecTernary - 1 so the loop condition (minPrec < peekPrec) allows
+	// the next ternary to bind: (PrecTernary - 1) < PrecTernary = true
+	falseExpr := p.ParseExpression(PrecTernary - 1)
+
+	ternaryExpr := &ast.TernaryExpr{
+		Cond:     cond,
+		Question: questionPos,
+		True:     trueExpr,
+		Colon:    colonPos,
+		False:    falseExpr,
+	}
+	p.collectDingoNode(ternaryExpr)
+	return ternaryExpr
 }
 
 // isExpressionTerminator returns true if current token ends an expression
