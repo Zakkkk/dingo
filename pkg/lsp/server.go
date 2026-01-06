@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/lsp/semantic"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
@@ -40,6 +41,7 @@ const (
 // Server implements the LSP proxy server
 type Server struct {
 	config        ServerConfig
+	dingoConfig   *config.Config // Dingo compiler config for output paths
 	gopls         *GoplsClient
 	mapCache      *SourceMapCache
 	translator    *Translator
@@ -86,6 +88,13 @@ type transpileDebounceState struct {
 
 // NewServer creates a new LSP server instance
 func NewServer(cfg ServerConfig) (*Server, error) {
+	// Load dingo config for output paths
+	dingoConfig, err := config.Load(nil)
+	if err != nil {
+		// Fall back to defaults on error
+		dingoConfig = config.DefaultConfig()
+	}
+
 	// Initialize gopls client
 	gopls, err := NewGoplsClient(cfg.GoplsPath, cfg.Logger)
 	if err != nil {
@@ -98,8 +107,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		return nil, fmt.Errorf("failed to create source map cache: %w", err)
 	}
 
-	// Initialize translator
-	translator := NewTranslator(mapCache)
+	// Initialize translator with dingo config for path calculation
+	translator := NewTranslatorWithConfig(mapCache, dingoConfig)
 
 	// Initialize incremental document manager
 	docManager := NewIncrementalDocumentManager(cfg.Logger)
@@ -107,6 +116,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	// Create server first (without transpiler)
 	server := &Server{
 		config:              cfg,
+		dingoConfig:         dingoConfig,
 		gopls:               gopls,
 		mapCache:            mapCache,
 		translator:          translator,
@@ -135,6 +145,11 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	gopls.SetDiagnosticsHandler(server.handlePublishDiagnostics)
 
 	return server, nil
+}
+
+// dingoToGoPath converts a Dingo path to its Go output path using server config.
+func (s *Server) dingoToGoPath(dingoPath string) string {
+	return dingoToGoPathWithConfig(dingoPath, s.dingoConfig)
 }
 
 // createTranspileFunc creates a transpile function for the semantic manager
@@ -393,7 +408,7 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 		}
 
 		// Check if .go file exists, if not auto-transpile
-		goPath := dingoToGoPath(dingoPath)
+		goPath := s.dingoToGoPath(dingoPath)
 		if _, err := os.Stat(goPath); os.IsNotExist(err) {
 			s.config.Logger.Infof("[didOpen] .go file missing, auto-transpiling: %s", dingoPath)
 
@@ -585,8 +600,8 @@ func (s *Server) handleDingoFileChange(dingoPath string) {
 // openGoFileWithGopls opens the corresponding .go file with gopls
 // CRITICAL FIX D1: This enables gopls to analyze the file and send diagnostics
 func (s *Server) openGoFileWithGopls(ctx context.Context, dingoPath string) error {
-	// Convert .dingo path to .go path
-	goPath := dingoToGoPath(dingoPath)
+	// Convert .dingo path to .go path using config-aware calculation
+	goPath := s.dingoToGoPath(dingoPath)
 
 	s.config.Logger.Debugf("[Diagnostic Fix] Opening .go file with gopls: %s", goPath)
 
@@ -622,8 +637,8 @@ func (s *Server) openGoFileWithGopls(ctx context.Context, dingoPath string) erro
 // closeGoFileWithGopls closes the corresponding .go file with gopls
 // CRITICAL FIX D1: Clean up when .dingo file is closed
 func (s *Server) closeGoFileWithGopls(ctx context.Context, dingoPath string) error {
-	// Convert .dingo path to .go path
-	goPath := dingoToGoPath(dingoPath)
+	// Convert .dingo path to .go path using config-aware calculation
+	goPath := s.dingoToGoPath(dingoPath)
 
 	s.config.Logger.Debugf("[Diagnostic Fix] Closing .go file with gopls: %s", goPath)
 
@@ -819,22 +834,27 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 	delete(s.lastErrors, uriStr)
 	s.lastErrorMu.Unlock()
 
+	// Calculate output paths using unified path calculation
+	paths, err := transpiler.CalculateOutputPaths(dingoPath, s.dingoConfig)
+	if err != nil {
+		s.config.Logger.Warnf("[Debounce] Failed to calculate output paths: %v", err)
+		return
+	}
+
 	// Write transpiled Go code to disk for gopls
-	goPath := dingoToGoPath(dingoPath)
-	if err := os.WriteFile(goPath, result.GoCode, 0644); err != nil {
+	if err := os.WriteFile(paths.GoPath, result.GoCode, 0644); err != nil {
 		s.config.Logger.Warnf("[Debounce] Failed to write Go file: %v", err)
 		return
 	}
 
-	// Write dmap file for position mapping
-	dmapPath := goPath + ".dmap"
+	// Write dmap file for position mapping (same directory as .go file)
 	writer := dmap.NewWriter(result.DingoSource, result.GoCode)
-	if err := writer.WriteFile(dmapPath, result.LineMappings, result.ColumnMappings); err != nil {
+	if err := writer.WriteFile(paths.DmapPath, result.LineMappings, result.ColumnMappings); err != nil {
 		s.config.Logger.Warnf("[Debounce] Failed to write dmap: %v", err)
 	}
 
 	// Invalidate source map cache
-	s.mapCache.Invalidate(goPath)
+	s.mapCache.Invalidate(paths.GoPath)
 
 	// Sync gopls with new Go file content
 	ctx := s.getServerContext()
@@ -842,7 +862,7 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 		ctx = context.Background()
 	}
 
-	if err := s.transpiler.SyncGoplsWithGoFile(ctx, goPath); err != nil {
+	if err := s.transpiler.SyncGoplsWithGoFile(ctx, paths.GoPath); err != nil {
 		s.config.Logger.Warnf("[Debounce] Failed to sync gopls: %v", err)
 	}
 

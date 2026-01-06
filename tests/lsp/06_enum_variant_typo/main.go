@@ -1,3 +1,4 @@
+//go:build ignore
 package main
 
 // Test: Enum variant - bare variant name should work

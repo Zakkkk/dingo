@@ -29,9 +29,9 @@ func (s *Server) handleDocumentSymbol(ctx context.Context, reply jsonrpc2.Replie
 	}
 
 	// For .dingo files:
-	// 1. Translate Dingo URI to Go URI
+	// 1. Translate Dingo URI to Go URI using config-aware path calculation
 	dingoURI := params.TextDocument.URI
-	goPath := dingoToGoPath(dingoURI.Filename())
+	goPath := s.dingoToGoPath(dingoURI.Filename())
 	goURI := protocol.DocumentURI(uri.File(goPath))
 
 	// Update params with Go URI

@@ -1,3 +1,4 @@
+//go:build ignore
 package main
 
 // Test: Go type error - undefined variable

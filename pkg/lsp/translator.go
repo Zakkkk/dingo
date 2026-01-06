@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
 )
@@ -23,12 +25,25 @@ const (
 
 // Translator handles bidirectional position translation using source maps
 type Translator struct {
-	cache SourceMapGetter
+	cache       SourceMapGetter
+	dingoConfig *config.Config
 }
 
 // NewTranslator creates a new position translator
 func NewTranslator(cache SourceMapGetter) *Translator {
-	return &Translator{cache: cache}
+	return NewTranslatorWithConfig(cache, nil)
+}
+
+// NewTranslatorWithConfig creates a translator with explicit config
+func NewTranslatorWithConfig(cache SourceMapGetter, cfg *config.Config) *Translator {
+	if cfg == nil {
+		// Load config or use defaults
+		cfg, _ = config.Load(nil)
+		if cfg == nil {
+			cfg = config.DefaultConfig()
+		}
+	}
+	return &Translator{cache: cache, dingoConfig: cfg}
 }
 
 // TranslatePosition translates a single position between Dingo and Go files.
@@ -50,10 +65,10 @@ func (t *Translator) TranslatePosition(
 	line := int(pos.Line) + 1
 	col := int(pos.Character) + 1 // LSP character offset is 0-indexed, dmap uses 1-indexed
 
-	// Determine file paths
+	// Determine file paths using config-aware path calculation
 	var goPath string
 	if dir == DingoToGo {
-		goPath = dingoToGoPath(uri.Filename())
+		goPath = dingoToGoPathWithConfig(uri.Filename(), t.dingoConfig)
 	} else {
 		goPath = uri.Filename()
 	}
@@ -155,7 +170,7 @@ func (t *Translator) TranslatePosition(
 			log.Printf("[LSP Translator] GoToDingo: goLine=%d -> dingoLine=%d (identity)", line, newLine)
 		}
 
-		dingoPath := goToDingoPath(goPath)
+		dingoPath := goToDingoPathWithConfig(goPath, t.dingoConfig)
 		newURI = lspuri.File(dingoPath)
 	}
 
@@ -270,18 +285,47 @@ func isDingoFilePath(path string) bool {
 	return strings.HasSuffix(path, ".dingo")
 }
 
+// dingoToGoPath converts a .dingo path to its corresponding .go path.
+// This uses the unified path calculation to respect the configured output directory.
 func dingoToGoPath(dingoPath string) string {
+	return dingoToGoPathWithConfig(dingoPath, nil)
+}
+
+// dingoToGoPathWithConfig converts a .dingo path to its .go path using config.
+func dingoToGoPathWithConfig(dingoPath string, cfg *config.Config) string {
 	if !strings.HasSuffix(dingoPath, ".dingo") {
 		return dingoPath
 	}
-	return strings.TrimSuffix(dingoPath, ".dingo") + ".go"
+
+	// Use unified path calculation
+	goPath, err := transpiler.CalculateGoPath(dingoPath, cfg)
+	if err != nil {
+		// Fallback to simple suffix replacement if calculation fails
+		log.Printf("[LSP Translator] dingoToGoPath: calculation failed for %s: %v, using fallback", dingoPath, err)
+		return strings.TrimSuffix(dingoPath, ".dingo") + ".go"
+	}
+	return goPath
 }
 
+// goToDingoPath converts a .go path back to its source .dingo path.
 func goToDingoPath(goPath string) string {
+	return goToDingoPathWithConfig(goPath, nil)
+}
+
+// goToDingoPathWithConfig converts a .go path to its .dingo source path using config.
+func goToDingoPathWithConfig(goPath string, cfg *config.Config) string {
 	if !strings.HasSuffix(goPath, ".go") {
 		return goPath
 	}
-	return strings.TrimSuffix(goPath, ".go") + ".dingo"
+
+	// Use unified path calculation
+	dingoPath, err := transpiler.GoPathToDingoPath(goPath, cfg)
+	if err != nil {
+		// Fallback to simple suffix replacement if calculation fails
+		log.Printf("[LSP Translator] goToDingoPath: calculation failed for %s: %v, using fallback", goPath, err)
+		return strings.TrimSuffix(goPath, ".go") + ".dingo"
+	}
+	return dingoPath
 }
 
 // expandTabsInColumn adjusts a column position from Go (tabs) to Dingo (spaces).

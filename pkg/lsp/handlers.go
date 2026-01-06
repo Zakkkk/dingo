@@ -63,8 +63,8 @@ func (t *Translator) TranslateHover(
 		// For GoToDingo direction, we need to pass the Go URI, not the Dingo URI.
 		rangeURI := originalURI
 		if dir == GoToDingo && isDingoFile(originalURI) {
-			// Convert Dingo URI to Go URI for proper translation
-			rangeURI = uri.File(dingoToGoPath(originalURI.Filename()))
+			// Convert Dingo URI to Go URI for proper translation using config
+			rangeURI = uri.File(dingoToGoPathWithConfig(originalURI.Filename(), t.dingoConfig))
 		}
 		_, newRange, err := t.TranslateRange(rangeURI, *hover.Range, dir)
 		if err != nil {

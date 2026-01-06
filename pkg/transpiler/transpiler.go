@@ -5,6 +5,8 @@ package transpiler
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
@@ -103,14 +105,28 @@ func (t *Transpiler) TranspileFile(inputPath string) error {
 	return t.TranspileFileWithOutput(inputPath, "")
 }
 
-// TranspileFileWithOutput transpiles with custom output path using AST-based pipeline
+// TranspileFileWithOutput transpiles with custom output path using AST-based pipeline.
+// If outputPath is empty, uses the configured output directory (default: build/).
+// Dmap files always go in .dmap/ folder regardless of where .go files are placed.
 func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error {
+	var dmapPath string
+
 	if outputPath == "" {
-		// Default: replace .dingo with .go
-		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
-			outputPath = inputPath[:len(inputPath)-6] + ".go"
-		} else {
-			outputPath = inputPath + ".go"
+		// Use configured output directory (default: build/)
+		paths, err := CalculateOutputPaths(inputPath, t.config)
+		if err != nil {
+			return fmt.Errorf("failed to calculate output paths: %w", err)
+		}
+		outputPath = paths.GoPath
+		dmapPath = paths.DmapPath
+	} else {
+		// Custom output path provided - but dmap still goes in .dmap/ folder
+		// based on the INPUT path, not the output path
+		var err error
+		dmapPath, err = CalculateDmapPath(inputPath, t.config)
+		if err != nil {
+			// Fallback: derive from input path with simple suffix replacement
+			dmapPath = strings.TrimSuffix(inputPath, ".dingo") + ".dmap"
 		}
 	}
 
@@ -127,6 +143,11 @@ func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error
 		return fmt.Errorf("transpilation error: %w", err)
 	}
 
+	// Ensure output directory exists
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
 	// Write output
 	if err := os.WriteFile(outputPath, result.GoCode, 0o644); err != nil {
 		return fmt.Errorf("failed to write output: %w", err)
@@ -134,12 +155,10 @@ func (t *Transpiler) TranspileFileWithOutput(inputPath, outputPath string) error
 
 	// Write `.dmap` source map (used by dingo-lsp and other tooling).
 	// Keep this non-fatal: transpilation output is still valuable without maps.
-	if dmapPath, err := calculateDmapPath(inputPath); err == nil {
-		writer := dmap.NewWriter(result.DingoSource, result.GoCode)
-		// Write v3 format with column mappings
-		// Intentionally non-fatal: tooling can still use the `.go` file.
-		_ = writer.WriteFile(dmapPath, result.LineMappings, result.ColumnMappings)
-	}
+	writer := dmap.NewWriter(result.DingoSource, result.GoCode)
+	// Write v3 format with column mappings
+	// Intentionally non-fatal: tooling can still use the `.go` file.
+	_ = writer.WriteFile(dmapPath, result.LineMappings, result.ColumnMappings)
 
 	return nil
 }

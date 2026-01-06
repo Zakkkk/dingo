@@ -196,12 +196,24 @@ func runTranspile(files []string, output, outdir string, watch bool) error {
 }
 
 func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
+	// Load dingo config for output path calculation
+	cfg, err := config.Load(nil)
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
 	if outputPath == "" {
-		// Default: replace .dingo with .go
-		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
-			outputPath = inputPath[:len(inputPath)-6] + ".go"
+		// Use unified path calculation (default: build/)
+		goPath, err := transpiler.CalculateGoPath(inputPath, cfg)
+		if err != nil {
+			// Fallback to in-place
+			if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
+				outputPath = inputPath[:len(inputPath)-6] + ".go"
+			} else {
+				outputPath = inputPath + ".go"
+			}
 		} else {
-			outputPath = inputPath + ".go"
+			outputPath = goPath
 		}
 	}
 
@@ -253,8 +265,8 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 		return fmt.Errorf("failed to write output: %w", err)
 	}
 
-	// Write .dmap file to project root .dmap/ folder
-	dmapPath, dmapErr := calculateDmapPath(inputPath)
+	// Write .dmap file to .dmap/ folder
+	dmapPath, dmapErr := calculateDmapPath(inputPath, cfg)
 	if dmapErr != nil {
 		buildUI.PrintStep(ui.Step{
 			Name:     "Write",
@@ -288,12 +300,24 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 
 // buildFileSimple builds a single file with animated spinner during steps
 func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) error {
+	// Load config for path calculation
+	cfg, err := config.Load(nil)
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
 	if outputPath == "" {
-		// Default: replace .dingo with .go
-		if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
-			outputPath = inputPath[:len(inputPath)-6] + ".go"
+		// Use unified path calculation - puts .go files in build/ folder
+		goPath, pathErr := transpiler.CalculateGoPath(inputPath, cfg)
+		if pathErr != nil {
+			// Fallback: replace .dingo with .go
+			if len(inputPath) > 6 && inputPath[len(inputPath)-6:] == ".dingo" {
+				outputPath = inputPath[:len(inputPath)-6] + ".go"
+			} else {
+				outputPath = inputPath + ".go"
+			}
 		} else {
-			outputPath = inputPath + ".go"
+			outputPath = goPath
 		}
 	}
 
@@ -315,7 +339,7 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 	// Step 1: Read source (with spinner)
 	var src []byte
 	var readDuration time.Duration
-	err := runWithSpinner("Read", func() error {
+	err = runWithSpinner("Read", func() error {
 		start := time.Now()
 		var err error
 		src, err = os.ReadFile(inputPath)
@@ -367,7 +391,7 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 		// Write .dmap file to project root .dmap/ folder
 		// This keeps source directories clean from generated files
 		// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
-		dmapPath, dmapErr := calculateDmapPath(inputPath)
+		dmapPath, dmapErr := calculateDmapPath(inputPath, cfg)
 		if dmapErr != nil {
 			fmt.Printf("\n  ⚠ Warning: Failed to calculate source map path: %v\n", dmapErr)
 			writeDuration = time.Since(start)
@@ -526,40 +550,19 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-// calculateDmapPath calculates the .dmap file path in the project root .dmap/ folder.
-// This keeps generated source maps separate from source files.
-// Example: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
-func calculateDmapPath(inputPath string) (string, error) {
-	// Convert to absolute path
-	absInput, err := filepath.Abs(inputPath)
+// calculateDmapPath calculates the .dmap file path using the unified output path calculation.
+// The .dmap file is placed alongside the .go file in the configured output directory.
+// Example: examples/03_option/user.dingo -> build/examples/03_option/user.dmap
+func calculateDmapPath(inputPath string, cfg *config.Config) (string, error) {
+	dmapPath, err := transpiler.CalculateDmapPath(inputPath, cfg)
 	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
+		return "", fmt.Errorf("failed to calculate dmap path: %w", err)
 	}
-
-	// Find workspace root (go.mod, go.work, or dingo.toml)
-	inputDir := filepath.Dir(absInput)
-	workspaceRoot, err := DetectWorkspaceRoot(inputDir)
-	if err != nil {
-		// Fall back to current directory if no workspace marker found
-		workspaceRoot, _ = os.Getwd()
-	}
-
-	// Calculate relative path from workspace root
-	relPath, err := filepath.Rel(workspaceRoot, absInput)
-	if err != nil {
-		return "", fmt.Errorf("failed to calculate relative path: %w", err)
-	}
-
-	// Replace .dingo extension with .dmap
-	relDmap := strings.TrimSuffix(relPath, ".dingo") + ".dmap"
-
-	// Build final path: workspaceRoot/.dmap/relPath
-	dmapPath := filepath.Join(workspaceRoot, ".dmap", relDmap)
 
 	// Ensure parent directory exists
 	dmapDir := filepath.Dir(dmapPath)
 	if err := os.MkdirAll(dmapDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create .dmap directory: %w", err)
+		return "", fmt.Errorf("failed to create dmap directory: %w", err)
 	}
 
 	return dmapPath, nil

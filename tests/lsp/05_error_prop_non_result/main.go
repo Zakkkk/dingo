@@ -1,3 +1,4 @@
+//go:build ignore
 package main
 
 // Test: Error propagation on non-Result type

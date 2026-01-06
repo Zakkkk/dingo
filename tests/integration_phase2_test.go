@@ -48,7 +48,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		goFile := strings.TrimSuffix(dingoFile, ".dingo") + ".go"
+		// Generated .go files now go to build/ folder
+		goFile := filepath.Join(tmpDir, "build", "test_result.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -56,7 +57,7 @@ func main() {
 			t.Fatalf("Failed to transpile: %v", err)
 		}
 
-		// Verify .go file was created
+		// Verify .go file was created in build/ folder
 		if _, err := os.Stat(goFile); os.IsNotExist(err) {
 			t.Fatal("Generated .go file not found")
 		}
@@ -98,7 +99,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		goFile := strings.TrimSuffix(dingoFile, ".dingo") + ".go"
+		// Generated .go files now go to build/ folder
+		goFile := filepath.Join(tmpDir, "build", "test_enum.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -106,7 +108,7 @@ func main() {
 			t.Fatalf("Failed to transpile: %v", err)
 		}
 
-		// Verify .go file was created
+		// Verify .go file was created in build/ folder
 		if _, err := os.Stat(goFile); os.IsNotExist(err) {
 			t.Fatal("Generated .go file not found")
 		}

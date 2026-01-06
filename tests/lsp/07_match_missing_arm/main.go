@@ -1,3 +1,4 @@
+//go:build ignore
 package main
 
 // Test: Match expression with valid syntax

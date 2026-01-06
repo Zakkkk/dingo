@@ -1,3 +1,4 @@
+//go:build ignore
 package main
 
 // Test: Safe navigation on non-pointer type

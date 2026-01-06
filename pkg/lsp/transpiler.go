@@ -112,8 +112,8 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 		at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{})
 	}
 
-	// Invalidate source map cache
-	goPath := dingoToGoPath(dingoPath)
+	// Invalidate source map cache using config-aware path calculation
+	goPath := at.server.dingoToGoPath(dingoPath)
 	at.mapCache.Invalidate(goPath)
 	at.logger.Debugf("Source map cache invalidated: %s", goPath)
 

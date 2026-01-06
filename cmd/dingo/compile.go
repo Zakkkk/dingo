@@ -329,6 +329,12 @@ func scanDirForDingo(dir string) ([]string, error) {
 func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) ([]string, error) {
 	var generatedFiles []string
 
+	// Load dingo config for output path calculation
+	cfg, err := config.Load(nil)
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
 	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
@@ -336,8 +342,8 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 	outputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
 
 	for _, dingoFile := range opts.DingoFiles {
-		// Determine output path
-		goFile := computeOutputPath(dingoFile, opts.OutDir)
+		// Determine output path using config
+		goFile := computeOutputPath(dingoFile, opts.OutDir, cfg)
 
 		// Print file header if UI enabled
 		if buildUI != nil {
@@ -431,9 +437,8 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 					return err
 				}
 
-				// Write .dmap file to project root .dmap/ folder
-				// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
-				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
+				// Write .dmap file alongside .go file in output directory
+				dmapPath, dmapPathErr := calculateDmapPath(dingoFile, cfg)
 				if dmapPathErr == nil {
 					writer := dmap.NewWriter(src, goSource)
 					// Write v3 format with column mappings
@@ -452,9 +457,8 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 			// Write .go file
 			writeErr = os.WriteFile(goFile, goSource, 0644)
 			if writeErr == nil {
-				// Write .dmap file to project root .dmap/ folder
-				// Path: examples/03_option/user.dingo -> .dmap/examples/03_option/user.dmap
-				dmapPath, dmapPathErr := calculateDmapPath(dingoFile)
+				// Write .dmap file alongside .go file in output directory
+				dmapPath, dmapPathErr := calculateDmapPath(dingoFile, cfg)
 				if dmapPathErr == nil {
 					writer := dmap.NewWriter(src, goSource)
 					// Write v3 format with column mappings
@@ -595,38 +599,47 @@ func runWithSpinnerCompile(stepName string, fn func() error) error {
 	}
 }
 
-// computeOutputPath determines where to write the .go file
-func computeOutputPath(dingoFile, outDir string) string {
-	base := strings.TrimSuffix(dingoFile, ".dingo") + ".go"
+// computeOutputPath determines where to write the .go file.
+// Uses the unified output path calculation from the transpiler package.
+// When outDir is empty, uses the configured output directory (default: build/).
+func computeOutputPath(dingoFile, outDir string, cfg *config.Config) string {
+	// If explicit outDir is set, use custom logic (backwards compatibility)
+	if outDir != "" {
+		base := strings.TrimSuffix(dingoFile, ".dingo") + ".go"
 
-	if outDir == "" {
-		// In-place: .go file next to .dingo file
-		return base
+		// OutDir set: mirror structure in output directory
+		// e.g., cmd/app/main.dingo -> <outDir>/cmd/app/main.go
+		// Use absolute paths for reliability
+		absDingo, err := filepath.Abs(dingoFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Cannot get absolute path for %s: %v\nUsing flat structure in output directory.\n", dingoFile, err)
+			return filepath.Join(outDir, filepath.Base(base))
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Cannot get working directory: %v\nUsing flat structure in output directory.\n", err)
+			return filepath.Join(outDir, filepath.Base(base))
+		}
+
+		// Compute relative path from cwd
+		rel, err := filepath.Rel(cwd, absDingo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Cannot compute relative path for %s: %v\nUsing flat structure in output directory.\n", dingoFile, err)
+			return filepath.Join(outDir, filepath.Base(base))
+		}
+
+		return filepath.Join(outDir, strings.TrimSuffix(rel, ".dingo")+".go")
 	}
 
-	// OutDir set: mirror structure in output directory
-	// e.g., cmd/app/main.dingo -> <outDir>/cmd/app/main.go
-	// Use absolute paths for reliability
-	absDingo, err := filepath.Abs(dingoFile)
+	// Use unified path calculation (respects config's OutDir, defaults to build/)
+	goPath, err := transpiler.CalculateGoPath(dingoFile, cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Cannot get absolute path for %s: %v\nUsing flat structure in output directory.\n", dingoFile, err)
-		return filepath.Join(outDir, filepath.Base(base))
+		// Fallback to in-place if calculation fails
+		fmt.Fprintf(os.Stderr, "Warning: Failed to calculate output path: %v\nFalling back to in-place output.\n", err)
+		return strings.TrimSuffix(dingoFile, ".dingo") + ".go"
 	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Cannot get working directory: %v\nUsing flat structure in output directory.\n", err)
-		return filepath.Join(outDir, filepath.Base(base))
-	}
-
-	// Compute relative path from cwd
-	rel, err := filepath.Rel(cwd, absDingo)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Cannot compute relative path for %s: %v\nUsing flat structure in output directory.\n", dingoFile, err)
-		return filepath.Join(outDir, filepath.Base(base))
-	}
-
-	return filepath.Join(outDir, strings.TrimSuffix(rel, ".dingo")+".go")
+	return goPath
 }
 
 // invokeGoTool executes go build or go run with the constructed arguments
