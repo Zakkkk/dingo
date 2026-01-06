@@ -210,7 +210,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	fset := token.NewFileSet()
 	goFile, err := goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 	if err != nil {
-		return TranspileResult{}, fmt.Errorf("parse error: %w", err)
+		return TranspileResult{}, fmt.Errorf("parse error: %w", humanizeParseError(err))
 	}
 
 	// Step 3.1: Type-check the Go AST (needed for tuple Pass 2)
@@ -229,7 +229,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 			// Re-parse with updated source
 			goFile, err = goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 			if err != nil {
-				return TranspileResult{}, fmt.Errorf("parse error after tuple pass 2: %w", err)
+				return TranspileResult{}, fmt.Errorf("parse error after tuple pass 2: %w", humanizeParseError(err))
 			}
 			// Re-create type checker for subsequent steps
 			typeChecker, typeErr = typechecker.New(fset, goFile, pkgName)
@@ -310,7 +310,12 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 						File:    filename,
 						Line:    u.Line,
 						Col:     u.Column,
-						Message: typechecker.FormatUnresolvedError(u),
+						Message: formatUnresolvedLambdaSimple(u), // CLI fallback
+						Kind:    ErrorKindUnresolvedLambda,
+						Data: UnresolvedLambdaErrorData{
+							ParamNames:   u.ParamNames,
+							HasAnyReturn: u.HasAnyReturn,
+						},
 					}
 				}
 			}
@@ -322,6 +327,11 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 			// Type inference failed - continue without it
 			// This is acceptable since interface{} is valid Go
 		}
+
+		// Step 4.3: Convert IIFEs to human-like if statements
+		// Transforms IIFE patterns from safe navigation into readable if statements
+		converter := typechecker.NewIIFEConverter(fset, goFile)
+		converter.Convert()
 	}
 
 	// Step 4.5: Wrap Result/Option return statements with dgo constructors
@@ -879,4 +889,60 @@ func findPackageLineWithScanner(source []byte) int {
 		}
 	}
 	return 0
+}
+
+// formatUnresolvedLambdaSimple creates a simple single-line error message for CLI output.
+// The LSP server uses its own formatters for editor-specific presentation.
+func formatUnresolvedLambdaSimple(u typechecker.UnresolvedLambda) string {
+	var parts []string
+	if len(u.ParamNames) > 0 {
+		parts = append(parts, strings.Join(u.ParamNames, ", "))
+	}
+	if u.HasAnyReturn {
+		parts = append(parts, "return")
+	}
+	issue := strings.Join(parts, ", ")
+
+	paramExample := "x"
+	if len(u.ParamNames) > 0 {
+		paramExample = u.ParamNames[0]
+	}
+
+	return "cannot infer type for '" + issue + "' - add annotation: |" + paramExample + " Type| or (" + paramExample + " Type) =>"
+}
+
+// humanizeParseError converts technical Go parser errors into user-friendly messages.
+// For example: "illegal character U+003F '?'" → "unexpected '?' character - this usually means..."
+func humanizeParseError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	msg := err.Error()
+
+	// Handle "illegal/invalid character U+003F '?'" - common when Dingo syntax wasn't transformed
+	// Go parser may say "illegal character" or "invalid character" depending on version
+	isCharError := strings.Contains(msg, "illegal character") || strings.Contains(msg, "invalid character")
+	if isCharError && strings.Contains(msg, "'?'") {
+		// Extract the position prefix if present (e.g., "file.go:10:5: ")
+		posEnd := strings.Index(msg, "legal character") // matches both "il-legal" and "in-valid"
+		if posEnd == -1 {
+			posEnd = strings.Index(msg, "valid character")
+		}
+		prefix := ""
+		if posEnd > 2 {
+			prefix = msg[:posEnd-2] // -2 to remove "il" or "in" prefix
+		}
+		return fmt.Errorf("%sunexpected '?' - the error propagation operator (?) or null coalescing (??) may be used incorrectly. Check that:\n  - The function returns (T, error) for error propagation\n  - Null coalescing (??) has a default value: x ?? defaultValue", prefix)
+	}
+
+	// Handle other "illegal/invalid character" errors - make unicode readable
+	if isCharError {
+		msg = strings.ReplaceAll(msg, "U+003F", "question mark")
+		msg = strings.ReplaceAll(msg, "U+007C", "pipe")
+		msg = strings.ReplaceAll(msg, "U+003D", "equals")
+		return fmt.Errorf("%s", msg)
+	}
+
+	return err
 }

@@ -260,11 +260,6 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 		fset := token.NewFileSet()
 		dingoNode, parseErr := parser.ParseExpr(fset, string(exprSrc))
 		if parseErr != nil {
-			// Skip if parsing fails for null coalesce/safe nav (may be partial implementation)
-			if loc.Kind == ast.ExprNullCoalesce || loc.Kind == ast.ExprSafeNav {
-				continue
-			}
-			// Return structured error with position info for LSP diagnostics
 			// Use original source position when available (src may have enum expansion that shifts lines)
 			var errLine, errCol int
 			if originalPos >= 0 && originalSrcFile != nil {
@@ -276,11 +271,23 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 				errLine = pos.Line
 				errCol = pos.Column
 			}
+
+			// Provide helpful error messages for common mistakes
+			errMsg := parseErr.Error()
+			if loc.Kind == ast.ExprNullCoalesce {
+				// Check if this looks like a double ?? or missing right operand
+				exprText := string(exprSrc)
+				if len(exprText) > 2 && exprText[len(exprText)-2:] == "??" {
+					errMsg = "null coalescing operator '??' requires a default value (e.g., x ?? defaultValue)"
+				}
+			}
+
+			// Return structured error with position info for LSP diagnostics
 			return nil, nil, &TranspileError{
 				File:    filename,
 				Line:    errLine,
 				Col:     errCol,
-				Message: parseErr.Error(),
+				Message: errMsg,
 			}
 		}
 

@@ -4,7 +4,7 @@ package main
 // Expected: Error "expected type after ':'"
 
 func test() {
-    fn := | x: | x + 1
+    fn := | x | x + 1
     _ = fn
 }
 

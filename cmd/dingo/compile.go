@@ -15,6 +15,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
+	"github.com/MadAppGang/dingo/pkg/version"
 )
 
 // CompileOptions holds parsed compile command options
@@ -138,7 +139,7 @@ func runGoCommand(args []string, goCmd string) error {
 		// Print header
 		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 		versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-		fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version))
+		fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version.Version))
 
 		// Print build info
 		if len(opts.DingoFiles) == 1 {

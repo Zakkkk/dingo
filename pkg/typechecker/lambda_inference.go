@@ -1701,30 +1701,6 @@ func (inf *LambdaTypeInferrer) FindUnresolvedLambdas() []UnresolvedLambda {
 	return unresolved
 }
 
-// FormatUnresolvedError generates a helpful error message for an unresolved lambda.
-// Suggests typed lambda syntax: |p Product| expr or (p Product) => expr
-func FormatUnresolvedError(u UnresolvedLambda) string {
-	var parts []string
-
-	if len(u.ParamNames) > 0 {
-		parts = append(parts, "parameter types: "+strings.Join(u.ParamNames, ", "))
-	}
-	if u.HasAnyReturn {
-		parts = append(parts, "return type")
-	}
-
-	issue := strings.Join(parts, " and ")
-
-	// Build suggestion based on parameter names
-	paramExample := "x"
-	if len(u.ParamNames) > 0 {
-		paramExample = u.ParamNames[0]
-	}
-
-	return "lambda type inference failed at line " + strconv.Itoa(u.Line) +
-		": could not infer " + issue + "\n" +
-		"  Suggestion: add explicit type annotation\n" +
-		"    Rust style:       |" + paramExample + " Type| expr\n" +
-		"    TypeScript style: (" + paramExample + " Type) => expr\n" +
-		"    Full Go syntax:   func(" + paramExample + " Type) ReturnType { return expr }"
-}
+// Note: Error formatting is now handled by the LSP error_formatter.go
+// The LSP server uses ErrorFormatter interface to create editor-specific messages
+// from the structured UnresolvedLambdaErrorData in transpiler.TranspileError

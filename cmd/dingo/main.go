@@ -16,10 +16,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
-)
-
-var (
-	version = "0.4.1"
+	"github.com/MadAppGang/dingo/pkg/version"
 )
 
 func main() {
@@ -29,11 +26,11 @@ func main() {
 		Long: `Dingo is a meta-language that transpiles to idiomatic Go code.
 It provides Result/Option types, pattern matching, error propagation,
 and other quality-of-life features while maintaining 100% Go ecosystem compatibility.`,
-		Version: version,
+		Version: version.Version,
 		SilenceUsage:  true, // Don't show usage on errors
 		SilenceErrors: true, // We handle error display ourselves
 		Run: func(cmd *cobra.Command, args []string) {
-			ui.PrintDingoHelp(version)
+			ui.PrintDingoHelp(version.Version)
 		},
 	}
 
@@ -44,7 +41,7 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		// Only use custom help for root command, not subcommands
 		if cmd == rootCmd {
-			ui.PrintDingoHelp(version)
+			ui.PrintDingoHelp(version.Version)
 		} else {
 			// Use default help for subcommands
 			defaultHelpFunc(cmd, args)
@@ -118,7 +115,7 @@ func versionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version number of Dingo",
 		Run: func(cmd *cobra.Command, args []string) {
-			ui.PrintVersionInfo(version)
+			ui.PrintVersionInfo(version.Version)
 		},
 	}
 }
@@ -155,7 +152,7 @@ func runTranspile(files []string, output, outdir string, watch bool) error {
 	// Print header
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
 	versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-	fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version))
+	fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version.Version))
 
 	// Print build start
 	if len(expandedFiles) == 1 {

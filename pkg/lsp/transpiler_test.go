@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseTranspileError_NilError(t *testing.T) {
-	diag := ParseTranspileError("test.dingo", nil)
+	diag := ParseTranspileError("test.dingo", nil, &SimpleFormatter{})
 	if diag != nil {
 		t.Errorf("expected nil diagnostic for nil error, got: %+v", diag)
 	}
@@ -25,7 +25,7 @@ func TestParseTranspileError_TranspileError(t *testing.T) {
 		Message: "unexpected token",
 	}
 
-	diag := ParseTranspileError("test.dingo", err)
+	diag := ParseTranspileError("test.dingo", err, &SimpleFormatter{})
 	if diag == nil {
 		t.Fatal("expected diagnostic, got nil")
 	}
@@ -59,7 +59,7 @@ func TestParseTranspileError_ScannerErrorList(t *testing.T) {
 	}
 	wrappedErr := fmt.Errorf("parse error: %w", errList)
 
-	diag := ParseTranspileError("test.dingo", wrappedErr)
+	diag := ParseTranspileError("test.dingo", wrappedErr, &SimpleFormatter{})
 	if diag == nil {
 		t.Fatal("expected diagnostic, got nil")
 	}
@@ -86,7 +86,7 @@ func TestParseTranspileError_ScannerErrorList(t *testing.T) {
 func TestParseTranspileError_GenericError(t *testing.T) {
 	err := fmt.Errorf("some generic error")
 
-	diag := ParseTranspileError("test.dingo", err)
+	diag := ParseTranspileError("test.dingo", err, &SimpleFormatter{})
 	if diag == nil {
 		t.Fatal("expected diagnostic, got nil")
 	}
@@ -109,7 +109,7 @@ func TestParseTranspileError_WrappedTranspileError(t *testing.T) {
 	}
 	wrappedErr := fmt.Errorf("AST transform error: %w", innerErr)
 
-	diag := ParseTranspileError("test.dingo", wrappedErr)
+	diag := ParseTranspileError("test.dingo", wrappedErr, &SimpleFormatter{})
 	if diag == nil {
 		t.Fatal("expected diagnostic, got nil")
 	}

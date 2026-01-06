@@ -17,6 +17,8 @@ import (
 )
 
 // === 1. ENUM ===
+//
+//line examples/101_combined//showcase.dingo:17:1
 type Status interface{ isStatus() }
 
 type StatusPending struct{}
@@ -33,6 +35,8 @@ type StatusDone struct{ code int }
 
 func (StatusDone) isStatus()        {}
 func NewStatusDone(code int) Status { return StatusDone{code: code} }
+
+//line examples/101_combined//showcase.dingo:22:1
 
 // === Types ===
 type User struct {
@@ -149,13 +153,10 @@ func demo() string {
 	}
 
 	// === 8. SAFE NAVIGATION ===
-	userLang := func() *string {
-		tmp := user.Settings
-		if tmp == nil {
-			return nil
-		}
-		return tmp.Language
-	}()
+	var userLang *string
+	if user.Settings != nil {
+		userLang = user.Settings.Language
+	}
 
 	// === 10. NULL COALESCE ===
 	displayLang := func() string {
@@ -167,6 +168,7 @@ func demo() string {
 
 	// === 9. TERNARY ===
 	// BUG: Generates assignment without declaration - See BUGS.md Bug 2
+	//line examples/101_combined//showcase.dingo:124:14
 	var greeting any
 	if user.ID > 0 {
 		greeting = "Welcome"
@@ -176,6 +178,7 @@ func demo() string {
 
 	// === 2. MATCH ===
 	status := NewStatusActive("working")
+	//line examples/101_combined//showcase.dingo:128:15
 	var statusMsg string
 	val := status
 	switch v1 := val.(type) {

@@ -398,6 +398,18 @@ md5 editors/vscode/server/bin/dingo-lsp
 | `dingo-lsp` | `go build -o /Users/jack/go/bin/dingo-lsp ./cmd/dingo-lsp` | **Must be in `$PATH`** |
 | `lsp-hovercheck` | `go build -o lsp-hovercheck ./cmd/lsp-hovercheck` | Local (test tool) |
 
+### Version Management
+
+All Dingo binaries share the same version defined in `pkg/version/version.go`:
+
+```go
+const Version = "0.4.1"
+```
+
+When releasing a new version, update this single file. Both `dingo` and `dingo-lsp` will use it:
+- `dingo version` - shows version
+- `dingo-lsp --version` - shows version
+
 ## References
 
 - Research: `ai-docs/claude-research.md`, `ai-docs/gemini_research.md`

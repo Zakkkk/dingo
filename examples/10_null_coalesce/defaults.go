@@ -34,7 +34,7 @@ type EnvConfig struct {
 // GetHost returns configured host or default
 func GetHost(config *AppConfig) string {
 	// If config is nil or Host is nil, return default
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:37:9
+	//line examples/10_null_coalesce//defaults.dingo:37:9
 	if config != nil && config.Host != nil {
 		return *config.Host
 	}
@@ -43,7 +43,7 @@ func GetHost(config *AppConfig) string {
 
 // GetPort returns configured port or default
 func GetPort(config *AppConfig) int {
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:42:9
+	//line examples/10_null_coalesce//defaults.dingo:42:9
 	if config != nil && config.Port != nil {
 		return *config.Port
 	}
@@ -58,7 +58,7 @@ func GetTimeout(config *AppConfig) int {
 		// Parse would go here in real code
 		return 30
 	}
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:53:9
+	//line examples/10_null_coalesce//defaults.dingo:53:9
 	if config != nil && config.Timeout != nil {
 		return *config.Timeout
 	}
@@ -67,7 +67,7 @@ func GetTimeout(config *AppConfig) int {
 
 // GetLogLevel - ?? for pointer, ternary for empty string fallback
 func GetLogLevel(config *AppConfig) string {
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:58:11
+	//line examples/10_null_coalesce//defaults.dingo:58:11
 	var level string
 	if config != nil && config.LogLevel != nil {
 		level = *config.LogLevel
@@ -75,7 +75,7 @@ func GetLogLevel(config *AppConfig) string {
 		level = ""
 	}
 	envLevel := os.Getenv("LOG_LEVEL")
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:60:9
+	//line examples/10_null_coalesce//defaults.dingo:60:9
 	if level != "" {
 		return level
 	}
@@ -87,7 +87,7 @@ func GetLogLevel(config *AppConfig) string {
 
 // GetDatabaseURL - ?? for pointer, ternary for empty string fallback
 func GetDatabaseURL(env *EnvConfig) string {
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:65:9
+	//line examples/10_null_coalesce//defaults.dingo:65:9
 	var url string
 	if env != nil && env.DatabaseURL != nil {
 		url = *env.DatabaseURL
@@ -95,7 +95,7 @@ func GetDatabaseURL(env *EnvConfig) string {
 		url = ""
 	}
 	envUrl := os.Getenv("DATABASE_URL")
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:67:9
+	//line examples/10_null_coalesce//defaults.dingo:67:9
 	if url != "" {
 		return url
 	}
@@ -109,7 +109,7 @@ func GetDatabaseURL(env *EnvConfig) string {
 func GetRegion(env *EnvConfig) string {
 	// Use len(env?.Region) > 0 to check if region is set and non-empty
 	// Null-state inference: env?.Region in true branch becomes *env.Region (no IIFE)
-	//line /Users/jack/mag/dingo/examples/10_null_coalesce/defaults.dingo:74:9
+	//line examples/10_null_coalesce//defaults.dingo:74:9
 	var tmp int
 	if env != nil && env.Region != nil {
 		tmp = len(*env.Region)

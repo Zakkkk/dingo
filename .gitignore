@@ -100,3 +100,7 @@ specs/tools
 
 # VS Code compiled output
 editors/vscode/out/
+
+editors/goland/.intellijPlatform
+editors/goland/.gradle
+editors/goland/build

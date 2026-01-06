@@ -17,7 +17,7 @@ import "fmt"
 // APIResponse models all possible responses from our payment API
 // Each variant has different data - impossible to confuse them
 //
-//line /Users/jack/mag/dingo/examples/05_sum_types/api_response.dingo:19:1
+//line examples/05_sum_types//api_response.dingo:19:1
 type APIResponse interface{ isAPIResponse() }
 
 type APIResponseSuccess struct {
@@ -64,11 +64,11 @@ func NewAPIResponseServerError(requestID string) APIResponse {
 	return APIResponseServerError{requestID: requestID}
 }
 
-//line /Users/jack/mag/dingo/examples/05_sum_types/api_response.dingo:26:1
+//line examples/05_sum_types//api_response.dingo:26:1
 
 // PaymentStatus tracks the state of a payment
 //
-//line /Users/jack/mag/dingo/examples/05_sum_types/api_response.dingo:28:1
+//line examples/05_sum_types//api_response.dingo:28:1
 type PaymentStatus interface{ isPaymentStatus() }
 
 type PaymentStatusPending struct{}
@@ -113,7 +113,7 @@ func NewPaymentStatusRefunded(refundID string, amount float64) PaymentStatus {
 	return PaymentStatusRefunded{refundID: refundID, amount: amount}
 }
 
-//line /Users/jack/mag/dingo/examples/05_sum_types/api_response.dingo:35:1
+//line examples/05_sum_types//api_response.dingo:35:1
 
 // HandleAPIResponse processes the response appropriately
 // Uses type switch - idiomatic Go pattern for sum types

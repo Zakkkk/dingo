@@ -2,7 +2,7 @@
 
 Syntax highlighting and language support for [Dingo](https://dingolang.com) - a modern meta-language for Go with Result types, error propagation, pattern matching, and more.
 
-![Dingo LSP Demo](dingo-lsp-demo.gif)
+![Dingo LSP Demo](https://madappgangua.s3.amazonaws.com/Share/dingo/dingo-lsp-demo.gif)
 
 ## Features
 

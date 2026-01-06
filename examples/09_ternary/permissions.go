@@ -31,6 +31,7 @@ type User struct {
 
 // GetUserStatus returns status based on admin flag
 func GetUserStatus(user User) string {
+	//line examples/09_ternary//permissions.dingo:34:9
 	if user.IsAdmin {
 		return "Administrator"
 	}
@@ -39,6 +40,7 @@ func GetUserStatus(user User) string {
 
 // GetAgeCategory returns category based on age (nested ternary)
 func GetAgeCategory(age int) string {
+	//line examples/09_ternary//permissions.dingo:39:9
 	if age >= 65 {
 		return "Senior"
 	}
@@ -50,6 +52,7 @@ func GetAgeCategory(age int) string {
 
 // GetDisplayName returns formatted name with optional badge
 func GetDisplayName(user User) string {
+	//line examples/09_ternary//permissions.dingo:44:9
 	if user.Verified {
 		return fmt.Sprintf("%s ✓", user.Name)
 	}
@@ -58,6 +61,7 @@ func GetDisplayName(user User) string {
 
 // GetAccessLevel returns numeric access level (nested ternary with int)
 func GetAccessLevel(isAdmin bool, isVerified bool) int {
+	//line examples/09_ternary//permissions.dingo:49:9
 	if isAdmin {
 		return 100
 	}

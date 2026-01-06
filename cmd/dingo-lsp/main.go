@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 
 	"github.com/MadAppGang/dingo/pkg/lsp"
+	"github.com/MadAppGang/dingo/pkg/version"
 	"go.lsp.dev/jsonrpc2"
 )
 
@@ -15,6 +17,12 @@ const maxLogSize = 5 * 1024 * 1024 // 5MB max log file size
 var logger lsp.Logger
 
 func main() {
+	// Handle --version flag
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("dingo-lsp %s\n", version.Version)
+		return
+	}
+
 	// Configure logging from environment variable
 	logLevel := os.Getenv("DINGO_LSP_LOG")
 	if logLevel == "" {

@@ -95,7 +95,12 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 		at.logger.Errorf("Auto-transpile failed for %s: %v", dingoPath, err)
 
 		// Publish Dingo-specific diagnostic for transpilation error
-		diagnostic := ParseTranspileError(dingoPath, err)
+		// Use editor-appropriate formatter for error messages
+		var formatter ErrorFormatter = &SimpleFormatter{}
+		if at.server != nil {
+			formatter = GetFormatterForEditor(at.server.editorType)
+		}
+		diagnostic := ParseTranspileError(dingoPath, err, formatter)
 		if diagnostic != nil && at.server != nil {
 			at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
 		}
@@ -131,7 +136,10 @@ func (at *AutoTranspiler) SyncGoplsWithGoFile(ctx context.Context, goPath string
 // - *transpiler.TranspileError: Structured errors from Dingo transpiler
 // - scanner.ErrorList: Errors from Go parser (wrapped by pure_pipeline.go)
 // - Generic errors: Fall back to line 0
-func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
+//
+// The formatter parameter formats error messages for the specific editor.
+// Use GetFormatterForEditor() to get the appropriate formatter.
+func ParseTranspileError(dingoPath string, err error, formatter ErrorFormatter) *protocol.Diagnostic {
 	if err == nil {
 		return nil
 	}
@@ -143,6 +151,12 @@ func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
 		startChar, endChar := 0, 1
 		if transpileErr.Line > 0 {
 			startChar, endChar = getLineRange(dingoPath, transpileErr.Line)
+		}
+
+		// Use formatter to create editor-appropriate message
+		message := transpileErr.Message
+		if formatter != nil {
+			message = formatter.Format(transpileErr)
 		}
 
 		return &protocol.Diagnostic{
@@ -158,7 +172,7 @@ func ParseTranspileError(dingoPath string, err error) *protocol.Diagnostic {
 			},
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "dingo",
-			Message:  transpileErr.Message,
+			Message:  message,
 		}
 	}
 
