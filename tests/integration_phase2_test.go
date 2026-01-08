@@ -18,6 +18,14 @@ func TestIntegrationPhase2EndToEnd(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// Create a go.mod file for the shadow build system
+	goModContent := `module test
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// Test case 1: Error propagation with error handling
 	t.Run("error_propagation_result_type", func(t *testing.T) {
 		dingoFile := filepath.Join(tmpDir, "test_result.dingo")
@@ -48,8 +56,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		// dingo build uses in-place output (.go next to .dingo)
-		goFile := filepath.Join(tmpDir, "test_result.go")
+		// dingo build uses shadow build system - output goes to build/
+		goFile := filepath.Join(tmpDir, "build", "test_result.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -59,11 +67,12 @@ func main() {
 
 		// Verify .go file was created in build/ folder
 		if _, err := os.Stat(goFile); os.IsNotExist(err) {
-			t.Fatal("Generated .go file not found")
+			t.Fatal("Generated .go file not found at " + goFile)
 		}
 
-		// Compile the generated Go file
+		// Compile the generated Go file from the shadow build directory
 		cmd = exec.Command("go", "build", "-o", filepath.Join(tmpDir, "test_result"), goFile)
+		cmd.Dir = filepath.Join(tmpDir, "build") // Run from shadow dir for module resolution
 		output, err = cmd.CombinedOutput()
 		if err != nil {
 			t.Logf("Generated Go file:\n%s", mustReadFile(t, goFile))
@@ -99,8 +108,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		// dingo build uses in-place output (.go next to .dingo)
-		goFile := filepath.Join(tmpDir, "test_enum.go")
+		// dingo build uses shadow build system - output goes to build/
+		goFile := filepath.Join(tmpDir, "build", "test_enum.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -110,11 +119,12 @@ func main() {
 
 		// Verify .go file was created in build/ folder
 		if _, err := os.Stat(goFile); os.IsNotExist(err) {
-			t.Fatal("Generated .go file not found")
+			t.Fatal("Generated .go file not found at " + goFile)
 		}
 
-		// Compile the generated Go file
+		// Compile the generated Go file from the shadow build directory
 		cmd = exec.Command("go", "build", "-o", filepath.Join(tmpDir, "test_enum"), goFile)
+		cmd.Dir = filepath.Join(tmpDir, "build") // Run from shadow dir for module resolution
 		output, err = cmd.CombinedOutput()
 		if err != nil {
 			t.Logf("Generated Go file:\n%s", mustReadFile(t, goFile))

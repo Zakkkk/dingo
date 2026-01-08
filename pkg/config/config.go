@@ -69,8 +69,16 @@ type BuildConfig struct {
 	// When set, all .go and .dmap files are written to this directory
 	// and source directory structure is mirrored. Pure .go files are
 	// automatically copied to maintain a buildable output tree.
-	// Empty string (default) means output files are placed alongside source files.
+	// Default: "build" (shadow build directory)
 	OutDir string `toml:"outdir"`
+
+	// Shadow enables the shadow build system
+	// When true: Creates a shadow directory (build/) with go.mod, generated .go files,
+	// and copies of pure .go files. Go toolchain runs from within the shadow directory.
+	// This keeps source directories clean.
+	// When false: Falls back to in-place generation (.go files next to .dingo files)
+	// Default: true
+	Shadow bool `toml:"shadow"`
 
 	// TranspileMode selects the transpilation strategy
 	// Valid values: "ast" (only)
@@ -315,8 +323,9 @@ func DefaultConfig() *Config {
 			KeepMarkers: false, // Default to clean output for production
 		},
 		Build: BuildConfig{
-			OutDir:        "",    // Default to placing output alongside source
-			TranspileMode: "ast", // Default to AST mode (only available mode)
+			OutDir:        "build", // Default shadow build directory
+			Shadow:        true,    // Default to shadow build system
+			TranspileMode: "ast",   // Default to AST mode (only available mode)
 		},
 		TypeInference: TypeInferenceConfig{
 			GoplsEnabled: false, // Default to disabled for CI compatibility

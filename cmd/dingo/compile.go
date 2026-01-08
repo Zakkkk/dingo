@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/ui"
@@ -112,10 +113,6 @@ func runGoCommand(args []string, goCmd string) error {
 		cfg = config.DefaultConfig()
 	}
 
-	// Force in-place generation - go build/run need .go files next to .dingo files
-	cfg.Build.OutDir = ""
-	opts.OutDir = cfg.Build.OutDir
-
 	// Resolve package paths to .dingo files
 	if err := resolveDingoFiles(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -148,6 +145,21 @@ func runGoCommand(args []string, goCmd string) error {
 			fmt.Printf("Building %d files\n", len(opts.DingoFiles))
 		}
 	}
+
+	// Check if shadow build is enabled (default: true)
+	if cfg.Build.Shadow {
+		return runWithShadowBuild(opts, cfg, buildUI, goCmd)
+	}
+
+	// Fall back to in-place generation
+	return runWithInPlaceBuild(opts, cfg, buildUI, goCmd)
+}
+
+// runWithInPlaceBuild uses in-place generation (legacy mode)
+func runWithInPlaceBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.SimpleBuildUI, goCmd string) error {
+	// Force in-place generation
+	cfg.Build.OutDir = ""
+	opts.OutDir = ""
 
 	// Step 1: Transpile .dingo files with UI
 	generatedFiles, err := transpileDingoFilesWithUI(opts, buildUI)
@@ -204,6 +216,192 @@ func runGoCommand(args []string, goCmd string) error {
 	}
 
 	return nil
+}
+
+// runWithShadowBuild uses the shadow build system for compilation
+func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.SimpleBuildUI, goCmd string) error {
+	// Find workspace root
+	var workspaceRoot string
+	var err error
+
+	if len(opts.DingoFiles) > 0 {
+		workspaceRoot, err = shadow.FindWorkspaceRoot(opts.DingoFiles[0])
+	} else if len(opts.PackagePaths) > 0 {
+		workspaceRoot, err = shadow.FindWorkspaceRoot(opts.PackagePaths[0])
+	} else {
+		workspaceRoot, err = shadow.FindWorkspaceRoot(".")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to find workspace root: %w", err)
+	}
+
+	// Determine shadow directory name
+	shadowDir := cfg.Build.OutDir
+	if shadowDir == "" {
+		shadowDir = "build"
+	}
+
+	// Create shadow builder
+	builder := shadow.NewBuilder(workspaceRoot, shadowDir, cfg)
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
+	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
+	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
+	arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+	outputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
+
+	// Step 1: Build shadow directory
+	var result *shadow.BuildResult
+	var shadowDuration time.Duration
+
+	if buildUI != nil {
+		buildUI.SetStatus(mascot.StateCompiling, "Building shadow...", "")
+		err = runWithSpinnerCompile("Shadow", func() error {
+			start := time.Now()
+			var buildErr error
+			result, buildErr = builder.Build(opts.DingoFiles)
+			shadowDuration = time.Since(start)
+			return buildErr
+		})
+	} else {
+		start := time.Now()
+		result, err = builder.Build(opts.DingoFiles)
+		shadowDuration = time.Since(start)
+	}
+
+	if err != nil {
+		if buildUI != nil {
+			buildUI.SetStatus(mascot.StateFailed, "Shadow build failed!", "see error above")
+		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return err
+	}
+
+	if buildUI != nil {
+		fmt.Printf("  %s Shadow      Done %s\n",
+			successStyle.Render("✓"),
+			timeStyle.Render("("+formatDuration(shadowDuration)+")"))
+		fmt.Printf("    %s\n",
+			timeStyle.Render(fmt.Sprintf("%d files transpiled, %d files copied",
+				len(result.GeneratedFiles), len(result.CopiedFiles))))
+
+		// Show file mappings
+		for _, dingoFile := range opts.DingoFiles {
+			relDingo, _ := filepath.Rel(workspaceRoot, dingoFile)
+			relGo := strings.TrimSuffix(relDingo, ".dingo") + ".go"
+			fmt.Printf("    %s %s %s\n",
+				inputStyle.Render(relDingo),
+				arrowStyle.Render("→"),
+				outputStyle.Render(shadowDir+"/"+relGo))
+		}
+		fmt.Println()
+	}
+
+	// Step 2: Run go build/run from shadow directory
+	var goDuration time.Duration
+	var goErr error
+
+	if buildUI != nil {
+		buildUI.SetStatus(mascot.StateCompiling, "Running go "+goCmd+"...", "")
+		goErr = runWithSpinnerCompile("Go "+goCmd, func() error {
+			start := time.Now()
+			err := invokeGoToolFromShadow(opts, result, goCmd, workspaceRoot)
+			goDuration = time.Since(start)
+			return err
+		})
+	} else {
+		start := time.Now()
+		goErr = invokeGoToolFromShadow(opts, result, goCmd, workspaceRoot)
+		goDuration = time.Since(start)
+	}
+
+	if goErr != nil {
+		if buildUI != nil {
+			buildUI.SetStatus(mascot.StateFailed, "Go "+goCmd+" failed!", "see error above")
+		}
+		return goErr
+	}
+
+	// Show Go step completion
+	if buildUI != nil {
+		fmt.Printf("  %s Go %s    Done %s\n\n",
+			successStyle.Render("✓"),
+			goCmd,
+			timeStyle.Render("("+formatDuration(goDuration)+")"))
+	}
+
+	// Success!
+	if buildUI != nil {
+		if goCmd == "build" {
+			buildUI.SetStatus(mascot.StateSuccess, "Build successful!", fmt.Sprintf("%d file(s) compiled", len(result.GeneratedFiles)))
+		} else {
+			buildUI.SetStatus(mascot.StateSuccess, "Run complete!", "")
+		}
+	}
+
+	return nil
+}
+
+// invokeGoToolFromShadow executes go build or go run from the shadow directory
+func invokeGoToolFromShadow(opts *CompileOptions, result *shadow.BuildResult, goCmd string, workspaceRoot string) error {
+	// Build argument list
+	args := []string{goCmd}
+
+	// Add -o flag with path relative to shadow (output goes to workspace root)
+	if opts.OutputPath != "" && goCmd == "build" {
+		// Make output path absolute relative to workspace root
+		outputPath := opts.OutputPath
+		if !filepath.IsAbs(outputPath) {
+			outputPath = filepath.Join(workspaceRoot, outputPath)
+		}
+		args = append(args, "-o", outputPath)
+	} else if goCmd == "build" {
+		// Default output name: binary goes to workspace root
+		// Get the package name or main file name
+		var binaryName string
+		if len(opts.PackagePaths) > 0 {
+			binaryName = filepath.Base(opts.PackagePaths[0])
+		} else if len(opts.DingoFiles) > 0 {
+			binaryName = strings.TrimSuffix(filepath.Base(opts.DingoFiles[0]), ".dingo")
+		} else {
+			binaryName = "main"
+		}
+		args = append(args, "-o", filepath.Join(workspaceRoot, binaryName))
+	}
+
+	// Add Go flags from GoArgs (excluding package paths which we handle differently)
+	for _, arg := range opts.GoArgs {
+		// Skip package paths - we'll specify them relative to shadow
+		if !strings.HasPrefix(arg, "-") && !strings.HasSuffix(arg, ".go") {
+			continue
+		}
+		args = append(args, arg)
+	}
+
+	// For file mode, add the generated .go files
+	if len(opts.PackagePaths) == 0 && len(result.GeneratedFiles) > 0 {
+		// Convert to paths relative to shadow directory
+		for _, goFile := range result.GeneratedFiles {
+			relPath, _ := filepath.Rel(result.ShadowDir, goFile)
+			args = append(args, relPath)
+		}
+	} else if len(opts.PackagePaths) > 0 {
+		// Package mode - use "." since we're running from shadow
+		args = append(args, ".")
+	}
+
+	// Verbose: print the command
+	if opts.Verbose {
+		fmt.Printf("+ cd %s && go %s\n", result.ShadowDir, strings.Join(args, " "))
+	}
+
+	cmd := exec.Command("go", args...)
+	cmd.Dir = result.ShadowDir // Run from shadow directory
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	return cmd.Run()
 }
 
 // parseCompileArgs separates dingo options from go build args

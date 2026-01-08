@@ -15,9 +15,19 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
+	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/version"
 )
+
+// transpileForWatch transpiles a .dingo file and returns the Go code
+func transpileForWatch(src []byte, filename string) ([]byte, error) {
+	result, err := transpiler.PureASTTranspileWithMappings(src, filename, true)
+	if err != nil {
+		return nil, err
+	}
+	return result.GoCode, nil
+}
 
 // watchDebounce is the debounce duration for file changes
 const watchDebounce = 500 * time.Millisecond
@@ -36,6 +46,11 @@ type ProcessManager struct {
 
 // Start starts the process with the given command and arguments
 func (pm *ProcessManager) Start(goFiles []string, programArgs []string) error {
+	return pm.StartFromDir("", goFiles, programArgs)
+}
+
+// StartFromDir starts the process from a specific directory
+func (pm *ProcessManager) StartFromDir(dir string, goFiles []string, programArgs []string) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -44,13 +59,31 @@ func (pm *ProcessManager) Start(goFiles []string, programArgs []string) error {
 	pm.cancel = cancel
 	pm.doneCh = make(chan struct{})
 
+	// Convert absolute paths to relative paths if running from a specific directory
+	var relFiles []string
+	if dir != "" {
+		for _, goFile := range goFiles {
+			relPath, err := filepath.Rel(dir, goFile)
+			if err == nil {
+				relFiles = append(relFiles, relPath)
+			} else {
+				relFiles = append(relFiles, goFile)
+			}
+		}
+	} else {
+		relFiles = goFiles
+	}
+
 	args := []string{"run"}
-	args = append(args, goFiles...)
+	args = append(args, relFiles...)
 	if len(programArgs) > 0 {
 		args = append(args, programArgs...)
 	}
 
 	pm.cmd = exec.CommandContext(ctx, "go", args...)
+	if dir != "" {
+		pm.cmd.Dir = dir
+	}
 	pm.cmd.Stdout = os.Stdout
 	pm.cmd.Stderr = os.Stderr
 	pm.cmd.Stdin = os.Stdin
@@ -124,6 +157,8 @@ type WatchRunner struct {
 	styles         watchStyles
 	generatedFiles map[string]bool // Set of generated .go files to ignore
 	mu             sync.Mutex      // Protects generatedFiles and rebuild operations
+	workspaceRoot  string          // Path to go.mod
+	shadowBuilder  *shadow.Builder // Shadow build manager
 }
 
 type watchStyles struct {
@@ -197,9 +232,6 @@ func runWatch(args []string) error {
 		cfg = config.DefaultConfig()
 	}
 
-	// Force in-place generation for watch mode
-	cfg.Build.OutDir = ""
-
 	// Resolve package paths to .dingo files
 	if err := resolveDingoFiles(opts); err != nil {
 		return err
@@ -216,6 +248,24 @@ func runWatch(args []string) error {
 		pm:             &ProcessManager{},
 		styles:         newWatchStyles(),
 		generatedFiles: make(map[string]bool),
+	}
+
+	// Set up shadow builder if shadow mode is enabled
+	if cfg.Build.Shadow {
+		// Find workspace root
+		workspaceRoot, err := shadow.FindWorkspaceRoot(opts.DingoFiles[0])
+		if err != nil {
+			return fmt.Errorf("failed to find workspace root: %w", err)
+		}
+
+		// Determine shadow directory name
+		shadowDir := cfg.Build.OutDir
+		if shadowDir == "" {
+			shadowDir = "build"
+		}
+
+		wr.workspaceRoot = workspaceRoot
+		wr.shadowBuilder = shadow.NewBuilder(workspaceRoot, shadowDir, cfg)
 	}
 
 	return wr.Run()
@@ -420,21 +470,37 @@ func (wr *WatchRunner) isWatchedFile(path string) bool {
 }
 
 func (wr *WatchRunner) buildAndRun() ([]string, error) {
-	// Transpile .dingo files
-	goFiles, err := wr.transpileFiles()
+	// Use shadow build if configured
+	if wr.shadowBuilder != nil {
+		return wr.buildAndRunShadow()
+	}
+	return wr.buildAndRunInPlace()
+}
+
+func (wr *WatchRunner) buildAndRunShadow() ([]string, error) {
+	// Build shadow directory (transpile + copy)
+	result, err := wr.shadowBuilder.Build(wr.dingoFiles)
 	if err != nil {
 		return nil, err
 	}
 
-	// Start the process
-	if err := wr.pm.Start(goFiles, wr.programArgs); err != nil {
+	// Track generated files to avoid triggering rebuilds
+	wr.mu.Lock()
+	for _, goFile := range result.GeneratedFiles {
+		wr.generatedFiles[goFile] = true
+	}
+	wr.mu.Unlock()
+
+	// Start the process from shadow directory
+	if err := wr.pm.StartFromDir(result.ShadowDir, result.GeneratedFiles, wr.programArgs); err != nil {
 		return nil, err
 	}
 
-	return goFiles, nil
+	return result.GeneratedFiles, nil
 }
 
-func (wr *WatchRunner) transpileFiles() ([]string, error) {
+func (wr *WatchRunner) buildAndRunInPlace() ([]string, error) {
+	// Transpile .dingo files in-place
 	var goFiles []string
 
 	for _, dingoFile := range wr.dingoFiles {
@@ -444,13 +510,13 @@ func (wr *WatchRunner) transpileFiles() ([]string, error) {
 			return nil, fmt.Errorf("failed to read %s: %w", dingoFile, err)
 		}
 
-		// Transpile
-		result, err := transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
+		// Transpile using pkg/transpiler
+		result, err := transpileForWatch(src, dingoFile)
 		if err != nil {
 			return nil, fmt.Errorf("transpilation error in %s: %w", dingoFile, err)
 		}
 
-		// Compute output path (in-place for watch mode)
+		// Compute output path (in-place)
 		goFile := strings.TrimSuffix(dingoFile, ".dingo") + ".go"
 
 		// Track this as a generated file (to ignore changes to it)
@@ -462,11 +528,16 @@ func (wr *WatchRunner) transpileFiles() ([]string, error) {
 		}
 
 		// Write .go file
-		if err := os.WriteFile(goFile, result.GoCode, 0644); err != nil {
+		if err := os.WriteFile(goFile, result, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write %s: %w", goFile, err)
 		}
 
 		goFiles = append(goFiles, goFile)
+	}
+
+	// Start the process
+	if err := wr.pm.Start(goFiles, wr.programArgs); err != nil {
+		return nil, err
 	}
 
 	return goFiles, nil
