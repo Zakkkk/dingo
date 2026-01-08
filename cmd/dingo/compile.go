@@ -138,12 +138,7 @@ func runGoCommand(args []string, goCmd string) error {
 		versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
 		fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version.Version))
 
-		// Print build info
-		if len(opts.DingoFiles) == 1 {
-			fmt.Println("Building 1 file")
-		} else {
-			fmt.Printf("Building %d files\n", len(opts.DingoFiles))
-		}
+		// Note: actual file count will be shown during shadow build discovery
 	}
 
 	// Check if shadow build is enabled (default: true)
@@ -246,23 +241,69 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
-	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
-	arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-	outputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
+	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+
+	// Set up progress callback for scrolling display
+	const maxVisibleFiles = 8
+	var recentFiles []string
+	var fileCountShown bool
+
+	if buildUI != nil {
+		builder.OnProgress = func(current, total int, file string) {
+			// Show file count on first callback
+			if !fileCountShown {
+				if total == 1 {
+					fmt.Println("Building 1 file")
+				} else {
+					fmt.Printf("Building %d files\n", total)
+				}
+				fmt.Println()
+				fileCountShown = true
+			}
+
+			// Update recent files list
+			recentFiles = append(recentFiles, file)
+			if len(recentFiles) > maxVisibleFiles {
+				recentFiles = recentFiles[1:]
+			}
+
+			// Clear previous lines and redraw (ANSI escape codes)
+			linesToClear := len(recentFiles)
+			if linesToClear > 1 {
+				// Move cursor up and clear lines
+				fmt.Printf("\033[%dA", linesToClear-1)
+			}
+
+			// Show progress bar
+			progressWidth := 30
+			filled := (current * progressWidth) / total
+			bar := strings.Repeat("█", filled) + strings.Repeat("░", progressWidth-filled)
+			fmt.Printf("\r\033[K  %s %s %d/%d\n",
+				dimStyle.Render("["+bar+"]"),
+				dimStyle.Render("Transpiling"),
+				current, total)
+
+			// Show recent files
+			for i, f := range recentFiles {
+				status := "  "
+				if i == len(recentFiles)-1 {
+					status = successStyle.Render("✓ ")
+				}
+				fmt.Printf("\033[K%s%s\n", status, fileStyle.Render(f))
+			}
+		}
+	}
 
 	// Step 1: Build shadow directory
 	var result *shadow.BuildResult
 	var shadowDuration time.Duration
 
 	if buildUI != nil {
-		buildUI.SetStatus(mascot.StateCompiling, "Building shadow...", "")
-		err = runWithSpinnerCompile("Shadow", func() error {
-			start := time.Now()
-			var buildErr error
-			result, buildErr = builder.Build(opts.DingoFiles)
-			shadowDuration = time.Since(start)
-			return buildErr
-		})
+		buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", "please wait")
+		start := time.Now()
+		result, err = builder.Build(opts.DingoFiles)
+		shadowDuration = time.Since(start)
 	} else {
 		start := time.Now()
 		result, err = builder.Build(opts.DingoFiles)
@@ -278,22 +319,18 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 	}
 
 	if buildUI != nil {
-		fmt.Printf("  %s Shadow      Done %s\n",
-			successStyle.Render("✓"),
-			timeStyle.Render("("+formatDuration(shadowDuration)+")"))
-		fmt.Printf("    %s\n",
-			timeStyle.Render(fmt.Sprintf("%d files transpiled, %d files copied",
-				len(result.GeneratedFiles), len(result.CopiedFiles))))
-
-		// Show file mappings
-		for _, dingoFile := range opts.DingoFiles {
-			relDingo, _ := filepath.Rel(workspaceRoot, dingoFile)
-			relGo := strings.TrimSuffix(relDingo, ".dingo") + ".go"
-			fmt.Printf("    %s %s %s\n",
-				inputStyle.Render(relDingo),
-				arrowStyle.Render("→"),
-				outputStyle.Render(shadowDir+"/"+relGo))
+		// Clear the progress display
+		fmt.Printf("\033[%dA", len(recentFiles)+1)
+		for i := 0; i <= len(recentFiles); i++ {
+			fmt.Print("\033[K\n")
 		}
+		fmt.Printf("\033[%dA", len(recentFiles)+1)
+
+		// Show completion summary
+		fmt.Printf("  %s Transpile   %d files %s\n",
+			successStyle.Render("✓"),
+			len(result.GeneratedFiles),
+			timeStyle.Render("("+formatDuration(shadowDuration)+")"))
 		fmt.Println()
 	}
 
@@ -378,12 +415,15 @@ func invokeGoToolFromShadow(opts *CompileOptions, result *shadow.BuildResult, go
 		args = append(args, arg)
 	}
 
-	// For file mode, add the generated .go files
-	if len(opts.PackagePaths) == 0 && len(result.GeneratedFiles) > 0 {
-		// Convert to paths relative to shadow directory
-		for _, goFile := range result.GeneratedFiles {
-			relPath, _ := filepath.Rel(result.ShadowDir, goFile)
-			args = append(args, relPath)
+	// For file mode, add only the .go files corresponding to the specified .dingo files
+	if len(opts.PackagePaths) == 0 && len(opts.DingoFiles) > 0 {
+		// Build only the files that correspond to the originally specified .dingo files
+		for _, dingoFile := range opts.DingoFiles {
+			// Get relative path from workspace root
+			absDingo, _ := filepath.Abs(dingoFile)
+			relDingo, _ := filepath.Rel(workspaceRoot, absDingo)
+			relGo := strings.TrimSuffix(relDingo, ".dingo") + ".go"
+			args = append(args, relGo)
 		}
 	} else if len(opts.PackagePaths) > 0 {
 		// Package mode - use "." since we're running from shadow

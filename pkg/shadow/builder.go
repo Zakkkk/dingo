@@ -16,6 +16,9 @@ import (
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 )
 
+// ProgressCallback is called during build to report progress
+type ProgressCallback func(current, total int, file string)
+
 // Builder creates and manages shadow build directories
 type Builder struct {
 	// WorkspaceRoot is the path containing go.mod
@@ -29,6 +32,9 @@ type Builder struct {
 
 	// Verbose enables verbose output
 	Verbose bool
+
+	// OnProgress is called during transpilation to report progress
+	OnProgress ProgressCallback
 
 	// generatedFiles tracks files we've transpiled (to avoid copying them as pure Go)
 	generatedFiles map[string]bool
@@ -59,7 +65,8 @@ type BuildResult struct {
 	CopiedFiles []string
 }
 
-// Build creates the shadow directory with all necessary files
+// Build creates the shadow directory with all necessary files.
+// If dingoFiles is empty, it discovers all .dingo files in the workspace.
 func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 	result := &BuildResult{
 		ShadowDir: b.ShadowDir,
@@ -76,8 +83,33 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 	}
 	result.CopiedFiles = append(result.CopiedFiles, "go.mod", "go.sum")
 
-	// 3. Transpile .dingo files to shadow
-	for _, dingoFile := range dingoFiles {
+	// 3. Discover all .dingo files if none specified
+	allDingoFiles := dingoFiles
+	if len(allDingoFiles) == 0 {
+		var err error
+		allDingoFiles, err = b.findAllDingoFiles()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find .dingo files: %w", err)
+		}
+	} else {
+		// Even if specific files are given, we need to transpile ALL .dingo files
+		// for imports to resolve correctly in the shadow directory
+		var err error
+		allDingoFiles, err = b.findAllDingoFiles()
+		if err != nil {
+			return nil, fmt.Errorf("failed to find .dingo files: %w", err)
+		}
+	}
+
+	// 4. Transpile .dingo files to shadow
+	total := len(allDingoFiles)
+	for i, dingoFile := range allDingoFiles {
+		// Report progress
+		if b.OnProgress != nil {
+			relPath, _ := filepath.Rel(b.WorkspaceRoot, dingoFile)
+			b.OnProgress(i+1, total, relPath)
+		}
+
 		goFile, err := b.transpileFile(dingoFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to transpile %s: %w", dingoFile, err)
@@ -90,19 +122,53 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 		b.generatedFiles[goRelPath] = true
 	}
 
-	// 4. Copy pure .go files to shadow
+	// 5. Copy pure .go files to shadow
 	copiedGo, err := b.copyPureGoFiles()
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy Go files: %w", err)
 	}
 	result.CopiedFiles = append(result.CopiedFiles, copiedGo...)
 
-	// 5. Handle vendor directory if present
+	// 6. Handle vendor directory if present
 	if err := b.handleVendor(); err != nil {
 		return nil, fmt.Errorf("failed to handle vendor directory: %w", err)
 	}
 
 	return result, nil
+}
+
+// findAllDingoFiles discovers all .dingo files in the workspace
+func (b *Builder) findAllDingoFiles() ([]string, error) {
+	var files []string
+
+	err := filepath.Walk(b.WorkspaceRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories we don't want to process
+		if info.IsDir() {
+			name := info.Name()
+			// Skip hidden dirs, shadow dir, vendor, node_modules
+			if strings.HasPrefix(name, ".") ||
+				path == b.ShadowDir ||
+				name == "vendor" ||
+				name == "node_modules" ||
+				name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Only process .dingo files
+		if strings.HasSuffix(path, ".dingo") {
+			files = append(files, path)
+		}
+
+		return nil
+	})
+
+	return files, err
 }
 
 // copyModFiles copies go.mod and go.sum to the shadow directory,
