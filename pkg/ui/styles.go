@@ -431,6 +431,7 @@ func PrintDingoHelp(version string) {
 		{"go", "Transpile Dingo to Go only (no compilation)"},
 		{"lint", "Run Dingo linter on source files"},
 		{"fmt", "Format Dingo source files"},
+		{"clean", "Remove build artifacts and generated files"},
 		{"version", "Print the version number of Dingo"},
 		{"help", "Help about any command"},
 	}

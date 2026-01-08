@@ -56,6 +56,7 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 	rootCmd.AddCommand(goCmd())         // dingo go - transpile only
 	rootCmd.AddCommand(lintCmd())       // dingo lint - run linter
 	rootCmd.AddCommand(fmtCmd())        // dingo fmt - format files
+	rootCmd.AddCommand(cleanCmd())      // dingo clean - remove build artifacts
 	rootCmd.AddCommand(newVersionCmd()) // dingo version - show version with mascot and update check
 	rootCmd.AddCommand(updateCmd())     // dingo update - auto-update from GitHub
 	rootCmd.AddCommand(mascotCmd())
