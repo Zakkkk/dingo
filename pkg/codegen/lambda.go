@@ -27,7 +27,8 @@ type LambdaCodeGen struct {
 // Generate produces Go code for the lambda expression.
 //
 // Output format:
-//   func(param1 type1, param2 type2, ...) returnType { body }
+//
+//	func(param1 type1, param2 type2, ...) returnType { body }
 //
 // For expression bodies, wraps in { return ... }.
 // For block bodies, uses as-is.

@@ -91,8 +91,8 @@ func TestMatchCodeGen_ConstructorPattern(t *testing.T) {
 			// Verify value is cached (prevents double evaluation)
 			// New Option/Result codegen uses opt/res as temp var
 			hasCaching := strings.Contains(code, "val :=") ||
-				         strings.Contains(code, "opt :=") ||
-				         strings.Contains(code, "res :=")
+				strings.Contains(code, "opt :=") ||
+				strings.Contains(code, "res :=")
 			if !hasCaching {
 				t.Errorf("Expected value caching, got: %s", code)
 			}

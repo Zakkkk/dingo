@@ -123,6 +123,7 @@ func findEnclosingFunctionFallback(src []byte, exprPos int) *ast.FuncDecl {
 	s.Init(file, src, nil, 0)
 
 	var lastTok token.Token
+	var afterFuncSawReceiver bool // tracks if we saw a receiver after FUNC
 	for {
 		pos, tok, _ := s.Scan()
 		if tok == token.EOF {
@@ -133,13 +134,24 @@ func findEnclosingFunctionFallback(src []byte, exprPos int) *ast.FuncDecl {
 			break // Stop when we pass exprPos
 		}
 		if lastTok == token.FUNC && tok == token.IDENT {
-			// Previous token was FUNC, this is a name → function declaration
+			// Previous token was FUNC, this is a name → function declaration (no receiver)
 			if len(funcs) > 0 {
 				funcs[len(funcs)-1].isNamed = true
 			}
+			afterFuncSawReceiver = false
+		} else if lastTok == token.FUNC && tok == token.LPAREN {
+			// Previous token was FUNC, opening paren → method receiver starts
+			afterFuncSawReceiver = true
+		} else if afterFuncSawReceiver && lastTok == token.RPAREN && tok == token.IDENT {
+			// After receiver closing paren, this IDENT is the method name → method declaration
+			if len(funcs) > 0 {
+				funcs[len(funcs)-1].isNamed = true
+			}
+			afterFuncSawReceiver = false
 		}
 		if tok == token.FUNC {
 			funcs = append(funcs, funcInfo{pos: offset, isNamed: false})
+			afterFuncSawReceiver = false
 		}
 		lastTok = tok
 	}
@@ -265,13 +277,35 @@ func exprToTypeName(expr ast.Expr) string {
 // Returns -1 if detection fails (fallback to multi-return assumption).
 //
 // This function attempts to type-check the expression by:
-// 1. Extracting the function being called from the expression
-// 2. Finding the function declaration in the source
-// 3. Counting return values from the signature
+// 1. Using TypeResolver for cross-file/cross-package type resolution (if provided)
+// 2. Extracting the function being called from the expression
+// 3. Finding the function declaration in the source
+// 4. Counting return values from the signature
 //
 // For external package functions (like sql.Row.Scan), detection may fail
 // and the caller should use the fallback value.
 func InferExprReturnCount(src []byte, exprBytes []byte, exprPos int) int {
+	// Delegate to the version with optional resolver
+	return InferExprReturnCountWithResolver(src, exprBytes, exprPos, nil)
+}
+
+// InferExprReturnCountWithResolver determines how many values an expression returns.
+// If resolver is provided and can resolve the type, it takes precedence.
+// Otherwise falls back to local-only search (existing behavior).
+//
+// Returns 1 for single-return expressions (like row.Scan() returning just error),
+// Returns 2+ for multi-return expressions (like db.Query() returning (*Rows, error)),
+// Returns -1 if detection fails (fallback to multi-return assumption).
+func InferExprReturnCountWithResolver(src []byte, exprBytes []byte, exprPos int, resolver *TypeResolver) int {
+	// Try resolver first if available
+	if resolver != nil {
+		count := resolver.GetReturnCount(exprBytes)
+		if count > 0 {
+			return count
+		}
+		// Fall through to local search if resolver fails
+	}
+
 	// Parse the expression using go/parser to extract method name
 	exprStr := string(exprBytes)
 	methodName := extractMethodName(exprStr)

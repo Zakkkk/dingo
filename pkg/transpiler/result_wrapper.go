@@ -216,8 +216,8 @@ func cloneExpr(expr ast.Expr) ast.Expr {
 	case *ast.InterfaceType:
 		// Interface types can be cloned as-is (they're typically empty interfaces)
 		return &ast.InterfaceType{
-			Interface: e.Interface,
-			Methods:   e.Methods, // Shallow copy of FieldList
+			Interface:  e.Interface,
+			Methods:    e.Methods, // Shallow copy of FieldList
 			Incomplete: e.Incomplete,
 		}
 	case *ast.IndexExpr:

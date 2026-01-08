@@ -67,40 +67,61 @@ func TransformSource(src []byte, filename string) ([]byte, error) {
 
 	// State tracking
 	parenDepth := 0
-	inParamList := false
-	inLambdaParams := false // Track TypeScript-style lambda (x: Type) => ...
+	paramListDepth := -1    // Depth at which we entered a param list (-1 = not in param list)
+	lambdaParamsDepth := -1 // Depth at which we entered lambda params (-1 = not in lambda)
 
 	for i := 0; i < len(tokens)-1; i++ {
 		t := tokens[i]
 		offset := file.Offset(t.pos)
 
 		// Track parentheses for parameter context
-		// IMPORTANT: We only set inParamList for function DECLARATIONS, not function CALLS.
-		// Function calls like Ok[User](User{ID: 1}) should NOT have colons transformed.
+		// IMPORTANT: We only transform colons in function DECLARATIONS, not function CALLS.
+		// Function calls like wrap(func() { &rw{X: 1} }) should NOT have colons transformed.
 		if t.tok == gotoken.LPAREN {
-			if i > 0 {
+			parenDepth++
+			if i > 0 && paramListDepth == -1 {
 				prev := tokens[i-1]
-				// FUNC( = function type literal: func(x: int)
-				// IDENT( = function declaration after name: func foo(x: int)
-				// NOTE: Do NOT include RBRACK - that's for generic function CALLS: Ok[T](...)
-				// which contain struct literals where colons should be preserved
-				if prev.tok == gotoken.FUNC || prev.tok == gotoken.IDENT {
-					inParamList = true
+				// FUNC( = anonymous function or function type: func(x: int)
+				if prev.tok == gotoken.FUNC {
+					paramListDepth = parenDepth
+				} else if prev.tok == gotoken.IDENT && i >= 2 {
+					// Check if this is a named function declaration: func name(x: int)
+					// Look for 'func' immediately before the identifier
+					prevPrev := tokens[i-2]
+					if prevPrev.tok == gotoken.FUNC {
+						paramListDepth = parenDepth
+					} else if prevPrev.tok == gotoken.RBRACK {
+						// Handle generic functions: func name[T any](x: T)
+						// Find 'func' before the type params
+						for j := i - 3; j >= 0; j-- {
+							pt := tokens[j]
+							if pt.tok == gotoken.FUNC {
+								paramListDepth = parenDepth
+								break
+							}
+							if pt.tok == gotoken.SEMICOLON || pt.tok == gotoken.LBRACE ||
+								pt.tok == gotoken.RBRACE {
+								break
+							}
+						}
+					}
 				}
 			}
 			// Check for TypeScript-style lambda: ( ... ) =>
 			// Lookahead to find matching ) followed by => or ): Type =>
-			if isLambdaParenStart(tokens, i) {
-				inLambdaParams = true
+			if isLambdaParenStart(tokens, i) && lambdaParamsDepth == -1 {
+				lambdaParamsDepth = parenDepth
 			}
-			parenDepth++
 		}
 		if t.tok == gotoken.RPAREN {
-			parenDepth--
-			if parenDepth == 0 {
-				inParamList = false
-				inLambdaParams = false
+			// Exit param list context when we return to the depth we entered at
+			if parenDepth == paramListDepth {
+				paramListDepth = -1
 			}
+			if parenDepth == lambdaParamsDepth {
+				lambdaParamsDepth = -1
+			}
+			parenDepth--
 		}
 
 		// NOTE: Generic syntax transformation (<T> -> [T]) has been REMOVED.
@@ -112,7 +133,9 @@ func TransformSource(src []byte, filename string) ([]byte, error) {
 		if t.tok == gotoken.COLON {
 			// Case 1: Inside parameter list (func params, method receiver)
 			// Case 2: Inside lambda parameter list (x: Type) => ...
-			// Case 3: Lambda return type ): Type =>
+			// Only transform if we're at exactly the param list depth (not in nested braces/calls)
+			inParamList := paramListDepth != -1 && parenDepth == paramListDepth
+			inLambdaParams := lambdaParamsDepth != -1 && parenDepth == lambdaParamsDepth
 			if (inParamList || inLambdaParams) && i > 0 && tokens[i-1].tok == gotoken.IDENT {
 				result = append(result, src[lastCopied:offset]...)
 				result = append(result, ' ')

@@ -50,6 +50,7 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 
 	rootCmd.AddCommand(goBuildCmd())  // dingo build - transpile + go build
 	rootCmd.AddCommand(goRunCmd())    // dingo run - transpile + go run
+	rootCmd.AddCommand(watchCmd())    // dingo watch - watch + rebuild + restart
 	rootCmd.AddCommand(goCmd())       // dingo go - transpile only
 	rootCmd.AddCommand(lintCmd())     // dingo lint - run linter
 	rootCmd.AddCommand(fmtCmd())      // dingo fmt - format files
@@ -57,7 +58,8 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 	rootCmd.AddCommand(mascotCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		// Error is already printed by cobra
+		// Print error since we have SilenceErrors: true
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -602,34 +604,38 @@ func expandPattern(pattern string) ([]string, error) {
 		return nil, fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	// Find workspace root
-	// TODO: Re-enable workspace detection
-	// root, err := DetectWorkspaceRoot(cwd)
-	// if err != nil {
-	// 	// Fall back to current directory if no workspace root found
-	// 	root = cwd
-	// }
-	_ = cwd // Suppress unused variable warning
+	// Determine the search root based on the pattern
+	searchRoot := cwd
+	if pattern != "./..." && pattern != "..." {
+		// Pattern like ./pkg/... - extract the prefix
+		prefix := strings.TrimSuffix(pattern, "/...")
+		prefix = strings.TrimPrefix(prefix, "./")
+		searchRoot = filepath.Join(cwd, prefix)
+	}
 
-	// Scan workspace for packages
-	// TODO: Re-enable workspace scanning
-	// ws, err := ScanWorkspace(root)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to scan workspace: %w", err)
-	// }
-
-	// Collect files matching the pattern
+	// Collect .dingo files by walking the directory tree
 	var files []string
-	// TODO: Re-enable pattern matching
-	// for _, pkg := range ws.Packages {
-	// 	if MatchesPattern(pkg.Path, pattern) {
-	// 		for _, dingoFile := range pkg.DingoFiles {
-	// 			// Convert to absolute path
-	// 			absPath := filepath.Join(root, dingoFile)
-	// 			files = append(files, absPath)
-	// 		}
-	// 	}
-	// }
+	err = filepath.Walk(searchRoot, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		// Skip hidden directories and common non-source directories
+		if info.IsDir() {
+			name := info.Name()
+			if strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules" || name == "build" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Collect .dingo files
+		if strings.HasSuffix(path, ".dingo") {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk directory: %w", err)
+	}
 
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no .dingo files found matching pattern: %s", pattern)

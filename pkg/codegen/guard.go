@@ -57,15 +57,17 @@ func InferExprTypeWithBinding(exprText string, hasBinding bool) (ExprType, error
 // GuardGenerator generates Go code for guard statements.
 //
 // Transforms:
-//   guard user := FindUser(id) else |err| { return Err(err) }
+//
+//	guard user := FindUser(id) else |err| { return Err(err) }
 //
 // Into:
-//   tmp := FindUser(id)
-//   if tmp.IsErr() {
-//       err := *tmp.err
-//       return ResultErr(err)
-//   }
-//   user := *tmp.ok
+//
+//	tmp := FindUser(id)
+//	if tmp.IsErr() {
+//	    err := *tmp.err
+//	    return ResultErr(err)
+//	}
+//	user := *tmp.ok
 //
 // Variable naming convention:
 //   - First: tmp, err

@@ -9,17 +9,21 @@ import (
 // TernaryCodeGen generates Go code from Dingo ternary expressions.
 //
 // Transforms:
-//   cond ? trueVal : falseVal
+//
+//	cond ? trueVal : falseVal
 //
 // With context (return):
-//   if cond { return trueVal }
-//   return falseVal
+//
+//	if cond { return trueVal }
+//	return falseVal
 //
 // With context (assignment):
-//   if cond { x = trueVal } else { x = falseVal }
+//
+//	if cond { x = trueVal } else { x = falseVal }
 //
 // Without context (IIFE):
-//   func() T { if cond { return trueVal }; return falseVal }()
+//
+//	func() T { if cond { return trueVal }; return falseVal }()
 //
 // Handles:
 //   - AST-based expressions (Cond, True, False)
@@ -63,7 +67,8 @@ func (g *TernaryCodeGen) Generate() ast.CodeGenResult {
 //
 // Input:  return cond ? trueVal : falseVal
 // Output: if cond { return trueVal }
-//         return falseVal
+//
+//	return falseVal
 //
 // For nested ternaries in the false branch, recursively applies return context.
 // Handles hoisting: if the condition contains BuiltinCallExpr like len(c?.Region),
@@ -136,7 +141,8 @@ func (g *TernaryCodeGen) generateReturnContext() ast.CodeGenResult {
 //
 // Input:  x := cond ? trueVal : falseVal
 // Output: var x TYPE
-//         if cond { x = trueVal } else { x = falseVal }
+//
+//	if cond { x = trueVal } else { x = falseVal }
 //
 // Handles hoisting: if the condition contains BuiltinCallExpr like len(c?.Region),
 // the hoisted code is prepended before the if statement.

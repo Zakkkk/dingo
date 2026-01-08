@@ -36,10 +36,10 @@ import (
 type TupleTypeResolver struct {
 	info         *types.Info
 	fset         *token.FileSet
-	typeAliases  map[string]string              // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
-	tplCounter   int                            // Counter for unique tpl variable names per scope
-	needsImport  bool                           // Whether runtime/tuples import is needed
-	lineMappings []sourcemap.LineMapping        // Line mappings for tuple destructures
+	typeAliases  map[string]string       // alias name → generic type signature (e.g., "Point2D" → "tuples.Tuple2[float64, float64]")
+	tplCounter   int                     // Counter for unique tpl variable names per scope
+	needsImport  bool                    // Whether runtime/tuples import is needed
+	lineMappings []sourcemap.LineMapping // Line mappings for tuple destructures
 }
 
 // TupleFieldNames maps tuple indices to human-readable field names
@@ -777,16 +777,18 @@ func (r *TupleTypeResolver) tryExpandDestructure(stmt goast.Stmt) []goast.Stmt {
 // expandDestructureMarker transforms __tupleDest{N}__("name:path", ..., expr) to statements.
 //
 // For flat patterns like __tupleDest2__("x:0", "y:1", point):
-//   tmp := point
-//   x := tmp._0
-//   y := tmp._1
+//
+//	tmp := point
+//	x := tmp._0
+//	y := tmp._1
 //
 // For nested patterns like __tupleDest4__("minX:0.0", "minY:0.1", "maxX:1.0", "maxY:1.1", bbox):
-//   tmp := bbox
-//   minX := tmp._0._0
-//   minY := tmp._0._1
-//   maxX := tmp._1._0
-//   maxY := tmp._1._1
+//
+//	tmp := bbox
+//	minX := tmp._0._0
+//	minY := tmp._0._1
+//	maxX := tmp._1._0
+//	maxY := tmp._1._1
 //
 // Note: Uses unique tmp variable names (tmp, tmp1, tmp2, ...) to avoid
 // "no new variables on left side of :=" errors when multiple destructurings
@@ -1031,7 +1033,8 @@ func (r *TupleTypeResolver) transformExpr(expr goast.Expr) goast.Expr {
 // resolveLiteralMarker transforms __tuple{N}__(args) to generic struct literal.
 //
 // Example:
-//   __tuple2__(3.0, 4.0) → tuples.Tuple2[float64, float64]{First: 3.0, Second: 4.0}
+//
+//	__tuple2__(3.0, 4.0) → tuples.Tuple2[float64, float64]{First: 3.0, Second: 4.0}
 func (r *TupleTypeResolver) resolveLiteralMarker(call *goast.CallExpr) goast.Expr {
 	r.needsImport = true
 
@@ -1251,4 +1254,3 @@ func (r *TupleTypeResolver) constructStructType(elemTypes []types.Type) types.Ty
 	// Create the struct type
 	return types.NewStruct(fields, nil)
 }
-

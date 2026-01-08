@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/scanner"
 	"go/token"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -151,14 +152,14 @@ func fixColumnMappingGoLines(colMappings []sourcemap.ColumnMapping, lineMappings
 // to Go code using the AST-based parser and codegen pipeline.
 //
 // Process:
-// 1. Find all match/lambda expression locations using FindDingoExpressions
-// 2. Sort by position descending (transform from end to avoid offset shifts)
-// 3. For each expression:
-//    a. Parse the expression using pkg/parser
-//    b. Set IsExpr on MatchExpr based on context (Assignment/Return/Argument = true)
-//    c. Generate Go code using pkg/codegen
-//    d. Splice generated code back into result
-// 4. Return transformed source
+//  1. Find all match/lambda expression locations using FindDingoExpressions
+//  2. Sort by position descending (transform from end to avoid offset shifts)
+//  3. For each expression:
+//     a. Parse the expression using pkg/parser
+//     b. Set IsExpr on MatchExpr based on context (Assignment/Return/Argument = true)
+//     c. Generate Go code using pkg/codegen
+//     d. Splice generated code back into result
+//  4. Return transformed source
 //
 // enumRegistry provides enum name resolution for match expressions.
 // originalSrc is the original Dingo source (before transforms) for //line directives.
@@ -335,8 +336,8 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 				VarName:        loc.VarName,
 				StatementStart: loc.StatementStart,
 				StatementEnd:   loc.StatementEnd,
-				EnumRegistry:   enumRegistry,  // Pass enum registry for match pattern resolution
-				TempCounter:    &tempCounter,  // Share counter for unique temp var names
+				EnumRegistry:   enumRegistry, // Pass enum registry for match pattern resolution
+				TempCounter:    &tempCounter, // Share counter for unique temp var names
 			}
 
 			// For assignments and arguments, try to infer the type
@@ -644,6 +645,13 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 		return src, nil, nil, nil
 	}
 
+	// Create TypeResolver for accurate cross-file type resolution.
+	// This is OPTIONAL - if it fails, we fall back to local search.
+	// Extract working directory from filename.
+	workingDir := extractWorkingDir(filename)
+	resolver, _ := codegen.NewTypeResolver(src, workingDir)
+	// Ignore resolver creation errors - it's an optimization, not a requirement
+
 	// Pre-scan original source to get accurate line numbers
 	// Earlier transforms (like enum expansion) change line counts, so we need original positions
 	originalLineInfos := buildOriginalLineMap(originalSrc)
@@ -729,7 +737,7 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			goLHSLen = 0
 		case ast.StmtErrorPropBare:
 			// foo()?
-			generated = generateErrorPropBareAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			generated = generateErrorPropBareAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody, resolver)
 			// For bare statements, no variable assignment
 			dingoLHSLen = 0
 			goLHSLen = 0
@@ -846,9 +854,9 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			// Example: Dingo "    x := getInt()?" (4 spaces = column 5)
 			//          Go    "\ttmp, err := getInt()" (1 tab = column 2)
 			// The leading 4 spaces become 1 tab = 3 characters shorter.
-			leadingSpaces := dingoCol - 1                  // Characters before first non-space (0-indexed)
-			leadingTabs := (leadingSpaces + 3) / 4         // Ceiling division: tabs after go/printer
-			indentAdjust := leadingSpaces - leadingTabs    // Characters "saved" by tab compression
+			leadingSpaces := dingoCol - 1               // Characters before first non-space (0-indexed)
+			leadingTabs := (leadingSpaces + 3) / 4      // Ceiling division: tabs after go/printer
+			indentAdjust := leadingSpaces - leadingTabs // Characters "saved" by tab compression
 
 			columnMappings = append(columnMappings, sourcemap.ColumnMapping{
 				DingoLine: dingoLine,
@@ -872,13 +880,16 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 // with support for all three error kinds: basic, context, and lambda.
 //
 // Basic (ErrorPropBasic):
-//   tmp, err := expr; if err != nil { return ..., err }; data := tmp
+//
+//	tmp, err := expr; if err != nil { return ..., err }; data := tmp
 //
 // Context (ErrorPropContext):
-//   tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; data := tmp
+//
+//	tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; data := tmp
 //
 // Lambda (ErrorPropLambda):
-//   tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; data := tmp
+//
+//	tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; data := tmp
 func generateErrorPropStatementAdvanced(expr []byte, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
@@ -1134,13 +1145,16 @@ func substituteIdentifier(src []byte, oldIdent, newIdent string) []byte {
 // with support for all three error kinds: basic, context, and lambda.
 //
 // Basic (ErrorPropBasic):
-//   tmp, err := expr; if err != nil { return ..., err }; return tmp
+//
+//	tmp, err := expr; if err != nil { return ..., err }; return tmp
 //
 // Context (ErrorPropContext):
-//   tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; return tmp
+//
+//	tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; return tmp
 //
 // Lambda (ErrorPropLambda):
-//   tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; return tmp
+//
+//	tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; return tmp
 func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
@@ -1207,22 +1221,30 @@ func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter 
 
 // generateErrorPropBareAdvanced generates code for bare statement error propagation.
 //
-// Uses InferExprReturnCount to detect:
-// - Single-return functions (like row.Scan()) → generates: err := expr
-// - Multi-return functions (like db.Query()) → generates: _, err := expr
+// Uses InferExprReturnCountWithResolver to detect:
+// - Single-return functions (like row.Scan()) -> generates: err := expr
+// - Multi-return functions (like db.Query()) -> generates: _, err := expr
 //
-// For external packages where detection fails, defaults to multi-return (_, err :=).
+// If resolver is provided, it enables cross-file/cross-package type resolution
+// for accurate return count detection. This is especially important for external
+// package methods like repository.Create().
+//
+// For external packages where detection fails, defaults to single-return (err :=)
+// for bare statements since the user is explicitly not capturing any return value.
 //
 // Basic (ErrorPropBasic):
-//   err := expr; if err != nil { return ..., err }  (single-return)
-//   _, err := expr; if err != nil { return ..., err }  (multi-return)
+//
+//	err := expr; if err != nil { return ..., err }  (single-return)
+//	_, err := expr; if err != nil { return ..., err }  (multi-return)
 //
 // Context (ErrorPropContext):
-//   err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }
+//
+//	err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }
 //
 // Lambda (ErrorPropLambda):
-//   err := expr; if err != nil { return ..., transformedError }
-func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+//
+//	err := expr; if err != nil { return ..., transformedError }
+func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names
@@ -1234,20 +1256,25 @@ func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnT
 	}
 	*counter--
 
-	// Detect return count: 1 = single (error only), 2+ = multi (T, error)
-	returnCount := codegen.InferExprReturnCount(src, expr, exprPos)
+	// Detect return count: 1 = single (error only), 2+ = multi (T, error), -1 = unknown
+	// Use the resolver for cross-file type resolution if available
+	returnCount := codegen.InferExprReturnCountWithResolver(src, expr, exprPos, resolver)
 
 	// Detect if enclosing function returns Result type
 	resultOkType := codegen.InferEnclosingFunctionReturnsResult(src, exprPos)
 	isResultReturn := resultOkType != ""
 
 	// Generate assignment based on return count
-	if returnCount == 1 {
-		// Single return: err := expr
+	// For BARE statements (no user-specified LHS variable), we default to single-return when unknown
+	// because the user is explicitly not capturing any non-error return value.
+	// If a function returns (T, error) but user wrote a bare `foo()?`, they want to ignore T.
+	if returnCount == 1 || returnCount == -1 {
+		// Single return or unknown: err := expr
+		// For bare statements, single-return is safer default (avoids "assignment mismatch" errors)
 		buf.WriteString(errVar)
 		buf.WriteString(" := ")
 	} else {
-		// Multi-return or unknown: _, err := expr (safe default)
+		// Multi-return (returnCount > 1): _, err := expr
 		buf.WriteString("_, ")
 		buf.WriteString(errVar)
 		buf.WriteString(" := ")
@@ -1324,8 +1351,9 @@ func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnT
 // filename is used for //line directive generation (pass "" to disable).
 //
 // Transforms:
-//   guard user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
-//   guard (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
+//
+//	guard user = FindUser(id) else |err| { return Err(err) }  →  tmp := FindUser(id); if tmp.IsErr() { err := *tmp.err; return ResultErr(err) }; user := *tmp.ok
+//	guard (a, b) = ParseInfo(data) else { return None() }     →  tmp := ParseInfo(data); if tmp.IsNone() { return OptionNone[Info]() }; a := (*tmp.ok).Item1; b := (*tmp.ok).Item2
 func transformGuardStatements(src []byte, originalSrc []byte, filename string) ([]byte, error) {
 	locations, err := ast.FindGuardStatements(src)
 	if err != nil {
@@ -1503,4 +1531,18 @@ func offsetToLineCol(src []byte, offset int) (line, col int) {
 	position := fset.Position(pos)
 
 	return position.Line, position.Column
+}
+
+// extractWorkingDir extracts the directory containing a file.
+// Returns "." if filename is empty or has no directory component.
+// This is used to determine the working directory for go/packages loading.
+func extractWorkingDir(filename string) string {
+	if filename == "" {
+		return "."
+	}
+	dir := filepath.Dir(filename)
+	if dir == "" {
+		return "."
+	}
+	return dir
 }

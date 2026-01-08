@@ -7,10 +7,10 @@ import (
 
 func TestTupleTypeResolver_BasicTypeInference(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string // Marker-infused Go source
-		want     string // Expected output - now uses generic types from runtime/tuples
-		wantErr  bool
+		name    string
+		input   string // Marker-infused Go source
+		want    string // Expected output - now uses generic types from runtime/tuples
+		wantErr bool
 	}{
 		{
 			name: "simple int tuple",
@@ -92,10 +92,10 @@ func main() {
 
 func TestTupleTypeResolver_Destructuring(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		wantVars  []string // Variables that should be assigned
-		skipVars  []string // Wildcards that should NOT be assigned
+		name     string
+		input    string
+		wantVars []string // Variables that should be assigned
+		skipVars []string // Wildcards that should NOT be assigned
 	}{
 		{
 			name: "basic destructuring",

@@ -34,9 +34,9 @@ func TestErrorPropGeneratorWithTypeInference(t *testing.T) {
 			wantContains: []string{"tmp, err := baz()", `return 0, "", err`, "tmp"},
 		},
 		{
-			name:        "no explicit return types (fallback to nil)",
-			operand:     &ast.RawExpr{Text: "qux()"},
-			returnTypes: []string{},
+			name:         "no explicit return types (fallback to nil)",
+			operand:      &ast.RawExpr{Text: "qux()"},
+			returnTypes:  []string{},
 			wantContains: []string{"tmp, err := qux()", "return err", "tmp"},
 		},
 		{
@@ -71,8 +71,8 @@ func TestErrorPropGeneratorWithTypeInference(t *testing.T) {
 
 func TestErrorPropGeneratorVariableNaming(t *testing.T) {
 	tests := []struct {
-		name        string
-		wantPairs   [][]string // Each pair is [tmpVar, errVar]
+		name      string
+		wantPairs [][]string // Each pair is [tmpVar, errVar]
 	}{
 		{
 			name:      "first generation",

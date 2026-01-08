@@ -612,12 +612,27 @@ func (inf *LambdaTypeInferrer) rewriteResults(fn *ast.FuncLit, expected *types.S
 }
 
 // isAnyType checks if an expression is 'any' (interface{}).
+// Used for type inference to detect placeholder types that need resolution.
 func (inf *LambdaTypeInferrer) isAnyType(expr ast.Expr) bool {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name == "any"
 	case *ast.InterfaceType:
 		return t.Methods == nil || len(t.Methods.List) == 0
+	}
+	return false
+}
+
+// isDingoAnyPlaceholder checks if an expression is specifically Dingo's 'any' placeholder.
+// Unlike isAnyType, this only returns true for the 'any' identifier,
+// NOT for Go's native 'interface{}' type literal.
+//
+// This distinction is important for FindUnresolvedLambdas:
+// - Dingo lambdas (|x| expr) generate 'any' as a placeholder needing inference
+// - Go-native func literals can legitimately use 'interface{}' and should not be flagged
+func (inf *LambdaTypeInferrer) isDingoAnyPlaceholder(expr ast.Expr) bool {
+	if ident, ok := expr.(*ast.Ident); ok {
+		return ident.Name == "any"
 	}
 	return false
 }
@@ -1658,13 +1673,24 @@ func (inf *LambdaTypeInferrer) FindUnresolvedLambdas() []UnresolvedLambda {
 		}
 
 		// Check if this lambda has any unresolved 'any' types
+		// We use isDingoAnyPlaceholder instead of isAnyType because:
+		// - Dingo lambdas (|x| expr) generate 'any' identifier as placeholder
+		// - Go-native func literals can legitimately use 'interface{}' type
+		// Only Dingo placeholders should be flagged as needing type annotation
+		//
+		// IMPORTANT: We only flag lambdas with 'any' in PARAMETERS, not just returns.
+		// This is because Go's parser normalizes 'interface{}' to 'any' (Go 1.18+),
+		// so native Go code like `func(x int) (interface{}, error)` would have
+		// 'any' in the return type after parsing. But Dingo-generated lambdas
+		// always have 'any' in their parameters because they're generated with
+		// placeholder types. Native Go func literals have typed parameters.
 		var anyParams []string
 		hasAnyReturn := false
 
 		// Check parameters
 		if funcLit.Type.Params != nil {
 			for _, field := range funcLit.Type.Params.List {
-				if inf.isAnyType(field.Type) {
+				if inf.isDingoAnyPlaceholder(field.Type) {
 					// Collect parameter names
 					for _, name := range field.Names {
 						anyParams = append(anyParams, name.Name)
@@ -1673,18 +1699,20 @@ func (inf *LambdaTypeInferrer) FindUnresolvedLambdas() []UnresolvedLambda {
 			}
 		}
 
-		// Check return type
-		if funcLit.Type.Results != nil {
+		// Only check return type if we have untyped params
+		// This avoids false positives from native Go code using interface{} returns
+		if len(anyParams) > 0 && funcLit.Type.Results != nil {
 			for _, field := range funcLit.Type.Results.List {
-				if inf.isAnyType(field.Type) {
+				if inf.isDingoAnyPlaceholder(field.Type) {
 					hasAnyReturn = true
 					break
 				}
 			}
 		}
 
-		// If any unresolved types found, record this lambda
-		if len(anyParams) > 0 || hasAnyReturn {
+		// Only flag lambdas with unresolved parameter types
+		// Unresolved return types alone could be from native Go interface{} usage
+		if len(anyParams) > 0 {
 			pos := inf.fset.Position(funcLit.Pos())
 			unresolved = append(unresolved, UnresolvedLambda{
 				Line:         pos.Line,

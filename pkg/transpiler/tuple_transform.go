@@ -666,7 +666,7 @@ func transformTuplePass1(src []byte) ([]byte, error) {
 	// Add tuple destructures from parser
 	for _, td := range stmtParser.TupleDestructures {
 		tupleNodes = append(tupleNodes, tupleNodeWithPos{
-			kind:       ast.TupleKindDestructure,
+			kind:        ast.TupleKindDestructure,
 			destructure: td,
 		})
 	}
@@ -756,7 +756,6 @@ func (n tupleNodeWithPos) Pos() gotoken.Pos {
 	}
 }
 
-
 // transformTuplePass2 resolves tuple markers to final struct types using go/types.
 // This is Pass 2 of the two-pass tuple pipeline.
 //
@@ -788,4 +787,3 @@ func transformTuplePass2(fset *gotoken.FileSet, file *goast.File, checker *typec
 
 	return result.Output, resolver.LineMappings(), nil
 }
-

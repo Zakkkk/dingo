@@ -13,16 +13,18 @@ import (
 // Transforms Dingo match expressions to Go switch statements with type assertions.
 //
 // Example transformation:
-//   Dingo: match result { Ok(value) => value, Err(e) => 0 }
-//   Go:    func() int { switch v := result.(type) { case Ok: value := v.Value; return value; case Err: e := v.Value; return 0 } }()
+//
+//	Dingo: match result { Ok(value) => value, Err(e) => 0 }
+//	Go:    func() int { switch v := result.(type) { case Ok: value := v.Value; return value; case Err: e := v.Value; return 0 } }()
 //
 // With return context (human-like output - no IIFE):
-//   Dingo: return match s { Status_Pending => "waiting", Status_Active => "active" }
-//   Go:    switch s.(type) {
-//              case StatusPending: return "waiting"
-//              case StatusActive: return "active"
-//          }
-//          panic("unreachable: exhaustive match")
+//
+//	Dingo: return match s { Status_Pending => "waiting", Status_Active => "active" }
+//	Go:    switch s.(type) {
+//	           case StatusPending: return "waiting"
+//	           case StatusActive: return "active"
+//	       }
+//	       panic("unreachable: exhaustive match")
 //
 // Pattern types supported:
 //   - ConstructorPattern: Ok(x), Err(e), Some(v), None
@@ -177,9 +179,9 @@ func (g *MatchCodeGen) generateMatchSwitch() {
 
 // armGroup represents a group of arms that share the same case clause
 type armGroup struct {
-	typeName string        // The Go type name for constructor patterns
-	arms     []*ast.MatchArm
-	isDefault bool         // true for wildcard/variable patterns (default case)
+	typeName  string // The Go type name for constructor patterns
+	arms      []*ast.MatchArm
+	isDefault bool // true for wildcard/variable patterns (default case)
 }
 
 // generateGroupedCases groups arms by pattern type and generates cases.

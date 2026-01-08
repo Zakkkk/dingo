@@ -15,21 +15,21 @@ const DefaultOutputDir = "build"
 
 // OutputPaths contains all calculated output paths for a transpiled file
 type OutputPaths struct {
-	GoPath      string // Path to generated .go file (in build/ or OutDir)
-	DmapPath    string // Path to generated .dmap file (always in .dmap/)
-	OutputDir   string // The output directory for .go files
-	DmapDir     string // The .dmap directory
-	RelPath     string // Relative path from workspace root (without extension)
+	GoPath    string // Path to generated .go file (in build/ or OutDir)
+	DmapPath  string // Path to generated .dmap file (always in .dmap/)
+	OutputDir string // The output directory for .go files
+	DmapDir   string // The .dmap directory
+	RelPath   string // Relative path from workspace root (without extension)
 }
 
 // CalculateOutputPaths computes all output paths for a given Dingo source file.
 // It respects the OutDir config setting, defaulting to "build/" if not set.
 // Dmap files always go in .dmap/ folder (separate from Go output).
 //
-// Example: /project/src/main.dingo -> OutputPaths{
-//   GoPath:   /project/build/src/main.go
-//   DmapPath: /project/.dmap/src/main.dmap
-// }
+//	Example: /project/src/main.dingo -> OutputPaths{
+//	  GoPath:   /project/build/src/main.go
+//	  DmapPath: /project/.dmap/src/main.dmap
+//	}
 func CalculateOutputPaths(dingoPath string, cfg *config.Config) (*OutputPaths, error) {
 	absPath, err := filepath.Abs(dingoPath)
 	if err != nil {
@@ -53,13 +53,24 @@ func CalculateOutputPaths(dingoPath string, cfg *config.Config) (*OutputPaths, e
 	basePath := strings.TrimSuffix(relPath, ".dingo")
 
 	// Determine output directory for .go files
+	// Empty string means "in-place" (alongside source files)
+	// Non-empty value is a directory name (e.g., "build" or ".dingo")
 	outDir := DefaultOutputDir
-	if cfg != nil && cfg.Build.OutDir != "" {
+	if cfg != nil {
+		// If config explicitly sets outdir (even to empty string), use it
+		// Empty string = in-place output
 		outDir = cfg.Build.OutDir
 	}
 
-	// Build .go output path (in build/ or configured OutDir)
-	goOutputBase := filepath.Join(workspaceRoot, outDir, basePath)
+	// Build .go output path
+	var goOutputBase string
+	if outDir == "" {
+		// In-place: .go file goes next to .dingo file
+		goOutputBase = filepath.Join(workspaceRoot, basePath)
+	} else {
+		// Out-of-place: .go file goes in outDir (e.g., build/)
+		goOutputBase = filepath.Join(workspaceRoot, outDir, basePath)
+	}
 	goOutputDir := filepath.Dir(goOutputBase)
 
 	// Build .dmap output path (always in .dmap/ folder)

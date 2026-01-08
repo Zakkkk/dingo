@@ -16,15 +16,15 @@ import (
 type ErrorKind int
 
 const (
-	ErrorKindGeneric ErrorKind = iota
-	ErrorKindUnresolvedLambda  // Lambda type inference failed
-	ErrorKindParsing           // Syntax/parsing error
-	ErrorKindTypeCheck         // Type checking error
-	ErrorKindNullCoalesce      // Null coalescing operator error
-	ErrorKindSafeNavigation    // Safe navigation error
-	ErrorKindMatchExpression   // Match expression error
-	ErrorKindEnumDefinition    // Enum definition error
-	ErrorKindErrorPropagation  // Error propagation (?) error
+	ErrorKindGeneric          ErrorKind = iota
+	ErrorKindUnresolvedLambda           // Lambda type inference failed
+	ErrorKindParsing                    // Syntax/parsing error
+	ErrorKindTypeCheck                  // Type checking error
+	ErrorKindNullCoalesce               // Null coalescing operator error
+	ErrorKindSafeNavigation             // Safe navigation error
+	ErrorKindMatchExpression            // Match expression error
+	ErrorKindEnumDefinition             // Enum definition error
+	ErrorKindErrorPropagation           // Error propagation (?) error
 )
 
 // UnresolvedLambdaErrorData contains structured data for lambda inference errors.
