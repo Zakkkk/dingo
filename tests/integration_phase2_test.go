@@ -48,8 +48,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		// Generated .go files now go to build/ folder
-		goFile := filepath.Join(tmpDir, "build", "test_result.go")
+		// dingo build uses in-place output (.go next to .dingo)
+		goFile := filepath.Join(tmpDir, "test_result.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -99,8 +99,8 @@ func main() {
 		}
 
 		// Build with dingo CLI
-		// Generated .go files now go to build/ folder
-		goFile := filepath.Join(tmpDir, "build", "test_enum.go")
+		// dingo build uses in-place output (.go next to .dingo)
+		goFile := filepath.Join(tmpDir, "test_enum.go")
 		cmd := exec.Command("go", "run", filepath.Join("..", "cmd", "dingo"), "build", dingoFile)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
