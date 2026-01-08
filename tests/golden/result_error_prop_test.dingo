@@ -1,0 +1,76 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/MadAppGang/dingo/dgo"
+)
+
+// Test: Result type error propagation with ? operator
+// Feature: Error propagation for Result[T, E] types (not tuple returns)
+// Complexity: intermediate
+//
+// This test verifies that the ? operator generates correct code for Result types:
+// - Result[T, E] should use: .IsErr() and .MustErr() pattern
+// - (T, error) tuple should use: != nil pattern (existing behavior)
+
+// Function returning Result type - should use .IsErr() pattern
+func getResult() dgo.Result[int, error] {
+	return dgo.Ok[int, error](42)
+}
+
+// Function returning error Result - for testing error path
+func getResultError() dgo.Result[int, error] {
+	return dgo.Err[int, error](fmt.Errorf("test error"))
+}
+
+// Function returning tuple - should use != nil pattern (existing behavior)
+func getTuple() (int, error) {
+	return 42, nil
+}
+
+// PROBLEM CASE: Using ? on Result type
+// Current behavior (WRONG):
+//   err := getResult()
+//   if err != nil { return dgo.Err[string](err) }
+//
+// Expected behavior (CORRECT):
+//   tmp := getResult()
+//   if tmp.IsErr() { return dgo.Err[string, error](tmp.MustErr()) }
+func useResult() dgo.Result[string, error] {
+	val := getResult()?
+	return dgo.Ok[string, error](fmt.Sprintf("value: %d", val))
+}
+
+// This should continue to work with existing != nil pattern
+func useTuple() (string, error) {
+	val := getTuple()?
+	return fmt.Sprintf("value: %d", val), nil
+}
+
+// Chained Result propagation - multiple ? operators on Result types
+func chainedResults() dgo.Result[string, error] {
+	a := getResult()?
+	b := getResult()?
+	return dgo.Ok[string, error](fmt.Sprintf("sum: %d", a+b))
+}
+
+func main() {
+	// Test Result propagation
+	result := useResult()
+	if result.IsOk() {
+		fmt.Println("Result:", result.MustOk())
+	}
+
+	// Test tuple propagation (existing behavior)
+	tupleResult, err := useTuple()
+	if err == nil {
+		fmt.Println("Tuple:", tupleResult)
+	}
+
+	// Test chained results
+	chained := chainedResults()
+	if chained.IsOk() {
+		fmt.Println("Chained:", chained.MustOk())
+	}
+}

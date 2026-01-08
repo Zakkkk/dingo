@@ -268,3 +268,294 @@ func TestParseReturnTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractFunctionSignatures(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		wantFunc string // Expected function name to be found
+		wantRet  string // Expected return type
+	}{
+		{
+			name:     "simple function",
+			src:      "package main\nfunc foo() error { return nil }",
+			wantFunc: "foo",
+			wantRet:  "error",
+		},
+		{
+			name: "function with match expression",
+			src: `package main
+func process() Result[int, error] {
+	match result {
+		Ok(v) => return v,
+		Err(e) => return e,
+	}
+}`,
+			wantFunc: "process",
+			wantRet:  "Result[int, error]",
+		},
+		{
+			name:     "function with error propagation",
+			src:      "package main\nfunc load() (*Config, error) { cfg := fetch()? }",
+			wantFunc: "load",
+			wantRet:  "*Config",
+		},
+		{
+			name:     "method with receiver",
+			src:      "package main\nfunc (f *Fetcher) GetKey(kid string) Result[any, error] { return Ok[any, error](nil) }",
+			wantFunc: "GetKey",
+			wantRet:  "Result[any, error]",
+		},
+		{
+			name: "multiple functions with match",
+			src: `package main
+func first() int { return 1 }
+func second() Result[string, error] {
+	match x {
+		Some(v) => v,
+		None => "",
+	}
+}
+func third() bool { return true }`,
+			wantFunc: "second",
+			wantRet:  "Result[string, error]",
+		},
+		{
+			name: "nested braces in match",
+			src: `package main
+func fetch() Result[User, error] {
+	match response {
+		Ok(data) => {
+			user := parse(data)
+			return Ok[User, error](user)
+		},
+		Err(e) => {
+			log.Printf("error: %v", e)
+			return Err[User, error](e)
+		},
+	}
+}`,
+			wantFunc: "fetch",
+			wantRet:  "Result[User, error]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use findMethodReturnType which internally uses extractFunctionSignatures
+			ret := findMethodReturnType([]byte(tt.src), tt.wantFunc)
+			if ret != tt.wantRet {
+				t.Errorf("findMethodReturnType(%q) = %q, want %q", tt.wantFunc, ret, tt.wantRet)
+			}
+		})
+	}
+}
+
+func TestFindMethodReturnTypeWithDingoSyntax(t *testing.T) {
+	// Test case based on real passgate file with match expressions
+	src := `package util
+
+func NewJWKSFetcher(jwksURL string) Result[JWKSFetcher, error] {
+	f.Refresh()?
+	return Ok[JWKSFetcher, error](f)
+}
+
+func (f *jwksFetcher) backgroundRefresh(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			match f.fetchJWKSWithRetry() {
+				Ok(_) => log.Printf("success"),
+				Err(e) => log.Printf("error: %v", e),
+			}
+		}
+	}
+}
+
+func (f *jwksFetcher) fetchJWKS() Result[Unit, error] {
+	match keyResult {
+		Ok(key) => {
+			newKeys[jwk.Kid] = key
+		},
+		Err(e) => {
+			log.Printf("warn: %v", e)
+		},
+	}
+	return Ok[Unit, error](Unit{})
+}
+`
+
+	tests := []struct {
+		methodName string
+		wantRet    string
+	}{
+		{"NewJWKSFetcher", "Result[JWKSFetcher, error]"},
+		{"backgroundRefresh", ""}, // void return
+		{"fetchJWKS", "Result[Unit, error]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.methodName, func(t *testing.T) {
+			ret := findMethodReturnType([]byte(src), tt.methodName)
+			if ret != tt.wantRet {
+				t.Errorf("findMethodReturnType(%q) = %q, want %q", tt.methodName, ret, tt.wantRet)
+			}
+		})
+	}
+}
+
+func TestFindMethodReturnCountWithDingoSyntax(t *testing.T) {
+	src := `package main
+
+func single() error {
+	match x {
+		Ok(_) => nil,
+		Err(e) => e,
+	}
+}
+
+func double() (int, error) {
+	return 0, nil
+}
+
+func triple() (string, int, error) {
+	return "", 0, nil
+}
+`
+
+	tests := []struct {
+		methodName string
+		wantCount  int
+	}{
+		{"single", 1},
+		{"double", 2},
+		{"triple", 3},
+		{"nonexistent", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.methodName, func(t *testing.T) {
+			count := findMethodReturnCount([]byte(src), tt.methodName)
+			if count != tt.wantCount {
+				t.Errorf("findMethodReturnCount(%q) = %d, want %d", tt.methodName, count, tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestExtractFunctionSignaturesSkipsFunctionTypes(t *testing.T) {
+	// Test that function type definitions and function literals are NOT extracted
+	// This caused parse errors like "func(*jwksFetcher)" without a name
+	src := `package util
+
+// Function type definition - should NOT be extracted
+type JWKSFetcherOption func(*jwksFetcher)
+
+// Regular named function - SHOULD be extracted
+func NewJWKSFetcher(jwksURL string, options ...JWKSFetcherOption) Result[JWKSFetcher, error] {
+	f := &jwksFetcher{url: jwksURL}
+	return Ok[JWKSFetcher, error](f)
+}
+
+// Method returning function literal - should NOT extract the literal
+func (f *jwksFetcher) GetOption() JWKSFetcherOption {
+	return func(f *jwksFetcher) {
+		f.timeout = 30
+	}
+}
+
+// Method with Result return - SHOULD be extracted
+func (f *jwksFetcher) Refresh() Result[Unit, error] {
+	return Ok[Unit, error](Unit{})
+}
+
+// Anonymous function in variable assignment - should NOT be extracted
+var handler = func(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("hello"))
+}
+
+// Function literal as return value - should NOT extract the literal
+func makeHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello"))
+	}
+}
+`
+
+	// Test that we correctly extract only named functions/methods
+	tests := []struct {
+		name      string
+		wantFound bool
+		wantRet   string
+	}{
+		{"NewJWKSFetcher", true, "Result[JWKSFetcher, error]"},
+		{"GetOption", true, "JWKSFetcherOption"},
+		{"Refresh", true, "Result[Unit, error]"},
+		{"makeHandler", true, "http.HandlerFunc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ret := findMethodReturnType([]byte(src), tt.name)
+			found := ret != ""
+			if found != tt.wantFound {
+				t.Errorf("findMethodReturnType(%q) found=%v, want found=%v", tt.name, found, tt.wantFound)
+			}
+			if tt.wantFound && ret != tt.wantRet {
+				t.Errorf("findMethodReturnType(%q) = %q, want %q", tt.name, ret, tt.wantRet)
+			}
+		})
+	}
+
+	// Verify the extracted signatures parse correctly (no parse errors)
+	signatures := extractFunctionSignatures([]byte(src))
+	if signatures == "" {
+		t.Fatal("extractFunctionSignatures returned empty string")
+	}
+
+	fset := token.NewFileSet()
+	_, err := parser.ParseFile(fset, "", signatures, 0)
+	if err != nil {
+		t.Errorf("extractFunctionSignatures produced invalid Go: %v\nSignatures:\n%s", err, signatures)
+	}
+}
+
+func TestExtractFunctionSignaturesPassgateCase(t *testing.T) {
+	// Real-world test case from passgate that was causing parse errors
+	src := `package util
+
+type JWKSFetcherOption func(*jwksFetcher)
+
+func WithRefreshInterval(d time.Duration) JWKSFetcherOption {
+	return func(f *jwksFetcher) {
+		f.refreshInterval = d
+	}
+}
+
+func (f *jwksFetcher) Refresh() Result[Unit, error] {
+	data := f.fetch()?
+	f.parseKeys(data)?
+	return Ok[Unit, error](Unit{})
+}
+
+func (f *jwksFetcher) fetch() Result[[]byte, error] {
+	return Ok[[]byte, error](nil)
+}
+`
+
+	// The key test: Refresh should be detected as returning Result[Unit, error]
+	ret := findMethodReturnType([]byte(src), "Refresh")
+	if ret != "Result[Unit, error]" {
+		t.Errorf("findMethodReturnType(Refresh) = %q, want %q", ret, "Result[Unit, error]")
+	}
+
+	// Also verify parse doesn't fail
+	signatures := extractFunctionSignatures([]byte(src))
+	fset := token.NewFileSet()
+	_, err := parser.ParseFile(fset, "", signatures, 0)
+	if err != nil {
+		t.Errorf("parse error: %v\nSignatures:\n%s", err, signatures)
+	}
+}

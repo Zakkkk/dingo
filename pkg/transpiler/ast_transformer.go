@@ -718,7 +718,7 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 		switch loc.Kind {
 		case ast.StmtErrorPropAssign, ast.StmtErrorPropLet:
 			// x := foo()? or let x = foo()?
-			generated = generateErrorPropStatementAdvanced(exprBytes, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			generated = generateErrorPropStatementAdvanced(result, exprBytes, loc.ExprStart, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
 			// Calculate LHS lengths for column mapping
 			// Dingo: "varName := " or "varName = " for underscore
 			dingoLHSLen = len(loc.VarName) + 4 // " := " or " = " (always 4 with leading space consideration)
@@ -731,7 +731,7 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			}
 		case ast.StmtErrorPropReturn:
 			// return foo()?
-			generated = generateErrorPropReturnAdvanced(exprBytes, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			generated = generateErrorPropReturnAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
 			// For return statements, no variable assignment - expression starts immediately after "return "
 			dingoLHSLen = 0
 			goLHSLen = 0
@@ -879,18 +879,107 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 // generateErrorPropStatementAdvanced generates code for statement-level error propagation
 // with support for all three error kinds: basic, context, and lambda.
 //
-// Basic (ErrorPropBasic):
+// For tuple returns (T, error):
 //
 //	tmp, err := expr; if err != nil { return ..., err }; data := tmp
 //
-// Context (ErrorPropContext):
+// For Result[T, E] returns:
 //
-//	tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; data := tmp
+//	tmp := expr; if tmp.IsErr() { return dgo.Err[T, E](tmp.MustErr()) }; data := tmp.MustOk()
 //
-// Lambda (ErrorPropLambda):
+// Context and Lambda variants wrap the error appropriately.
+func generateErrorPropStatementAdvanced(src []byte, expr []byte, exprPos int, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+	// Check if expression returns a Result type
+	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+
+	if isResult {
+		return generateResultErrorPropStatement(expr, varName, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)
+	}
+
+	// Original tuple-based error propagation
+	return generateTupleErrorPropStatement(expr, varName, returnTypes, counter, errorKind, errorContext, lambdaParam, lambdaBody)
+}
+
+// generateResultErrorPropStatement generates code for Result[T, E] error propagation.
 //
-//	tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; data := tmp
-func generateErrorPropStatementAdvanced(expr []byte, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+// Pattern:
+//
+//	tmp := expr
+//	if tmp.IsErr() { return dgo.Err[EnclosingOkType, EnclosingErrType](tmp.MustErr()) }
+//	varName := tmp.MustOk()
+func generateResultErrorPropStatement(expr []byte, varName string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, src []byte, exprPos int, exprOkType string, exprErrType string) []byte {
+	var buf bytes.Buffer
+
+	// Generate unique variable name
+	var tmpVar string
+	if *counter == 1 {
+		tmpVar = "tmp"
+	} else {
+		tmpVar = fmt.Sprintf("tmp%d", *counter-1)
+	}
+	*counter--
+
+	// Get enclosing function's Result type for the return statement
+	enclosingOkType := codegen.InferEnclosingFunctionReturnsResult(src, exprPos)
+	if enclosingOkType == "" {
+		enclosingOkType = exprOkType // Fallback to expression's type
+	}
+
+	// tmp := expr
+	buf.WriteString(tmpVar)
+	buf.WriteString(" := ")
+	buf.Write(expr)
+	buf.WriteByte('\n')
+
+	// if tmp.IsErr() { return dgo.Err[T, E](ERROR_VALUE) }
+	buf.WriteString("if ")
+	buf.WriteString(tmpVar)
+	buf.WriteString(".IsErr() {\n\treturn dgo.Err[")
+	buf.WriteString(enclosingOkType)
+	buf.WriteString(", ")
+	buf.WriteString(exprErrType)
+	buf.WriteString("](")
+
+	// Generate the error value based on kind
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", tmp.MustErr())
+		buf.WriteString(`fmt.Errorf("`)
+		buf.WriteString(errorContext)
+		buf.WriteString(`: %w", `)
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr())")
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with tmp.MustErr() in body
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, tmpVar+".MustErr()")
+		buf.Write(substituted)
+	default:
+		// Basic: just use tmp.MustErr()
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr()")
+	}
+
+	buf.WriteString(")\n}\n")
+
+	// varName := tmp.MustOk() (or varName = tmp.MustOk() for underscore)
+	buf.WriteString(varName)
+	if varName == "_" {
+		buf.WriteString(" = ")
+	} else {
+		buf.WriteString(" := ")
+	}
+	buf.WriteString(tmpVar)
+	buf.WriteString(".MustOk()")
+
+	return buf.Bytes()
+}
+
+// generateTupleErrorPropStatement generates code for tuple (T, error) error propagation.
+//
+// Pattern:
+//
+//	tmp, err := expr; if err != nil { return ..., err }; data := tmp
+func generateTupleErrorPropStatement(expr []byte, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names
@@ -1144,18 +1233,100 @@ func substituteIdentifier(src []byte, oldIdent, newIdent string) []byte {
 // generateErrorPropReturnAdvanced generates code for return statement error propagation
 // with support for all three error kinds: basic, context, and lambda.
 //
-// Basic (ErrorPropBasic):
+// For tuple returns (T, error):
 //
 //	tmp, err := expr; if err != nil { return ..., err }; return tmp
 //
-// Context (ErrorPropContext):
+// For Result[T, E] returns:
 //
-//	tmp, err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }; return tmp
+//	tmp := expr; if tmp.IsErr() { return dgo.Err[T, E](tmp.MustErr()) }; return tmp.MustOk()
+func generateErrorPropReturnAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+	// Check if expression returns a Result type
+	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+
+	if isResult {
+		return generateResultErrorPropReturn(expr, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)
+	}
+
+	// Original tuple-based error propagation
+	return generateTupleErrorPropReturn(expr, returnTypes, counter, errorKind, errorContext, lambdaParam, lambdaBody)
+}
+
+// generateResultErrorPropReturn generates code for Result[T, E] return error propagation.
 //
-// Lambda (ErrorPropLambda):
+// Pattern:
 //
-//	tmp, err := expr; if err != nil { return ..., func(p error) error { return body }(err) }; return tmp
-func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
+//	tmp := expr
+//	if tmp.IsErr() { return dgo.Err[EnclosingOkType, EnclosingErrType](tmp.MustErr()) }
+//	return tmp.MustOk()
+func generateResultErrorPropReturn(expr []byte, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, src []byte, exprPos int, exprOkType string, exprErrType string) []byte {
+	var buf bytes.Buffer
+
+	// Generate unique variable name
+	var tmpVar string
+	if *counter == 1 {
+		tmpVar = "tmp"
+	} else {
+		tmpVar = fmt.Sprintf("tmp%d", *counter-1)
+	}
+	*counter--
+
+	// Get enclosing function's Result type for the return statement
+	enclosingOkType := codegen.InferEnclosingFunctionReturnsResult(src, exprPos)
+	if enclosingOkType == "" {
+		enclosingOkType = exprOkType // Fallback to expression's type
+	}
+
+	// tmp := expr
+	buf.WriteString(tmpVar)
+	buf.WriteString(" := ")
+	buf.Write(expr)
+	buf.WriteByte('\n')
+
+	// if tmp.IsErr() { return dgo.Err[T, E](ERROR_VALUE) }
+	buf.WriteString("if ")
+	buf.WriteString(tmpVar)
+	buf.WriteString(".IsErr() {\n\treturn dgo.Err[")
+	buf.WriteString(enclosingOkType)
+	buf.WriteString(", ")
+	buf.WriteString(exprErrType)
+	buf.WriteString("](")
+
+	// Generate the error value based on kind
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", tmp.MustErr())
+		buf.WriteString(`fmt.Errorf("`)
+		buf.WriteString(errorContext)
+		buf.WriteString(`: %w", `)
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr())")
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with tmp.MustErr() in body
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, tmpVar+".MustErr()")
+		buf.Write(substituted)
+	default:
+		// Basic: just use tmp.MustErr()
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr()")
+	}
+
+	buf.WriteString(")\n}\n")
+
+	// return tmp.MustOk()
+	buf.WriteString("return ")
+	buf.WriteString(tmpVar)
+	buf.WriteString(".MustOk()")
+
+	return buf.Bytes()
+}
+
+// generateTupleErrorPropReturn generates code for tuple (T, error) return error propagation.
+//
+// Pattern:
+//
+//	tmp, err := expr; if err != nil { return ..., err }; return tmp
+func generateTupleErrorPropReturn(expr []byte, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names
@@ -1221,6 +1392,11 @@ func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter 
 
 // generateErrorPropBareAdvanced generates code for bare statement error propagation.
 //
+// For expressions returning Result[T, E]:
+//
+//	tmp := expr; if tmp.IsErr() { return dgo.Err[T, E](tmp.MustErr()) }
+//
+// For expressions returning (T, error) tuples:
 // Uses InferExprReturnCountWithResolver to detect:
 // - Single-return functions (like row.Scan()) -> generates: err := expr
 // - Multi-return functions (like db.Query()) -> generates: _, err := expr
@@ -1231,20 +1407,88 @@ func generateErrorPropReturnAdvanced(expr []byte, returnTypes []string, counter 
 //
 // For external packages where detection fails, defaults to single-return (err :=)
 // for bare statements since the user is explicitly not capturing any return value.
+func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
+	// Check if expression returns a Result type
+	isExprResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+
+	if isExprResult {
+		return generateResultErrorPropBare(expr, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)
+	}
+
+	// Original tuple-based error propagation for bare statements
+	return generateTupleErrorPropBare(src, expr, exprPos, returnTypes, counter, errorKind, errorContext, lambdaParam, lambdaBody, resolver)
+}
+
+// generateResultErrorPropBare generates code for Result[T, E] bare error propagation.
 //
-// Basic (ErrorPropBasic):
+// Pattern:
+//
+//	tmp := expr
+//	if tmp.IsErr() { return dgo.Err[EnclosingOkType, EnclosingErrType](tmp.MustErr()) }
+func generateResultErrorPropBare(expr []byte, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, src []byte, exprPos int, exprOkType string, exprErrType string) []byte {
+	var buf bytes.Buffer
+
+	// Generate unique variable name
+	var tmpVar string
+	if *counter == 1 {
+		tmpVar = "tmp"
+	} else {
+		tmpVar = fmt.Sprintf("tmp%d", *counter-1)
+	}
+	*counter--
+
+	// Get enclosing function's Result type for the return statement
+	enclosingOkType := codegen.InferEnclosingFunctionReturnsResult(src, exprPos)
+	if enclosingOkType == "" {
+		enclosingOkType = exprOkType // Fallback to expression's type
+	}
+
+	// tmp := expr
+	buf.WriteString(tmpVar)
+	buf.WriteString(" := ")
+	buf.Write(expr)
+	buf.WriteByte('\n')
+
+	// if tmp.IsErr() { return dgo.Err[T, E](ERROR_VALUE) }
+	buf.WriteString("if ")
+	buf.WriteString(tmpVar)
+	buf.WriteString(".IsErr() {\n\treturn dgo.Err[")
+	buf.WriteString(enclosingOkType)
+	buf.WriteString(", ")
+	buf.WriteString(exprErrType)
+	buf.WriteString("](")
+
+	// Generate the error value based on kind
+	switch errorKind {
+	case ast.ErrorPropContext:
+		// fmt.Errorf("message: %w", tmp.MustErr())
+		buf.WriteString(`fmt.Errorf("`)
+		buf.WriteString(errorContext)
+		buf.WriteString(`: %w", `)
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr())")
+	case ast.ErrorPropLambda:
+		// Substitute lambda param with tmp.MustErr() in body
+		substituted := substituteIdentifier(lambdaBody, lambdaParam, tmpVar+".MustErr()")
+		buf.Write(substituted)
+	default:
+		// Basic: just use tmp.MustErr()
+		buf.WriteString(tmpVar)
+		buf.WriteString(".MustErr()")
+	}
+
+	buf.WriteString(")\n}")
+
+	return buf.Bytes()
+}
+
+// generateTupleErrorPropBare generates code for tuple (T, error) bare error propagation.
+//
+// Pattern:
 //
 //	err := expr; if err != nil { return ..., err }  (single-return)
 //	_, err := expr; if err != nil { return ..., err }  (multi-return)
-//
-// Context (ErrorPropContext):
-//
-//	err := expr; if err != nil { return ..., fmt.Errorf("msg: %w", err) }
-//
-// Lambda (ErrorPropLambda):
-//
-//	err := expr; if err != nil { return ..., transformedError }
-func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
+func generateTupleErrorPropBare(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
 	var buf bytes.Buffer
 
 	// Generate unique variable names

@@ -7,6 +7,153 @@ import (
 	"go/token"
 )
 
+// extractFunctionSignatures extracts function/method signatures from Dingo source.
+// It uses go/scanner to tokenize and extract only the signature portion (func ... { ),
+// replacing the body with empty braces {}. This allows go/parser to parse the
+// signatures even when the source contains Dingo-specific syntax like match expressions.
+//
+// IMPORTANT: Only extracts TOP-LEVEL NAMED functions and methods:
+//   - `func FunctionName(params) returns { ... }`
+//   - `func (receiver) MethodName(params) returns { ... }`
+//
+// Skips:
+//   - `type Foo func(...)` - type alias to function type
+//   - `return func(...) {...}` - function literals
+//   - `x := func(...) {...}` - anonymous functions assigned to variables
+//
+// Returns a valid Go source string containing a package declaration and function stubs.
+func extractFunctionSignatures(src []byte) string {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(src))
+
+	var s scanner.Scanner
+	s.Init(file, src, nil, 0)
+
+	var result []byte
+	result = append(result, "package p\n"...)
+
+	// State machine for extracting signatures
+	// States:
+	// 0 = looking for 'func'
+	// 1 = found 'func', need to determine if it's a named function/method
+	// 2 = in receiver parens, waiting for closing paren
+	// 3 = confirmed named function, collecting signature until '{'
+	// 4 = inside function body, skip until balanced braces
+	// 5 = skip this func entirely (it's a literal or type def)
+	state := 0
+	braceDepth := 0
+	parenDepth := 0
+	sigStart := -1
+
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		offset := fset.Position(pos).Offset
+
+		switch state {
+		case 0: // Looking for 'func'
+			if tok == token.FUNC {
+				state = 1
+				sigStart = offset
+			}
+
+		case 1: // Found 'func', determine what kind
+			if tok == token.IDENT {
+				// func FunctionName(...) - regular named function
+				state = 3
+			} else if tok == token.LPAREN {
+				// func (... - could be method receiver OR function literal params
+				// Need to look ahead: method has IDENT after receiver parens
+				state = 2
+				parenDepth = 1
+			} else {
+				// Unexpected token after func - skip this func
+				state = 0
+				sigStart = -1
+			}
+
+		case 2: // Inside receiver parens (or function literal params)
+			if tok == token.LPAREN {
+				parenDepth++
+			} else if tok == token.RPAREN {
+				parenDepth--
+				if parenDepth == 0 {
+					// Parens closed, next token determines if method or literal
+					// Stay in state 2 with parenDepth=0 to check next token
+				}
+			} else if parenDepth == 0 {
+				// We're past the parens, check what comes next
+				if tok == token.IDENT {
+					// func (receiver) MethodName(...) - this is a method
+					state = 3
+				} else if tok == token.LBRACE {
+					// func (params) { - function literal, skip it
+					state = 4
+					braceDepth = 1
+					sigStart = -1
+				} else if tok == token.LPAREN {
+					// func (receiver) (params) - could be method with no name?
+					// Actually this is invalid Go, but let's handle gracefully
+					state = 5
+					parenDepth = 1
+				} else {
+					// Something else - skip
+					state = 0
+					sigStart = -1
+				}
+			}
+
+		case 3: // Confirmed named function, collecting signature
+			if tok == token.LBRACE {
+				// Extract signature from sigStart to current position
+				sig := src[sigStart:offset]
+				result = append(result, sig...)
+				result = append(result, " {}\n"...)
+				state = 4
+				braceDepth = 1
+			} else if tok == token.SEMICOLON {
+				// Interface method or forward declaration - no body
+				sig := src[sigStart:offset]
+				result = append(result, sig...)
+				result = append(result, " {}\n"...)
+				state = 0
+				sigStart = -1
+			}
+
+		case 4: // Inside function body, skip until braces balance
+			if tok == token.LBRACE {
+				braceDepth++
+			} else if tok == token.RBRACE {
+				braceDepth--
+				if braceDepth == 0 {
+					state = 0
+					sigStart = -1
+				}
+			}
+
+		case 5: // Skip nested parens (for edge cases)
+			if tok == token.LPAREN {
+				parenDepth++
+			} else if tok == token.RPAREN {
+				parenDepth--
+				if parenDepth == 0 {
+					state = 0
+					sigStart = -1
+				}
+			}
+		}
+	}
+
+	if len(result) <= len("package p\n") {
+		return ""
+	}
+
+	return string(result)
+}
+
 // InferReturnTypes analyzes the source to find the enclosing function's return types
 // and returns the corresponding zero values for each return position.
 // The last return value is always assumed to be the error being propagated.
@@ -56,6 +203,149 @@ func InferEnclosingFunctionReturnsResult(src []byte, exprPos int) string {
 			okType := ExtractResultOkType(typeName)
 			if okType != "" {
 				return okType
+			}
+		}
+	}
+	return ""
+}
+
+// InferExprReturnsResult checks if an expression returns a Result type.
+// Returns (isResult, okType, errType) where:
+//   - isResult: true if the expression returns a Result[T, E] type
+//   - okType: the T type from Result[T, E]
+//   - errType: the E type from Result[T, E]
+//
+// This is used by error propagation to determine whether to generate:
+//   - Result pattern: tmp := expr; if tmp.IsErr() { return dgo.Err[T,E](tmp.MustErr()) }
+//   - Tuple pattern: tmp, err := expr; if err != nil { return ..., err }
+//
+// The function works by:
+//  1. Extracting the function/method name from the expression
+//  2. Finding the function declaration in the source
+//  3. Checking if its return type matches Result[T, E] pattern
+func InferExprReturnsResult(src []byte, exprBytes []byte, exprPos int) (isResult bool, okType string, errType string) {
+	// Parse the expression to extract function name
+	exprStr := string(exprBytes)
+	methodName := extractMethodName(exprStr)
+	if methodName == "" {
+		return false, "", ""
+	}
+
+	// Find the function declaration and get its return type
+	returnType := findMethodReturnType(src, methodName)
+	if returnType == "" {
+		return false, "", ""
+	}
+
+	// Check if it's a Result type
+	if !IsResultType(returnType) {
+		return false, "", ""
+	}
+
+	// Extract type parameters
+	okType = ExtractResultOkType(returnType)
+	errType = ExtractResultErrType(returnType)
+
+	return true, okType, errType
+}
+
+// findMethodReturnType searches the source for a function/method with the given name
+// and returns its return type as a string, or empty string if not found.
+//
+// NOTE: This function extracts function signatures using go/scanner to handle
+// Dingo-specific syntax (match expressions, ?, etc.) that go/parser cannot handle.
+// Function signatures are valid Go syntax, so we extract them and parse those.
+func findMethodReturnType(src []byte, methodName string) string {
+	// Extract function signatures (valid Go) from Dingo source
+	signatures := extractFunctionSignatures(src)
+	if signatures == "" {
+		return ""
+	}
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", signatures, parser.ParseComments)
+	if err != nil {
+		return ""
+	}
+
+	var returnType string
+	ast.Inspect(f, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok {
+			return true
+		}
+		if fn.Name.Name == methodName {
+			if fn.Type.Results != nil && fn.Type.Results.NumFields() > 0 {
+				// Get the first return type
+				returnType = exprToTypeName(fn.Type.Results.List[0].Type)
+			}
+			return false
+		}
+		return true
+	})
+
+	return returnType
+}
+
+// ExtractResultErrType extracts the E from Result[T, E] or dgo.Result[T, E]
+// Returns empty string if not a Result type or extraction fails
+func ExtractResultErrType(typeStr string) string {
+	// Find "Result[" in the string
+	resultIdx := -1
+	for i := 0; i <= len(typeStr)-7; i++ {
+		if typeStr[i:i+7] == "Result[" {
+			resultIdx = i + 7
+			break
+		}
+	}
+	if resultIdx == -1 {
+		return ""
+	}
+
+	// Find the comma that separates T and E (at depth 1)
+	depth := 1
+	commaIdx := -1
+	for i := resultIdx; i < len(typeStr); i++ {
+		switch typeStr[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				// No comma found, invalid Result type
+				return ""
+			}
+		case ',':
+			if depth == 1 {
+				commaIdx = i
+				break
+			}
+		}
+		if commaIdx != -1 {
+			break
+		}
+	}
+	if commaIdx == -1 {
+		return ""
+	}
+
+	// Extract from comma+1 to closing bracket
+	// Skip leading space after comma
+	start := commaIdx + 1
+	for start < len(typeStr) && typeStr[start] == ' ' {
+		start++
+	}
+
+	// Find closing bracket at depth 1
+	depth = 1
+	for i := start; i < len(typeStr); i++ {
+		switch typeStr[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return typeStr[start:i]
 			}
 		}
 	}
@@ -365,25 +655,18 @@ func extractFuncName(expr ast.Expr) string {
 // findMethodReturnCount searches the source for a function/method with the given name
 // and returns its return count, or 0 if not found.
 //
-// NOTE: This function sanitizes Dingo-specific '?' syntax to allow go/parser to work.
-// This is NOT byte-based code transformation - all actual analysis is done via go/ast.
-// The sanitization is necessary because we need to parse function signatures that
-// exist in the same file as error propagation expressions, and go/parser cannot
-// handle the '?' character. The actual return count detection is performed entirely
-// through ast.Inspect on the parsed AST.
+// NOTE: This function extracts function signatures using go/scanner to handle
+// Dingo-specific syntax (match expressions, ?, etc.) that go/parser cannot handle.
+// Function signatures are valid Go syntax, so we extract them and parse those.
 func findMethodReturnCount(src []byte, methodName string) int {
-	// Sanitize source: replace Dingo's '?' with space to allow go/parser to work.
-	// This preserves byte positions while making the source valid Go syntax.
-	sanitized := make([]byte, len(src))
-	copy(sanitized, src)
-	for i := 0; i < len(sanitized); i++ {
-		if sanitized[i] == '?' {
-			sanitized[i] = ' '
-		}
+	// Extract function signatures (valid Go) from Dingo source
+	signatures := extractFunctionSignatures(src)
+	if signatures == "" {
+		return 0
 	}
 
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "", sanitized, parser.ParseComments)
+	f, err := parser.ParseFile(fset, "", signatures, parser.ParseComments)
 	if err != nil {
 		return 0
 	}
