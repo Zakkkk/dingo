@@ -29,7 +29,7 @@ func (p *LocalFuncParser) ParseLocalFunctions(source []byte) (map[string]*Functi
 	// Use SkipObjectResolution to be lenient with undefined types
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "", normalized, parser.SkipObjectResolution)
-	
+
 	// Step 3: If Go parser fails (due to Dingo syntax in bodies), use regex fallback
 	if err != nil {
 		return p.extractFuncsRegex(source)
@@ -54,8 +54,19 @@ func (p *LocalFuncParser) ParseLocalFunctions(source []byte) (map[string]*Functi
 }
 
 // normalizeFuncDecls converts Dingo function declarations to valid Go
-// Only normalizes the declaration line, not the body
+// Normalizes both declaration lines and bodies to make them parseable by go/parser
 func (p *LocalFuncParser) normalizeFuncDecls(source []byte) []byte {
+	// Step 1: Replace '?' with space (error propagation operator)
+	// This makes Dingo source parseable while preserving byte positions
+	sanitized := make([]byte, len(source))
+	copy(sanitized, source)
+	for i := 0; i < len(sanitized); i++ {
+		if sanitized[i] == '?' {
+			sanitized[i] = ' '
+		}
+	}
+
+	// Step 2: Convert Dingo parameter syntax to Go syntax
 	// Pattern: func name(param: Type) ReturnType
 	// Convert to: func name(param Type) ReturnType
 
@@ -64,7 +75,7 @@ func (p *LocalFuncParser) normalizeFuncDecls(source []byte) []byte {
 	typeAnnotPattern := regexp.MustCompile(`\b(\w+):\s+([^,)\s]+)`)
 
 	// Process line by line to avoid modifying non-function-signature colons
-	lines := bytes.Split(source, []byte("\n"))
+	lines := bytes.Split(sanitized, []byte("\n"))
 	for i, line := range lines {
 		lineStr := string(line)
 		// Only process lines that look like function declarations
@@ -156,10 +167,11 @@ func (p *LocalFuncParser) extractFuncsRegex(source []byte) (map[string]*Function
 	result := make(map[string]*FunctionSignature)
 
 	// Pattern to match function declarations with return types
-	// func name(params) (ReturnType, error)
-	// func name(params) error
-	// func name(params) ReturnType
-	pattern := regexp.MustCompile(`(?m)^func\s+(\w+)\s*\(([^)]*)\)\s*(?:\(([^)]+)\)|(\w+(?:\.\w+)?))?\s*\{`)
+	// Captures everything between ) and { as the return type section
+	// This handles: func name(params) ReturnType {
+	//               func name(params) (Type1, error) {
+	//               func name(params) Result[T, E] {
+	pattern := regexp.MustCompile(`(?m)^func\s+(\w+)\s*\(([^)]*)\)\s*([^{]*)\{`)
 
 	matches := pattern.FindAllSubmatch(source, -1)
 	for _, match := range matches {
@@ -172,32 +184,89 @@ func (p *LocalFuncParser) extractFuncsRegex(source []byte) (map[string]*Function
 			sig.Parameters = params
 		}
 
-		// Parse return types
+		// Parse return types (match[3])
 		if len(match) > 3 && len(match[3]) > 0 {
-			// Multiple returns: (Type1, error)
-			returns := strings.Split(string(match[3]), ",")
-			for _, ret := range returns {
-				ret = strings.TrimSpace(ret)
-				ref := TypeRef{Name: ret}
-				if ret == "error" {
-					ref.IsError = true
-				}
-				sig.Results = append(sig.Results, ref)
+			returnSection := strings.TrimSpace(string(match[3]))
+			if returnSection != "" {
+				sig.Results = p.parseReturnTypes(returnSection)
 			}
-		} else if len(match) > 4 && len(match[4]) > 0 {
-			// Single return: Type or error
-			ret := strings.TrimSpace(string(match[4]))
-			ref := TypeRef{Name: ret}
-			if ret == "error" {
-				ref.IsError = true
-			}
-			sig.Results = append(sig.Results, ref)
 		}
 
 		result[name] = sig
 	}
 
 	return result, nil
+}
+
+// parseReturnTypes parses the return type section from a function signature
+// Handles: "error", "Result[T, E]", "(Type1, error)", etc.
+func (p *LocalFuncParser) parseReturnTypes(returnSection string) []TypeRef {
+	returnSection = strings.TrimSpace(returnSection)
+	if returnSection == "" {
+		return nil
+	}
+
+	var results []TypeRef
+
+	// Check if it's a tuple return: (Type1, Type2)
+	if strings.HasPrefix(returnSection, "(") && strings.HasSuffix(returnSection, ")") {
+		// Remove parentheses and split by comma (but not commas inside brackets)
+		inner := returnSection[1 : len(returnSection)-1]
+		types := splitByCommaRespectingBrackets(inner)
+		for _, t := range types {
+			t = strings.TrimSpace(t)
+			if t != "" {
+				ref := TypeRef{Name: t}
+				if t == "error" {
+					ref.IsError = true
+				}
+				results = append(results, ref)
+			}
+		}
+	} else {
+		// Single return type: Type, error, Result[T, E], etc.
+		ref := TypeRef{Name: returnSection}
+		if returnSection == "error" {
+			ref.IsError = true
+		}
+		results = append(results, ref)
+	}
+
+	return results
+}
+
+// splitByCommaRespectingBrackets splits a string by comma, but ignores commas inside brackets
+func splitByCommaRespectingBrackets(s string) []string {
+	var result []string
+	var current strings.Builder
+	bracketDepth := 0
+
+	for _, ch := range s {
+		switch ch {
+		case '[':
+			bracketDepth++
+			current.WriteRune(ch)
+		case ']':
+			bracketDepth--
+			current.WriteRune(ch)
+		case ',':
+			if bracketDepth == 0 {
+				result = append(result, current.String())
+				current.Reset()
+			} else {
+				current.WriteRune(ch)
+			}
+		default:
+			current.WriteRune(ch)
+		}
+	}
+
+	// Don't forget the last part
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+
+	return result
 }
 
 // parseParamsRegex extracts parameter types from a parameter string
@@ -207,7 +276,7 @@ func (p *LocalFuncParser) parseParamsRegex(params string) []TypeRef {
 	}
 
 	var result []TypeRef
-	
+
 	// Handle both Dingo syntax (name: Type) and Go syntax (name Type)
 	// Split by comma to get individual parameters
 	parts := strings.Split(params, ",")
@@ -216,7 +285,7 @@ func (p *LocalFuncParser) parseParamsRegex(params string) []TypeRef {
 		if part == "" {
 			continue
 		}
-		
+
 		// Try to extract type (handle both "x: int" and "x int")
 		typePattern := regexp.MustCompile(`\w+[:\s]+(\S+)`)
 		if matches := typePattern.FindStringSubmatch(part); len(matches) > 1 {
@@ -226,7 +295,7 @@ func (p *LocalFuncParser) parseParamsRegex(params string) []TypeRef {
 			result = append(result, TypeRef{Name: typeName})
 		}
 	}
-	
+
 	return result
 }
 
@@ -252,6 +321,20 @@ func formatType(expr ast.Expr) string {
 		return t.Sel.Name
 	case *ast.InterfaceType:
 		return "interface{}"
+	case *ast.IndexExpr:
+		// Generic type with single type param: Result[T]
+		return formatType(t.X) + "[" + formatType(t.Index) + "]"
+	case *ast.IndexListExpr:
+		// Generic type with multiple type params: Result[T, E]
+		result := formatType(t.X) + "["
+		for i, idx := range t.Indices {
+			if i > 0 {
+				result += ", "
+			}
+			result += formatType(idx)
+		}
+		result += "]"
+		return result
 	default:
 		return "unknown"
 	}

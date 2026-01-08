@@ -60,15 +60,15 @@ func TestDetectOperators(t *testing.T) {
 			},
 		},
 		{
-			name:   "operators inside strings should NOT be detected",
-			source: `s := "foo()? and a ?? b"`,
+			name:     "operators inside strings should NOT be detected",
+			source:   `s := "foo()? and a ?? b"`,
 			expected: []expectedOp{
 				// String contents should be treated as STRING token, not operators
 			},
 		},
 		{
-			name:   "operators in comments should NOT be detected",
-			source: "// x := foo()?\nx := 42",
+			name:     "operators in comments should NOT be detected",
+			source:   "// x := foo()?\nx := 42",
 			expected: []expectedOp{
 				// Comments should be COMMENT token, not operators
 			},
@@ -105,15 +105,15 @@ func TestDetectOperators(t *testing.T) {
 			},
 		},
 		{
-			name:   "empty source",
-			source: "",
+			name:     "empty source",
+			source:   "",
 			expected: []expectedOp{
 				// No operators
 			},
 		},
 		{
-			name:   "no operators",
-			source: "x := foo()\ny := bar()",
+			name:     "no operators",
+			source:   "x := foo()\ny := bar()",
 			expected: []expectedOp{
 				// No operators
 			},

@@ -8,9 +8,9 @@ import (
 // OrPattern represents pattern alternatives: Ok(_) | Err(_)
 // Used in match expressions for combining multiple patterns
 type OrPattern struct {
-	Left     Pattern   // Left pattern
-	Pipe     token.Pos // Position of '|'
-	Right    Pattern   // Right pattern
+	Left  Pattern   // Left pattern
+	Pipe  token.Pos // Position of '|'
+	Right Pattern   // Right pattern
 }
 
 func (p *OrPattern) PatternNode() {}
@@ -35,8 +35,8 @@ func (p *OrPattern) GetBindings() []Binding {
 // RestPattern represents rest pattern in slice/array: [a, b, ...rest]
 // Matches remaining elements in sequence patterns
 type RestPattern struct {
-	Dots token.Pos       // Position of '...'
-	Name *string         // Optional variable name (nil for anonymous ...)
+	Dots token.Pos // Position of '...'
+	Name *string   // Optional variable name (nil for anonymous ...)
 }
 
 func (p *RestPattern) PatternNode() {}
@@ -138,10 +138,10 @@ func (p *SlicePattern) GetBindings() []Binding {
 // StructFieldPattern represents struct field pattern: {x, y: newName}
 // Used in struct destructuring
 type StructFieldPattern struct {
-	Field   string    // Field name
+	Field    string    // Field name
 	FieldPos token.Pos // Position of field name
-	Colon   token.Pos // Position of ':' (zero if shorthand)
-	Pattern Pattern   // Pattern for field value (nil if shorthand)
+	Colon    token.Pos // Position of ':' (zero if shorthand)
+	Pattern  Pattern   // Pattern for field value (nil if shorthand)
 }
 
 func (p *StructFieldPattern) PatternNode() {}

@@ -205,8 +205,8 @@ func TestFindNearest(t *testing.T) {
 		{
 			name:        "nearest within distance - after",
 			line:        1,
-			col:         17, // 3 columns after 14 (last col of ident), 3 columns before 20 (first col of call)
-			maxDistance: 5,  // dist = col - EndCol + 1 = 17 - 15 + 1 = 3 for ident, dist = 20 - 17 = 3 for call
+			col:         17,             // 3 columns after 14 (last col of ident), 3 columns before 20 (first col of call)
+			maxDistance: 5,              // dist = col - EndCol + 1 = 17 - 15 + 1 = 3 for ident, dist = 20 - 17 = 3 for call
 			wantKind:    ptr(KindIdent), // Equidistant (both dist=3), ident wins because it's checked first
 		},
 		{

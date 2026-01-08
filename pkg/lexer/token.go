@@ -24,16 +24,16 @@ const (
 	VAR
 
 	// Operators and delimiters
-	ASSIGN   // =
-	DEFINE   // :=
-	COLON    // :
-	COMMA    // ,
-	LPAREN   // (
-	RPAREN   // )
-	LBRACKET // [
-	RBRACKET // ]
-	LANGLE   // <
-	RANGLE   // >
+	ASSIGN    // =
+	DEFINE    // :=
+	COLON     // :
+	COMMA     // ,
+	LPAREN    // (
+	RPAREN    // )
+	LBRACKET  // [
+	RBRACKET  // ]
+	LANGLE    // <
+	RANGLE    // >
 	SEMICOLON // ;
 
 	// Dingo-specific operators
@@ -43,27 +43,27 @@ const (
 )
 
 var tokenTypeNames = map[TokenType]string{
-	ILLEGAL:   "ILLEGAL",
-	EOF:       "EOF",
-	NEWLINE:   "NEWLINE",
-	IDENT:     "IDENT",
-	INT:       "INT",
-	FLOAT:     "FLOAT",
-	STRING:    "STRING",
-	LET:       "LET",
-	VAR:       "VAR",
-	ASSIGN:    "ASSIGN",
-	DEFINE:    "DEFINE",
-	COLON:     "COLON",
-	COMMA:     "COMMA",
-	LPAREN:    "LPAREN",
-	RPAREN:    "RPAREN",
-	LBRACKET:  "LBRACKET",
-	RBRACKET:  "RBRACKET",
-	LANGLE:    "LANGLE",
-	RANGLE:    "RANGLE",
-	SEMICOLON: "SEMICOLON",
-	QUESTION:  "QUESTION",
+	ILLEGAL:           "ILLEGAL",
+	EOF:               "EOF",
+	NEWLINE:           "NEWLINE",
+	IDENT:             "IDENT",
+	INT:               "INT",
+	FLOAT:             "FLOAT",
+	STRING:            "STRING",
+	LET:               "LET",
+	VAR:               "VAR",
+	ASSIGN:            "ASSIGN",
+	DEFINE:            "DEFINE",
+	COLON:             "COLON",
+	COMMA:             "COMMA",
+	LPAREN:            "LPAREN",
+	RPAREN:            "RPAREN",
+	LBRACKET:          "LBRACKET",
+	RBRACKET:          "RBRACKET",
+	LANGLE:            "LANGLE",
+	RANGLE:            "RANGLE",
+	SEMICOLON:         "SEMICOLON",
+	QUESTION:          "QUESTION",
 	QUESTION_QUESTION: "QUESTION_QUESTION",
 	QUESTION_DOT:      "QUESTION_DOT",
 }

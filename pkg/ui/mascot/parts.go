@@ -6,11 +6,11 @@ package mascot
 
 // Ears variants - Different ear positions for emotional states
 var Ears = struct {
-	NORMAL      []string
-	ALERT_L     []string
-	ALERT_R     []string
-	ALERT_BOTH  []string
-	DROOPY      []string
+	NORMAL     []string
+	ALERT_L    []string
+	ALERT_R    []string
+	ALERT_BOTH []string
+	DROOPY     []string
 }{
 	NORMAL: []string{
 		"     ▄▀▀▄   ▄▀▀▄      ",

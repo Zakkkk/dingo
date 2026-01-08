@@ -131,7 +131,7 @@ func TestWriterMultipleKinds(t *testing.T) {
 
 func TestWriterLineOffsetsCorrectness(t *testing.T) {
 	// Source with known line boundaries
-	dingoSrc := []byte("a\nb\nc")  // Lines at: 0, 2, 4
+	dingoSrc := []byte("a\nb\nc") // Lines at: 0, 2, 4
 	goSrc := []byte("x\ny\nz\nw") // Lines at: 0, 2, 4, 6
 
 	writer := NewWriter(dingoSrc, goSrc)

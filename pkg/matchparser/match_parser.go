@@ -204,9 +204,10 @@ func (p *MatchParser) parseArm() (*ast.MatchArm, error) {
 
 // parsePattern parses a pattern (recursive for nested patterns)
 // Grammar:
-//   pattern := '_' | literal | identifier | constructor | tuple
-//   constructor := IDENT '(' pattern (',' pattern)* ')'
-//   tuple := '(' pattern (',' pattern)* ')'
+//
+//	pattern := '_' | literal | identifier | constructor | tuple
+//	constructor := IDENT '(' pattern (',' pattern)* ')'
+//	tuple := '(' pattern (',' pattern)* ')'
 func (p *MatchParser) parsePattern() (ast.Pattern, error) {
 	tok := p.tok.Current()
 

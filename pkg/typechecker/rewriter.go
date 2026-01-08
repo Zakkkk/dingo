@@ -123,6 +123,10 @@ func (r *TypeRewriter) isInterfaceType(expr ast.Expr) bool {
 func (r *TypeRewriter) typeToExpr(t types.Type) ast.Expr {
 	switch typ := t.(type) {
 	case *types.Basic:
+		// UntypedNil has no valid type representation - skip it
+		if typ.Kind() == types.UntypedNil {
+			return nil
+		}
 		return &ast.Ident{Name: typ.Name()}
 
 	case *types.Pointer:

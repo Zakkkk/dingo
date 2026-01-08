@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MadAppGang/dingo/pkg/lint"
+	"github.com/MadAppGang/dingo/pkg/lint/analyzer"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
-	"github.com/MadAppGang/dingo/pkg/lint"
-	"github.com/MadAppGang/dingo/pkg/lint/analyzer"
 )
 
 // lintCmd creates the "dingo lint" subcommand

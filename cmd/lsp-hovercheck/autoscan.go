@@ -12,9 +12,9 @@ import (
 
 // AutoScanResult holds the result of scanning a .dingo file
 type AutoScanResult struct {
-	File       string
+	File        string
 	Identifiers []IdentifierInfo
-	Errors     []string
+	Errors      []string
 }
 
 // IdentifierInfo holds information about an identifier found in a file

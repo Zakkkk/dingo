@@ -414,3 +414,211 @@ func makeToken(kind tokenizer.TokenKind, lit string) tokenizer.Token {
 		Column: 1,
 	}
 }
+
+// TestMatchArmAssignmentError verifies that assignment statements in braceless arms produce clear errors
+func TestMatchArmAssignmentError(t *testing.T) {
+	src := []byte(`match x {
+		val => y = val + 1
+	}`)
+
+	tok := tokenizer.New(src)
+	_, err := tok.Tokenize()
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+	tok.Reset()
+
+	parser := NewPrattParser(tok)
+	expr := parser.ParseExpression(PrecLowest)
+
+	if expr == nil {
+		t.Fatal("expected match expression, got nil")
+	}
+
+	errors := parser.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error for assignment in match arm, got none")
+	}
+
+	// Check that we got the correct error
+	foundError := false
+	for _, err := range errors {
+		if err.Code == ErrMatchArmStatement {
+			foundError = true
+			if !containsSubstring(err.Message, "must be an expression") {
+				t.Errorf("Expected error message to contain 'must be an expression', got: %s", err.Message)
+			}
+			if !containsSubstring(err.Message, "assignment statement") {
+				t.Errorf("Expected error message to contain 'assignment statement', got: %s", err.Message)
+			}
+			if !containsSubstring(err.Hint, "assignment statements need braces") {
+				t.Errorf("Expected hint to contain 'assignment statements need braces', got: %s", err.Hint)
+			}
+		}
+	}
+
+	if !foundError {
+		t.Errorf("Expected error code %s, got errors: %+v", ErrMatchArmStatement, errors)
+	}
+}
+
+// TestMatchArmDefineError verifies that := operator in braceless arms produces clear errors
+func TestMatchArmDefineError(t *testing.T) {
+	src := []byte(`match x {
+		Some(v) => result := process(v)
+	}`)
+
+	tok := tokenizer.New(src)
+	_, err := tok.Tokenize()
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+	tok.Reset()
+
+	parser := NewPrattParser(tok)
+	expr := parser.ParseExpression(PrecLowest)
+
+	if expr == nil {
+		t.Fatal("expected match expression, got nil")
+	}
+
+	errors := parser.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error for define in match arm, got none")
+	}
+
+	// Check that we got the correct error
+	foundError := false
+	for _, err := range errors {
+		if err.Code == ErrMatchArmStatement && containsSubstring(err.Message, "assignment statement") {
+			foundError = true
+			break
+		}
+	}
+
+	if !foundError {
+		t.Errorf("Expected error about assignment statement, got errors: %+v", errors)
+	}
+}
+
+// TestMatchArmValidExpression verifies that valid expressions still work correctly
+func TestMatchArmValidExpression(t *testing.T) {
+	src := []byte(`match x {
+		Some(v) => process(v),
+		None => 0
+	}`)
+
+	tok := tokenizer.New(src)
+	_, err := tok.Tokenize()
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+	tok.Reset()
+
+	parser := NewPrattParser(tok)
+	expr := parser.ParseExpression(PrecLowest)
+
+	if expr == nil {
+		t.Fatal("expected match expression, got nil")
+	}
+
+	errors := parser.Errors()
+	if len(errors) != 0 {
+		t.Errorf("Expected no errors for valid expression, got: %+v", errors)
+	}
+
+	matchExpr, ok := expr.(*ast.MatchExpr)
+	if !ok {
+		t.Fatalf("expected *ast.MatchExpr, got %T", expr)
+	}
+
+	if len(matchExpr.Arms) != 2 {
+		t.Errorf("expected 2 arms, got %d", len(matchExpr.Arms))
+	}
+}
+
+// TestMatchArmBlockWithAssignment verifies that assignments inside blocks still work
+func TestMatchArmBlockWithAssignment(t *testing.T) {
+	src := []byte(`match x {
+		val => {
+			y = val + 1
+			y
+		}
+	}`)
+
+	tok := tokenizer.New(src)
+	_, err := tok.Tokenize()
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+	tok.Reset()
+
+	parser := NewPrattParser(tok)
+	expr := parser.ParseExpression(PrecLowest)
+
+	if expr == nil {
+		t.Fatal("expected match expression, got nil")
+	}
+
+	errors := parser.Errors()
+	if len(errors) != 0 {
+		t.Errorf("Expected no errors for block with assignment, got: %+v", errors)
+	}
+
+	matchExpr, ok := expr.(*ast.MatchExpr)
+	if !ok {
+		t.Fatalf("expected *ast.MatchExpr, got %T", expr)
+	}
+
+	if len(matchExpr.Arms) != 1 {
+		t.Errorf("expected 1 arm, got %d", len(matchExpr.Arms))
+	}
+
+	if !matchExpr.Arms[0].IsBlock {
+		t.Error("expected arm to be marked as block")
+	}
+}
+
+// TestMatchMultipleArmsWithError verifies error recovery with multiple arms
+func TestMatchMultipleArmsWithError(t *testing.T) {
+	src := []byte(`match x {
+		0 => 42,
+		val => opts = append(opts, val),
+		_ => 0
+	}`)
+
+	tok := tokenizer.New(src)
+	_, err := tok.Tokenize()
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+	tok.Reset()
+
+	parser := NewPrattParser(tok)
+	expr := parser.ParseExpression(PrecLowest)
+
+	if expr == nil {
+		t.Fatal("expected match expression, got nil")
+	}
+
+	errors := parser.Errors()
+	if len(errors) == 0 {
+		t.Fatal("expected error for assignment in middle arm, got none")
+	}
+
+	// Should have exactly one error (for the middle arm)
+	foundStatementError := false
+	for _, err := range errors {
+		if err.Code == ErrMatchArmStatement {
+			foundStatementError = true
+			// Check that hint includes the pattern name
+			if !containsSubstring(err.Hint, "val => {") {
+				t.Errorf("Expected hint to include pattern name 'val', got: %s", err.Hint)
+			}
+		}
+	}
+
+	if !foundStatementError {
+		t.Errorf("Expected error code %s, got errors: %+v", ErrMatchArmStatement, errors)
+	}
+}

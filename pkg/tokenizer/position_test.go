@@ -9,9 +9,9 @@ func TestTokenizerPositions(t *testing.T) {
 		name     string
 		src      string
 		expected []struct {
-			lit      string
-			bytePos  int // Actual byte position in source (0-based)
-			byteEnd  int // Actual byte end position in source (0-based, exclusive)
+			lit     string
+			bytePos int // Actual byte position in source (0-based)
+			byteEnd int // Actual byte end position in source (0-based, exclusive)
 		}
 	}{
 		{

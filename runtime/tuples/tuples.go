@@ -7,10 +7,11 @@
 //   - First, Second, Third, Fourth, Fifth, Sixth, Seventh, Eighth, Ninth, Tenth
 //
 // Usage:
-//   import "github.com/MadAppGang/dingo/runtime/tuples"
 //
-//   type Point2D = tuples.Tuple2[float64, float64]
-//   p := Point2D{First: 3.0, Second: 4.0}
+//	import "github.com/MadAppGang/dingo/runtime/tuples"
+//
+//	type Point2D = tuples.Tuple2[float64, float64]
+//	p := Point2D{First: 3.0, Second: 4.0}
 package tuples
 
 // Tuple2 is a generic 2-element tuple.

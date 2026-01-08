@@ -51,7 +51,7 @@ func TestLogger_ParseLevel(t *testing.T) {
 		{"warning", LogLevelWarn},
 		{"error", LogLevelError},
 		{"unknown", LogLevelInfo}, // Default
-		{"", LogLevelInfo},         // Default
+		{"", LogLevelInfo},        // Default
 	}
 
 	for _, tt := range tests {

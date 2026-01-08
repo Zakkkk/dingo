@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
+	"strings"
 )
 
 // extractFunctionSignatures extracts function/method signatures from Dingo source.
@@ -221,32 +222,145 @@ func InferEnclosingFunctionReturnsResult(src []byte, exprPos int) string {
 //
 // The function works by:
 //  1. Extracting the function/method name from the expression
-//  2. Finding the function declaration in the source
-//  3. Checking if its return type matches Result[T, E] pattern
+//  2. Finding the function declaration in the source (Strategy 1)
+//  3. If not found, checking if the enclosing function returns Result (Strategy 2 - heuristic)
+//  4. Checking if its return type matches Result[T, E] pattern
+//
+// For cross-file type resolution, use InferExprReturnsResultWithResolver instead.
 func InferExprReturnsResult(src []byte, exprBytes []byte, exprPos int) (isResult bool, okType string, errType string) {
+	return InferExprReturnsResultWithResolver(src, exprBytes, exprPos, nil)
+}
+
+// InferExprReturnsResultWithResolver checks if an expression returns a Result type.
+// If resolver is provided, it uses cross-file type resolution for imported packages.
+//
+// Returns (isResult, okType, errType) where:
+//   - isResult: true if the expression returns a Result[T, E] type
+//   - okType: the T type from Result[T, E]
+//   - errType: the E type from Result[T, E]
+func InferExprReturnsResultWithResolver(src []byte, exprBytes []byte, exprPos int, resolver *TypeResolver) (isResult bool, okType string, errType string) {
+	// Strategy 0: Try resolver first if available (handles cross-file/cross-package)
+	if resolver != nil {
+		isResult, okType, errType = resolver.GetReturnTypeInfo(exprBytes)
+		if isResult {
+			return isResult, okType, errType
+		}
+		// Resolver didn't find it - fall through to local search
+	}
 	// Parse the expression to extract function name
 	exprStr := string(exprBytes)
 	methodName := extractMethodName(exprStr)
-	if methodName == "" {
-		return false, "", ""
+
+	// Strategy 1: Find the method/function declaration in the current file
+	if methodName != "" {
+		returnType := findMethodReturnType(src, methodName)
+		if returnType != "" {
+			// Found the method definition in current file
+			if IsResultType(returnType) {
+				okType = ExtractResultOkType(returnType)
+				errType = ExtractResultErrType(returnType)
+				return true, okType, errType
+			}
+			// Method found but doesn't return Result - use tuple pattern
+			return false, "", ""
+		}
 	}
 
-	// Find the function declaration and get its return type
-	returnType := findMethodReturnType(src, methodName)
-	if returnType == "" {
-		return false, "", ""
+	// Strategy 2: Be conservative - default to tuple pattern
+	// We can't reliably determine if a cross-file Dingo function returns Result[T,E]
+	// or (T, error) without parsing the target package's source.
+	//
+	// The tuple pattern (T, error) is the Go standard and works for most cases.
+	// Result-returning functions in the SAME file are already found by Strategy 1.
+	// For cross-file Result calls, users should ensure the function is defined in the same file
+	// or the caller should also use tuple pattern for interop.
+	//
+	// REMOVED: Aggressive heuristic that assumed Result pattern based on enclosing function.
+	// This caused issues when mixing Result-returning and tuple-returning functions.
+
+	// No method definition found - use tuple pattern as safe default
+	return false, "", ""
+}
+
+// isKnownTupleMethod checks if a method name is a known stdlib method that returns (T, error).
+// This is used to avoid incorrectly treating stdlib calls as Result-returning.
+func isKnownTupleMethod(methodName string) bool {
+	// Common Go stdlib methods that return (T, error) or just error
+	// This list covers the most common patterns
+	knownTupleMethods := map[string]bool{
+		// io operations
+		"Read": true, "Write": true, "Close": true, "Seek": true,
+		"ReadAll": true, "ReadFile": true, "WriteFile": true,
+		"Copy": true, "CopyN": true, "ReadFrom": true, "WriteTo": true,
+		// os operations
+		"Open": true, "Create": true, "Remove": true, "Rename": true,
+		"Mkdir": true, "MkdirAll": true, "Stat": true, "Lstat": true,
+		"Getwd": true, "Chdir": true, "Chmod": true, "Chown": true,
+		// encoding/json, encoding/xml
+		"Marshal": true, "Unmarshal": true, "Encode": true, "Decode": true,
+		// net/http
+		"Get": true, "Post": true, "Do": true, "NewRequest": true,
+		"ListenAndServe": true, "ListenAndServeTLS": true,
+		// database/sql
+		"Query": true, "QueryRow": true, "Exec": true, "Prepare": true,
+		"Begin": true, "Commit": true, "Rollback": true, "Scan": true,
+		// context
+		"WithCancel": true, "WithTimeout": true, "WithDeadline": true,
+		// strconv
+		"Atoi": true, "ParseInt": true, "ParseFloat": true, "ParseBool": true,
+		// time
+		"Parse": true, "ParseDuration": true, "LoadLocation": true,
+		// regexp
+		"Compile": true, "MustCompile": true, "Match": true, "MatchString": true,
+		// sync
+		"Wait": true, "Lock": true, "Unlock": true,
+		// fmt - these don't return error as second value typically, but good to know
+		"Println": true, "Printf": true, "Sprintf": true,
+		// common config/init patterns that return tuple
+		"Load": true, "Init": true, "Setup": true, "Configure": true,
 	}
 
-	// Check if it's a Result type
-	if !IsResultType(returnType) {
-		return false, "", ""
+	// Check direct match
+	if knownTupleMethods[methodName] {
+		return true
 	}
 
-	// Extract type parameters
-	okType = ExtractResultOkType(returnType)
-	errType = ExtractResultErrType(returnType)
+	// Check for common naming patterns that suggest tuple returns
+	lower := strings.ToLower(methodName)
 
-	return true, okType, errType
+	// Methods starting with common tuple-return prefixes
+	// NOTE: "new" is intentionally excluded because project-local methods like
+	// NewJWKSFetcher might return Result[T, E] instead of (T, error).
+	// We only want to match stdlib patterns here.
+	tuplePrefixes := []string{
+		"get", "set", "read", "write", "load", "save", "fetch", "send",
+		"parse", "format", "encode", "decode", "marshal", "unmarshal",
+		"open", "close", "create", "delete", "update", "insert",
+		"connect", "disconnect", "dial", "listen", "accept",
+		// "new" removed - too broad, catches project methods returning Result
+	}
+	for _, prefix := range tuplePrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getEnclosingFunctionReturnType finds the enclosing function and returns its return type as a string.
+// Returns empty string if not found or if function has multiple return values.
+func getEnclosingFunctionReturnType(src []byte, exprPos int) string {
+	funcDecl := findEnclosingFunction(src, exprPos)
+	if funcDecl == nil {
+		return ""
+	}
+
+	returnTypes := parseReturnTypes(funcDecl)
+	if len(returnTypes) == 1 {
+		return returnTypes[0]
+	}
+	return ""
 }
 
 // findMethodReturnType searches the source for a function/method with the given name

@@ -118,6 +118,14 @@ func GenerateExpr(expr ast.Expr) ast.CodeGenResult {
 	case *ast.RawExpr:
 		// RawExpr is pass-through - just return the text
 		return ast.NewCodeGenResult([]byte(e.Text))
+	case *ast.ReturnExpr:
+		// ReturnExpr represents a return statement used in match arm bodies
+		// Generate: return <value> (or just "return" for bare return)
+		if e.Value != nil {
+			valueResult := GenerateExpr(e.Value)
+			return ast.NewCodeGenResult(append([]byte("return "), valueResult.Output...))
+		}
+		return ast.NewCodeGenResult([]byte("return"))
 	default:
 		// Unknown expression - use String() method if available
 		if stringer, ok := expr.(interface{ String() string }); ok {

@@ -347,17 +347,17 @@ func sanitizeTupleTypeName(typeName string) string {
 func abbreviateTupleName(fullName string, arity int, elementTypes []string) string {
 	// Simple strategy: use abbreviated type names
 	abbreviations := map[string]string{
-		"DatabaseConnection":     "DbConn",
-		"HttpRequestHandler":     "HttpReqHandler",
-		"AuthenticationService":  "AuthService",
-		"Configuration":          "Config",
-		"Repository":             "Repo",
-		"Controller":             "Ctrl",
-		"Manager":                "Mgr",
-		"Service":                "Svc",
-		"Handler":                "Hdlr",
-		"Processor":              "Proc",
-		"Interface":              "Iface",
+		"DatabaseConnection":    "DbConn",
+		"HttpRequestHandler":    "HttpReqHandler",
+		"AuthenticationService": "AuthService",
+		"Configuration":         "Config",
+		"Repository":            "Repo",
+		"Controller":            "Ctrl",
+		"Manager":               "Mgr",
+		"Service":               "Svc",
+		"Handler":               "Hdlr",
+		"Processor":             "Proc",
+		"Interface":             "Iface",
 	}
 
 	var parts []string

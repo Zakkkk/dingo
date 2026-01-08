@@ -49,9 +49,9 @@ func NewWithPlugins(fset *token.FileSet, registry *plugin.Registry, logger plugi
 	}
 
 	ctx := &plugin.Context{
-		FileSet:     fset,
-		TypeInfo:    nil, // TODO: Add type information when available
-		Config:      &plugin.Config{
+		FileSet:  fset,
+		TypeInfo: nil, // TODO: Add type information when available
+		Config: &plugin.Config{
 			EmitGeneratedMarkers: true,  // Default: enabled
 			KeepMarkers:          false, // Default: clean output (remove markers)
 		},
@@ -421,8 +421,9 @@ func (g *Generator) runTypeChecker(file *ast.File) (*types.Info, error) {
 // 6. Regenerate .go code
 //
 // This enables resolving cases like:
-//   func find() Option { ... }  // Generic Option
-//   result := find() ?? 0        // Generates func() __INFER__ { ... }
+//
+//	func find() Option { ... }  // Generic Option
+//	result := find() ?? 0        // Generates func() __INFER__ { ... }
 //
 // With Post-AST resolution:
 //   - Parse the .go file
@@ -611,11 +612,12 @@ func (g *Generator) resolvePostASTPlaceholders(goCode []byte) ([]byte, error) {
 // using full go/types information (Post-AST approach)
 //
 // Special handling for safe navigation patterns:
-//   func() __INFER__ {
-//       if opt.IsNone() { return __INFER___None() }  // Skip this
-//       val := opt.Unwrap()
-//       return val.field  // Infer from this -> construct FieldOption
-//   }
+//
+//	func() __INFER__ {
+//	    if opt.IsNone() { return __INFER___None() }  // Skip this
+//	    val := opt.Unwrap()
+//	    return val.field  // Infer from this -> construct FieldOption
+//	}
 func (g *Generator) inferFuncLitReturnTypePostAST(funcLit *ast.FuncLit, info *types.Info) string {
 	if funcLit.Body == nil || len(funcLit.Body.List) == 0 {
 		return ""

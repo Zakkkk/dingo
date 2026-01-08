@@ -179,7 +179,8 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
 	// Note: //line directives are disabled - position mapping is handled via line/column mappings
-	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, "")
+	// Pass filename for TypeResolver (needed for cross-file type resolution), but disable directives
+	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename, false)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}

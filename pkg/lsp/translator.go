@@ -20,7 +20,7 @@ type Direction int
 
 const (
 	DingoToGo Direction = iota // .dingo → .go
-	GoToDingo                   // .go → .dingo
+	GoToDingo                  // .go → .dingo
 )
 
 // Translator handles bidirectional position translation using source maps

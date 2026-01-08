@@ -23,11 +23,12 @@ import (
 // SanitizeTypeName converts type name parts to camelCase format
 // This is used for Result[T,E] → ResultIntError and Option[T] → OptionString naming
 // Examples:
-//   ("int", "error") → "IntError"
-//   ("string") → "String"
-//   ("any", "error") → "InterfaceError"
-//   ("*User", "error") → "PtrUserError"
-//   ("[]int", "error") → "SliceIntError"
+//
+//	("int", "error") → "IntError"
+//	("string") → "String"
+//	("any", "error") → "InterfaceError"
+//	("*User", "error") → "PtrUserError"
+//	("[]int", "error") → "SliceIntError"
 func SanitizeTypeName(parts ...string) string {
 	var result strings.Builder
 	for _, part := range parts {
@@ -162,12 +163,13 @@ func sanitizeTypeComponent(s string) string {
 // while preserving basic Go types unchanged.
 // This is used for type references in struct fields and method signatures.
 // Examples:
-//   "Option_int" → "OptionInt"
-//   "Result_int_error" → "ResultIntError"
-//   "int" → "int" (preserved)
-//   "error" → "error" (preserved)
-//   "*Option_int" → "*OptionInt"
-//   "[]Option_int" → "[]OptionInt"
+//
+//	"Option_int" → "OptionInt"
+//	"Result_int_error" → "ResultIntError"
+//	"int" → "int" (preserved)
+//	"error" → "error" (preserved)
+//	"*Option_int" → "*OptionInt"
+//	"[]Option_int" → "[]OptionInt"
 func NormalizeTypeName(typeName string) string {
 	// Handle pointer types
 	if strings.HasPrefix(typeName, "*") {
@@ -196,10 +198,11 @@ func NormalizeTypeName(typeName string) string {
 // GenerateTempVarName generates temporary variable names with optional numbering
 // First call returns base name (e.g., "ok"), subsequent calls add numbers ("ok1", "ok2")
 // Examples:
-//   ("ok", 0) → "ok"
-//   ("ok", 1) → "ok1"
-//   ("err", 0) → "err"
-//   ("err", 1) → "err1"
+//
+//	("ok", 0) → "ok"
+//	("ok", 1) → "ok1"
+//	("err", 0) → "err"
+//	("err", 1) → "err1"
 func GenerateTempVarName(base string, index int) string {
 	if index < 0 {
 		index = 0 // Defensive: treat negative as zero

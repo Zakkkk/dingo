@@ -967,12 +967,12 @@ func TestWrapInIIFE_ValidGoCode(t *testing.T) {
 
 	// Verify syntactic completeness
 	requiredParts := []bool{
-		funcLit.Type != nil,               // Function type exists
-		funcLit.Type.Params != nil,        // Parameters exist (even if empty)
-		funcLit.Type.Results != nil,       // Results exist
-		funcLit.Body != nil,               // Body exists
-		len(funcLit.Body.List) == 2,       // Body has 2 statements
-		len(callExpr.Args) == 0,           // Immediate invocation (no args)
+		funcLit.Type != nil,         // Function type exists
+		funcLit.Type.Params != nil,  // Parameters exist (even if empty)
+		funcLit.Type.Results != nil, // Results exist
+		funcLit.Body != nil,         // Body exists
+		len(funcLit.Body.List) == 2, // Body has 2 statements
+		len(callExpr.Args) == 0,     // Immediate invocation (no args)
 	}
 
 	for i, part := range requiredParts {

@@ -10,6 +10,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/plugin"
 	"golang.org/x/tools/go/ast/astutil"
 )
+
 // OptionTypePlugin generates Option[T] type declarations and transformations
 //
 // This plugin implements the Option type as a tagged union (sum type) with two variants:
@@ -1331,7 +1332,6 @@ func (p *OptionTypePlugin) getTypeName(expr ast.Expr) string {
 		return "unknown"
 	}
 }
-
 
 func (p *OptionTypePlugin) typeToAST(typeName string, asPointer bool) ast.Expr {
 	var baseType ast.Expr

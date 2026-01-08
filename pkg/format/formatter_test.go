@@ -20,7 +20,7 @@ let x = 42
 `,
 		},
 		{
-			name: "function_call",
+			name:  "function_call",
 			input: `fmt.Println(x,y,z)`,
 			want: `fmt.Println(x, y, z)
 `,

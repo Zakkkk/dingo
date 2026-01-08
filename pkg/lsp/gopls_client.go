@@ -21,16 +21,16 @@ type DiagnosticsHandler func(ctx context.Context, params protocol.PublishDiagnos
 
 // GoplsClient manages a gopls subprocess and forwards LSP requests
 type GoplsClient struct {
-	cmd                 *exec.Cmd
-	conn                jsonrpc2.Conn
-	logger              Logger
-	goplsPath           string
-	restarts            int
-	maxRestarts         int
-	mu                  sync.Mutex
-	shuttingDown        bool           // CRITICAL FIX C2: Track shutdown state
-	closeMu             sync.Mutex     // CRITICAL FIX C2: Protect shutdown flag
-	diagnosticsHandler  DiagnosticsHandler // Callback for diagnostics
+	cmd                *exec.Cmd
+	conn               jsonrpc2.Conn
+	logger             Logger
+	goplsPath          string
+	restarts           int
+	maxRestarts        int
+	mu                 sync.Mutex
+	shuttingDown       bool               // CRITICAL FIX C2: Track shutdown state
+	closeMu            sync.Mutex         // CRITICAL FIX C2: Protect shutdown flag
+	diagnosticsHandler DiagnosticsHandler // Callback for diagnostics
 
 	// Version tracking for gopls sync - prevents version conflicts
 	versionMu   sync.Mutex
@@ -497,10 +497,10 @@ func (c *GoplsClient) handleCrash() error {
 
 // readWriteCloser combines separate Read and Write closers with buffering (GPT-5 fix)
 type readWriteCloser struct {
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	reader  *bufio.Reader
-	writer  *bufio.Writer
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	reader *bufio.Reader
+	writer *bufio.Writer
 }
 
 func newReadWriteCloser(stdin io.WriteCloser, stdout io.ReadCloser) *readWriteCloser {
@@ -535,4 +535,3 @@ func (rwc *readWriteCloser) Close() error {
 	}
 	return err2
 }
-

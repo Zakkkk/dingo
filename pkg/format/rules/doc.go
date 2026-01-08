@@ -1,6 +1,6 @@
 // Package rules provides formatting rules for specific Dingo language constructs.
 //
-// Overview
+// # Overview
 //
 // The rules package defines specialized formatting logic for Dingo-specific syntax:
 //   - match expressions (pattern matching)
@@ -11,7 +11,7 @@
 // Each rule is implemented as a separate formatter that operates on token streams
 // and writes formatted output through the TokenWriter interface.
 //
-// Architecture
+// # Architecture
 //
 // The rules package follows a pluggable architecture where each rule is independent:
 //
@@ -32,7 +32,7 @@
 //	                   │ TokenWriter │
 //	                   └─────────────┘
 //
-// Usage
+// # Usage
 //
 // Rules are typically invoked by the main formatter when specific token patterns
 // are detected:
@@ -46,7 +46,7 @@
 // Each formatter returns the index of the last token consumed, allowing the
 // main formatter to continue processing from the correct position.
 //
-// TokenWriter Interface
+// # TokenWriter Interface
 //
 // All formatters write output through the TokenWriter interface:
 //
@@ -60,7 +60,7 @@
 //
 // This abstraction allows rules to be tested independently and composed flexibly.
 //
-// Formatting Rules
+// # Formatting Rules
 //
 // Match Expressions (match.go)
 //
@@ -135,7 +135,7 @@
 //   - SpaceAroundNullCoal: Space around ?? operator (default: true)
 //   - NoSpaceAroundSafeNav: No space around ?. operator (default: true)
 //
-// Comment Preservation
+// # Comment Preservation
 //
 // All formatters preserve comments in their original positions:
 //
@@ -145,13 +145,13 @@
 //	    Pending      // Awaiting activation
 //	}
 //
-// Indentation
+// # Indentation
 //
 // Indentation is managed by the Writer through IncreaseIndent/DecreaseIndent.
 // Each rule is responsible for increasing indentation when entering nested
 // structures (after {) and decreasing when exiting (before }).
 //
-// Testing
+// # Testing
 //
 // Each rule should be tested with:
 //   - Golden tests: input.dingo -> expected.dingo
@@ -176,7 +176,7 @@
 //	    }
 //	}
 //
-// Future Enhancements
+// # Future Enhancements
 //
 // Potential additions to the rules package:
 //   - Guard statement formatting (guard let x = ... else { ... })
@@ -185,5 +185,4 @@
 //   - Error propagation chain formatting (a()?.b()?.c()?)
 //   - Pattern matching in function parameters
 //   - Multi-line lambda body formatting
-//
 package rules

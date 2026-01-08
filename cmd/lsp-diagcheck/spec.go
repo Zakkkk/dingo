@@ -9,10 +9,10 @@ import (
 
 // Spec defines expected diagnostics for a file
 type Spec struct {
-	File       string               `yaml:"file"`
-	Description string              `yaml:"description"`
-	Expected   []ExpectedDiagnostic `yaml:"expected"`
-	ExpectNone bool                 `yaml:"expect_none"` // Expect no diagnostics
+	File        string               `yaml:"file"`
+	Description string               `yaml:"description"`
+	Expected    []ExpectedDiagnostic `yaml:"expected"`
+	ExpectNone  bool                 `yaml:"expect_none"` // Expect no diagnostics
 }
 
 // ExpectedDiagnostic defines a single expected diagnostic

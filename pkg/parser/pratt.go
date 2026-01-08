@@ -651,12 +651,13 @@ func (p *PrattParser) addErrorWithCode(code, msg, hint string) {
 	})
 }
 
-// synchronize advances tokens until a sync point is found
+// synchronize advances tokens until a sync point is found in peek position
 // Used for error recovery to continue parsing after an error
+// After synchronize returns, peekToken will be at a sync point (or EOF)
 func (p *PrattParser) synchronize(syncSet SyncSet) {
-	for !p.curTokenIs(tokenizer.EOF) {
-		// Check if current token is a sync point
-		if syncSet.Contains(p.curToken.Kind) {
+	for !p.peekTokenIs(tokenizer.EOF) {
+		// Check if peek token is a sync point
+		if syncSet.Contains(p.peekToken.Kind) {
 			return
 		}
 		// Check if peek token starts a new construct

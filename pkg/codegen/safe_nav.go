@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 )
@@ -367,17 +368,30 @@ func (g *SafeNavCodeGen) generateIIFEContent(chain []chainSegment, baseReceiver 
 
 	// Final access (the last segment)
 	lastSeg := chain[len(chain)-1]
-	g.Write("return ")
-	g.Write(tmpVar)
-	g.Write(".")
-	g.Write(lastSeg.name)
-	if lastSeg.isMethod {
+
+	// Check if the method is known to return void (can't use "return void_call()")
+	if lastSeg.isMethod && isVoidReturningMethod(lastSeg.name) {
+		// For void methods: call then return nil
+		g.Write(tmpVar)
+		g.Write(".")
+		g.Write(lastSeg.name)
 		g.WriteByte('(')
 		g.generateArgsFrom(lastSeg.args)
 		g.WriteByte(')')
+		g.Write("; return nil }()")
+	} else {
+		// For value-returning methods: return the result
+		g.Write("return ")
+		g.Write(tmpVar)
+		g.Write(".")
+		g.Write(lastSeg.name)
+		if lastSeg.isMethod {
+			g.WriteByte('(')
+			g.generateArgsFrom(lastSeg.args)
+			g.WriteByte(')')
+		}
+		g.Write(" }()")
 	}
-
-	g.Write(" }()")
 }
 
 // dingoExprToString converts a Dingo Expr to its string representation.
@@ -413,4 +427,49 @@ func (g *SafeNavCodeGen) dingoExprToString(expr ast.Expr) string {
 		}
 		return "/* unknown */"
 	}
+}
+
+// isVoidReturningMethod checks if a method name commonly returns void.
+// This is used to avoid generating invalid "return voidCall()" in safe nav IIFEs.
+func isVoidReturningMethod(methodName string) bool {
+	// Common void-returning method names
+	voidMethods := map[string]bool{
+		// Lifecycle methods
+		"Start": true, "Stop": true, "Run": true, "Close": true,
+		"Shutdown": true, "Cancel": true, "Init": true, "Reset": true,
+		// Sync methods
+		"Lock": true, "Unlock": true, "RLock": true, "RUnlock": true,
+		"Wait": true, "Signal": true, "Broadcast": true,
+		// Logging/output
+		"Log": true, "Print": true, "Printf": true, "Println": true,
+		"Debug": true, "Info": true, "Warn": true, "Error": true, "Fatal": true,
+		// Context
+		"Done": true,
+		// Timer/cleanup
+		"Tick": true, "Flush": true, "Clear": true,
+		// Notification
+		"Notify": true, "Fire": true, "Emit": true, "Trigger": true,
+	}
+
+	if voidMethods[methodName] {
+		return true
+	}
+
+	// Check common prefixes that suggest void methods
+	// NOTE: Avoided ambiguous prefixes like "add" (could return sum) and "send" (could return result)
+	lower := strings.ToLower(methodName)
+	voidPrefixes := []string{
+		"set", "remove", "delete", "put",
+		"push", "pop", "enqueue", "dequeue",
+		"register", "unregister", "subscribe", "unsubscribe",
+		"enable", "disable", "activate", "deactivate",
+		"handle", "process", "execute", "perform",
+	}
+	for _, prefix := range voidPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+
+	return false
 }

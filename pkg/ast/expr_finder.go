@@ -139,9 +139,11 @@ func FindDingoExpressions(src []byte) ([]ExprLocation, error) {
 
 		// Rust-style lambda: |params| body
 		if current.Kind == tokenizer.PIPE {
-			// Peek ahead to distinguish from standalone pipe
-			next := tok.PeekToken()
-			if next.Kind == tokenizer.IDENT || next.Kind == tokenizer.RPAREN || next.Kind == tokenizer.UNDERSCORE {
+			// Peek ahead to distinguish from bitwise OR operator
+			// A Rust lambda has the pattern: |params| body
+			// Bitwise OR has the pattern: expr | expr (no closing pipe)
+			// We need to verify there's a closing | before any statement terminator
+			if isRustLambda(tok, allTokens) {
 				start := current.BytePos()
 				tok.Advance() // consume opening |
 
@@ -882,7 +884,7 @@ func findNullCoalesceEnd(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, 
 			if braceDepth == 0 && parenDepth == 0 && bracketDepth == 0 {
 				// If next is not a selector/call/index/another ??, we're done
 				if next.Kind != tokenizer.DOT && next.Kind != tokenizer.LPAREN &&
-				   next.Kind != tokenizer.LBRACKET && next.Kind != tokenizer.QUESTION_QUESTION {
+					next.Kind != tokenizer.LBRACKET && next.Kind != tokenizer.QUESTION_QUESTION {
 					return lastPos
 				}
 			}
@@ -971,7 +973,6 @@ func findSafeNavEnd(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token, start
 		tok.Advance()
 	}
 }
-
 
 // findMatchingColon looks ahead from questionIdx to find a : token that matches this ? for ternary
 // Returns the token index of the matching :, or -1 if not found
@@ -1294,3 +1295,92 @@ func isStatementStartKeyword(kind tokenizer.TokenKind) bool {
 	return false
 }
 
+// isRustLambda checks if the current PIPE token starts a Rust-style lambda |params| body
+// rather than being a bitwise OR operator. It looks ahead to find a closing | before
+// any statement terminator. The tokenizer should be positioned at the opening |.
+func isRustLambda(tok *tokenizer.Tokenizer, allTokens []tokenizer.Token) bool {
+	// Find current position in allTokens
+	currentPos := tok.Current().Pos
+	startIdx := -1
+	for i, t := range allTokens {
+		if t.Pos == currentPos {
+			startIdx = i
+			break
+		}
+	}
+	if startIdx < 0 {
+		return false
+	}
+
+	// Scan forward looking for closing | before statement terminator
+	// Lambda params can contain: IDENT, COMMA, COLON (for type annotation), type names
+	// Statement terminators: SEMICOLON, NEWLINE (at depth 0), LBRACE, RBRACE, EOF
+	parenDepth := 0
+	for i := startIdx + 1; i < len(allTokens); i++ {
+		t := allTokens[i]
+
+		switch t.Kind {
+		case tokenizer.PIPE:
+			// Found closing pipe - this is a lambda!
+			// Verify next token could start a body (not another |)
+			if i+1 < len(allTokens) {
+				next := allTokens[i+1]
+				// Body can start with: IDENT, literal, {, (, -, !, etc.
+				if next.Kind != tokenizer.PIPE {
+					return true
+				}
+			}
+			return true
+
+		case tokenizer.LPAREN:
+			parenDepth++
+
+		case tokenizer.RPAREN:
+			parenDepth--
+			if parenDepth < 0 {
+				// Unmatched ) - not a valid lambda
+				return false
+			}
+
+		case tokenizer.IDENT, tokenizer.COMMA, tokenizer.COLON, tokenizer.UNDERSCORE:
+			// Valid in lambda params, continue
+
+		case tokenizer.SEMICOLON, tokenizer.LBRACE, tokenizer.RBRACE, tokenizer.EOF:
+			// Statement terminator before finding closing | - this is bitwise OR
+			return false
+
+		case tokenizer.NEWLINE:
+			// Newline at depth 0 terminates - this is bitwise OR
+			if parenDepth == 0 {
+				return false
+			}
+
+		case tokenizer.ASSIGN, tokenizer.DEFINE:
+			// Assignment operators - not valid in lambda params
+			return false
+
+		default:
+			// For other tokens (operators, etc.), if we're not inside parens
+			// and it's a binary operator, this is likely bitwise OR context
+			if parenDepth == 0 && isBinaryOperator(t.Kind) {
+				return false
+			}
+		}
+	}
+
+	// Reached end without finding closing | - not a lambda
+	return false
+}
+
+// isBinaryOperator returns true if the token is a binary operator
+// that would indicate we're in an expression context, not lambda params
+func isBinaryOperator(kind tokenizer.TokenKind) bool {
+	switch kind {
+	case tokenizer.PLUS, tokenizer.MINUS, tokenizer.STAR, tokenizer.SLASH,
+		tokenizer.AND, tokenizer.OR, tokenizer.EQ, tokenizer.NE,
+		tokenizer.LT, tokenizer.GT, tokenizer.LE, tokenizer.GE,
+		tokenizer.QUESTION_QUESTION, tokenizer.QUESTION, tokenizer.QUESTION_DOT:
+		return true
+	}
+	return false
+}

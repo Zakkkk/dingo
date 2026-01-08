@@ -19,16 +19,16 @@ const ColumnMappingEntrySize = 16
 
 // Header represents the fixed 56-byte .dmap v3 file header
 type Header struct {
-	Magic [4]byte // File magic: "DMAP" (0x444D4150)
-	Version uint16 // Format version (3)
-	Flags uint16 // Bit 0: has column mappings
-	DingoLen uint32 // Original .dingo file size in bytes
-	GoLen uint32 // Generated .go file size in bytes
+	Magic    [4]byte // File magic: "DMAP" (0x444D4150)
+	Version  uint16  // Format version (3)
+	Flags    uint16  // Bit 0: has column mappings
+	DingoLen uint32  // Original .dingo file size in bytes
+	GoLen    uint32  // Generated .go file size in bytes
 
 	// Line offset sections
-	LineIdxOff uint32 // Byte offset to line index section
+	LineIdxOff   uint32 // Byte offset to line index section
 	DingoLineCnt uint32 // Number of Dingo line offsets
-	GoLineCnt uint32 // Number of Go line offsets
+	GoLineCnt    uint32 // Number of Go line offsets
 
 	// Line mapping section (Dingo line -> Go line range)
 	LineMappingOff uint32 // Byte offset to line mapping section
@@ -52,22 +52,22 @@ const (
 
 // LineMappingEntry represents a line-level mapping (16 bytes)
 type LineMappingEntry struct {
-	DingoLine uint32 // Line number in .dingo source (1-indexed)
+	DingoLine   uint32 // Line number in .dingo source (1-indexed)
 	GoLineStart uint32 // Start line number in .go output (1-indexed)
-	GoLineEnd uint32 // End line number in .go output (1-indexed, inclusive)
-	KindIdx uint16 // Index into kind string table
-	Reserved uint16 // Alignment padding for future use
+	GoLineEnd   uint32 // End line number in .go output (1-indexed, inclusive)
+	KindIdx     uint16 // Index into kind string table
+	Reserved    uint16 // Alignment padding for future use
 }
 
 // ColumnMappingEntry provides precise position mapping for hover/go-to-definition
 type ColumnMappingEntry struct {
 	DingoLine uint16 // Line in .dingo (1-indexed)
-	DingoCol uint16 // Column in .dingo (1-indexed)
-	GoLine uint16 // Line in .go (1-indexed)
-	GoCol uint16 // Column in .go (1-indexed)
-	Length uint16 // Length of the mapped region (bytes)
-	KindIdx uint16 // Index into kind string table
-	Reserved uint32 // Padding for alignment
+	DingoCol  uint16 // Column in .dingo (1-indexed)
+	GoLine    uint16 // Line in .go (1-indexed)
+	GoCol     uint16 // Column in .go (1-indexed)
+	Length    uint16 // Length of the mapped region (bytes)
+	KindIdx   uint16 // Index into kind string table
+	Reserved  uint32 // Padding for alignment
 }
 
 // ErrMigrationRequired indicates a v1/v2 .dmap file that needs regeneration

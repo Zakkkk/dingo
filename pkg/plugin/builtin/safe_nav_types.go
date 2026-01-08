@@ -240,20 +240,20 @@ func (p *SafeNavTypePlugin) Transform(node ast.Node) (ast.Node, error) {
 							currentFuncLit := funcLitStack[len(funcLitStack)-1]
 							optionType = funcLitTypes[currentFuncLit]
 
-						// If not in map, check if the function's return type is already resolved
-						if optionType == "" && currentFuncLit.Type != nil && currentFuncLit.Type.Results != nil {
-							if len(currentFuncLit.Type.Results.List) == 1 {
-								if ident, ok := currentFuncLit.Type.Results.List[0].Type.(*ast.Ident); ok {
-									// Use the function's return type directly (e.g., "StringOption")
-									if ident.Name != "__INFER__" {
-										optionType = ident.Name
-										p.ctx.Logger.Debugf("SafeNavTypePlugin: Using function return type %s for __INFER__ call", optionType)
+							// If not in map, check if the function's return type is already resolved
+							if optionType == "" && currentFuncLit.Type != nil && currentFuncLit.Type.Results != nil {
+								if len(currentFuncLit.Type.Results.List) == 1 {
+									if ident, ok := currentFuncLit.Type.Results.List[0].Type.(*ast.Ident); ok {
+										// Use the function's return type directly (e.g., "StringOption")
+										if ident.Name != "__INFER__" {
+											optionType = ident.Name
+											p.ctx.Logger.Debugf("SafeNavTypePlugin: Using function return type %s for __INFER__ call", optionType)
+										}
 									}
 								}
 							}
 						}
-					}
-					if optionType == "" {
+						if optionType == "" {
 							// Try to resolve from context
 							optionType = p.resolveOptionTypeFromContext(call)
 						}
@@ -1420,11 +1420,11 @@ func (p *SafeNavTypePlugin) reportTypeInferenceError(
 
 	errMsg := fmt.Sprintf(
 		"Cannot infer type for safe navigation chain '%s'\n"+
-		"  at %s:%d:%d\n"+
-		"\n"+
-		"  Reason: %s\n"+
-		"\n"+
-		"  Suggestion: %s",
+			"  at %s:%d:%d\n"+
+			"\n"+
+			"  Reason: %s\n"+
+			"\n"+
+			"  Suggestion: %s",
 		chain,
 		pos.Filename,
 		pos.Line,

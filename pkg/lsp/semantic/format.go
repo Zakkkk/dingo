@@ -809,9 +809,9 @@ type dingoEnumInfo struct {
 
 // dingoVariantInfo holds information about a Dingo enum variant
 type dingoVariantInfo struct {
-	EnumName    string            // Parent enum name (e.g., "Event")
-	VariantName string            // Variant name without prefix (e.g., "UserCreated")
-	Fields      []dingoFieldInfo  // Variant fields
+	EnumName    string           // Parent enum name (e.g., "Event")
+	VariantName string           // Variant name without prefix (e.g., "UserCreated")
+	Fields      []dingoFieldInfo // Variant fields
 }
 
 // dingoFieldInfo holds information about a variant field

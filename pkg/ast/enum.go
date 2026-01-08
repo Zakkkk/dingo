@@ -10,12 +10,12 @@ import (
 //   - enum Result[T, E] { Ok(T), Err(E) }
 //   - enum Color { Red, Green, Blue, RGB { r: int, g: int, b: int } }
 type EnumDecl struct {
-	Enum       token.Pos        // Position of 'enum' keyword
-	Name       *Ident           // Enum name
-	TypeParams *TypeParamList   // Generic type parameters (optional)
-	LBrace     token.Pos        // Position of '{'
-	Variants   []*EnumVariant   // Enum variants
-	RBrace     token.Pos        // Position of '}'
+	Enum       token.Pos      // Position of 'enum' keyword
+	Name       *Ident         // Enum name
+	TypeParams *TypeParamList // Generic type parameters (optional)
+	LBrace     token.Pos      // Position of '{'
+	Variants   []*EnumVariant // Enum variants
+	RBrace     token.Pos      // Position of '}'
 }
 
 // Ident represents an identifier
@@ -30,9 +30,9 @@ func (i *Ident) String() string { return i.Name }
 
 // TypeParamList represents generic type parameters: <T, E>
 type TypeParamList struct {
-	Opening token.Pos   // Position of '<'
-	Params  []*Ident    // Type parameter names
-	Closing token.Pos   // Position of '>'
+	Opening token.Pos // Position of '<'
+	Params  []*Ident  // Type parameter names
+	Closing token.Pos // Position of '>'
 }
 
 func (t *TypeParamList) Pos() token.Pos { return t.Opening }
@@ -54,12 +54,12 @@ func (t *TypeParamList) String() string {
 //   - Ok(T) (tuple variant)
 //   - RGB { r: int, g: int, b: int } (struct variant)
 type EnumVariant struct {
-	Name    *Ident          // Variant name
-	Kind    EnumFieldKind   // Variant kind (unit/tuple/struct)
-	LDelim  token.Pos       // Position of '(' or '{' (zero if unit)
-	Fields  []*EnumField    // Fields (empty for unit variants)
-	RDelim  token.Pos       // Position of ')' or '}' (zero if unit)
-	Comma   token.Pos       // Position of trailing comma (if present)
+	Name   *Ident        // Variant name
+	Kind   EnumFieldKind // Variant kind (unit/tuple/struct)
+	LDelim token.Pos     // Position of '(' or '{' (zero if unit)
+	Fields []*EnumField  // Fields (empty for unit variants)
+	RDelim token.Pos     // Position of ')' or '}' (zero if unit)
+	Comma  token.Pos     // Position of trailing comma (if present)
 }
 
 func (v *EnumVariant) Pos() token.Pos { return v.Name.Pos() }
@@ -117,9 +117,9 @@ func (k EnumFieldKind) String() string {
 //   - T (tuple field, no name)
 //   - r: int (struct field, with name)
 type EnumField struct {
-	Name     *Ident    // Field name (nil for tuple variants)
-	Colon    token.Pos // Position of ':' (zero for tuple variants)
-	Type     *TypeExpr // Field type
+	Name  *Ident    // Field name (nil for tuple variants)
+	Colon token.Pos // Position of ':' (zero for tuple variants)
+	Type  *TypeExpr // Field type
 }
 
 func (f *EnumField) Pos() token.Pos {

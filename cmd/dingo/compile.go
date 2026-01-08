@@ -1,15 +1,19 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
@@ -18,6 +22,16 @@ import (
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
 	"github.com/MadAppGang/dingo/pkg/version"
 )
+
+// errAlreadyPrinted is a sentinel error indicating the error was already printed.
+// Used to prevent double-printing errors (once in command, once in main).
+var errAlreadyPrinted = errors.New("error already printed")
+
+// isTerminal returns true if stdout is connected to a terminal.
+// Used to auto-disable mascot animation in CI, agents, and piped output.
+func isTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
 
 // CompileOptions holds parsed compile command options
 type CompileOptions struct {
@@ -97,12 +111,18 @@ func runGoCommand(args []string, goCmd string) error {
 	opts, err := parseCompileArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
+		return errAlreadyPrinted
 	}
 
 	// For 'run' command, always disable mascot animation
 	// The running program needs full access to stdin/stdout
 	if goCmd == "run" {
+		opts.NoMascot = true
+	}
+
+	// Auto-detect non-interactive environment (CI, agents, pipes)
+	// Disable mascot if stdout is not a TTY
+	if !isTerminal() {
 		opts.NoMascot = true
 	}
 
@@ -116,21 +136,30 @@ func runGoCommand(args []string, goCmd string) error {
 	// Resolve package paths to .dingo files
 	if err := resolveDingoFiles(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
+		return errAlreadyPrinted
 	}
 
 	// Validate we have something to compile
 	if len(opts.DingoFiles) == 0 && len(opts.GoFiles) == 0 && len(opts.PackagePaths) == 0 {
-		err := fmt.Errorf("no source files or packages specified")
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
+		fmt.Fprintf(os.Stderr, "Error: no source files or packages specified\n")
+		return errAlreadyPrinted
 	}
 
 	// Create build UI for mascot animation (unless --no-mascot)
 	var buildUI *ui.SimpleBuildUI
+	var deferredError error // Error to print after mascot stops (deferred functions run LIFO)
 	if !opts.NoMascot {
 		buildUI = ui.NewSimpleBuildUI()
+		buildUI.SuppressSpinnerMascot = true // Prevent runWithSpinnerCompile from printing its own mascot
 		buildUI.Start()
+		// Deferred functions run in LIFO order (Last In, First Out).
+		// We want: Stop() runs first (prints mascot), then error prints after.
+		// So defer error printing SECOND (runs after), defer Stop() FIRST (runs before).
+		defer func() {
+			if deferredError != nil {
+				fmt.Fprintf(os.Stderr, "\nError: %v\n", deferredError)
+			}
+		}()
 		defer buildUI.Stop()
 
 		// Print header
@@ -142,12 +171,20 @@ func runGoCommand(args []string, goCmd string) error {
 	}
 
 	// Check if shadow build is enabled (default: true)
+	var buildErr error
 	if cfg.Build.Shadow {
-		return runWithShadowBuild(opts, cfg, buildUI, goCmd)
+		buildErr = runWithShadowBuild(opts, cfg, buildUI, goCmd)
+	} else {
+		// Fall back to in-place generation
+		buildErr = runWithInPlaceBuild(opts, cfg, buildUI, goCmd)
 	}
 
-	// Fall back to in-place generation
-	return runWithInPlaceBuild(opts, cfg, buildUI, goCmd)
+	// Handle error printing: if buildUI is active, use deferred printing so error shows after mascot
+	if buildErr != nil && buildErr != errAlreadyPrinted && buildUI != nil {
+		deferredError = buildErr
+		return errAlreadyPrinted
+	}
+	return buildErr
 }
 
 // runWithInPlaceBuild uses in-place generation (legacy mode)
@@ -160,10 +197,11 @@ func runWithInPlaceBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.S
 	generatedFiles, err := transpileDingoFilesWithUI(opts, buildUI)
 	if err != nil {
 		if buildUI != nil {
-			buildUI.SetStatus(mascot.StateFailed, "Build failed!", "see error above")
+			buildUI.SetStatus(mascot.StateFailed, "Transpile failed!", "")
+			return err // Return actual error, caller handles printing after Stop()
 		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
+		return errAlreadyPrinted
 	}
 
 	// Step 2: Invoke go build or go run (with timing and UI)
@@ -172,7 +210,7 @@ func runWithInPlaceBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.S
 
 	if buildUI != nil {
 		buildUI.SetStatus(mascot.StateCompiling, "Running go "+goCmd+"...", "")
-		goErr = runWithSpinnerCompile("Go "+goCmd, func() error {
+		goErr = runWithSpinnerCompile("Go "+goCmd, buildUI, func() error {
 			start := time.Now()
 			err := invokeGoToolSilent(opts, generatedFiles, goCmd)
 			goDuration = time.Since(start)
@@ -186,7 +224,8 @@ func runWithInPlaceBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.S
 
 	if goErr != nil {
 		if buildUI != nil {
-			buildUI.SetStatus(mascot.StateFailed, "Go "+goCmd+" failed!", "see error above")
+			buildUI.SetStatus(mascot.StateFailed, "Go "+goCmd+" failed!", "")
+			return goErr // Return actual error, caller handles printing after Stop()
 		}
 		return goErr
 	}
@@ -244,54 +283,145 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 	fileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#CDD6F4"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
 
-	// Set up progress callback for scrolling display
-	const maxVisibleFiles = 8
-	var recentFiles []string
-	var fileCountShown bool
+	// Set up progress callback with text-only progress display
+	// (no mascot here - the final mascot is shown by SimpleBuildUI.Stop())
+	const maxVisibleFiles = 5
+
+	// File entry with timing info
+	type fileEntry struct {
+		name     string
+		duration time.Duration
+		done     bool
+	}
+
+	// Shared state for animation goroutine
+	var progressMu sync.Mutex
+	var progressCurrent, progressTotal int
+	var recentFiles []fileEntry
+	var currentFile string
+	var lastFileTime time.Time
+	var animationStarted bool
+	var animationDone chan struct{}
+	var animationExited chan struct{}
+
+	// Spinner characters for current file
+	spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	spinnerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F7DC6F")).Bold(true)
+	currentFileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F7DC6F"))
+
+	// drawProgress renders simple text-only progress (no mascot)
+	// The final mascot will be shown by SimpleBuildUI.Stop() - this avoids duplicate mascots
+	drawProgress := func(frameIdx int, firstDraw bool) {
+		progressMu.Lock()
+		current := progressCurrent
+		total := progressTotal
+		files := make([]fileEntry, len(recentFiles))
+		copy(files, recentFiles)
+		currFile := currentFile
+		progressMu.Unlock()
+
+		if total == 0 {
+			return
+		}
+
+		// Clear previous output using cursor restore + clear-to-end
+		if !firstDraw {
+			fmt.Print("\033[u")  // Restore cursor to saved position
+			fmt.Print("\033[0J") // Clear from cursor to end of screen
+		}
+
+		// Build progress bar with percentage
+		progressWidth := 30
+		filled := (current * progressWidth) / total
+		percentage := (current * 100) / total
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", progressWidth-filled)
+		progressLine := fmt.Sprintf("%s %s %d/%d %s",
+			dimStyle.Render("["+bar+"]"),
+			dimStyle.Render("Transpiling"),
+			current, total,
+			dimStyle.Render(fmt.Sprintf("(%d%%)", percentage)))
+
+		// Print progress bar
+		fmt.Println(progressLine)
+
+		// Show completed files with timing (max 5)
+		for _, f := range files {
+			timeStr := dimStyle.Render(fmt.Sprintf("(%s)", formatDuration(f.duration)))
+			fmt.Printf("  %s %s %s\n", successStyle.Render("✓"), fileStyle.Render(f.name), timeStr)
+		}
+
+		// Show current file being processed with spinner
+		if currFile != "" {
+			spinner := spinnerChars[frameIdx%len(spinnerChars)]
+			fmt.Printf("  %s %s%s\n", spinnerStyle.Render(spinner), currentFileStyle.Render(currFile), dimStyle.Render(" ..."))
+		}
+	}
 
 	if buildUI != nil {
 		builder.OnProgress = func(current, total int, file string) {
-			// Show file count on first callback
-			if !fileCountShown {
+			now := time.Now()
+			progressMu.Lock()
+
+			// Start animation on first callback
+			if !animationStarted {
+				animationStarted = true
+				animationDone = make(chan struct{})
+				animationExited = make(chan struct{})
+				lastFileTime = now
+
+				// Print header
 				if total == 1 {
 					fmt.Println("Building 1 file")
 				} else {
 					fmt.Printf("Building %d files\n", total)
 				}
 				fmt.Println()
-				fileCountShown = true
+
+				// Save cursor position for reliable clearing later
+				fmt.Print("\033[s")
+
+				// Start animation goroutine
+				go func() {
+					ticker := time.NewTicker(80 * time.Millisecond)
+					defer ticker.Stop()
+					frameIdx := 0
+					firstDraw := true
+					for {
+						select {
+						case <-animationDone:
+							// Signal that we've exited
+							close(animationExited)
+							return
+						case <-ticker.C:
+							drawProgress(frameIdx, firstDraw)
+							firstDraw = false
+							frameIdx++
+						}
+					}
+				}()
 			}
 
-			// Update recent files list
-			recentFiles = append(recentFiles, file)
-			if len(recentFiles) > maxVisibleFiles {
-				recentFiles = recentFiles[1:]
-			}
+			// Calculate duration for the previous file
+			fileDuration := now.Sub(lastFileTime)
+			lastFileTime = now
 
-			// Clear previous lines and redraw (ANSI escape codes)
-			linesToClear := len(recentFiles)
-			if linesToClear > 1 {
-				// Move cursor up and clear lines
-				fmt.Printf("\033[%dA", linesToClear-1)
-			}
-
-			// Show progress bar
-			progressWidth := 30
-			filled := (current * progressWidth) / total
-			bar := strings.Repeat("█", filled) + strings.Repeat("░", progressWidth-filled)
-			fmt.Printf("\r\033[K  %s %s %d/%d\n",
-				dimStyle.Render("["+bar+"]"),
-				dimStyle.Render("Transpiling"),
-				current, total)
-
-			// Show recent files
-			for i, f := range recentFiles {
-				status := "  "
-				if i == len(recentFiles)-1 {
-					status = successStyle.Render("✓ ")
+			// Add completed file with timing (skip first callback which has no previous file)
+			if currentFile != "" {
+				recentFiles = append(recentFiles, fileEntry{
+					name:     currentFile,
+					duration: fileDuration,
+					done:     true,
+				})
+				if len(recentFiles) > maxVisibleFiles {
+					recentFiles = recentFiles[1:]
 				}
-				fmt.Printf("\033[K%s%s\n", status, fileStyle.Render(f))
 			}
+
+			// Update current file
+			currentFile = file
+			progressCurrent = current
+			progressTotal = total
+			progressMu.Unlock()
 		}
 	}
 
@@ -310,21 +440,33 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 		shadowDuration = time.Since(start)
 	}
 
-	if err != nil {
-		if buildUI != nil {
-			buildUI.SetStatus(mascot.StateFailed, "Shadow build failed!", "see error above")
-		}
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return err
+	// Stop animation goroutine and wait for it to actually exit
+	if animationDone != nil {
+		close(animationDone)
+		<-animationExited // Wait for goroutine to confirm exit
 	}
 
-	if buildUI != nil {
-		// Clear the progress display
-		fmt.Printf("\033[%dA", len(recentFiles)+1)
-		for i := 0; i <= len(recentFiles); i++ {
-			fmt.Print("\033[K\n")
+	if err != nil {
+		// Clear animation area before showing error
+		if animationStarted {
+			fmt.Print("\033[u")  // Restore cursor to saved position
+			fmt.Print("\033[0J") // Clear from cursor to end of screen
 		}
-		fmt.Printf("\033[%dA", len(recentFiles)+1)
+		// Show sad mascot - error will be printed by caller after mascot stops
+		if buildUI != nil {
+			buildUI.SetStatus(mascot.StateFailed, "Build failed!", "")
+			return err // Return actual error, caller handles printing after Stop()
+		}
+		// No buildUI - print error directly
+		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
+		return errAlreadyPrinted
+	}
+
+	if buildUI != nil && animationStarted {
+		// Clear animation area using cursor restore + clear-to-end
+		// This avoids line counting bugs with varying content heights
+		fmt.Print("\033[u")  // Restore cursor to saved position
+		fmt.Print("\033[0J") // Clear from cursor to end of screen
 
 		// Show completion summary
 		fmt.Printf("  %s Transpile   %d files %s\n",
@@ -340,7 +482,7 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	if buildUI != nil {
 		buildUI.SetStatus(mascot.StateCompiling, "Running go "+goCmd+"...", "")
-		goErr = runWithSpinnerCompile("Go "+goCmd, func() error {
+		goErr = runWithSpinnerCompile("Go "+goCmd, buildUI, func() error {
 			start := time.Now()
 			err := invokeGoToolFromShadow(opts, result, goCmd, workspaceRoot)
 			goDuration = time.Since(start)
@@ -354,7 +496,8 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	if goErr != nil {
 		if buildUI != nil {
-			buildUI.SetStatus(mascot.StateFailed, "Go "+goCmd+" failed!", "see error above")
+			buildUI.SetStatus(mascot.StateFailed, "Go "+goCmd+" failed!", "")
+			return goErr // Return actual error, caller handles printing after Stop()
 		}
 		return goErr
 	}
@@ -597,7 +740,7 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 		var readErr error
 
 		if buildUI != nil {
-			readErr = runWithSpinnerCompile("Read", func() error {
+			readErr = runWithSpinnerCompile("Read", buildUI, func() error {
 				start := time.Now()
 				var err error
 				src, err = os.ReadFile(dingoFile)
@@ -626,7 +769,7 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 
 		if buildUI != nil {
 			buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", filepath.Base(dingoFile))
-			transpileErr = runWithSpinnerCompile("Transpile", func() error {
+			transpileErr = runWithSpinnerCompile("Transpile", buildUI, func() error {
 				start := time.Now()
 				var err error
 				result, err = transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
@@ -666,7 +809,7 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 		var writeErr error
 
 		if buildUI != nil {
-			writeErr = runWithSpinnerCompile("Write", func() error {
+			writeErr = runWithSpinnerCompile("Write", buildUI, func() error {
 				start := time.Now()
 
 				// Write .go file
@@ -726,8 +869,15 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 	return generatedFiles, nil
 }
 
-// runWithSpinnerCompile runs a function while showing animated mascot spinner
-func runWithSpinnerCompile(stepName string, fn func() error) error {
+// runWithSpinnerCompile runs a function while showing animated mascot spinner.
+// If buildUI is provided with SuppressSpinnerMascot=true, this function
+// skips the mascot and runs fn silently to prevent duplicate displays.
+func runWithSpinnerCompile(stepName string, buildUI *ui.SimpleBuildUI, fn func() error) error {
+	// Skip mascot if buildUI is suppressing it
+	if buildUI != nil && buildUI.SuppressSpinnerMascot {
+		return fn()
+	}
+
 	done := make(chan error, 1)
 	go func() {
 		done <- fn()
@@ -809,29 +959,27 @@ func runWithSpinnerCompile(stepName string, fn func() error) error {
 		}
 	}
 
-	// Hide cursor
-	fmt.Print("\033[?25l")
+	// Hide cursor and save position for reliable clearing
+	// Using cursor save/restore + clear-to-end-of-screen avoids line counting bugs
+	fmt.Print("\033[?25l") // Hide cursor
+	fmt.Print("\033[s")    // Save cursor position
 
 	// Draw first frame
 	drawMascotFrame(mascotFrames[frameIdx])
-	mascotHeight := len(mascotFrames[0]) + 1 // +1 for separator
 
 	for {
 		select {
 		case err := <-done:
-			// Move cursor up and clear mascot area
-			fmt.Printf("\033[%dA", mascotHeight)
-			for i := 0; i < mascotHeight; i++ {
-				fmt.Print("\033[2K\n")
-			}
-			fmt.Printf("\033[%dA", mascotHeight)
-			// Show cursor
-			fmt.Print("\033[?25h")
+			// Restore cursor to saved position and clear everything below
+			fmt.Print("\033[u")   // Restore cursor position
+			fmt.Print("\033[0J")  // Clear from cursor to end of screen
+			fmt.Print("\033[?25h") // Show cursor
 			return err
 		case <-ticker.C:
 			frameIdx = (frameIdx + 1) % len(mascotFrames)
-			// Move cursor up to redraw mascot
-			fmt.Printf("\033[%dA", mascotHeight)
+			// Restore cursor and clear, then redraw
+			fmt.Print("\033[u")   // Restore cursor position
+			fmt.Print("\033[0J")  // Clear from cursor to end of screen
 			drawMascotFrame(mascotFrames[frameIdx])
 		}
 	}

@@ -17,8 +17,8 @@ func TestTransformEnumConstructors(t *testing.T) {
 status := PaymentStatus.Pending{}
 `,
 			registry: map[string]string{
-				"Pending":               "PaymentStatus",
-				"PaymentStatusPending":  "PaymentStatus",
+				"Pending":              "PaymentStatus",
+				"PaymentStatusPending": "PaymentStatus",
 			},
 			expected: `
 status := NewPaymentStatusPending()
@@ -30,8 +30,8 @@ status := NewPaymentStatusPending()
 resp := APIResponse.Success{transactionID: "TXN-123", amount: 99.99}
 `,
 			registry: map[string]string{
-				"Success":              "APIResponse",
-				"APIResponseSuccess":   "APIResponse",
+				"Success":            "APIResponse",
+				"APIResponseSuccess": "APIResponse",
 			},
 			expected: `
 resp := NewAPIResponseSuccess("TXN-123", 99.99)
@@ -43,8 +43,8 @@ resp := NewAPIResponseSuccess("TXN-123", 99.99)
 result := Ok(42)
 `,
 			registry: map[string]string{
-				"Ok":        "Result",
-				"ResultOk":  "Result",
+				"Ok":       "Result",
+				"ResultOk": "Result",
 			},
 			expected: `
 result := NewResultOk(42)
@@ -73,8 +73,8 @@ s2 := NewStatusPending()
 payment := PaymentStatus.Processing{processorID: "STRIPE"}
 `,
 			registry: map[string]string{
-				"Processing":               "PaymentStatus",
-				"PaymentStatusProcessing":  "PaymentStatus",
+				"Processing":              "PaymentStatus",
+				"PaymentStatusProcessing": "PaymentStatus",
 			},
 			expected: `
 payment := NewPaymentStatusProcessing("STRIPE")
@@ -106,11 +106,11 @@ x := SomeType.SomeField{}
 
 func TestFindMatchingBracket(t *testing.T) {
 	tests := []struct {
-		name      string
-		src       string
-		pos       int
-		openChar  byte
-		expected  int
+		name     string
+		src      string
+		pos      int
+		openChar byte
+		expected int
 	}{
 		{
 			name:     "simple braces",

@@ -524,7 +524,7 @@ func TestTranslatePositionErrorPropagationColumnMultipleIdentifiers(t *testing.T
 	columnMappings := []sourcemap.ColumnMapping{
 		{
 			DingoLine: 1,
-			DingoCol:  7,  // 1-indexed position of 'c' in checkPermissions
+			DingoCol:  7, // 1-indexed position of 'c' in checkPermissions
 			GoLine:    1,
 			GoCol:     16, // 1-indexed position of 'c' in checkPermissions
 			Length:    16, // length of "checkPermissions"

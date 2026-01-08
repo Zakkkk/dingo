@@ -30,8 +30,8 @@ type LoadResult struct {
 // FunctionSignature represents a function or method signature
 type FunctionSignature struct {
 	Name       string
-	Package    string    // Full import path (empty for local functions)
-	Receiver   *TypeRef  // nil for functions
+	Package    string   // Full import path (empty for local functions)
+	Receiver   *TypeRef // nil for functions
 	Parameters []TypeRef
 	Results    []TypeRef
 }

@@ -23,8 +23,8 @@ const (
 //	    return None[User]()
 //	}
 type Option[T any] struct {
-	Tag   OptionTag  // Exported for pattern matching
-	Some  *T         // Exported for pattern matching
+	Tag  OptionTag // Exported for pattern matching
+	Some *T        // Exported for pattern matching
 }
 
 // Some creates an Option containing the given value
@@ -171,11 +171,20 @@ func (o Option[T]) Replace(value T) (Option[T], T) {
 
 // Zip combines two Options into an Option of a pair
 // Returns None if either Option is None
-func Zip[T, U any](a Option[T], b Option[U]) Option[struct{ First T; Second U }] {
+func Zip[T, U any](a Option[T], b Option[U]) Option[struct {
+	First  T
+	Second U
+}] {
 	if a.Tag == OptionTagSome && b.Tag == OptionTagSome && a.Some != nil && b.Some != nil {
-		return Some(struct{ First T; Second U }{*a.Some, *b.Some})
+		return Some(struct {
+			First  T
+			Second U
+		}{*a.Some, *b.Some})
 	}
-	return None[struct{ First T; Second U }]()
+	return None[struct {
+		First  T
+		Second U
+	}]()
 }
 
 // OkOr converts an Option to a Result, using the provided error if None

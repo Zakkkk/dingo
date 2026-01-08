@@ -75,36 +75,36 @@ const (
 	GUARD // guard (pattern matching guards)
 
 	// Go keywords (needed for full parsing)
-	PACKAGE   // package
-	IMPORT    // import
-	FUNC      // func
-	RETURN    // return
-	TYPE      // type
-	STRUCT    // struct
-	INTERFACE // interface
-	MAP       // map
-	CHAN      // chan
-	FOR       // for
-	RANGE     // range
-	SWITCH    // switch
-	CASE      // case
-	DEFAULT   // default
-	SELECT    // select
-	BREAK     // break
-	CONTINUE  // continue
-	GOTO      // goto
+	PACKAGE     // package
+	IMPORT      // import
+	FUNC        // func
+	RETURN      // return
+	TYPE        // type
+	STRUCT      // struct
+	INTERFACE   // interface
+	MAP         // map
+	CHAN        // chan
+	FOR         // for
+	RANGE       // range
+	SWITCH      // switch
+	CASE        // case
+	DEFAULT     // default
+	SELECT      // select
+	BREAK       // break
+	CONTINUE    // continue
+	GOTO        // goto
 	FALLTHROUGH // fallthrough
-	DEFER     // defer
-	GO        // go
-	ELSE      // else
-	NIL       // nil
-	TRUE      // true
-	FALSE     // false
-	IOTA      // iota
+	DEFER       // defer
+	GO          // go
+	ELSE        // else
+	NIL         // nil
+	TRUE        // true
+	FALSE       // false
+	IOTA        // iota
 
 	// Additional operators
-	AMPERSAND // &
-	ELLIPSIS  // ...
+	AMPERSAND  // &
+	ELLIPSIS   // ...
 	CHAN_ARROW // <-
 
 	// Boundaries (help with expression extraction)
@@ -112,47 +112,47 @@ const (
 )
 
 var tokenKindStrings = map[TokenKind]string{
-	ILLEGAL:    "ILLEGAL",
-	EOF:        "EOF",
-	COMMENT:    "COMMENT",
-	IDENT:      "IDENT",
-	INT:        "INT",
-	FLOAT:      "FLOAT",
-	STRING:     "STRING",
-	CHAR:       "CHAR",
-	ARROW:      "=>",
-	COMMA:      ",",
-	LPAREN:     "(",
-	RPAREN:     ")",
-	LBRACE:     "{",
-	RBRACE:     "}",
-	LBRACKET:   "[",
-	RBRACKET:   "]",
-	COLON:      ":",
-	SEMICOLON:  ";",
-	UNDERSCORE: "_",
-	PIPE:       "|",
-	MATCH:      "match",
-	IF:         "if",
-	WHERE:      "where",
-	VAR:        "var",
-	LET:        "let",
-	CONST:      "const",
-	EQ:         "==",
-	NE:         "!=",
-	LT:         "<",
-	LE:         "<=",
-	GT:         ">",
-	GE:         ">=",
-	AND:        "&&",
-	OR:         "||",
-	NOT:        "!",
-	ASSIGN:     "=",
-	DEFINE:     ":=",
-	PLUS:       "+",
-	MINUS:      "-",
-	STAR:       "*",
-	SLASH:      "/",
+	ILLEGAL:           "ILLEGAL",
+	EOF:               "EOF",
+	COMMENT:           "COMMENT",
+	IDENT:             "IDENT",
+	INT:               "INT",
+	FLOAT:             "FLOAT",
+	STRING:            "STRING",
+	CHAR:              "CHAR",
+	ARROW:             "=>",
+	COMMA:             ",",
+	LPAREN:            "(",
+	RPAREN:            ")",
+	LBRACE:            "{",
+	RBRACE:            "}",
+	LBRACKET:          "[",
+	RBRACKET:          "]",
+	COLON:             ":",
+	SEMICOLON:         ";",
+	UNDERSCORE:        "_",
+	PIPE:              "|",
+	MATCH:             "match",
+	IF:                "if",
+	WHERE:             "where",
+	VAR:               "var",
+	LET:               "let",
+	CONST:             "const",
+	EQ:                "==",
+	NE:                "!=",
+	LT:                "<",
+	LE:                "<=",
+	GT:                ">",
+	GE:                ">=",
+	AND:               "&&",
+	OR:                "||",
+	NOT:               "!",
+	ASSIGN:            "=",
+	DEFINE:            ":=",
+	PLUS:              "+",
+	MINUS:             "-",
+	STAR:              "*",
+	SLASH:             "/",
 	DOT:               ".",
 	QUESTION:          "?",
 	QUESTION_QUESTION: "??",

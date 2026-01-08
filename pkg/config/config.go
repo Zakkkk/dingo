@@ -110,13 +110,13 @@ type TypeInferenceConfig struct {
 
 // Config represents the complete Dingo project configuration
 type Config struct {
-	Features       FeatureConfig        `toml:"features"`
-	FeatureMatrix  FeatureMatrix        `toml:"feature_matrix"`
-	Match          MatchConfig          `toml:"match"`
-	SourceMap      SourceMapConfig      `toml:"sourcemaps"`
-	Debug          DebugConfig          `toml:"debug"`
-	Build          BuildConfig          `toml:"build"`
-	TypeInference  TypeInferenceConfig  `toml:"type_inference"`
+	Features      FeatureConfig       `toml:"features"`
+	FeatureMatrix FeatureMatrix       `toml:"feature_matrix"`
+	Match         MatchConfig         `toml:"match"`
+	SourceMap     SourceMapConfig     `toml:"sourcemaps"`
+	Debug         DebugConfig         `toml:"debug"`
+	Build         BuildConfig         `toml:"build"`
+	TypeInference TypeInferenceConfig `toml:"type_inference"`
 }
 
 // FeatureMatrix controls which language features are enabled/disabled.
@@ -124,18 +124,18 @@ type Config struct {
 // When a disabled feature's syntax is used, the transpiler will report an error.
 type FeatureMatrix struct {
 	// Character-level features (transform raw source)
-	Enum             *bool `toml:"enum"`              // enum declarations
-	Match            *bool `toml:"match"`             // match expressions
-	EnumConstructors *bool `toml:"enum_constructors"` // Variant() -> NewVariant()
-	ErrorProp        *bool `toml:"error_prop"`        // ? operator for error propagation
-	Guard         *bool `toml:"guard"`         // guard expressions
+	Enum              *bool `toml:"enum"`                // enum declarations
+	Match             *bool `toml:"match"`               // match expressions
+	EnumConstructors  *bool `toml:"enum_constructors"`   // Variant() -> NewVariant()
+	ErrorProp         *bool `toml:"error_prop"`          // ? operator for error propagation
+	Guard             *bool `toml:"guard"`               // guard expressions
 	SafeNavStatements *bool `toml:"safe_nav_statements"` // ?. in statements
-	SafeNav          *bool `toml:"safe_nav"`          // ?. operator
-	NullCoalesce     *bool `toml:"null_coalesce"`     // ?? operator
-	Lambdas          *bool `toml:"lambdas"`           // |x| expr and x => expr
+	SafeNav           *bool `toml:"safe_nav"`            // ?. operator
+	NullCoalesce      *bool `toml:"null_coalesce"`       // ?? operator
+	Lambdas           *bool `toml:"lambdas"`             // |x| expr and x => expr
 
 	// Token-level features (transform after tokenization)
-	Generics        *bool `toml:"generics"`         // <T> syntax
+	Generics *bool `toml:"generics"` // <T> syntax
 }
 
 // ToEnabledFeatures converts the FeatureMatrix to a map[string]bool
@@ -371,6 +371,22 @@ func Load(overrides *Config) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	return cfg, nil
+}
+
+// LoadFromDir loads configuration from a specific directory.
+// It searches for dingo.toml starting from the given directory and walking up.
+// If no dingo.toml is found, returns default config (not an error).
+// This is useful for LSP and tools that need to load config from a specific workspace.
+func LoadFromDir(workspaceDir string) (*Config, error) {
+	cfg, _, err := FindConfig(workspaceDir)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// No dingo.toml found, use defaults
+		return DefaultConfig(), nil
+	}
 	return cfg, nil
 }
 

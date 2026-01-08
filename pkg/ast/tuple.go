@@ -195,8 +195,9 @@ func (t *TupleLiteral) ToGo(markerName string) string {
 
 // ToGo converts TupleDestructure to Go code
 // Output:
-//   Simple: tmp := expr; a, b := tmp._0, tmp._1
-//   Nested: tmp := expr; tmp1 := tmp._0; a, b := tmp1._0, tmp1._1; c := tmp._1
+//
+//	Simple: tmp := expr; a, b := tmp._0, tmp._1
+//	Nested: tmp := expr; tmp1 := tmp._0; a, b := tmp1._0, tmp1._1; c := tmp._1
 func (t *TupleDestructure) ToGo() string {
 	var result strings.Builder
 

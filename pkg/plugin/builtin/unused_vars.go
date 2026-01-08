@@ -136,8 +136,8 @@ func (p *UnusedVarsPlugin) handleIfStatement(ifStmt *ast.IfStmt) {
 
 		// Insert after the variable declaration
 		newList := make([]ast.Stmt, 0, len(ifStmt.Body.List)+1)
-		newList = append(newList, ifStmt.Body.List[0]) // Original assignment
-		newList = append(newList, blankAssign)          // Add _ = v
+		newList = append(newList, ifStmt.Body.List[0])     // Original assignment
+		newList = append(newList, blankAssign)             // Add _ = v
 		newList = append(newList, ifStmt.Body.List[1:]...) // Rest of statements
 		ifStmt.Body.List = newList
 	}

@@ -196,23 +196,23 @@ func TestRendererClearFrameSequence(t *testing.T) {
 	r := NewRenderer(buf)
 
 	tests := []struct {
-		name   string
-		height int
+		name      string
+		height    int
 		wantEmpty bool
 	}{
 		{
-			name:   "Zero height",
-			height: 0,
+			name:      "Zero height",
+			height:    0,
 			wantEmpty: true,
 		},
 		{
-			name:   "Single line",
-			height: 1,
+			name:      "Single line",
+			height:    1,
 			wantEmpty: false,
 		},
 		{
-			name:   "Multiple lines",
-			height: 5,
+			name:      "Multiple lines",
+			height:    5,
 			wantEmpty: false,
 		},
 	}

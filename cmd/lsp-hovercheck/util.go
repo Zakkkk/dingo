@@ -152,7 +152,7 @@ func isIdentChar(r rune) bool {
 func vsCodeColumnWidth(r rune, currentCol int, tabSize int) int {
 	if r == '\t' {
 		// Tab advances to next tab stop
-		return ((currentCol / tabSize) + 1) * tabSize - currentCol
+		return ((currentCol/tabSize)+1)*tabSize - currentCol
 	}
 	// VS Code counts all other characters as 1 column
 	return 1

@@ -32,7 +32,8 @@ func untypedToTypedName(kind types.BasicKind) string {
 	case types.UntypedString:
 		return "string"
 	case types.UntypedNil:
-		return "nil"
+		// nil is not a type - return empty to skip inference
+		return ""
 	default:
 		return "" // not an untyped kind, use typ.Name()
 	}
@@ -51,12 +52,12 @@ func untypedToTypedName(kind types.BasicKind) string {
 // Layer 3: Generic unification (third-party generic functions)
 // Layer 4: gopls fallback (optional, configurable via dingo.toml)
 type LambdaTypeInferrer struct {
-	fset         *token.FileSet
-	info         *types.Info
-	file         *ast.File
-	changed      bool
-	config       *config.TypeInferenceConfig
-	goplsClient  *GoplsClient // Lazy-initialized when needed
+	fset        *token.FileSet
+	info        *types.Info
+	file        *ast.File
+	changed     bool
+	config      *config.TypeInferenceConfig
+	goplsClient *GoplsClient // Lazy-initialized when needed
 }
 
 // NewLambdaTypeInferrer creates a new inferrer.
@@ -143,7 +144,6 @@ func (inf *LambdaTypeInferrer) visit(n ast.Node) bool {
 			// Parameter is not a function type
 			continue
 		}
-
 
 		// Rewrite the function literal's types
 		if inf.rewriteFuncLit(funcLit, expectedSig) {
@@ -646,6 +646,10 @@ func (inf *LambdaTypeInferrer) typeToExpr(t types.Type) ast.Expr {
 
 	switch typ := t.(type) {
 	case *types.Basic:
+		// UntypedNil has no valid type representation - skip it
+		if typ.Kind() == types.UntypedNil {
+			return nil
+		}
 		// Handle untyped constants by converting to their typed equivalents
 		// using go/types Kind constants (no string manipulation)
 		name := untypedToTypedName(typ.Kind())
@@ -1347,6 +1351,11 @@ func (inf *LambdaTypeInferrer) inferStandaloneLambdas() {
 		// Try to infer return type from body expression
 		returnType := inf.inferReturnTypeFromBody(funcLit)
 		if returnType != nil {
+			// Skip UntypedNil - interface{} is the correct return type for nil-returning functions
+			// This catches UntypedNil from any code path (info.Types or analyzeExpressionType)
+			if basic, ok := returnType.(*types.Basic); ok && basic.Kind() == types.UntypedNil {
+				return true
+			}
 			// Rewrite the return type
 			newTypeExpr := inf.typeToExpr(returnType)
 			if newTypeExpr != nil {
@@ -1387,6 +1396,11 @@ func (inf *LambdaTypeInferrer) inferReturnTypeFromBody(funcLit *ast.FuncLit) typ
 	if tv, ok := inf.info.Types[returnExpr]; ok && tv.Type != nil {
 		// Handle untyped constants
 		if basic, ok := tv.Type.(*types.Basic); ok {
+			// UntypedNil has no typed equivalent - skip inference
+			// interface{} is the correct return type for functions that return nil
+			if basic.Kind() == types.UntypedNil {
+				return nil
+			}
 			if name := untypedToTypedName(basic.Kind()); name != "" {
 				return types.Universe.Lookup(name).Type()
 			}

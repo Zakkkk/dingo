@@ -86,7 +86,8 @@ func (cs ColorScheme) ApplyAccentColor(s string) string {
 // This is a convenience function for applying the color scheme to mascot parts.
 //
 // Usage example:
-//   colored := scheme.Colorize(bodyPart, eyePart, nosePart)
+//
+//	colored := scheme.Colorize(bodyPart, eyePart, nosePart)
 func (cs ColorScheme) Colorize(body, eyes, nose string) (coloredBody, coloredEyes, coloredNose string) {
 	return cs.ApplyBodyColor(body), cs.ApplyEyeColor(eyes), cs.ApplyNoseColor(nose)
 }

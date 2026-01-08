@@ -67,6 +67,7 @@ type BuildResult struct {
 
 // Build creates the shadow directory with all necessary files.
 // If dingoFiles is empty, it discovers all .dingo files in the workspace.
+// Uses incremental builds - only transpiles files that changed since last build.
 func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 	result := &BuildResult{
 		ShadowDir: b.ShadowDir,
@@ -83,27 +84,31 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 	}
 	result.CopiedFiles = append(result.CopiedFiles, "go.mod", "go.sum")
 
-	// 3. Discover all .dingo files if none specified
-	allDingoFiles := dingoFiles
-	if len(allDingoFiles) == 0 {
-		var err error
-		allDingoFiles, err = b.findAllDingoFiles()
-		if err != nil {
-			return nil, fmt.Errorf("failed to find .dingo files: %w", err)
-		}
-	} else {
-		// Even if specific files are given, we need to transpile ALL .dingo files
-		// for imports to resolve correctly in the shadow directory
-		var err error
-		allDingoFiles, err = b.findAllDingoFiles()
-		if err != nil {
-			return nil, fmt.Errorf("failed to find .dingo files: %w", err)
+	// 3. Discover all .dingo files
+	allDingoFiles, err := b.findAllDingoFiles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to find .dingo files: %w", err)
+	}
+
+	// 4. Filter to only files that need transpilation (incremental build)
+	var filesToTranspile []string
+	for _, dingoFile := range allDingoFiles {
+		if b.needsTranspile(dingoFile) {
+			filesToTranspile = append(filesToTranspile, dingoFile)
+		} else {
+			// Track as generated even if skipped (for pure Go copy logic)
+			relPath, _ := filepath.Rel(b.WorkspaceRoot, dingoFile)
+			goRelPath := strings.TrimSuffix(relPath, ".dingo") + ".go"
+			b.generatedFiles[goRelPath] = true
+			// Add to result (existing file)
+			goFile := filepath.Join(b.ShadowDir, goRelPath)
+			result.GeneratedFiles = append(result.GeneratedFiles, goFile)
 		}
 	}
 
-	// 4. Transpile .dingo files to shadow
-	total := len(allDingoFiles)
-	for i, dingoFile := range allDingoFiles {
+	// 5. Transpile only changed .dingo files
+	total := len(filesToTranspile)
+	for i, dingoFile := range filesToTranspile {
 		// Report progress
 		if b.OnProgress != nil {
 			relPath, _ := filepath.Rel(b.WorkspaceRoot, dingoFile)
@@ -122,19 +127,46 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 		b.generatedFiles[goRelPath] = true
 	}
 
-	// 5. Copy pure .go files to shadow
+	// 6. Copy pure .go files to shadow
 	copiedGo, err := b.copyPureGoFiles()
 	if err != nil {
 		return nil, fmt.Errorf("failed to copy Go files: %w", err)
 	}
 	result.CopiedFiles = append(result.CopiedFiles, copiedGo...)
 
-	// 6. Handle vendor directory if present
+	// 7. Handle vendor directory if present
 	if err := b.handleVendor(); err != nil {
 		return nil, fmt.Errorf("failed to handle vendor directory: %w", err)
 	}
 
 	return result, nil
+}
+
+// needsTranspile checks if a .dingo file needs to be transpiled.
+// Returns true if the .go file doesn't exist or is older than the .dingo file.
+func (b *Builder) needsTranspile(dingoFile string) bool {
+	// Calculate the output .go file path
+	relPath, err := filepath.Rel(b.WorkspaceRoot, dingoFile)
+	if err != nil {
+		return true // Can't determine, transpile to be safe
+	}
+	goRelPath := strings.TrimSuffix(relPath, ".dingo") + ".go"
+	goFile := filepath.Join(b.ShadowDir, goRelPath)
+
+	// Check if .go file exists
+	goInfo, err := os.Stat(goFile)
+	if err != nil {
+		return true // .go doesn't exist, needs transpile
+	}
+
+	// Check if .dingo is newer than .go
+	dingoInfo, err := os.Stat(dingoFile)
+	if err != nil {
+		return true // Can't stat .dingo, transpile to be safe
+	}
+
+	// Transpile if .dingo is newer than .go
+	return dingoInfo.ModTime().After(goInfo.ModTime())
 }
 
 // findAllDingoFiles discovers all .dingo files in the workspace
@@ -149,12 +181,14 @@ func (b *Builder) findAllDingoFiles() ([]string, error) {
 		// Skip directories we don't want to process
 		if info.IsDir() {
 			name := info.Name()
-			// Skip hidden dirs, shadow dir, vendor, node_modules
+			// Skip hidden dirs, shadow dir, vendor, node_modules, editors, tests
 			if strings.HasPrefix(name, ".") ||
 				path == b.ShadowDir ||
 				name == "vendor" ||
 				name == "node_modules" ||
-				name == "testdata" {
+				name == "testdata" ||
+				name == "editors" ||
+				name == "tests" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -303,12 +337,14 @@ func (b *Builder) copyPureGoFiles() ([]string, error) {
 		// Skip directories we don't want to process
 		if info.IsDir() {
 			name := info.Name()
-			// Skip hidden dirs, shadow dir, vendor, node_modules
+			// Skip hidden dirs, shadow dir, vendor, node_modules, editors, tests
 			if strings.HasPrefix(name, ".") ||
 				path == b.ShadowDir ||
 				name == "vendor" ||
 				name == "node_modules" ||
-				name == "testdata" {
+				name == "testdata" ||
+				name == "editors" ||
+				name == "tests" {
 				return filepath.SkipDir
 			}
 			return nil

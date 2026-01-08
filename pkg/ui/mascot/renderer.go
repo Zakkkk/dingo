@@ -3,22 +3,32 @@ package mascot
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 )
+
+// ansiStripRegex matches ANSI escape sequences.
+var ansiStripRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// StripAnsi removes ANSI escape codes from a string.
+func StripAnsi(str string) string {
+	return ansiStripRegex.ReplaceAllString(str, "")
+}
+
 
 // ANSI escape codes for terminal control
 const (
 	// ANSI cursor movement
-	ansiMoveUp        = "\x1b[%dA"   // Move cursor up N lines
-	ansiMoveDown      = "\x1b[%dB"   // Move cursor down N lines
-	ansiMoveRight     = "\x1b[%dC"   // Move cursor right N columns
-	ansiMoveLeft      = "\x1b[%dD"   // Move cursor left N columns
-	ansiMoveBOL       = "\x1b[1G"    // Move cursor to beginning of line
-	ansiMoveToLine    = "\x1b[%d;1H" // Move cursor to specific line
+	ansiMoveUp     = "\x1b[%dA"   // Move cursor up N lines
+	ansiMoveDown   = "\x1b[%dB"   // Move cursor down N lines
+	ansiMoveRight  = "\x1b[%dC"   // Move cursor right N columns
+	ansiMoveLeft   = "\x1b[%dD"   // Move cursor left N columns
+	ansiMoveBOL    = "\x1b[1G"    // Move cursor to beginning of line
+	ansiMoveToLine = "\x1b[%d;1H" // Move cursor to specific line
 
 	// ANSI clearing
-	ansiClearFromCursor = "\x1b[0J" // Clear from cursor to end of screen
-	ansiClearLine       = "\x1b[2K" // Clear entire current line
+	ansiClearFromCursor   = "\x1b[0J" // Clear from cursor to end of screen
+	ansiClearLine         = "\x1b[2K" // Clear entire current line
 	ansiClearLineToCursor = "\x1b[1K" // Clear from line start to cursor
 
 	// ANSI cursor visibility

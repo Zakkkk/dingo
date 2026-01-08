@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/fsnotify/fsnotify"
-	"github.com/spf13/cobra"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"github.com/MadAppGang/dingo/pkg/version"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/cobra"
 )
 
 // transpileForWatch transpiles a .dingo file and returns the Go code
@@ -37,11 +37,11 @@ const gracefulShutdownTimeout = 2 * time.Second
 
 // ProcessManager handles the running child process (cross-platform)
 type ProcessManager struct {
-	cmd       *exec.Cmd
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	running   bool
-	doneCh    chan struct{}
+	cmd     *exec.Cmd
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	running bool
+	doneCh  chan struct{}
 }
 
 // Start starts the process with the given command and arguments

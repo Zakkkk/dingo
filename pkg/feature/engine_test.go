@@ -16,12 +16,12 @@ type mockPlugin struct {
 	transformFn  func([]byte, *Context) ([]byte, error)
 }
 
-func (p *mockPlugin) Name() string               { return p.name }
-func (p *mockPlugin) Version() string            { return p.version }
-func (p *mockPlugin) Type() PluginType           { return p.ptype }
-func (p *mockPlugin) Priority() int              { return p.priority }
-func (p *mockPlugin) Dependencies() []string     { return p.dependencies }
-func (p *mockPlugin) Conflicts() []string        { return p.conflicts }
+func (p *mockPlugin) Name() string           { return p.name }
+func (p *mockPlugin) Version() string        { return p.version }
+func (p *mockPlugin) Type() PluginType       { return p.ptype }
+func (p *mockPlugin) Priority() int          { return p.priority }
+func (p *mockPlugin) Dependencies() []string { return p.dependencies }
+func (p *mockPlugin) Conflicts() []string    { return p.conflicts }
 func (p *mockPlugin) Detect(src []byte) []SyntaxLocation {
 	if p.detectFn != nil {
 		return p.detectFn(src)

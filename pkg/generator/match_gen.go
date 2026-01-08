@@ -20,10 +20,10 @@ type MatchGenerator struct {
 // NewMatchGenerator creates a new match generator
 func NewMatchGenerator(matchID int) *MatchGenerator {
 	return &MatchGenerator{
-		matchID:      matchID,
-		tempCounter:  0,
-		indentLevel:  0,
-		markerID:     0,
+		matchID:     matchID,
+		tempCounter: 0,
+		indentLevel: 0,
+		markerID:    0,
 	}
 }
 
@@ -153,7 +153,7 @@ func (g *MatchGenerator) hasGuardedArms(arms []*dingoast.MatchArm) bool {
 
 // armGroup represents a group of arms with the same pattern
 type armGroup struct {
-	patternKey string          // Unique key for grouping (e.g., "Constructor:OrderPlaced")
+	patternKey string // Unique key for grouping (e.g., "Constructor:OrderPlaced")
 	arms       []*dingoast.MatchArm
 }
 
@@ -707,8 +707,8 @@ func (g *MatchGenerator) inferReturnType(match *dingoast.MatchExpr) string {
 
 // Mapping represents a source map entry (placeholder for now)
 type Mapping struct {
-	OriginalLine   int
-	OriginalColumn int
-	GeneratedLine  int
+	OriginalLine    int
+	OriginalColumn  int
+	GeneratedLine   int
 	GeneratedColumn int
 }

@@ -406,9 +406,9 @@ func TestMatchParser_MultipleArms(t *testing.T) {
 
 func TestMatchParser_ComplexScrutinee(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		wantScrutinee  string
+		name          string
+		input         string
+		wantScrutinee string
 	}{
 		{
 			name:          "simple variable",

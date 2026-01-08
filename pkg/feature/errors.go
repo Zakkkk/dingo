@@ -35,9 +35,9 @@ func (e *DisabledFeatureError) Error() string {
 
 // DependencyError is returned when a plugin's dependencies are not satisfied
 type DependencyError struct {
-	Plugin      string   // Plugin that has unmet dependencies
-	Missing     []string // Names of missing dependencies
-	Disabled    []string // Names of disabled dependencies
+	Plugin   string   // Plugin that has unmet dependencies
+	Missing  []string // Names of missing dependencies
+	Disabled []string // Names of disabled dependencies
 }
 
 func (e *DependencyError) Error() string {

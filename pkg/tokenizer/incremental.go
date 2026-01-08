@@ -7,13 +7,13 @@ import (
 // IncrementalTokenizer supports efficient re-tokenization of changed text regions
 // This is critical for LSP performance where we need to update tokens on every keystroke
 type IncrementalTokenizer struct {
-	source     []byte
-	tokens     []Token
-	positions  []int // Byte offset to token index mapping (for fast lookup)
-	fset       *token.FileSet
-	filename   string
-	version    int // Incremented on each update for cache invalidation
-	tokenizer  *Tokenizer
+	source    []byte
+	tokens    []Token
+	positions []int // Byte offset to token index mapping (for fast lookup)
+	fset      *token.FileSet
+	filename  string
+	version   int // Incremented on each update for cache invalidation
+	tokenizer *Tokenizer
 }
 
 // NewIncremental creates an incremental tokenizer for the given source

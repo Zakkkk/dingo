@@ -572,7 +572,7 @@ func (p *PlaceholderResolverPlugin) replaceUnwrap(cursor *astutil.Cursor, call *
 		if !isOption {
 			name := ident.Name
 			isOption = strings.Contains(name, "opt") || strings.Contains(name, "Opt") ||
-			          strings.Contains(name, "option") || strings.Contains(name, "Option")
+				strings.Contains(name, "option") || strings.Contains(name, "Option")
 		}
 	}
 

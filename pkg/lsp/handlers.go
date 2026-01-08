@@ -46,7 +46,6 @@ func (t *Translator) TranslateCompletionList(
 	return list, nil
 }
 
-
 // TranslateHover translates hover response positions from Go → Dingo
 func (t *Translator) TranslateHover(
 	hover *protocol.Hover,

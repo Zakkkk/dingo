@@ -36,9 +36,9 @@ type TransformationStep struct {
 // NewASTPositionMapper creates a new position mapper
 func NewASTPositionMapper() *ASTPositionMapper {
 	return &ASTPositionMapper{
-		originalPositions:   make(map[string]token.Position),
+		originalPositions:    make(map[string]token.Position),
 		transformedPositions: make(map[string]token.Position),
-		transformations:     make([]TransformationStep, 0),
+		transformations:      make([]TransformationStep, 0),
 	}
 }
 
@@ -136,7 +136,7 @@ func (m *ASTPositionMapper) GenerateSourceMappings() []SourceMapping {
 			OriginalColumn: originalPos.Column,
 			FinalLine:      finalPos.Line,
 			FinalColumn:    finalPos.Column,
-			NodeHash:      hash,
+			NodeHash:       hash,
 		}
 
 		mappings = append(mappings, mapping)

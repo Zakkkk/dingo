@@ -36,20 +36,20 @@ type Position struct {
 
 // Replacement represents a suggested fix
 type Replacement struct {
-	NewLines   []string `json:"NewLines"`
-	Inline     *InlineFix `json:"Inline,omitempty"`
+	NewLines []string   `json:"NewLines"`
+	Inline   *InlineFix `json:"Inline,omitempty"`
 }
 
 // InlineFix represents an inline replacement
 type InlineFix struct {
-	StartCol int    `json:"StartCol"`
-	Length   int    `json:"Length"`
+	StartCol  int    `json:"StartCol"`
+	Length    int    `json:"Length"`
 	NewString string `json:"NewString"`
 }
 
 // Report contains summary statistics
 type Report struct {
-	Linters []LinterStats `json:"Linters"`
+	Linters  []LinterStats `json:"Linters"`
 	Warnings []string      `json:"Warnings"`
 }
 

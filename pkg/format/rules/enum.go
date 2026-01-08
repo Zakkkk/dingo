@@ -22,12 +22,13 @@ func NewEnumFormatter() *EnumFormatter {
 // Returns the index of the last token consumed
 //
 // Example formatting:
-//   Before: enum Status{Active,Inactive(string),Pending}
-//   After:  enum Status {
-//               Active
-//               Inactive(string)
-//               Pending
-//           }
+//
+//	Before: enum Status{Active,Inactive(string),Pending}
+//	After:  enum Status {
+//	            Active
+//	            Inactive(string)
+//	            Pending
+//	        }
 func (e *EnumFormatter) Format(tokens []tokenizer.Token, startIdx int, writer TokenWriter) int {
 	idx := startIdx
 

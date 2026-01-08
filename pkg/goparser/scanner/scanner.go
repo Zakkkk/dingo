@@ -14,10 +14,10 @@ type ErrorHandler func(pos gotoken.Position, msg string)
 
 // Scanner extends go/scanner.Scanner with Dingo token support
 type Scanner struct {
-	base    scanner.Scanner
-	file    *gotoken.File
-	src     []byte
-	offset  int // current reading offset
+	base     scanner.Scanner
+	file     *gotoken.File
+	src      []byte
+	offset   int // current reading offset
 	rdOffset int // reading offset (position after current character)
 
 	// Current token state
@@ -26,10 +26,10 @@ type Scanner struct {
 	lit string
 
 	// Lookahead for multi-char Dingo operators
-	peeked    bool
-	peekPos   gotoken.Pos
-	peekTok   token.Token
-	peekLit   string
+	peeked  bool
+	peekPos gotoken.Pos
+	peekTok token.Token
+	peekLit string
 }
 
 // Init initializes the scanner with source code

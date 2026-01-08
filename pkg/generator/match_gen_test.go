@@ -10,9 +10,9 @@ import (
 
 func TestMatchGenerator_SimplePatterns(t *testing.T) {
 	tests := []struct {
-		name     string
-		match    *dingoast.MatchExpr
-		checks   []string // strings that must be present in output
+		name   string
+		match  *dingoast.MatchExpr
+		checks []string // strings that must be present in output
 	}{
 		{
 			name: "Ok pattern",
@@ -21,7 +21,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 				Arms: []*dingoast.MatchArm{
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Ok",
+							Name: "Ok",
 							Params: []dingoast.Pattern{
 								&dingoast.VariablePattern{Name: "x"},
 							},
@@ -62,7 +62,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 				Arms: []*dingoast.MatchArm{
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Ok",
+							Name: "Ok",
 							Params: []dingoast.Pattern{
 								&dingoast.VariablePattern{Name: "x"},
 							},
@@ -71,7 +71,7 @@ func TestMatchGenerator_SimplePatterns(t *testing.T) {
 					},
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Err",
+							Name: "Err",
 							Params: []dingoast.Pattern{
 								&dingoast.VariablePattern{Name: "e"},
 							},
@@ -132,7 +132,7 @@ func TestMatchGenerator_NestedPatterns(t *testing.T) {
 					},
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Ok",
+							Name: "Ok",
 							Params: []dingoast.Pattern{
 								&dingoast.ConstructorPattern{Name: "None"},
 							},
@@ -141,7 +141,7 @@ func TestMatchGenerator_NestedPatterns(t *testing.T) {
 					},
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Err",
+							Name: "Err",
 							Params: []dingoast.Pattern{
 								&dingoast.VariablePattern{Name: "e"},
 							},
@@ -189,7 +189,7 @@ func TestMatchGenerator_Guards(t *testing.T) {
 				Arms: []*dingoast.MatchArm{
 					{
 						Pattern: &dingoast.ConstructorPattern{
-							Name:   "Ok",
+							Name: "Ok",
 							Params: []dingoast.Pattern{
 								&dingoast.VariablePattern{Name: "x"},
 							},
@@ -235,7 +235,7 @@ func TestMatchGenerator_BlockBody(t *testing.T) {
 		Arms: []*dingoast.MatchArm{
 			{
 				Pattern: &dingoast.ConstructorPattern{
-					Name:   "Ok",
+					Name: "Ok",
 					Params: []dingoast.Pattern{
 						&dingoast.VariablePattern{Name: "x"},
 					},
@@ -260,7 +260,7 @@ func TestMatchGenerator_SourceMapMarkers(t *testing.T) {
 		Arms: []*dingoast.MatchArm{
 			{
 				Pattern: &dingoast.ConstructorPattern{
-					Name:   "Ok",
+					Name: "Ok",
 					Params: []dingoast.Pattern{
 						&dingoast.VariablePattern{Name: "x"},
 					},
@@ -321,7 +321,7 @@ func TestMatchGenerator_CommentPreservation(t *testing.T) {
 		Arms: []*dingoast.MatchArm{
 			{
 				Pattern: &dingoast.ConstructorPattern{
-					Name:   "Ok",
+					Name: "Ok",
 					Params: []dingoast.Pattern{
 						&dingoast.VariablePattern{Name: "x"},
 					},

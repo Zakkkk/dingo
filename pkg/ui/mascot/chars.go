@@ -27,77 +27,77 @@ const (
 
 // Eye characters for different expressions
 const (
-	EyeNormal      = "●" // Normal solid eye
-	EyeSmall       = "•" // Small dot eye
-	EyeLarge       = "◉" // Large outlined eye
-	EyeClosed      = "-" // Closed eye (sleeping/happy)
-	EyeHappy       = "^" // Happy closed eye
-	EyeSad         = "╥" // Sad eye with tear
-	EyeX           = "X" // Dead/failed eye
-	EyeHalfL       = "◖" // Left half circle (looking left)
-	EyeHalfR       = "◗" // Right half circle (looking right)
-	EyeHalfU       = "◠" // Upper half circle (looking up)
-	EyeHalfD       = "◡" // Lower half circle (looking down)
-	EyeSquint      = "⌐" // Squinting eye
-	EyeWink        = "◕" // Winking eye
-	EyeSparkle     = "✧" // Sparkle eye (excited)
-	EyeHeart       = "♥" // Heart eye
-	EyeLoader1     = "◜" // Loading animation frame 1
-	EyeLoader2     = "◝" // Loading animation frame 2
-	EyeLoader3     = "◞" // Loading animation frame 3
-	EyeLoader4     = "◟" // Loading animation frame 4
-	EyeSpinner1    = "⠋" // Braille spinner frame 1
-	EyeSpinner2    = "⠙" // Braille spinner frame 2
-	EyeSpinner3    = "⠹" // Braille spinner frame 3
-	EyeSpinner4    = "⠸" // Braille spinner frame 4
-	EyeSpinner5    = "⠼" // Braille spinner frame 5
-	EyeSpinner6    = "⠴" // Braille spinner frame 6
-	EyeSpinner7    = "⠦" // Braille spinner frame 7
-	EyeSpinner8    = "⠧" // Braille spinner frame 8
+	EyeNormal   = "●" // Normal solid eye
+	EyeSmall    = "•" // Small dot eye
+	EyeLarge    = "◉" // Large outlined eye
+	EyeClosed   = "-" // Closed eye (sleeping/happy)
+	EyeHappy    = "^" // Happy closed eye
+	EyeSad      = "╥" // Sad eye with tear
+	EyeX        = "X" // Dead/failed eye
+	EyeHalfL    = "◖" // Left half circle (looking left)
+	EyeHalfR    = "◗" // Right half circle (looking right)
+	EyeHalfU    = "◠" // Upper half circle (looking up)
+	EyeHalfD    = "◡" // Lower half circle (looking down)
+	EyeSquint   = "⌐" // Squinting eye
+	EyeWink     = "◕" // Winking eye
+	EyeSparkle  = "✧" // Sparkle eye (excited)
+	EyeHeart    = "♥" // Heart eye
+	EyeLoader1  = "◜" // Loading animation frame 1
+	EyeLoader2  = "◝" // Loading animation frame 2
+	EyeLoader3  = "◞" // Loading animation frame 3
+	EyeLoader4  = "◟" // Loading animation frame 4
+	EyeSpinner1 = "⠋" // Braille spinner frame 1
+	EyeSpinner2 = "⠙" // Braille spinner frame 2
+	EyeSpinner3 = "⠹" // Braille spinner frame 3
+	EyeSpinner4 = "⠸" // Braille spinner frame 4
+	EyeSpinner5 = "⠼" // Braille spinner frame 5
+	EyeSpinner6 = "⠴" // Braille spinner frame 6
+	EyeSpinner7 = "⠦" // Braille spinner frame 7
+	EyeSpinner8 = "⠧" // Braille spinner frame 8
 )
 
 // Nose/snout characters
 const (
-	NoseNormal   = "▲" // Triangle nose pointing up
-	NoseSmall    = "△" // Small triangle nose
-	NoseSniff    = "◭" // Sniffing nose
-	NoseTwitch   = "▴" // Twitching nose
-	NoseFlat     = "▬" // Flat nose (happy/content)
+	NoseNormal = "▲" // Triangle nose pointing up
+	NoseSmall  = "△" // Small triangle nose
+	NoseSniff  = "◭" // Sniffing nose
+	NoseTwitch = "▴" // Twitching nose
+	NoseFlat   = "▬" // Flat nose (happy/content)
 )
 
 // Tail characters
 const (
-	TailNormal  = "~" // Wavy normal tail
-	TailUp      = "╯" // Tail up (alert)
-	TailDown    = "╰" // Tail down (sad)
-	TailWag1    = "∼" // Wag animation frame 1
-	TailWag2    = "≈" // Wag animation frame 2
-	TailCurved  = "⌒" // Curved tail (happy)
+	TailNormal   = "~" // Wavy normal tail
+	TailUp       = "╯" // Tail up (alert)
+	TailDown     = "╰" // Tail down (sad)
+	TailWag1     = "∼" // Wag animation frame 1
+	TailWag2     = "≈" // Wag animation frame 2
+	TailCurved   = "⌒" // Curved tail (happy)
 	TailStraight = "│" // Straight tail
 )
 
 // Status icon characters (displayed next to mascot)
 const (
-	IconCheck    = "✓" // Success checkmark
-	IconCross    = "✗" // Error cross
-	IconWarning  = "⚠" // Warning triangle
-	IconGear     = "⚙" // Working/building gear
-	IconRocket   = "🚀" // Fast/launching
-	IconStar     = "★" // Achievement/highlight
-	IconStarO    = "☆" // Empty star
-	IconSparkle  = "✨" // Sparkles (celebration)
-	IconHeart    = "♥" // Love/favorite
-	IconDiamond  = "◆" // Diamond (premium/special)
-	IconDot      = "●" // Simple dot
-	IconDotO     = "○" // Empty dot
-	IconArrowR   = "→" // Arrow right
-	IconArrowL   = "←" // Arrow left
-	IconArrowU   = "↑" // Arrow up
-	IconArrowD   = "↓" // Arrow down
-	IconBullet   = "•" // Bullet point
-	IconPlus     = "+" // Plus
-	IconMinus    = "-" // Minus
-	IconEquals   = "=" // Equals
+	IconCheck   = "✓" // Success checkmark
+	IconCross   = "✗" // Error cross
+	IconWarning = "⚠" // Warning triangle
+	IconGear    = "⚙" // Working/building gear
+	IconRocket  = "🚀" // Fast/launching
+	IconStar    = "★" // Achievement/highlight
+	IconStarO   = "☆" // Empty star
+	IconSparkle = "✨" // Sparkles (celebration)
+	IconHeart   = "♥" // Love/favorite
+	IconDiamond = "◆" // Diamond (premium/special)
+	IconDot     = "●" // Simple dot
+	IconDotO    = "○" // Empty dot
+	IconArrowR  = "→" // Arrow right
+	IconArrowL  = "←" // Arrow left
+	IconArrowU  = "↑" // Arrow up
+	IconArrowD  = "↓" // Arrow down
+	IconBullet  = "•" // Bullet point
+	IconPlus    = "+" // Plus
+	IconMinus   = "-" // Minus
+	IconEquals  = "=" // Equals
 )
 
 // Spinner animation frames (for loading states)
@@ -138,26 +138,26 @@ const (
 
 // Music/sound effect characters
 const (
-	MusicNote1   = "♪" // Single eighth note
-	MusicNote2   = "♫" // Beamed eighth notes
+	MusicNote1    = "♪" // Single eighth note
+	MusicNote2    = "♫" // Beamed eighth notes
 	MusicNoteBeam = "♬" // Beamed sixteenth notes
-	SoundWave1   = "~" // Sound wave
-	SoundWave2   = "≈" // Double sound wave
-	SoundWave3   = "∿" // Sine wave
+	SoundWave1    = "~" // Sound wave
+	SoundWave2    = "≈" // Double sound wave
+	SoundWave3    = "∿" // Sine wave
 )
 
 // Decoration characters (above head, around mascot)
 const (
-	DecoStar     = "★" // Solid star
-	DecoStarO    = "☆" // Outline star
-	DecoSparkle  = "✧" // Small sparkle
-	DecoSparkleL = "✨" // Large sparkle
-	DecoCircle   = "◯" // Circle
-	DecoCloud    = "☁" // Cloud (thinking)
+	DecoStar     = "★"   // Solid star
+	DecoStarO    = "☆"   // Outline star
+	DecoSparkle  = "✧"   // Small sparkle
+	DecoSparkleL = "✨"   // Large sparkle
+	DecoCircle   = "◯"   // Circle
+	DecoCloud    = "☁"   // Cloud (thinking)
 	DecoZzz      = "Zzz" // Sleep indicator
-	DecoHeart    = "♥" // Heart
-	DecoFlower   = "❀" // Flower
-	DecoLeaf     = "🍃" // Leaf
+	DecoHeart    = "♥"   // Heart
+	DecoFlower   = "❀"   // Flower
+	DecoLeaf     = "🍃"   // Leaf
 )
 
 // Corner and curve characters for smooth shapes
@@ -174,11 +174,11 @@ const (
 
 // Miscellaneous utility characters
 const (
-	Space      = " "  // Space (for alignment)
-	Dot        = "·"  // Middle dot
-	GroundLine = "▔"  // Ground line (for standing poses)
-	GroundWave = "≋"  // Wavy ground (water)
-	GroundDash = "┄"  // Dashed ground
+	Space      = " " // Space (for alignment)
+	Dot        = "·" // Middle dot
+	GroundLine = "▔" // Ground line (for standing poses)
+	GroundWave = "≋" // Wavy ground (water)
+	GroundDash = "┄" // Dashed ground
 )
 
 // SpinnerFrames provides a convenient slice of all spinner frames

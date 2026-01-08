@@ -12,10 +12,10 @@ import (
 
 func TestImmutabilityPlugin_MarkerCleanup(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		wantMarker   bool // Should marker appear in output?
-		wantComment  string
+		name              string
+		input             string
+		wantMarker        bool // Should marker appear in output?
+		wantComment       string
 		shouldHaveComment bool
 	}{
 		{
@@ -24,7 +24,7 @@ func TestImmutabilityPlugin_MarkerCleanup(t *testing.T) {
 func main() {
 	x := 42 // dingo:let:x
 }`,
-			wantMarker:   false,
+			wantMarker:        false,
 			shouldHaveComment: false,
 		},
 		{
@@ -33,8 +33,8 @@ func main() {
 func main() {
 	x := 42 // dingo:let:x important config value
 }`,
-			wantMarker:   false,
-			wantComment:  "important config value",
+			wantMarker:        false,
+			wantComment:       "important config value",
 			shouldHaveComment: true,
 		},
 		{
@@ -43,7 +43,7 @@ func main() {
 func main() {
 	a, b := 1, 2 // dingo:let:a,b
 }`,
-			wantMarker:   false,
+			wantMarker:        false,
 			shouldHaveComment: false,
 		},
 		{
@@ -52,8 +52,8 @@ func main() {
 func main() {
 	x := 42 // regular comment
 }`,
-			wantMarker:   false,
-			wantComment:  "regular comment",
+			wantMarker:        false,
+			wantComment:       "regular comment",
 			shouldHaveComment: true,
 		},
 	}

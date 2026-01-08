@@ -24,12 +24,12 @@ const (
 //   - Rust multi: |x, y| x + y
 //   - Rust typed: |x: int| -> int { x * 2 }
 type LambdaExpr struct {
-	LambdaPos  token.Pos      // Position of lambda start (first param or opening paren/pipe)
-	Style      LambdaStyle    // TypeScript (=>) or Rust (||)
-	Params     []LambdaParam  // Parameters
-	ReturnType string         // Return type annotation (optional, e.g., "int", "bool")
-	Body       string         // Body expression or block (unparsed)
-	IsBlock    bool           // true if body is a block { ... }, false if expression
+	LambdaPos  token.Pos     // Position of lambda start (first param or opening paren/pipe)
+	Style      LambdaStyle   // TypeScript (=>) or Rust (||)
+	Params     []LambdaParam // Parameters
+	ReturnType string        // Return type annotation (optional, e.g., "int", "bool")
+	Body       string        // Body expression or block (unparsed)
+	IsBlock    bool          // true if body is a block { ... }, false if expression
 }
 
 // LambdaParam represents a lambda parameter

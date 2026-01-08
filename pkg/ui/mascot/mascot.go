@@ -14,12 +14,12 @@ type MascotState int
 
 const (
 	StateIdle      MascotState = iota // Default idle state with occasional blink
-	StateCompiling                     // Actively compiling/building (spinner eyes)
-	StateRunning                       // Executing a program (running animation)
-	StateSuccess                       // Build/operation succeeded (celebrate then static)
-	StateFailed                        // Build/operation failed (sad/error pose)
-	StateThinking                      // Pondering/analyzing (looking around)
-	StateHelp                          // Friendly pose for help/version commands
+	StateCompiling                    // Actively compiling/building (spinner eyes)
+	StateRunning                      // Executing a program (running animation)
+	StateSuccess                      // Build/operation succeeded (celebrate then static)
+	StateFailed                       // Build/operation failed (sad/error pose)
+	StateThinking                     // Pondering/analyzing (looking around)
+	StateHelp                         // Friendly pose for help/version commands
 )
 
 // Mascot manages the animated mascot display with state transitions.

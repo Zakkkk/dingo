@@ -13,10 +13,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/MadAppGang/dingo/pkg/dgo"
 	"os"
 	"strconv"
 	"strings"
-	"github.com/MadAppGang/dingo/pkg/dgo"
 )
 
 // =============================================================================

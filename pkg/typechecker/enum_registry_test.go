@@ -153,8 +153,8 @@ func TestGetEnumForFullName(t *testing.T) {
 	}{
 		{"ShapePoint", "Shape", false},
 		{"ShapeCircle", "Shape", false},
-		{"Point", "", true},      // Variant name, not full name
-		{"Unknown", "", true},    // Not registered
+		{"Point", "", true},       // Variant name, not full name
+		{"Unknown", "", true},     // Not registered
 		{"ShapeSquare", "", true}, // Not a variant of Shape
 	}
 
@@ -238,7 +238,7 @@ func TestNormalizePatternName_PascalCase(t *testing.T) {
 		{"ShapeSquare", "", "", false},
 
 		// Invalid patterns
-		{"point", "", "", false},      // Not PascalCase (lowercase)
+		{"point", "", "", false},       // Not PascalCase (lowercase)
 		{"", "", "", false},            // Empty
 		{"Shape_Point", "", "", false}, // Underscore (deprecated)
 		{"_Point", "", "", false},      // Leading underscore
@@ -495,7 +495,7 @@ func TestMultipleEnums_VariantIsolation(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		containsMiddle(s, substr)))
+			containsMiddle(s, substr)))
 }
 
 func containsMiddle(s, substr string) bool {

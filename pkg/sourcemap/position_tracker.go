@@ -17,12 +17,12 @@ type Transform struct {
 	DingoEnd token.Pos // End position in Dingo source
 
 	// Computed after Finalize()
-	DingoLine   int // Line in .dingo (1-indexed)
-	DingoCol    int // Column in .dingo (1-indexed)
-	GoLine      int // Start line in .go (1-indexed)
-	GoLineEnd   int // End line in .go (1-indexed, inclusive)
-	GoCol       int // Column in .go (1-indexed)
-	ByteLength  int // Length of the transformed region in bytes (for ColumnMapping.Length)
+	DingoLine  int // Line in .dingo (1-indexed)
+	DingoCol   int // Column in .dingo (1-indexed)
+	GoLine     int // Start line in .go (1-indexed)
+	GoLineEnd  int // End line in .go (1-indexed, inclusive)
+	GoCol      int // Column in .go (1-indexed)
+	ByteLength int // Length of the transformed region in bytes (for ColumnMapping.Length)
 
 	Kind string // Transform type: "error_prop", "lambda", "match", etc.
 }
@@ -44,13 +44,14 @@ type ColumnMapping struct {
 // then resolve to lines AFTER go/printer reformats.
 //
 // Usage:
-//   tracker := NewPositionTracker(dingoFset)
-//   // During codegen:
-//   tracker.RecordTransform(node.Pos(), node.End(), "error_prop")
-//   // After go/printer produces final Go code:
-//   tracker.Finalize(goSource, goFset)
+//
+//	tracker := NewPositionTracker(dingoFset)
+//	// During codegen:
+//	tracker.RecordTransform(node.Pos(), node.End(), "error_prop")
+//	// After go/printer produces final Go code:
+//	tracker.Finalize(goSource, goFset)
 type PositionTracker struct {
-	dingoFset *token.FileSet // Dingo's FileSet (from pkg/parser)
+	dingoFset  *token.FileSet // Dingo's FileSet (from pkg/parser)
 	transforms []Transform
 
 	// Set after Finalize()
@@ -73,8 +74,9 @@ func NewPositionTracker(dingoFset *token.FileSet) *PositionTracker {
 // MUST be called during codegen while AST positions are valid.
 //
 // Example:
-//   // In error_prop codegen:
-//   tracker.RecordTransform(errorPropExpr.Pos(), errorPropExpr.End(), "error_prop")
+//
+//	// In error_prop codegen:
+//	tracker.RecordTransform(errorPropExpr.Pos(), errorPropExpr.End(), "error_prop")
 //
 // The positions will be resolved to line/column numbers during Finalize().
 func (t *PositionTracker) RecordTransform(dingoPos, dingoEnd token.Pos, kind string) {

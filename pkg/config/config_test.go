@@ -890,9 +890,9 @@ func TestFeatureMatrixToEnabledFeatures(t *testing.T) {
 	falseVal := false
 	trueVal := true
 	fm = &FeatureMatrix{
-		Enum:     &trueVal,
-		Match:    &falseVal,
-		Lambdas:  &trueVal,
+		Enum:      &trueVal,
+		Match:     &falseVal,
+		Lambdas:   &trueVal,
 		ErrorProp: &falseVal,
 	}
 	enabled = fm.ToEnabledFeatures()
@@ -1047,7 +1047,7 @@ lambdas = false
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
 		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		containsHelper(s, substr)))
+			containsHelper(s, substr)))
 }
 
 func containsHelper(s, substr string) bool {

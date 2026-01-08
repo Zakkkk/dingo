@@ -34,7 +34,12 @@ type SimpleBuildUI struct {
 	running bool
 	isTTY   bool
 
-	mu sync.Mutex
+	// Flag to suppress runWithSpinnerCompile's own mascot
+	// when this UI is active (prevents duplicate mascots)
+	SuppressSpinnerMascot bool
+
+	mu       sync.Mutex
+	stopOnce sync.Once
 }
 
 // NewSimpleBuildUI creates a simple animated build UI
@@ -69,7 +74,7 @@ func (ui *SimpleBuildUI) Start() {
 	}
 }
 
-// Stop ends animation and shows final mascot
+// Stop ends animation and shows final mascot (only on success)
 func (ui *SimpleBuildUI) Stop() {
 	ui.mu.Lock()
 	if !ui.running {
@@ -77,6 +82,7 @@ func (ui *SimpleBuildUI) Stop() {
 		return
 	}
 	ui.running = false
+	state := ui.state
 	ui.mu.Unlock()
 
 	if ui.isTTY {
@@ -84,8 +90,13 @@ func (ui *SimpleBuildUI) Stop() {
 		fmt.Print("\033[?25h")
 	}
 
-	// Print final mascot with status
-	ui.printMascot()
+	// Print mascot on success or failure (but not during normal operation)
+	// Only print once per UI instance
+	ui.stopOnce.Do(func() {
+		if state == mascot.StateSuccess || state == mascot.StateFailed {
+			ui.printMascot()
+		}
+	})
 }
 
 // SetStatus updates mascot state and status

@@ -9,8 +9,8 @@ import (
 // TupleExhaustivenessChecker checks tuple pattern exhaustiveness
 // Uses decision tree algorithm with wildcard catch-all semantics
 type TupleExhaustivenessChecker struct {
-	arity    int       // Number of tuple elements
-	variants []string  // All possible variants (Ok, Err, Some, None)
+	arity    int        // Number of tuple elements
+	variants []string   // All possible variants (Ok, Err, Some, None)
 	patterns [][]string // Patterns from each arm: [["Ok", "Ok"], ["Ok", "Err"], ["Err", "_"]]
 }
 

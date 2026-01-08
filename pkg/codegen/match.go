@@ -316,7 +316,10 @@ func (g *MatchCodeGen) generateArmsChain(arms []*ast.MatchArm) {
 
 		// Generate body
 		bodyResult := GenerateExpr(arm.Body)
-		if g.Match.IsExpr {
+		// Check if body is already a return statement (ReturnExpr)
+		_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+		if g.Match.IsExpr && !isReturnExpr {
+			// Only prepend "return" if body is not already a return statement
 			g.Write("return " + string(bodyResult.Output) + "\n")
 		} else {
 			g.Buf.Write(bodyResult.Output)
@@ -659,7 +662,10 @@ func (g *MatchCodeGen) generateArmBody(arm *ast.MatchArm, bindings []Binding) {
 
 	// Generate body
 	bodyResult := GenerateExpr(arm.Body)
-	if g.Match.IsExpr {
+	// Check if body is already a return statement (ReturnExpr)
+	_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+	if g.Match.IsExpr && !isReturnExpr {
+		// Only prepend "return" if body is not already a return statement
 		g.Write("return " + string(bodyResult.Output) + "\n")
 	} else {
 		g.Buf.Write(bodyResult.Output)
@@ -1222,7 +1228,8 @@ func (g *MatchCodeGen) generateOptionMatch() ast.CodeGenResult {
 
 	if noneArm != nil {
 		bodyResult := GenerateExpr(noneArm.Body)
-		if g.Match.IsExpr {
+		_, isReturnExpr := noneArm.Body.(*ast.ReturnExpr)
+		if g.Match.IsExpr && !isReturnExpr {
 			g.Write(fmt.Sprintf("\treturn %s\n", string(bodyResult.Output)))
 		} else {
 			g.Write(fmt.Sprintf("\t%s\n", string(bodyResult.Output)))
@@ -1277,7 +1284,8 @@ func (g *MatchCodeGen) generateOptionSomeArms(arms []*ast.MatchArm) {
 		if hasGuard || (!isFirst && arms[0].Guard != nil) {
 			indent = "\t\t"
 		}
-		if g.Match.IsExpr {
+		_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+		if g.Match.IsExpr && !isReturnExpr {
 			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
 		} else {
 			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))
@@ -1431,7 +1439,8 @@ func (g *MatchCodeGen) generateResultOkArms(arms []*ast.MatchArm) {
 		if hasGuard || (!isFirst && arms[0].Guard != nil) {
 			indent = "\t\t"
 		}
-		if g.Match.IsExpr {
+		_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+		if g.Match.IsExpr && !isReturnExpr {
 			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
 		} else {
 			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))
@@ -1469,7 +1478,8 @@ func (g *MatchCodeGen) generateResultErrArms(arms []*ast.MatchArm) {
 		if hasGuard || (!isFirst && arms[0].Guard != nil) {
 			indent = "\t\t"
 		}
-		if g.Match.IsExpr {
+		_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+		if g.Match.IsExpr && !isReturnExpr {
 			g.Write(fmt.Sprintf("%sreturn %s\n", indent, string(bodyResult.Output)))
 		} else {
 			g.Write(fmt.Sprintf("%s%s\n", indent, string(bodyResult.Output)))

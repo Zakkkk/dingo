@@ -20,10 +20,13 @@ type ResultWrapperTransformer struct {
 
 // NewResultWrapperTransformer creates a transformer with type checking support.
 func NewResultWrapperTransformer(fset *token.FileSet, file *ast.File, checker *typechecker.Checker) *ResultWrapperTransformer {
+	analyzer := NewReturnAnalyzer(checker)
+	// Build AST-based method return type map for fallback detection
+	analyzer.methodReturns = BuildMethodReturnTypes(file)
 	return &ResultWrapperTransformer{
 		fset:     fset,
 		file:     file,
-		analyzer: NewReturnAnalyzer(checker),
+		analyzer: analyzer,
 	}
 }
 

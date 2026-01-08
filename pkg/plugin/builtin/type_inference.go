@@ -45,18 +45,18 @@ type TypeInferenceService struct {
 
 // ResultTypeInfo contains parsed Result type information
 type ResultTypeInfo struct {
-	TypeName     string     // e.g., "Result_int_error"
-	OkType       types.Type // T type parameter
-	ErrType      types.Type // E type parameter
-	OkTypeString string     // Original type string (e.g., "map[string]int")
-	ErrTypeString string    // Original error type string (e.g., "error")
+	TypeName      string     // e.g., "Result_int_error"
+	OkType        types.Type // T type parameter
+	ErrType       types.Type // E type parameter
+	OkTypeString  string     // Original type string (e.g., "map[string]int")
+	ErrTypeString string     // Original error type string (e.g., "error")
 }
 
 // OptionTypeInfo contains parsed Option type information
 type OptionTypeInfo struct {
-	TypeName       string     // e.g., "Option_int"
-	ValueType      types.Type // T type parameter
-	ValueTypeString string    // Original type string (e.g., "map[string]int")
+	TypeName        string     // e.g., "Option_int"
+	ValueType       types.Type // T type parameter
+	ValueTypeString string     // Original type string (e.g., "map[string]int")
 }
 
 // TypeRegistry manages synthetic types created by Dingo
@@ -421,7 +421,7 @@ func (s *TypeInferenceService) InferType(expr ast.Expr) (types.Type, bool) {
 		return nil, false
 
 	default:
-	s.logger.Debugf("InferType: unsupported expression type %T", expr)
+		s.logger.Debugf("InferType: unsupported expression type %T", expr)
 		return nil, false
 	}
 }
@@ -667,7 +667,6 @@ func (s *TypeInferenceService) tupleToParamString(tuple *types.Tuple) string {
 // 3. Variable declarations: infers from explicit type annotation
 // 4. Function call arguments: infers from parameter type
 // 5. Binary operations: infers from other operand
-//
 func (s *TypeInferenceService) InferTypeFromContext(node ast.Node) (types.Type, bool) {
 	s.logger.Debugf("InferTypeFromContext called for node type: %T", node)
 

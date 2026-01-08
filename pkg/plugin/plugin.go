@@ -1,7 +1,6 @@
 // Package plugin provides the plugin system for code generation
 package plugin
 
-
 import (
 	"fmt"
 	"go/ast"
@@ -247,8 +246,8 @@ type Context struct {
 	Registry       *Registry
 	Logger         Logger
 	CurrentFile    interface{}
-	TempVarCounter int                    // Counter for generating unique temporary variable names (NOT thread-safe, plugins run sequentially)
-	errors         []error                // Accumulated compile errors
+	TempVarCounter int                   // Counter for generating unique temporary variable names (NOT thread-safe, plugins run sequentially)
+	errors         []error               // Accumulated compile errors
 	parentMap      map[ast.Node]ast.Node // Maps each AST node to its parent (built via BuildParentMap)
 }
 
@@ -460,4 +459,3 @@ func (ctx *Context) WalkParents(node ast.Node, visitor func(ast.Node) bool) bool
 		current = parent
 	}
 }
-

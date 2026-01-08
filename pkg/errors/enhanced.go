@@ -15,9 +15,9 @@ type EnhancedError struct {
 	// Basic error information
 	Message  string
 	Filename string
-	Line     int    // 1-indexed
-	Column   int    // 1-indexed
-	Length   int    // Length of error span (for underline)
+	Line     int // 1-indexed
+	Column   int // 1-indexed
+	Length   int // Length of error span (for underline)
 
 	// Source context
 	SourceLines   []string // Lines to display (with context)

@@ -14,7 +14,8 @@ import (
 // ReturnAnalyzer analyzes function return types and return expressions
 // to determine if implicit wrapping is needed for Result/Option types.
 type ReturnAnalyzer struct {
-	checker *typechecker.Checker
+	checker       *typechecker.Checker
+	methodReturns *MethodReturnTypes // AST-based fallback for method return types
 }
 
 // NewReturnAnalyzer creates a new return analyzer with type checking support.
@@ -156,6 +157,23 @@ func (ra *ReturnAnalyzer) DetermineWrapper(expr ast.Expr, returnInfo *ReturnType
 // determineResultWrapper determines Ok vs Err for Result[T,E] returns.
 // Uses multiple strategies with fallbacks when type checker is unavailable.
 func (ra *ReturnAnalyzer) determineResultWrapper(expr ast.Expr, returnInfo *ReturnTypeInfo) WrapperType {
+	// Strategy 0a: Check if expression already returns Result type via type checker
+	// This catches function/method calls that return Result[T, E] directly
+	if ra.checker != nil {
+		exprType := ra.checker.TypeOf(expr)
+		if exprType != nil {
+			if ra.isResultType(exprType) {
+				return WrapperSkip // Already Result[T, E], no wrapping needed
+			}
+		}
+	}
+
+	// Strategy 0b: AST-based detection for Result-returning expressions (fallback)
+	// Check for common patterns that return Result even without type checker
+	if ra.isResultExpression(expr) {
+		return WrapperSkip
+	}
+
 	// Strategy 1: AST-based error detection (works without type checker)
 	// This runs first to catch common error patterns even when type checker fails
 	if ra.isErrorExpression(expr) {
@@ -257,6 +275,137 @@ func isOptionType(expr ast.Expr) bool {
 	case *ast.SelectorExpr:
 		if ident, ok := x.X.(*ast.Ident); ok {
 			return ident.Name == "dgo" && x.Sel.Name == "Option"
+		}
+	}
+	return false
+}
+
+// isResultType checks if a go/types Type is a Result[T, E] type.
+// Works with both dgo.Result and locally aliased Result types.
+func (ra *ReturnAnalyzer) isResultType(t types.Type) bool {
+	if t == nil {
+		return false
+	}
+
+	// Check for named type (Result is a named generic type)
+	named, ok := t.(*types.Named)
+	if !ok {
+		return false
+	}
+
+	// Check the type name
+	typeName := named.Obj().Name()
+	return typeName == "Result"
+}
+
+// isResultExpression checks if an expression returns a Result type using AST patterns.
+// This is a fallback when type checker is unavailable.
+//
+// Detects:
+//   - dgo.Ok[T,E](...), dgo.Err[T,E](...) calls
+//   - Method/function calls that return Result (based on AST scan of declarations)
+//   - Method calls with common Result-returning patterns (Map, AndThen, etc.)
+func (ra *ReturnAnalyzer) isResultExpression(expr ast.Expr) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	// Check for dgo.Ok[T,E](...) or dgo.Err[T,E](...) constructors
+	// These are handled by isAlreadyWrapped, but include here for completeness
+	if ra.isAlreadyWrapped(expr) {
+		return true
+	}
+
+	// Check for method/function calls
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		methodName := sel.Sel.Name
+
+		// Strategy 1: Check AST-based method return type map
+		// This catches methods declared in the same file that return Result
+		if ra.methodReturns != nil && ra.methodReturns.ReturnsResult(methodName) {
+			return true
+		}
+
+		// Strategy 2: Check for common Result-returning method patterns
+		// Pattern: receiver.MethodName() where MethodName suggests Result return
+		resultPatterns := []string{
+			// These methods transform Results but return Result
+			"Map", "MapErr", "AndThen", "OrElse",
+			// These construct Results
+			"ToResult", "AsResult", "IntoResult",
+		}
+		for _, pattern := range resultPatterns {
+			if methodName == pattern {
+				return true
+			}
+		}
+	}
+
+	// Check for bare function calls (not method calls)
+	if ident, ok := call.Fun.(*ast.Ident); ok {
+		// Check AST-based function return type map
+		if ra.methodReturns != nil && ra.methodReturns.ReturnsResult(ident.Name) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// MethodReturnTypes maps method names to whether they return Result type.
+// This is built from AST scanning for fallback when type checker is unavailable.
+type MethodReturnTypes struct {
+	// methodReturnsResult maps method name to true if it returns Result
+	methodReturnsResult map[string]bool
+}
+
+// BuildMethodReturnTypes scans an AST file to build a map of method → returnsResult.
+// This enables AST-based detection of Result-returning methods.
+func BuildMethodReturnTypes(file *ast.File) *MethodReturnTypes {
+	m := &MethodReturnTypes{
+		methodReturnsResult: make(map[string]bool),
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		funcDecl, ok := n.(*ast.FuncDecl)
+		if !ok {
+			return true
+		}
+
+		// Check if this function/method returns Result
+		if funcDecl.Type.Results != nil && len(funcDecl.Type.Results.List) == 1 {
+			returnType := funcDecl.Type.Results.List[0].Type
+			if isResultTypeExpr(returnType) {
+				m.methodReturnsResult[funcDecl.Name.Name] = true
+			}
+		}
+
+		return true
+	})
+
+	return m
+}
+
+// ReturnsResult checks if a method call returns a Result type based on AST analysis.
+func (m *MethodReturnTypes) ReturnsResult(methodName string) bool {
+	if m == nil || m.methodReturnsResult == nil {
+		return false
+	}
+	return m.methodReturnsResult[methodName]
+}
+
+// isResultTypeExpr checks if an AST type expression is Result[T,E] or dgo.Result[T,E]
+func isResultTypeExpr(expr ast.Expr) bool {
+	// Check for IndexListExpr (two type params: Result[T, E])
+	if indexList, ok := expr.(*ast.IndexListExpr); ok {
+		switch x := indexList.X.(type) {
+		case *ast.Ident:
+			return x.Name == "Result"
+		case *ast.SelectorExpr:
+			if x.Sel.Name == "Result" {
+				return true
+			}
 		}
 	}
 	return false

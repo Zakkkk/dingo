@@ -24,16 +24,18 @@ func NewLambdaFormatter() *LambdaFormatter {
 // Returns the index of the last token consumed
 //
 // Example formatting:
-//   Before: |x,y|x+y
-//   After:  |x, y| => x + y
 //
-//   Before: |x|x*2
-//   After:  |x| => x * 2
+//	Before: |x,y|x+y
+//	After:  |x, y| => x + y
+//
+//	Before: |x|x*2
+//	After:  |x| => x * 2
 //
 // Supports both syntaxes:
-//   |x| => expr  (Rust-style with =>)
-//   |x| -> expr  (Alternative with ->)
-//   x => expr    (Single param shorthand)
+//
+//	|x| => expr  (Rust-style with =>)
+//	|x| -> expr  (Alternative with ->)
+//	x => expr    (Single param shorthand)
 func (l *LambdaFormatter) Format(tokens []tokenizer.Token, startIdx int, writer TokenWriter) int {
 	idx := startIdx
 

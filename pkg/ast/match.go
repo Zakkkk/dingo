@@ -10,14 +10,14 @@ import (
 //   - match result { Ok(x) => x, Err(e) => 0 }
 //   - match status { Status_Pending => "waiting", _ => "other" }
 type MatchExpr struct {
-	Match      token.Pos     // Position of 'match' keyword
-	Scrutinee  Expr          // Expression being matched (AST node, not string)
-	OpenBrace  token.Pos     // Position of '{'
-	Arms       []*MatchArm   // Match arms (pointer for mutability)
-	CloseBrace token.Pos     // Position of '}'
-	IsExpr     bool          // true if used as expression (return/assign)
-	MatchID    int           // Unique ID for temp variable naming
-	Comments   []*Comment    // Preserved inline comments
+	Match      token.Pos   // Position of 'match' keyword
+	Scrutinee  Expr        // Expression being matched (AST node, not string)
+	OpenBrace  token.Pos   // Position of '{'
+	Arms       []*MatchArm // Match arms (pointer for mutability)
+	CloseBrace token.Pos   // Position of '}'
+	IsExpr     bool        // true if used as expression (return/assign)
+	MatchID    int         // Unique ID for temp variable naming
+	Comments   []*Comment  // Preserved inline comments
 }
 
 // MatchArm represents one arm of a match expression
@@ -45,7 +45,7 @@ type CommentKind int
 
 const (
 	LineComment  CommentKind = iota // // comment
-	BlockComment                     // /* comment */
+	BlockComment                    // /* comment */
 )
 
 // Note: Expr interface is now defined in ast.go
@@ -58,11 +58,11 @@ type RawExpr struct {
 	Text     string
 }
 
-func (e *RawExpr) Node()             {}
-func (e *RawExpr) exprNode()         {}
-func (e *RawExpr) Pos() token.Pos    { return e.StartPos }
-func (e *RawExpr) End() token.Pos    { return e.EndPos }
-func (e *RawExpr) String() string    { return e.Text }
+func (e *RawExpr) Node()          {}
+func (e *RawExpr) exprNode()      {}
+func (e *RawExpr) Pos() token.Pos { return e.StartPos }
+func (e *RawExpr) End() token.Pos { return e.EndPos }
+func (e *RawExpr) String() string { return e.Text }
 
 // Pattern is the interface for all pattern types
 type Pattern interface {

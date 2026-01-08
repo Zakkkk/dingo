@@ -42,7 +42,7 @@ func main() {
 			t.Logf("Source import also failed: %v", err)
 		}
 	}
-	
+
 	if dgoPkg != nil {
 		t.Logf("dgo package loaded: %s", dgoPkg.Path())
 		t.Log("Scope names:")
@@ -137,7 +137,7 @@ func main() {
 
 		return true
 	})
-	
+
 	if !found {
 		t.Log("Did not find dgo.Map call")
 	}

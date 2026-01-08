@@ -41,7 +41,7 @@ func NewRefactoringAnalyzer() *RefactoringAnalyzer {
 			&ErrorPropDetector{},  // R001: prefer-error-prop
 			&NilCheckDetector{},   // R002: prefer-match-nil
 			&TypeSwitchDetector{}, // R003: prefer-match-type
-			&GuardDetector{},   // R004: prefer-guard
+			&GuardDetector{},      // R004: prefer-guard
 			&ResultTypeDetector{}, // R005: prefer-result-type
 			&OptionTypeDetector{}, // R006: prefer-option-type
 			&OkPatternDetector{},  // R007: prefer-match-ok

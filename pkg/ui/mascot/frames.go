@@ -5,17 +5,17 @@ package mascot
 
 // FrameConfig defines the configuration for composing a mascot frame
 type FrameConfig struct {
-	Above      string   // Decoration above head (e.g., sparkles, Zzz)
-	Ears       []string // Ear lines
-	Head       []string // Head shape lines
-	Eyes       string   // Eye expression line
-	EyesBadge  string   // Status icon after eyes (e.g., ✓, ✗, ⚙)
-	Snout      []string // Snout/nose lines
-	Chin       string   // Chin/jaw line
-	Body       []string // Body shape lines
-	Ground     string   // Ground line (for standing poses)
-	OffsetX    int      // Horizontal offset in spaces
-	OffsetY    int      // Vertical offset in lines
+	Above     string   // Decoration above head (e.g., sparkles, Zzz)
+	Ears      []string // Ear lines
+	Head      []string // Head shape lines
+	Eyes      string   // Eye expression line
+	EyesBadge string   // Status icon after eyes (e.g., ✓, ✗, ⚙)
+	Snout     []string // Snout/nose lines
+	Chin      string   // Chin/jaw line
+	Body      []string // Body shape lines
+	Ground    string   // Ground line (for standing poses)
+	OffsetX   int      // Horizontal offset in spaces
+	OffsetY   int      // Vertical offset in lines
 }
 
 // ComposeFrame takes a FrameConfig and returns a complete frame as a slice of strings
@@ -299,13 +299,13 @@ var FrameThinking = ComposeFrame(FrameConfig{
 
 // FrameJumping shows the dingo jumping up
 var FrameJumping = ComposeFrame(FrameConfig{
-	Ears:      Ears.ALERT_BOTH,
-	Head:      Head.NORMAL,
-	Eyes:      Eyes.WIDE,
-	Snout:     Snout.NORMAL,
-	Chin:      Chin.NORMAL,
-	Body:      Body.JUMPING,
-	OffsetY:   1, // Offset up by one line
+	Ears:    Ears.ALERT_BOTH,
+	Head:    Head.NORMAL,
+	Eyes:    Eyes.WIDE,
+	Snout:   Snout.NORMAL,
+	Chin:    Chin.NORMAL,
+	Body:    Body.JUMPING,
+	OffsetY: 1, // Offset up by one line
 })
 
 // FrameLanding shows the dingo landing after jump
@@ -332,32 +332,32 @@ var FrameStretch = ComposeFrame(FrameConfig{
 
 // FrameRunning1 is the first frame of the running animation
 var FrameRunning1 = ComposeFrame(FrameConfig{
-	Ears:      Ears.ALERT_R,
-	Head:      Head.NORMAL,
-	Eyes:      Eyes.LOOK_R,
-	Snout:     Snout.SNIFF_R,
-	Chin:      Chin.WITH_TAIL_UP,
-	Body:      Body.RUNNING_1,
+	Ears:  Ears.ALERT_R,
+	Head:  Head.NORMAL,
+	Eyes:  Eyes.LOOK_R,
+	Snout: Snout.SNIFF_R,
+	Chin:  Chin.WITH_TAIL_UP,
+	Body:  Body.RUNNING_1,
 })
 
 // FrameRunning2 is the second frame of the running animation
 var FrameRunning2 = ComposeFrame(FrameConfig{
-	Ears:      Ears.ALERT_R,
-	Head:      Head.NORMAL,
-	Eyes:      Eyes.LOOK_R,
-	Snout:     Snout.SNIFF_R,
-	Chin:      Chin.WITH_TAIL_MID,
-	Body:      Body.RUNNING_2,
+	Ears:  Ears.ALERT_R,
+	Head:  Head.NORMAL,
+	Eyes:  Eyes.LOOK_R,
+	Snout: Snout.SNIFF_R,
+	Chin:  Chin.WITH_TAIL_MID,
+	Body:  Body.RUNNING_2,
 })
 
 // FrameRunning3 is the third frame of the running animation
 var FrameRunning3 = ComposeFrame(FrameConfig{
-	Ears:      Ears.ALERT_R,
-	Head:      Head.NORMAL,
-	Eyes:      Eyes.LOOK_R,
-	Snout:     Snout.SNIFF_R,
-	Chin:      Chin.WITH_TAIL_DOWN,
-	Body:      Body.RUNNING_3,
+	Ears:  Ears.ALERT_R,
+	Head:  Head.NORMAL,
+	Eyes:  Eyes.LOOK_R,
+	Snout: Snout.SNIFF_R,
+	Chin:  Chin.WITH_TAIL_DOWN,
+	Body:  Body.RUNNING_3,
 })
 
 // Sniffing animation frames (left-right alternating)

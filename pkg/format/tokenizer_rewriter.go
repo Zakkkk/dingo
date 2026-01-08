@@ -14,10 +14,10 @@ type Writer struct {
 	src    []byte // Original source for extracting text
 
 	// State
-	indent            int  // Current indentation level
-	atLineStart       bool // True if we're at the beginning of a line
-	lastTokenKind     tokenizer.TokenKind
-	needSpace         bool   // True if we need to emit a space before next token
+	indent              int  // Current indentation level
+	atLineStart         bool // True if we're at the beginning of a line
+	lastTokenKind       tokenizer.TokenKind
+	needSpace           bool // True if we need to emit a space before next token
 	consecutiveNewlines int  // Count of consecutive newlines (for suppressing excessive blank lines)
 }
 

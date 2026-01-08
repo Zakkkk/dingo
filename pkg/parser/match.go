@@ -91,8 +91,8 @@ func (p *PrattParser) parseMatchArms() ([]*ast.MatchArm, []*ast.Comment) {
 			p.nextToken()
 		}
 
-		// Check for closing brace
-		if p.peekTokenIs(tokenizer.RBRACE) {
+		// Check for closing brace or EOF (EOF means unclosed match, handled by caller)
+		if p.peekTokenIs(tokenizer.RBRACE) || p.peekTokenIs(tokenizer.EOF) {
 			break
 		}
 
@@ -184,11 +184,14 @@ func (p *PrattParser) parseMatchArm() *ast.MatchArm {
 	p.nextToken()
 
 	// Parse body (expression or block)
-	body, isBlock := p.parseMatchBody()
-	if body != nil {
-		arm.Body = body
-		arm.IsBlock = isBlock
+	body, isBlock := p.parseMatchBody(pattern)
+	if body == nil {
+		// Body parsing failed (e.g., assignment statement without braces)
+		// synchronize already called in parseMatchBody, skip this arm
+		return nil
 	}
+	arm.Body = body
+	arm.IsBlock = isBlock
 
 	// Optional comma after body
 	if p.peekTokenIs(tokenizer.COMMA) {
@@ -227,6 +230,20 @@ func (p *PrattParser) parsePattern() ast.Pattern {
 			ValuePos: tok.Pos,
 			Value:    tok.Lit,
 			Kind:     literalKindFromToken(tok.Kind),
+		}
+
+	case tokenizer.TRUE:
+		return &ast.LiteralPattern{
+			ValuePos: tok.Pos,
+			Value:    "true",
+			Kind:     ast.BoolLiteral,
+		}
+
+	case tokenizer.FALSE:
+		return &ast.LiteralPattern{
+			ValuePos: tok.Pos,
+			Value:    "false",
+			Kind:     ast.BoolLiteral,
 		}
 
 	case tokenizer.IDENT:
@@ -516,15 +533,97 @@ func (p *PrattParser) parseGuard() ast.Expr {
 }
 
 // parseMatchBody parses arm body (expression or block)
-func (p *PrattParser) parseMatchBody() (ast.Expr, bool) {
+// pattern is used for better error messages when assignment statements are detected
+func (p *PrattParser) parseMatchBody(pattern ast.Pattern) (ast.Expr, bool) {
 	// Check for block body
 	if p.curTokenIs(tokenizer.LBRACE) {
 		return p.parseBlockBody()
 	}
 
+	// Check for return statement as body
+	// This allows: Ok(_) => return Ok[T, E](value)
+	if p.curTokenIs(tokenizer.RETURN) {
+		returnPos := p.curToken.Pos
+
+		// Check if there's an expression after return
+		// Return can be bare (just `return`) or with value (`return expr`)
+		if p.peekTokenIs(tokenizer.COMMA) || p.peekTokenIs(tokenizer.RBRACE) || p.peekTokenIs(tokenizer.NEWLINE) {
+			// Bare return
+			return &ast.ReturnExpr{
+				Return: returnPos,
+				Value:  nil,
+			}, false
+		}
+
+		// Move to return value expression
+		p.nextToken()
+
+		// Parse the return value expression
+		expr := p.ParseExpression(PrecLowest)
+
+		return &ast.ReturnExpr{
+			Return: returnPos,
+			Value:  expr,
+		}, false
+	}
+
 	// Expression body - parse as normal expression
 	// Will stop at comma, closing brace, or newline (depending on context)
 	expr := p.ParseExpression(PrecLowest)
+
+	// Check if user tried to write an assignment statement
+	// This happens when the expression parser returned an identifier
+	// and we see an assignment operator next
+	if p.peekTokenIs(tokenizer.ASSIGN) || p.peekTokenIs(tokenizer.DEFINE) {
+		// User tried: val => opts = append(...)
+		// Should be:  val => { opts = append(...) }
+
+		opToken := p.peekToken
+		patternStr := patternToString(pattern)
+		varName := exprToPatternString(expr)
+
+		// Build a clear, actionable error message with change/to format
+		hint := fmt.Sprintf(
+			"assignment statements need braces in match arms\n      Change: %s => %s = ...\n      To:     %s => { %s = ... }",
+			patternStr, varName, patternStr, varName,
+		)
+		p.errors = append(p.errors, ParseError{
+			Pos:     expr.Pos(),
+			EndPos:  opToken.End,
+			Line:    opToken.Line,
+			Column:  opToken.Column,
+			Code:    ErrMatchArmStatement,
+			Message: "match arm body must be an expression, found assignment statement",
+			Hint:    hint,
+			Context: "in match expression body",
+		})
+
+		// Synchronize to next arm or closing brace
+		// Must track paren/bracket depth to avoid stopping at commas inside function calls
+		depth := 0
+		for !p.peekTokenIs(tokenizer.EOF) {
+			switch p.peekToken.Kind {
+			case tokenizer.LPAREN, tokenizer.LBRACKET:
+				depth++
+			case tokenizer.RPAREN, tokenizer.RBRACKET:
+				depth--
+			case tokenizer.COMMA:
+				if depth == 0 {
+					// Found arm-ending comma (not inside parens)
+					p.nextToken() // consume the comma
+					return nil, false
+				}
+			case tokenizer.RBRACE:
+				if depth == 0 {
+					// Found match closing brace
+					return nil, false
+				}
+			}
+			p.nextToken()
+		}
+		return nil, false
+	}
+
 	return expr, false
 }
 
@@ -657,3 +756,33 @@ func toPascalCase(s string) string {
 
 	return string(result)
 }
+
+// patternToString converts a pattern to a string for error messages
+// Used to show the pattern in "pattern => { ... }" suggestions
+func patternToString(p ast.Pattern) string {
+	if p == nil {
+		return "_"
+	}
+	return p.String()
+}
+
+// exprToPatternString converts an expression back to a string for error messages
+// Used to show the identifier in "{ ident = ... }" suggestions
+func exprToPatternString(expr ast.Expr) string {
+	if expr == nil {
+		return "_"
+	}
+
+	switch e := expr.(type) {
+	case *ast.DingoIdent:
+		return e.Name
+	case *ast.RawExpr:
+		return e.Text
+	default:
+		if stringer, ok := expr.(interface{ String() string }); ok {
+			return stringer.String()
+		}
+		return "_"
+	}
+}
+

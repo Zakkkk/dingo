@@ -633,9 +633,10 @@ func buildOriginalLineMap(originalSrc []byte) []originalLineInfo {
 
 // transformErrorPropStatements transforms error propagation statements.
 // originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
-// filename is used to generate //line directives for accurate error reporting.
+// filename is used for TypeResolver (cross-file type resolution) and optionally //line directives.
+// emitDirectives controls whether //line directives are emitted (false for clean output).
 // Returns line mappings and column mappings for precise hover/go-to-definition.
-func transformErrorPropStatements(src []byte, originalSrc []byte, filename string) ([]byte, []sourcemap.LineMapping, []sourcemap.ColumnMapping, error) {
+func transformErrorPropStatements(src []byte, originalSrc []byte, filename string, emitDirectives bool) ([]byte, []sourcemap.LineMapping, []sourcemap.ColumnMapping, error) {
 	locations, err := ast.FindErrorPropStatements(src)
 	if err != nil {
 		return src, nil, nil, err
@@ -718,7 +719,7 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 		switch loc.Kind {
 		case ast.StmtErrorPropAssign, ast.StmtErrorPropLet:
 			// x := foo()? or let x = foo()?
-			generated = generateErrorPropStatementAdvanced(result, exprBytes, loc.ExprStart, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			generated = generateErrorPropStatementAdvanced(result, exprBytes, loc.ExprStart, loc.VarName, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody, resolver)
 			// Calculate LHS lengths for column mapping
 			// Dingo: "varName := " or "varName = " for underscore
 			dingoLHSLen = len(loc.VarName) + 4 // " := " or " = " (always 4 with leading space consideration)
@@ -731,7 +732,7 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			}
 		case ast.StmtErrorPropReturn:
 			// return foo()?
-			generated = generateErrorPropReturnAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody)
+			generated = generateErrorPropReturnAdvanced(result, exprBytes, loc.ExprStart, returnTypes, &counter, loc.ErrorKind, loc.ErrorContext, loc.LambdaParam, lambdaBody, resolver)
 			// For return statements, no variable assignment - expression starts immediately after "return "
 			dingoLHSLen = 0
 			goLHSLen = 0
@@ -743,14 +744,14 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			goLHSLen = 0
 		}
 
-		// Prepend //line directive before EACH line of generated code (when filename is provided).
+		// Prepend //line directive before EACH line of generated code (when emitDirectives is true).
 		// This ensures all lines of multi-line generated code (like error propagation)
 		// map back to the same Dingo source line.
 		// Look up correct line number from original source using original index
 		// This is needed because earlier transforms (like enum expansion) change line counts
 		var finalGenerated []byte
 		var replaceStart int
-		if filename != "" {
+		if emitDirectives {
 			// Find line start and indentation for proper //line directive placement.
 			// IMPORTANT: //line directives MUST start at column 1 (not indented).
 			// Go's parser ignores //line directives that don't start at column 1.
@@ -888,9 +889,9 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 //	tmp := expr; if tmp.IsErr() { return dgo.Err[T, E](tmp.MustErr()) }; data := tmp.MustOk()
 //
 // Context and Lambda variants wrap the error appropriately.
-func generateErrorPropStatementAdvanced(src []byte, expr []byte, exprPos int, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
-	// Check if expression returns a Result type
-	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+func generateErrorPropStatementAdvanced(src []byte, expr []byte, exprPos int, varName string, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
+	// Check if expression returns a Result type (use resolver for cross-file types)
+	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResultWithResolver(src, expr, exprPos, resolver)
 
 	if isResult {
 		return generateResultErrorPropStatement(expr, varName, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)
@@ -1240,9 +1241,9 @@ func substituteIdentifier(src []byte, oldIdent, newIdent string) []byte {
 // For Result[T, E] returns:
 //
 //	tmp := expr; if tmp.IsErr() { return dgo.Err[T, E](tmp.MustErr()) }; return tmp.MustOk()
-func generateErrorPropReturnAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte) []byte {
-	// Check if expression returns a Result type
-	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+func generateErrorPropReturnAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
+	// Check if expression returns a Result type (use resolver for cross-file types)
+	isResult, exprOkType, exprErrType := codegen.InferExprReturnsResultWithResolver(src, expr, exprPos, resolver)
 
 	if isResult {
 		return generateResultErrorPropReturn(expr, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)
@@ -1408,8 +1409,8 @@ func generateTupleErrorPropReturn(expr []byte, returnTypes []string, counter *in
 // For external packages where detection fails, defaults to single-return (err :=)
 // for bare statements since the user is explicitly not capturing any return value.
 func generateErrorPropBareAdvanced(src []byte, expr []byte, exprPos int, returnTypes []string, counter *int, errorKind ast.ErrorPropKind, errorContext string, lambdaParam string, lambdaBody []byte, resolver *codegen.TypeResolver) []byte {
-	// Check if expression returns a Result type
-	isExprResult, exprOkType, exprErrType := codegen.InferExprReturnsResult(src, expr, exprPos)
+	// Check if expression returns a Result type (use resolver for cross-file types)
+	isExprResult, exprOkType, exprErrType := codegen.InferExprReturnsResultWithResolver(src, expr, exprPos, resolver)
 
 	if isExprResult {
 		return generateResultErrorPropBare(expr, counter, errorKind, errorContext, lambdaParam, lambdaBody, src, exprPos, exprOkType, exprErrType)

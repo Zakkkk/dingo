@@ -9,9 +9,10 @@ import (
 // Dingo expressions that need code generation (like SafeNavExpr, BuiltinCallExpr).
 //
 // Example: len(c?.Region) > 0
-//   X:  BuiltinCallExpr{Func: "len", Args: [SafeNavExpr{...}]}
-//   Op: ">"
-//   Y:  RawExpr{Text: "0"}
+//
+//	X:  BuiltinCallExpr{Func: "len", Args: [SafeNavExpr{...}]}
+//	Op: ">"
+//	Y:  RawExpr{Text: "0"}
 type BinaryExpr struct {
 	X     Expr      // Left operand (may contain Dingo expressions)
 	OpPos token.Pos // Position of operator

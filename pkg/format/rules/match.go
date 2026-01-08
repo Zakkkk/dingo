@@ -20,11 +20,12 @@ func NewMatchFormatter() *MatchFormatter {
 // Returns the index of the last token consumed
 //
 // Example formatting:
-//   Before: match x{Some(v)=>v*2,None=>0}
-//   After:  match x {
-//               Some(v) => v * 2
-//               None    => 0
-//           }
+//
+//	Before: match x{Some(v)=>v*2,None=>0}
+//	After:  match x {
+//	            Some(v) => v * 2
+//	            None    => 0
+//	        }
 func (m *MatchFormatter) Format(tokens []tokenizer.Token, startIdx int, writer TokenWriter) int {
 	idx := startIdx
 

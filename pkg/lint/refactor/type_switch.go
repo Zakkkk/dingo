@@ -17,21 +17,23 @@ import (
 // match expressions with type patterns.
 //
 // Pattern detected:
-//   switch v := x.(type) {
-//   case string:
-//       handleString(v)
-//   case int:
-//       handleInt(v)
-//   default:
-//       handleOther(v)
-//   }
+//
+//	switch v := x.(type) {
+//	case string:
+//	    handleString(v)
+//	case int:
+//	    handleInt(v)
+//	default:
+//	    handleOther(v)
+//	}
 //
 // Suggested refactoring:
-//   match x {
-//       string => handleString(x)
-//       int    => handleInt(x)
-//       _      => handleOther(x)
-//   }
+//
+//	match x {
+//	    string => handleString(x)
+//	    int    => handleInt(x)
+//	    _      => handleOther(x)
+//	}
 type TypeSwitchDetector struct{}
 
 // Code implements PatternDetector
@@ -112,12 +114,12 @@ func (d *TypeSwitchDetector) Detect(fset *token.FileSet, file *dingoast.File, sr
 
 // typeSwitchInfo holds extracted information from a type switch statement
 type typeSwitchInfo struct {
-	scrutineeVar  string            // Variable being switched on (e.g., "x")
-	assignedVar   string            // Variable assigned in switch (e.g., "v"), can be ""
-	cases         []typeSwitchCase  // Case clauses
-	hasDefault    bool              // Whether there's a default case
-	defaultBody   string            // Body of default case
-	entireSwitch  string            // Entire switch statement source
+	scrutineeVar string           // Variable being switched on (e.g., "x")
+	assignedVar  string           // Variable assigned in switch (e.g., "v"), can be ""
+	cases        []typeSwitchCase // Case clauses
+	hasDefault   bool             // Whether there's a default case
+	defaultBody  string           // Body of default case
+	entireSwitch string           // Entire switch statement source
 }
 
 // typeSwitchCase represents a single case in the type switch

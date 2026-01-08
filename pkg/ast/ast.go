@@ -15,7 +15,7 @@ type Node interface {
 // All Dingo expression types must implement this interface
 type Expr interface {
 	Node
-	exprNode() // Marker method (unexported, only for Dingo AST nodes)
+	exprNode()      // Marker method (unexported, only for Dingo AST nodes)
 	String() string // String representation (for codegen)
 }
 
@@ -31,4 +31,35 @@ type Stmt interface {
 type Decl interface {
 	Node
 	declNode() // Marker method (unexported, only for Dingo AST nodes)
+}
+
+// ReturnExpr represents a return statement used as a match arm body.
+// This allows match arms to directly return from the enclosing function:
+//
+//	match result {
+//	    Ok(v) => return Ok[T, E](v),  // ReturnExpr wrapping Ok[T, E](v)
+//	    Err(e) => return Err[T, E](e),
+//	}
+//
+// The Value field contains the expression being returned.
+// If Value is nil, it represents a bare `return` statement.
+type ReturnExpr struct {
+	Return token.Pos // Position of 'return' keyword
+	Value  Expr      // Expression to return (may be nil for bare return)
+}
+
+func (e *ReturnExpr) Node()          {}
+func (e *ReturnExpr) exprNode()      {}
+func (e *ReturnExpr) Pos() token.Pos { return e.Return }
+func (e *ReturnExpr) End() token.Pos {
+	if e.Value != nil {
+		return e.Value.End()
+	}
+	return e.Return + 6 // len("return")
+}
+func (e *ReturnExpr) String() string {
+	if e.Value != nil {
+		return "return " + e.Value.String()
+	}
+	return "return"
 }

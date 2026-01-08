@@ -174,4 +174,3 @@ func rotateLogFile(logFile string) {
 	_ = os.Remove(oldFile)          // Ignore error if doesn't exist
 	_ = os.Rename(logFile, oldFile) // Ignore error, will just append
 }
-

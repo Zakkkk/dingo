@@ -77,7 +77,8 @@ type TextEdit struct {
 //   - Character scanning: for i := 0; i < len(src); i++
 //
 // Correct approach:
-//   Source → pkg/tokenizer/ → []Token → pkg/parser/ → AST → Analyzer
+//
+//	Source → pkg/tokenizer/ → []Token → pkg/parser/ → AST → Analyzer
 //
 // See CLAUDE.md for complete list of forbidden patterns and architecture rules.
 type Analyzer interface {

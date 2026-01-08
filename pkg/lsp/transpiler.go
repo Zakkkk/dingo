@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
@@ -45,6 +46,14 @@ func NewAutoTranspiler(logger Logger, mapCache *SourceMapCache, gopls *GoplsClie
 		server:     server,
 		fileLocks:  make(map[string]*sync.Mutex),
 	}
+}
+
+// ReinitializeWithConfig creates a new transpiler with the given config.
+// This is called after the workspace is known to ensure output paths are correct.
+func (at *AutoTranspiler) ReinitializeWithConfig(cfg *config.Config) {
+	at.transpiler = transpiler.NewWithConfig(cfg)
+	at.logger.Infof("Transpiler reinitialized with workspace config (outdir=%q, shadow=%v)",
+		cfg.Build.OutDir, cfg.Build.Shadow)
 }
 
 // TranspileFile transpiles a single .dingo file

@@ -20,7 +20,7 @@ type GuardLocation struct {
 	// Examples:
 	//   true:  guard user := FindUser(id) else { ... }  // declaration with :=
 	//   false: guard user = FindUser(id) else { ... }   // assignment with =
-	IsDecl   bool
+	IsDecl bool
 
 	// Expression (RHS of =)
 	ExprStart int    // start of expression

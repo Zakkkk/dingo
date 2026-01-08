@@ -7,15 +7,15 @@ import (
 
 func TestComposeFrame(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      FrameConfig
-		wantLines   int
+		name         string
+		config       FrameConfig
+		wantLines    int
 		wantContains string
 	}{
 		{
-			name: "Empty config",
-			config: FrameConfig{},
-			wantLines: 1, // ComposeFrame adds chin even if empty
+			name:         "Empty config",
+			config:       FrameConfig{},
+			wantLines:    1, // ComposeFrame adds chin even if empty
 			wantContains: "",
 		},
 		{
@@ -24,7 +24,7 @@ func TestComposeFrame(t *testing.T) {
 				Ears: []string{"  /\\  /\\  "},
 				Eyes: "  O  O  ",
 			},
-			wantLines: 2,
+			wantLines:    2,
 			wantContains: "O  O",
 		},
 		{
@@ -33,7 +33,7 @@ func TestComposeFrame(t *testing.T) {
 				Eyes:      "  O  O  ",
 				EyesBadge: "✓",
 			},
-			wantLines: 1,
+			wantLines:    1,
 			wantContains: "✓",
 		},
 		{
@@ -42,7 +42,7 @@ func TestComposeFrame(t *testing.T) {
 				Eyes:    "  O  O  ",
 				OffsetY: 2,
 			},
-			wantLines: 3, // 2 empty + 1 eyes
+			wantLines:    3, // 2 empty + 1 eyes
 			wantContains: "O  O",
 		},
 		{
@@ -51,22 +51,22 @@ func TestComposeFrame(t *testing.T) {
 				Eyes:    "O  O",
 				OffsetX: 4,
 			},
-			wantLines: 1,
+			wantLines:    1,
 			wantContains: "    O  O", // 4 spaces + eyes
 		},
 		{
 			name: "Full config",
 			config: FrameConfig{
-				Above: "  ✧ ★ ✧  ",
-				Ears:  []string{"  /\\  /\\  "},
-				Head:  []string{" |     | "},
-				Eyes:  "  O  O  ",
-				Snout: []string{"   ^   "},
-				Chin:  "  \\_/  ",
-				Body:  []string{" |   | ", " |___| "},
+				Above:  "  ✧ ★ ✧  ",
+				Ears:   []string{"  /\\  /\\  "},
+				Head:   []string{" |     | "},
+				Eyes:   "  O  O  ",
+				Snout:  []string{"   ^   "},
+				Chin:   "  \\_/  ",
+				Body:   []string{" |   | ", " |___| "},
 				Ground: "========",
 			},
-			wantLines: 9, // Above(1) + Ears(1) + Head(1) + Eyes(1) + Snout(1) + Chin(1) + Body(2) + Ground(1) = 9
+			wantLines:    9, // Above(1) + Ears(1) + Head(1) + Eyes(1) + Snout(1) + Chin(1) + Body(2) + Ground(1) = 9
 			wantContains: "O  O",
 		},
 	}
@@ -98,74 +98,74 @@ func TestComposeFrame(t *testing.T) {
 
 func TestPrecomposedFrames(t *testing.T) {
 	tests := []struct {
-		name  string
-		frame []string
+		name     string
+		frame    []string
 		minLines int
 		maxLines int
 	}{
 		{
-			name:  "FrameNeutral",
-			frame: FrameNeutral,
+			name:     "FrameNeutral",
+			frame:    FrameNeutral,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameHappy",
-			frame: FrameHappy,
+			name:     "FrameHappy",
+			frame:    FrameHappy,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameSad",
-			frame: FrameSad,
+			name:     "FrameSad",
+			frame:    FrameSad,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameAlert",
-			frame: FrameAlert,
+			name:     "FrameAlert",
+			frame:    FrameAlert,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameCompiling",
-			frame: FrameCompiling,
+			name:     "FrameCompiling",
+			frame:    FrameCompiling,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameBuildSuccess",
-			frame: FrameBuildSuccess,
+			name:     "FrameBuildSuccess",
+			frame:    FrameBuildSuccess,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameBuildFailed",
-			frame: FrameBuildFailed,
+			name:     "FrameBuildFailed",
+			frame:    FrameBuildFailed,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameLoading1",
-			frame: FrameLoading1,
+			name:     "FrameLoading1",
+			frame:    FrameLoading1,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameLoading2",
-			frame: FrameLoading2,
+			name:     "FrameLoading2",
+			frame:    FrameLoading2,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameLoading3",
-			frame: FrameLoading3,
+			name:     "FrameLoading3",
+			frame:    FrameLoading3,
 			minLines: 7,
 			maxLines: 12,
 		},
 		{
-			name:  "FrameLoading4",
-			frame: FrameLoading4,
+			name:     "FrameLoading4",
+			frame:    FrameLoading4,
 			minLines: 7,
 			maxLines: 12,
 		},
@@ -224,9 +224,9 @@ func TestFrameWithBadge(t *testing.T) {
 		frame []string
 		badge string
 	}{
-		"FrameCompiling": {FrameCompiling, IconGear},
+		"FrameCompiling":    {FrameCompiling, IconGear},
 		"FrameBuildSuccess": {FrameBuildSuccess, IconCheck},
-		"FrameBuildFailed": {FrameBuildFailed, IconCross},
+		"FrameBuildFailed":  {FrameBuildFailed, IconCross},
 	}
 
 	for name, test := range badgeFrames {
@@ -242,11 +242,11 @@ func TestFrameWithBadge(t *testing.T) {
 
 func TestAnimationConfigs(t *testing.T) {
 	tests := []struct {
-		name          string
-		anim          *AnimationConfig
-		wantFrames    int
-		wantDelayMs   int
-		wantLoop      bool
+		name        string
+		anim        *AnimationConfig
+		wantFrames  int
+		wantDelayMs int
+		wantLoop    bool
 	}{
 		{
 			name:        "AnimIdle",

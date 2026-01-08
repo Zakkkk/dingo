@@ -17,6 +17,16 @@ type Checker struct {
 	pkg  *types.Package
 }
 
+// cachedImporter is a shared importer that caches import results across type-checks.
+// This dramatically speeds up repeated type-checking of files with the same imports.
+var cachedImporter types.Importer
+
+func init() {
+	// Use "gc" mode (reads pre-compiled .a files) which is much faster.
+	// Falls back gracefully for packages not yet compiled.
+	cachedImporter = importer.Default()
+}
+
 // New creates a new Checker from a parsed Go AST.
 // The pkgName should match the package declaration in the file.
 // The pkgPath is used for the package's import path (e.g., "main" for standalone files).
@@ -31,14 +41,11 @@ func New(fset *token.FileSet, file *ast.File, pkgPath string) (*Checker, error) 
 		Instances:  make(map[*ast.Ident]types.Instance),
 	}
 
-	// Configure the type checker
-	// Use "source" mode to parse Go source files directly.
-	// While slower than "gc" mode (which reads pre-compiled .a files),
-	// "source" mode works correctly with Go modules and can find packages
-	// like dgo that are part of the dingo module without needing them to be
-	// pre-compiled in GOROOT/GOPATH.
+	// Configure the type checker with cached importer
+	// Using importer.Default() (gc mode) which reads pre-compiled .a files.
+	// This is MUCH faster than "source" mode which parses all imports from source.
 	conf := types.Config{
-		Importer: importer.ForCompiler(fset, "source", nil),
+		Importer: cachedImporter,
 		Error: func(err error) {
 			// Ignore type errors - we want partial type info even with errors
 			// This is important because the transformed code may have interface{}

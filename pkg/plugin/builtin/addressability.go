@@ -106,8 +106,9 @@ func isAddressable(expr ast.Expr) bool {
 // that creates a temporary variable, assigns the expression to it, and returns its address.
 //
 // Example transformation:
-//   Input:  Ok(42)
-//   Output: Ok(func() *int { tmp1 := 42; return &tmp1 }())
+//
+//	Input:  Ok(42)
+//	Output: Ok(func() *int { tmp1 := 42; return &tmp1 }())
 //
 // This pattern allows taking the address of literals and other non-addressable expressions.
 //
@@ -213,8 +214,9 @@ func parseTypeString(typeName string) ast.Expr {
 // This is the primary API that plugins should use.
 //
 // Usage:
-//   valueExpr := MaybeWrapForAddressability(arg, "int", ctx)
-//   // valueExpr is now guaranteed to be addressable (or already was)
+//
+//	valueExpr := MaybeWrapForAddressability(arg, "int", ctx)
+//	// valueExpr is now guaranteed to be addressable (or already was)
 //
 // Returns:
 //   - If expr is addressable: &expr (address-of expression)

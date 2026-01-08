@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/MadAppGang/dingo/pkg/ui/mascot"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Color palette - carefully chosen for readability and aesthetics
@@ -109,8 +109,8 @@ var (
 
 // BuildOutput manages the build output display
 type BuildOutput struct {
-	startTime time.Time
-	fileCount int
+	startTime   time.Time
+	fileCount   int
 	currentFile string
 }
 
@@ -253,7 +253,7 @@ func (b *BuildOutput) PrintSummary(success bool, errorMsg string) {
 		summaryLines = []string{
 			"",
 			"  " + styleSuccess.Render("Build Successful!"),
-			"  " + styleStepTime.Render("Completed in " + duration),
+			"  " + styleStepTime.Render("Completed in "+duration),
 		}
 	} else {
 		summaryLines = []string{

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +49,8 @@ type Server struct {
 	transpiler    *AutoTranspiler
 	watcher       *FileWatcher
 	docManager    *IncrementalDocumentManager // Incremental parser manager
-	workspacePath string
+	workspacePath string                      // Original workspace path (for user-facing operations)
+	shadowPath    string                      // Shadow build directory path (gopls workspace)
 	initialized   bool
 	editorType    EditorType // Detected editor for formatting
 
@@ -72,9 +74,9 @@ type Server struct {
 	semanticManager *semantic.Manager
 
 	// Debounced transpilation for responsive diagnostics
-	transpileDebounce    map[string]*transpileDebounceState
-	transpileDebounceMu  sync.Mutex
-	transpileDebounceMs  int // Debounce delay in milliseconds (default: 300)
+	transpileDebounce   map[string]*transpileDebounceState
+	transpileDebounceMu sync.Mutex
+	transpileDebounceMs int // Debounce delay in milliseconds (default: 300)
 
 	// Call hierarchy context for stateful call hierarchy protocol
 	callHierarchyCtx *CallHierarchyContext
@@ -180,6 +182,51 @@ func (s *Server) createTranspileFunc() semantic.TranspileFunc {
 	}
 }
 
+// detectShadowBuild checks if a shadow build directory exists and is valid.
+// Returns the shadow directory path if found, empty string otherwise.
+// A valid shadow build has: shadow directory exists, contains go.mod, and shadow build is enabled in config.
+func (s *Server) detectShadowBuild(workspacePath string) string {
+	// Load config from workspace to check settings
+	cfg, err := config.LoadFromDir(workspacePath)
+	if err != nil {
+		s.config.Logger.Warnf("Failed to load config from %s: %v", workspacePath, err)
+		return ""
+	}
+
+	// Store the config for later use
+	s.dingoConfig = cfg
+
+	// Check if shadow build is enabled
+	if !cfg.Build.Shadow {
+		s.config.Logger.Debugf("Shadow build disabled in config")
+		return ""
+	}
+
+	// Determine shadow directory name (default: "build")
+	shadowDirName := cfg.Build.OutDir
+	if shadowDirName == "" {
+		shadowDirName = "build"
+	}
+
+	shadowPath := filepath.Join(workspacePath, shadowDirName)
+
+	// Check if shadow directory exists
+	info, err := os.Stat(shadowPath)
+	if err != nil || !info.IsDir() {
+		s.config.Logger.Debugf("Shadow directory not found: %s", shadowPath)
+		return ""
+	}
+
+	// Check if go.mod exists in shadow directory
+	goModPath := filepath.Join(shadowPath, "go.mod")
+	if _, err := os.Stat(goModPath); err != nil {
+		s.config.Logger.Debugf("No go.mod in shadow directory: %s", shadowPath)
+		return ""
+	}
+
+	return shadowPath
+}
+
 // SetConn stores the connection and context in the server (thread-safe)
 func (s *Server) SetConn(conn jsonrpc2.Conn, ctx context.Context) {
 	s.connMu.Lock()
@@ -275,6 +322,32 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 		s.workspacePath = params.RootURI.Filename()
 		s.config.Logger.Infof("Workspace path: %s", s.workspacePath)
 
+		// Detect shadow build directory and load workspace config
+		// Check if build/ or configured shadow dir exists with go.mod
+		shadowDir := s.detectShadowBuild(s.workspacePath)
+		if shadowDir != "" {
+			s.shadowPath = shadowDir
+			s.config.Logger.Infof("Shadow build detected: %s (gopls will use this)", shadowDir)
+
+			// Modify params for gopls to use shadow directory
+			params.RootURI = lspuri.File(shadowDir)
+			if len(params.WorkspaceFolders) > 0 {
+				// Also update workspace folders if present
+				params.WorkspaceFolders = []protocol.WorkspaceFolder{
+					{
+						URI:  string(lspuri.File(shadowDir)),
+						Name: filepath.Base(shadowDir),
+					},
+				}
+			}
+		}
+
+		// Reinitialize transpiler with workspace config for correct output paths
+		// This ensures .go files go to build/ and .dmap files go to .dmap/
+		if s.dingoConfig != nil && s.transpiler != nil {
+			s.transpiler.ReinitializeWithConfig(s.dingoConfig)
+		}
+
 		// Start file watcher if auto-transpile enabled
 		if s.config.AutoTranspile {
 			watcher, err := NewFileWatcher(s.workspacePath, s.config.Logger, s.handleDingoFileChange)
@@ -287,7 +360,7 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 	}
 
 	// Forward initialize to gopls
-	s.config.Logger.Debugf("handleInitialize: Forwarding to gopls")
+	s.config.Logger.Debugf("handleInitialize: Forwarding to gopls (workspace: %s)", params.RootURI.Filename())
 	goplsResult, err := s.gopls.Initialize(ctx, params)
 	if err != nil {
 		s.config.Logger.Errorf("handleInitialize: gopls failed: %v", err)
@@ -402,9 +475,14 @@ func (s *Server) handleDidOpen(ctx context.Context, reply jsonrpc2.Replier, req 
 		} else {
 			s.config.Logger.Debugf("[didOpen] Incremental parser initialized")
 
-			// Publish initial diagnostics from parser
-			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
+			// NOTE: We intentionally do NOT publish parse diagnostics for .dingo files.
+			// The incremental parser uses Go's parser which produces invalid errors
+			// for Dingo syntax (e.g., "missing ',' in type argument list" for Result[T, E]).
+			// Valid diagnostics come from:
+			// - lint: from the Dingo linter (runLintOnOpen above)
+			// - gopls: translated from gopls analyzing the transpiled .go file
+			// - transpile: from the Dingo transpiler (scheduleTranspileFromBuffer below)
+			s.config.Logger.Debugf("[didOpen] Skipping parse diagnostics (Go parser errors invalid for Dingo)")
 		}
 
 		// Check if .go file exists, if not auto-transpile
@@ -460,17 +538,16 @@ func (s *Server) handleDidChange(ctx context.Context, reply jsonrpc2.Replier, re
 	if isDingoFile(params.TextDocument.URI) {
 		s.config.Logger.Debugf("Changed .dingo file (not forwarding to gopls): %s", params.TextDocument.URI)
 
-		// Update incremental parser
+		// Update incremental parser (used for completion context, not diagnostics)
 		if err := s.docManager.UpdateDocument(string(params.TextDocument.URI), params.ContentChanges); err != nil {
 			s.config.Logger.Warnf("[didChange] Incremental parse failed: %v", err)
 		} else {
 			s.config.Logger.Debugf("[didChange] Incremental parse succeeded")
 
-			// Get parse diagnostics
-			diagnostics := s.docManager.GetDiagnostics(string(params.TextDocument.URI))
-
-			// Publish parse diagnostics immediately (these are fast)
-			s.updateAndPublishDiagnostics(params.TextDocument.URI, "parse", diagnostics)
+			// NOTE: We intentionally do NOT publish parse diagnostics for .dingo files.
+			// The incremental parser uses Go's parser which produces invalid errors
+			// for Dingo syntax (e.g., "missing ',' in type argument list" for Result[T, E]).
+			// Real errors come from the transpiler via scheduleTranspileFromBuffer below.
 		}
 
 		// Always schedule debounced transpilation for diagnostics.
@@ -950,4 +1027,3 @@ func (s *Server) editorTypeName() string {
 		return "Unknown"
 	}
 }
-

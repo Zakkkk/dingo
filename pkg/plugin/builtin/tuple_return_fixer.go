@@ -18,8 +18,9 @@ import (
 // Go natively supports `return a, b` without wrapping.
 //
 // Example transformation:
-//   Before: return Tuple2(x, y)
-//   After:  return x, y
+//
+//	Before: return Tuple2(x, y)
+//	After:  return x, y
 //
 // This plugin runs in the Transform phase after tuple type inference.
 type TupleReturnFixer struct {

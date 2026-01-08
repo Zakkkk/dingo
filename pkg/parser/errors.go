@@ -20,6 +20,9 @@ const (
 	ErrEmptyMatchArms    = "E008"
 	ErrInvalidLambda     = "E009"
 	ErrMissingOperand    = "E010"
+	// ErrMatchArmStatement is reported when a statement (like assignment) is used
+	// in a braceless match arm body, which requires an expression
+	ErrMatchArmStatement = "E011"
 )
 
 // SpanError represents a parse error with full span information

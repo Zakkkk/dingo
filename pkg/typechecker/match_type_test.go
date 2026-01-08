@@ -380,8 +380,8 @@ type mockExpr struct {
 	text string
 }
 
-func (m *mockExpr) String() string            { return m.text }
-func (m *mockExpr) Pos() token.Pos            { return token.NoPos }
-func (m *mockExpr) End() token.Pos            { return token.NoPos }
-func (m *mockExpr) Node()                     {}
-func (m *mockExpr) exprNode()                 {}
+func (m *mockExpr) String() string { return m.text }
+func (m *mockExpr) Pos() token.Pos { return token.NoPos }
+func (m *mockExpr) End() token.Pos { return token.NoPos }
+func (m *mockExpr) Node()          {}
+func (m *mockExpr) exprNode()      {}

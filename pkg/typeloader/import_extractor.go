@@ -230,9 +230,9 @@ func DeduplicateImports(imports []string) []string {
 func FormatImportError(importPath string, err error) error {
 	return fmt.Errorf(
 		"failed to process import %q: %w\n\n"+
-		"Troubleshooting:\n"+
-		"  1. Ensure the package exists: go get %s\n"+
-		"  2. Run 'go mod download' to fetch dependencies\n"+
-		"  3. Check that go.mod is in the current directory",
+			"Troubleshooting:\n"+
+			"  1. Ensure the package exists: go get %s\n"+
+			"  2. Run 'go mod download' to fetch dependencies\n"+
+			"  3. Check that go.mod is in the current directory",
 		importPath, err, importPath)
 }

@@ -17,7 +17,7 @@ type LayoutMode int
 
 const (
 	LayoutSideBySide LayoutMode = iota // Mascot on left, output on right
-	LayoutDisabled                      // No mascot, output only
+	LayoutDisabled                     // No mascot, output only
 )
 
 // DefaultMascotWidth is the fixed width for the mascot column.
@@ -103,7 +103,7 @@ func NewLayout(opts ...LayoutOption) *Layout {
 		mode:         mode,
 		termWidth:    termWidth,
 		mascotWidth:  DefaultMascotWidth,
-		outputWidth:  termWidth - DefaultMascotWidth - DefaultSeparatorWidth,
+		outputWidth:  termWidth - DefaultMascotWidth - DefaultSeparatorWidth - 1, // -1 to prevent auto-wrapping
 		outputBuffer: &strings.Builder{},
 		writer:       os.Stdout,
 		stopCh:       make(chan struct{}),
@@ -371,13 +371,19 @@ func (l *Layout) combineSideBySide(mascotLines, outputLines []string) []string {
 		// Add mascot column (left)
 		if i < len(mascotLines) {
 			mascotLine := mascotLines[i]
-			visualWidth := runewidth.StringWidth(mascotLine) // Get visual width
+			// Strip ANSI codes for accurate width calculation
+			cleanLine := StripAnsi(mascotLine)
+			visualWidth := runewidth.StringWidth(cleanLine)
 
 			if visualWidth < l.mascotWidth {
 				line.WriteString(mascotLine)
 				line.WriteString(strings.Repeat(" ", l.mascotWidth-visualWidth))
 			} else if visualWidth > l.mascotWidth {
 				// Truncate to exact visual width without cutting characters
+				// Note: Truncating string with ANSI codes strictly by length is tricky
+				// For now, we assume mascot frames are well-behaved strings
+				// or we'd need a complex ANSI-aware truncate.
+				// Given we control frames, they shouldn't exceed width.
 				line.WriteString(runewidth.Truncate(mascotLine, l.mascotWidth, ""))
 			} else {
 				line.WriteString(mascotLine)
@@ -393,7 +399,8 @@ func (l *Layout) combineSideBySide(mascotLines, outputLines []string) []string {
 		// Add output column (right)
 		if i < len(outputLines) {
 			outputLine := outputLines[i]
-			visualWidth := runewidth.StringWidth(outputLine)
+			cleanLine := StripAnsi(outputLine)
+			visualWidth := runewidth.StringWidth(cleanLine)
 
 			if l.termWidth > 0 && visualWidth > l.outputWidth {
 				line.WriteString(runewidth.Truncate(outputLine, l.outputWidth, ""))

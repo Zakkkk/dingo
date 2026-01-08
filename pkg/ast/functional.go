@@ -8,13 +8,13 @@ import "go/token"
 //   - items.filter(func(x Item) bool { return x.active })
 //   - data.reduce(0, func(acc int, x int) int { return acc + x })
 type FunctionalCall struct {
-	CallPos    token.Pos    // Position of method call start
-	Receiver   string       // The slice/array expression (e.g., "nums", "items")
-	Method     string       // Method name (map, filter, reduce, etc.)
-	Args       []string     // Arguments (function literals, initial values)
-	Lambda     *FuncLiteral // Parsed lambda function (if applicable)
-	StartPos   int          // Start position in line (for chain detection)
-	EndPos     int          // End position in line (for chain detection)
+	CallPos  token.Pos    // Position of method call start
+	Receiver string       // The slice/array expression (e.g., "nums", "items")
+	Method   string       // Method name (map, filter, reduce, etc.)
+	Args     []string     // Arguments (function literals, initial values)
+	Lambda   *FuncLiteral // Parsed lambda function (if applicable)
+	StartPos int          // Start position in line (for chain detection)
+	EndPos   int          // End position in line (for chain detection)
 }
 
 // FuncLiteral represents a Go function literal parsed from functional call
@@ -37,17 +37,17 @@ type Param struct {
 //   - nums.filter(f).map(g)
 //   - items.map(f).filter(g).reduce(init, r)
 type ChainExpr struct {
-	ChainPos   token.Pos         // Position of chain start
-	Receiver   string            // Initial receiver (e.g., "nums")
-	Operations []FunctionalCall  // Ordered chain of operations
-	CanFuse    bool              // Whether this chain can be fused into single loop
-	StartPos   int               // Start position in line (for replacement)
-	EndPos     int               // End position in line (for replacement)
+	ChainPos   token.Pos        // Position of chain start
+	Receiver   string           // Initial receiver (e.g., "nums")
+	Operations []FunctionalCall // Ordered chain of operations
+	CanFuse    bool             // Whether this chain can be fused into single loop
+	StartPos   int              // Start position in line (for replacement)
+	EndPos     int              // End position in line (for replacement)
 }
 
 // Node implements DingoNode marker interface
 func (f *FunctionalCall) Node() {}
-func (c *ChainExpr) Node() {}
+func (c *ChainExpr) Node()      {}
 
 // Pos returns the position of the functional call
 func (f *FunctionalCall) Pos() token.Pos {

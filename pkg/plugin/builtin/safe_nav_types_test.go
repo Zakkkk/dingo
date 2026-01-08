@@ -34,10 +34,10 @@ func (l *testLogger) Error(msg string) {
 // TestSafeNavTypePlugin_Discovery tests the discovery phase of finding __INFER__ placeholders
 func TestSafeNavTypePlugin_Discovery(t *testing.T) {
 	tests := []struct {
-		name           string
-		source         string
-		expectedCount  int
-		description    string
+		name          string
+		source        string
+		expectedCount int
+		description   string
 	}{
 		{
 			name: "single __INFER__ placeholder",
@@ -332,11 +332,11 @@ func TestSafeNavTypePlugin_ErrorReporting(t *testing.T) {
 	t.Skip("Error reporting for non-nullable types requires full preprocessor integration")
 
 	tests := []struct {
-		name        string
-		source      string
-		expectError bool
+		name          string
+		source        string
+		expectError   bool
 		errorContains string
-		description string
+		description   string
 	}{
 		{
 			name: "non-nullable type error",
@@ -454,10 +454,10 @@ func TestSafeNavTypePlugin_Transform(t *testing.T) {
 // TestIsOptionType_Comprehensive tests the enhanced isOptionType function
 func TestIsOptionType_Comprehensive(t *testing.T) {
 	tests := []struct {
-		name       string
-		source     string
-		typeName   string
-		shouldPass bool
+		name        string
+		source      string
+		typeName    string
+		shouldPass  bool
 		description string
 	}{
 		{
@@ -472,8 +472,8 @@ func (o Option_User) Unwrap() User {
 	return *o.value
 }
 type User struct{}`,
-			typeName:   "Option_User",
-			shouldPass: true,
+			typeName:    "Option_User",
+			shouldPass:  true,
 			description: "Should detect valid Option[T] type",
 		},
 		{
@@ -490,8 +490,8 @@ func (r Result_User_Error) Unwrap() User {
 }
 type User struct{}
 type Error struct{}`,
-			typeName:   "Result_User_Error",
-			shouldPass: false,
+			typeName:    "Result_User_Error",
+			shouldPass:  false,
 			description: "Should NOT detect Result[T,E] as Option[T]",
 		},
 		{
@@ -503,8 +503,8 @@ type Option_User struct {
 	value *User
 }
 type User struct{}`,
-			typeName:   "Option_User",
-			shouldPass: false,
+			typeName:    "Option_User",
+			shouldPass:  false,
 			description: "Should require Unwrap() method",
 		},
 		{
@@ -517,8 +517,8 @@ func (o Option_User) Unwrap() User {
 	return *o.value
 }
 type User struct{}`,
-			typeName:   "Option_User",
-			shouldPass: false,
+			typeName:    "Option_User",
+			shouldPass:  false,
 			description: "Should require tag field",
 		},
 	}
@@ -684,8 +684,8 @@ func main() {
 // TestSafeNavTypePlugin_OptionVsResult tests differentiation between Option and Result types
 func TestSafeNavTypePlugin_OptionVsResult(t *testing.T) {
 	tests := []struct {
-		name       string
-		source     string
+		name         string
+		source       string
 		expectOption bool
 	}{
 		{

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MadAppGang/dingo/pkg/format"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
-	"github.com/MadAppGang/dingo/pkg/format"
 )
 
 // fmtCmd creates the "dingo fmt" subcommand

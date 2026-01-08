@@ -734,4 +734,3 @@ func (r *Reader) calculateBaseOffset() int {
 	goTotal := int(r.hdr.GoLineCnt)
 	return goTotal - dingoTotal
 }
-

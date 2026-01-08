@@ -88,7 +88,7 @@ func buildLineOffsets(src []byte) []uint32 {
 
 // estimateKindStrSize estimates the size needed for kind strings section
 func estimateKindStrSize(kinds []string) int {
-	size := 4 // KindCount uint32
+	size := 4              // KindCount uint32
 	size += len(kinds) * 4 // KindOffsets array
 	for _, k := range kinds {
 		size += len(k) + 1 // string + null terminator

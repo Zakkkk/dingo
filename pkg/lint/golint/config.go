@@ -29,10 +29,10 @@ type Config struct {
 	} `yaml:"issues"`
 
 	Run struct {
-		Timeout      string `yaml:"timeout"`
-		SkipDirs     []string `yaml:"skip-dirs"`
-		SkipFiles    []string `yaml:"skip-files"`
-		ModulesDownloadMode string `yaml:"modules-download-mode"`
+		Timeout             string   `yaml:"timeout"`
+		SkipDirs            []string `yaml:"skip-dirs"`
+		SkipFiles           []string `yaml:"skip-files"`
+		ModulesDownloadMode string   `yaml:"modules-download-mode"`
 	} `yaml:"run"`
 }
 
@@ -49,11 +49,11 @@ func DefaultConfig() *Config {
 
 	// Enable commonly useful linters for generated code
 	cfg.Linters.Enable = []string{
-		"errcheck",   // Check for unchecked errors
-		"govet",      // Go vet
+		"errcheck",    // Check for unchecked errors
+		"govet",       // Go vet
 		"staticcheck", // Staticcheck
-		"unused",     // Check for unused code
-		"gosimple",   // Suggest code simplifications
+		"unused",      // Check for unused code
+		"gosimple",    // Suggest code simplifications
 		"ineffassign", // Detect ineffective assignments
 	}
 

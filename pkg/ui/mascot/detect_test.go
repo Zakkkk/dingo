@@ -85,18 +85,18 @@ func TestDetectWithCIEnv(t *testing.T) {
 
 func TestDetectNoColor(t *testing.T) {
 	tests := []struct {
-		name            string
-		noColorValue    string
+		name             string
+		noColorValue     string
 		wantColorSupport bool
 	}{
 		{
-			name:            "NO_COLOR set",
-			noColorValue:    "1",
+			name:             "NO_COLOR set",
+			noColorValue:     "1",
 			wantColorSupport: false,
 		},
 		{
-			name:            "NO_COLOR empty",
-			noColorValue:    "",
+			name:             "NO_COLOR empty",
+			noColorValue:     "",
 			wantColorSupport: true, // Depends on IsInteractive and IsCI
 		},
 	}
@@ -126,18 +126,18 @@ func TestDetectNoColor(t *testing.T) {
 
 func TestDetectNoMascot(t *testing.T) {
 	tests := []struct {
-		name      string
-		envValue  string
+		name         string
+		envValue     string
 		wantNoMascot bool
 	}{
 		{
-			name:      "DINGO_NO_MASCOT set",
-			envValue:  "1",
+			name:         "DINGO_NO_MASCOT set",
+			envValue:     "1",
 			wantNoMascot: true,
 		},
 		{
-			name:      "DINGO_NO_MASCOT empty",
-			envValue:  "",
+			name:         "DINGO_NO_MASCOT empty",
+			envValue:     "",
 			wantNoMascot: false,
 		},
 	}

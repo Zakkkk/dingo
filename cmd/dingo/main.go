@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
@@ -26,7 +28,7 @@ func main() {
 		Long: `Dingo is a meta-language that transpiles to idiomatic Go code.
 It provides Result/Option types, pattern matching, error propagation,
 and other quality-of-life features while maintaining 100% Go ecosystem compatibility.`,
-		Version: version.Version,
+		Version:       version.Version,
 		SilenceUsage:  true, // Don't show usage on errors
 		SilenceErrors: true, // We handle error display ourselves
 		Run: func(cmd *cobra.Command, args []string) {
@@ -48,18 +50,22 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 		}
 	})
 
-	rootCmd.AddCommand(goBuildCmd())  // dingo build - transpile + go build
-	rootCmd.AddCommand(goRunCmd())    // dingo run - transpile + go run
-	rootCmd.AddCommand(watchCmd())    // dingo watch - watch + rebuild + restart
-	rootCmd.AddCommand(goCmd())       // dingo go - transpile only
-	rootCmd.AddCommand(lintCmd())     // dingo lint - run linter
-	rootCmd.AddCommand(fmtCmd())      // dingo fmt - format files
-	rootCmd.AddCommand(versionCmd())
+	rootCmd.AddCommand(goBuildCmd())    // dingo build - transpile + go build
+	rootCmd.AddCommand(goRunCmd())      // dingo run - transpile + go run
+	rootCmd.AddCommand(watchCmd())      // dingo watch - watch + rebuild + restart
+	rootCmd.AddCommand(goCmd())         // dingo go - transpile only
+	rootCmd.AddCommand(lintCmd())       // dingo lint - run linter
+	rootCmd.AddCommand(fmtCmd())        // dingo fmt - format files
+	rootCmd.AddCommand(newVersionCmd()) // dingo version - show version with mascot and update check
+	rootCmd.AddCommand(updateCmd())     // dingo update - auto-update from GitHub
 	rootCmd.AddCommand(mascotCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		// Print error since we have SilenceErrors: true
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// But skip if it's already been printed (sentinel error)
+		if err.Error() != "error already printed" {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -112,15 +118,7 @@ Examples:
 
 // goRunCmd is defined in compile.go - it's like goBuildCmd but invokes go run
 
-func versionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "Print the version number of Dingo",
-		Run: func(cmd *cobra.Command, args []string) {
-			ui.PrintVersionInfo(version.Version)
-		},
-	}
-}
+// versionCmd is now in version.go as newVersionCmd
 
 func runTranspile(files []string, output, outdir string, watch bool) error {
 	// Validate mutually exclusive flags
@@ -146,21 +144,27 @@ func runTranspile(files []string, output, outdir string, watch bool) error {
 		return fmt.Errorf("--outdir flag is not currently supported")
 	}
 
-	// Create build UI (always - mascot shown at end)
-	buildUI := ui.NewSimpleBuildUI()
-	buildUI.Start()
-	defer buildUI.Stop()
+	// Auto-detect non-interactive environment (CI, agents, pipes)
+	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 
-	// Print header
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-	fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version.Version))
+	// Create build UI only if we're in a TTY
+	var buildUI *ui.SimpleBuildUI
+	if isTTY {
+		buildUI = ui.NewSimpleBuildUI()
+		buildUI.Start()
+		defer buildUI.Stop()
 
-	// Print build start
-	if len(expandedFiles) == 1 {
-		fmt.Println("Building 1 file")
-	} else {
-		fmt.Printf("Building %d files\n", len(expandedFiles))
+		// Print header
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+		versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+		fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo"), versionStyle.Render("v"+version.Version))
+
+		// Print build start
+		if len(expandedFiles) == 1 {
+			fmt.Println("Building 1 file")
+		} else {
+			fmt.Printf("Building %d files\n", len(expandedFiles))
+		}
 	}
 
 	// Build each file
@@ -176,11 +180,13 @@ func runTranspile(files []string, output, outdir string, watch bool) error {
 			outputPath = output
 		}
 
-		if err := buildFileSimple(file, outputPath, buildUI); err != nil {
+		if err := buildFileSimple(file, outputPath, buildUI, isTTY); err != nil {
 			success = false
 			lastError = err
-			buildUI.SetStatus(mascot.StateFailed, "Build failed!", "see error above")
-			fmt.Printf("  ✗ %s\n", err.Error())
+			if buildUI != nil {
+				buildUI.SetStatus(mascot.StateFailed, "Build failed!", "see error above")
+			}
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 			break
 		}
 		transpiled++
@@ -188,7 +194,9 @@ func runTranspile(files []string, output, outdir string, watch bool) error {
 
 	// Final status
 	if success {
-		buildUI.SetStatus(mascot.StateSuccess, "Build successful!", fmt.Sprintf("%d file(s) transpiled", transpiled))
+		if buildUI != nil {
+			buildUI.SetStatus(mascot.StateSuccess, "Build successful!", fmt.Sprintf("%d file(s) transpiled", transpiled))
+		}
 		if watch {
 			fmt.Println("\nℹ Watch mode not yet implemented")
 		}
@@ -301,7 +309,7 @@ func buildFile(inputPath, outputPath string, buildUI *ui.BuildOutput) error {
 }
 
 // buildFileSimple builds a single file with animated spinner during steps
-func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) error {
+func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI, isTTY bool) error {
 	// Load config for path calculation
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -323,7 +331,44 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 		}
 	}
 
-	// Get just the filename for display
+	// Non-TTY mode: minimal output
+	if !isTTY {
+		// Read source
+		src, err := os.ReadFile(inputPath)
+		if err != nil {
+			return fmt.Errorf("failed to read file: %w", err)
+		}
+
+		// Transpile
+		transpileResult, err := transpiler.PureASTTranspileWithMappings(src, inputPath, true)
+		if err != nil {
+			return fmt.Errorf("transpilation error: %w", err)
+		}
+
+		// Ensure output directory exists
+		if dir := filepath.Dir(outputPath); dir != "." && dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+		}
+
+		// Write .go file
+		if err := os.WriteFile(outputPath, transpileResult.GoCode, 0o644); err != nil {
+			return fmt.Errorf("failed to write output: %w", err)
+		}
+
+		// Write .dmap file
+		dmapPath, dmapErr := calculateDmapPath(inputPath, cfg)
+		if dmapErr == nil {
+			writer := dmap.NewWriter(src, transpileResult.GoCode)
+			_ = writer.WriteFile(dmapPath, transpileResult.LineMappings, transpileResult.ColumnMappings)
+		}
+
+		fmt.Printf("%s → %s\n", inputPath, outputPath)
+		return nil
+	}
+
+	// TTY mode: fancy output with spinners
 	fileName := filepath.Base(inputPath)
 
 	// File header
@@ -359,7 +404,9 @@ func buildFileSimple(inputPath, outputPath string, buildUI *ui.SimpleBuildUI) er
 	var goSource []byte
 	var transpileResult transpiler.TranspileResult
 	var transpileDuration time.Duration
-	buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", fileName)
+	if buildUI != nil {
+		buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", fileName)
+	}
 	err = runWithSpinner("Transpile", func() error {
 		start := time.Now()
 		var err error
@@ -647,10 +694,10 @@ func expandPattern(pattern string) ([]string, error) {
 // mascotCmd creates the mascot debug command
 func mascotCmd() *cobra.Command {
 	var (
-		state     string
-		animate   bool
-		duration  int
-		listAll   bool
+		state    string
+		animate  bool
+		duration int
+		listAll  bool
 	)
 
 	cmd := &cobra.Command{
