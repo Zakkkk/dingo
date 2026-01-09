@@ -303,14 +303,27 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 	var animationStarted bool
 	var animationDone chan struct{}
 	var animationExited chan struct{}
+	var lastLineCount int // Track lines printed for reliable clearing
 
 	// Spinner characters for current file
 	spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	spinnerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F7DC6F")).Bold(true)
 	currentFileStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#F7DC6F"))
 
-	// drawProgress renders simple text-only progress (no mascot)
-	// The final mascot will be shown by SimpleBuildUI.Stop() - this avoids duplicate mascots
+	// Loading mascot frames for animation
+	loadingFrames := [][]string{
+		mascot.FrameLoading1,
+		mascot.FrameLoading2,
+		mascot.FrameLoading3,
+		mascot.FrameLoading4,
+	}
+	mascotStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
+
+	// drawProgress renders mascot + progress side by side
+	//
+	// Uses relative cursor movement (move up N lines) instead of save/restore.
+	// This survives terminal scrolling because we track how many lines we printed
+	// and move up by that amount before clearing and redrawing.
 	drawProgress := func(frameIdx int, firstDraw bool) {
 		progressMu.Lock()
 		current := progressCurrent
@@ -318,43 +331,80 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 		files := make([]fileEntry, len(recentFiles))
 		copy(files, recentFiles)
 		currFile := currentFile
+		prevLines := lastLineCount
 		progressMu.Unlock()
 
 		if total == 0 {
 			return
 		}
 
-		// Clear previous output using cursor restore + clear-to-end
-		if !firstDraw {
-			fmt.Print("\033[u")  // Restore cursor to saved position
-			fmt.Print("\033[0J") // Clear from cursor to end of screen
+		// Clear previous output by moving up N lines, then clearing to end of screen
+		// This is more robust than save/restore which breaks on terminal scroll
+		if !firstDraw && prevLines > 0 {
+			fmt.Printf("\033[%dA", prevLines) // Move cursor up N lines
+			fmt.Print("\033[0J")              // Clear from cursor to end of screen
 		}
 
-		// Build progress bar with percentage
+		// Get current mascot frame
+		mascotFrame := loadingFrames[frameIdx%len(loadingFrames)]
+
+		// Build progress lines (right side)
+		var progressLines []string
+
+		// Progress bar with percentage
 		progressWidth := 30
 		filled := (current * progressWidth) / total
 		percentage := (current * 100) / total
 		bar := strings.Repeat("█", filled) + strings.Repeat("░", progressWidth-filled)
-		progressLine := fmt.Sprintf("%s %s %d/%d %s",
+		progressLines = append(progressLines, fmt.Sprintf("%s %s %d/%d %s",
 			dimStyle.Render("["+bar+"]"),
 			dimStyle.Render("Transpiling"),
 			current, total,
-			dimStyle.Render(fmt.Sprintf("(%d%%)", percentage)))
+			dimStyle.Render(fmt.Sprintf("(%d%%)", percentage))))
 
-		// Print progress bar
-		fmt.Println(progressLine)
+		// Empty line for spacing
+		progressLines = append(progressLines, "")
 
-		// Show completed files with timing (max 5)
+		// Completed files with timing (max 5)
 		for _, f := range files {
 			timeStr := dimStyle.Render(fmt.Sprintf("(%s)", formatDuration(f.duration)))
-			fmt.Printf("  %s %s %s\n", successStyle.Render("✓"), fileStyle.Render(f.name), timeStr)
+			progressLines = append(progressLines, fmt.Sprintf("  %s %s %s", successStyle.Render("✓"), fileStyle.Render(f.name), timeStr))
 		}
 
-		// Show current file being processed with spinner
+		// Current file being processed with spinner
 		if currFile != "" {
 			spinner := spinnerChars[frameIdx%len(spinnerChars)]
-			fmt.Printf("  %s %s%s\n", spinnerStyle.Render(spinner), currentFileStyle.Render(currFile), dimStyle.Render(" ..."))
+			progressLines = append(progressLines, fmt.Sprintf("  %s %s%s", spinnerStyle.Render(spinner), currentFileStyle.Render(currFile), dimStyle.Render(" ...")))
 		}
+
+		// Render mascot + progress side by side
+		lineCount := 0
+		maxLines := len(mascotFrame)
+		if len(progressLines) > maxLines {
+			maxLines = len(progressLines)
+		}
+
+		for i := 0; i < maxLines; i++ {
+			mascotLine := ""
+			if i < len(mascotFrame) {
+				mascotLine = mascotStyle.Render(mascotFrame[i])
+			} else {
+				mascotLine = strings.Repeat(" ", 22) // Mascot width padding
+			}
+
+			progressLine := ""
+			if i < len(progressLines) {
+				progressLine = "  " + progressLines[i]
+			}
+
+			fmt.Printf("%s%s\n", mascotLine, progressLine)
+			lineCount++
+		}
+
+		// Update line count for next iteration (under lock)
+		progressMu.Lock()
+		lastLineCount = lineCount
+		progressMu.Unlock()
 	}
 
 	if buildUI != nil {
@@ -377,8 +427,8 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 				}
 				fmt.Println()
 
-				// Save cursor position for reliable clearing later
-				fmt.Print("\033[s")
+				// No cursor save needed - we use relative line count tracking
+				// which survives terminal scrolling
 
 				// Start animation goroutine
 				go func() {
@@ -448,9 +498,9 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	if err != nil {
 		// Clear animation area before showing error
-		if animationStarted {
-			fmt.Print("\033[u")  // Restore cursor to saved position
-			fmt.Print("\033[0J") // Clear from cursor to end of screen
+		if animationStarted && lastLineCount > 0 {
+			fmt.Printf("\033[%dA", lastLineCount) // Move cursor up N lines
+			fmt.Print("\033[0J")                  // Clear from cursor to end of screen
 		}
 		// Show sad mascot - error will be printed by caller after mascot stops
 		if buildUI != nil {
@@ -463,10 +513,12 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 	}
 
 	if buildUI != nil && animationStarted {
-		// Clear animation area using cursor restore + clear-to-end
-		// This avoids line counting bugs with varying content heights
-		fmt.Print("\033[u")  // Restore cursor to saved position
-		fmt.Print("\033[0J") // Clear from cursor to end of screen
+		// Clear animation area using relative line movement
+		// This survives terminal scrolling unlike cursor save/restore
+		if lastLineCount > 0 {
+			fmt.Printf("\033[%dA", lastLineCount) // Move cursor up N lines
+			fmt.Print("\033[0J")                  // Clear from cursor to end of screen
+		}
 
 		// Show completion summary
 		fmt.Printf("  %s Transpile   %d files %s\n",
@@ -943,10 +995,22 @@ func runWithSpinnerCompile(stepName string, buildUI *ui.SimpleBuildUI, fn func()
 		detailStyle.Render("please wait"),
 	}
 
+	// lastLineCount tracks lines printed for reliable clearing (robust against scrolling)
+	lastLineCount := 0
+
 	// Draw mascot frame
 	drawMascotFrame := func(frame []string) {
+		// Clear previous output if we've drawn before
+		if lastLineCount > 0 {
+			fmt.Printf("\033[%dA", lastLineCount) // Move cursor up N lines
+			fmt.Print("\033[0J")                  // Clear from cursor to end of screen
+		}
+
+		lineCount := 0
+
 		// Separator
 		fmt.Println(separatorStyle.Render("────────────────────────────────────────────────────────────"))
+		lineCount++
 
 		maxLines := len(frame)
 		for i := 0; i < maxLines; i++ {
@@ -956,13 +1020,14 @@ func runWithSpinnerCompile(stepName string, buildUI *ui.SimpleBuildUI, fn func()
 				statusLine = "  " + statusLines[i]
 			}
 			fmt.Printf("%s%s\n", mascotLine, statusLine)
+			lineCount++
 		}
+
+		lastLineCount = lineCount
 	}
 
-	// Hide cursor and save position for reliable clearing
-	// Using cursor save/restore + clear-to-end-of-screen avoids line counting bugs
-	fmt.Print("\033[?25l") // Hide cursor
-	fmt.Print("\033[s")    // Save cursor position
+	// Hide cursor
+	fmt.Print("\033[?25l")
 
 	// Draw first frame
 	drawMascotFrame(mascotFrames[frameIdx])
@@ -970,16 +1035,15 @@ func runWithSpinnerCompile(stepName string, buildUI *ui.SimpleBuildUI, fn func()
 	for {
 		select {
 		case err := <-done:
-			// Restore cursor to saved position and clear everything below
-			fmt.Print("\033[u")   // Restore cursor position
-			fmt.Print("\033[0J")  // Clear from cursor to end of screen
+			// Clear animation one last time
+			if lastLineCount > 0 {
+				fmt.Printf("\033[%dA", lastLineCount) // Move cursor up N lines
+				fmt.Print("\033[0J")                  // Clear from cursor to end of screen
+			}
 			fmt.Print("\033[?25h") // Show cursor
 			return err
 		case <-ticker.C:
 			frameIdx = (frameIdx + 1) % len(mascotFrames)
-			// Restore cursor and clear, then redraw
-			fmt.Print("\033[u")   // Restore cursor position
-			fmt.Print("\033[0J")  // Clear from cursor to end of screen
 			drawMascotFrame(mascotFrames[frameIdx])
 		}
 	}
