@@ -123,7 +123,31 @@ func GoPathToDingoPath(goPath string, cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// Find workspace root by walking up from the Go file
+	// Determine output directory name
+	outDir := DefaultOutputDir
+	if cfg != nil && cfg.Build.OutDir != "" {
+		outDir = cfg.Build.OutDir
+	}
+
+	// For shadow builds, find the project root (with dingo.toml) first
+	// This is more reliable than detectWorkspaceRoot which might find
+	// the shadow build's go.mod instead of the actual project root
+	projectRoot, err := findDingoProjectRoot(filepath.Dir(absPath))
+	if err == nil {
+		// Found dingo.toml - this is definitely a Dingo project
+		buildDir := filepath.Join(projectRoot, outDir)
+
+		// Check if the Go path is under the build directory
+		relFromBuild, err := filepath.Rel(buildDir, absPath)
+		if err == nil && !strings.HasPrefix(relFromBuild, "..") {
+			// Go file is in build directory - convert to dingo path
+			basePath := strings.TrimSuffix(relFromBuild, ".go")
+			dingoPath := filepath.Join(projectRoot, basePath+".dingo")
+			return dingoPath, nil
+		}
+	}
+
+	// Fallback: use standard workspace root detection
 	dir := filepath.Dir(absPath)
 	workspaceRoot, err := detectWorkspaceRoot(dir)
 	if err != nil {
@@ -139,12 +163,6 @@ func GoPathToDingoPath(goPath string, cfg *config.Config) (string, error) {
 				break
 			}
 		}
-	}
-
-	// Determine output directory
-	outDir := DefaultOutputDir
-	if cfg != nil && cfg.Build.OutDir != "" {
-		outDir = cfg.Build.OutDir
 	}
 
 	buildDir := filepath.Join(workspaceRoot, outDir)
@@ -168,6 +186,28 @@ func GoPathToDingoPath(goPath string, cfg *config.Config) (string, error) {
 	dingoPath := filepath.Join(workspaceRoot, basePath+".dingo")
 
 	return dingoPath, nil
+}
+
+// findDingoProjectRoot walks up the directory tree looking specifically for dingo.toml.
+// This is used for shadow builds where the build/ directory has go.mod but we need
+// to find the actual project root with dingo.toml.
+func findDingoProjectRoot(startPath string) (string, error) {
+	current := startPath
+	// Safety limit: max 100 directory levels to prevent infinite loops
+	// in case of symlink cycles or other filesystem anomalies
+	const maxDepth = 100
+	for i := 0; i < maxDepth; i++ {
+		if _, err := os.Stat(filepath.Join(current, "dingo.toml")); err == nil {
+			return current, nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("no dingo.toml found")
+		}
+		current = parent
+	}
+	return "", fmt.Errorf("no dingo.toml found (exceeded max depth of %d directories)", maxDepth)
 }
 
 // GoPathToDmapPath converts a Go path to its corresponding dmap path.

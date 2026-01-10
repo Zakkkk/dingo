@@ -203,77 +203,80 @@ func ExtractEnumRegistry(src []byte) map[string]string {
 	return registry
 }
 
-// TransformEnumSource transforms Dingo source containing enums to Go source.
-// This is the main entry point that replaces the old regex-based transformEnum.
-// If filename is provided, emits //line directives for accurate error reporting.
-func TransformEnumSource(src []byte, filename string) ([]byte, map[string]string) {
+// ExtractFullEnumRegistry extracts the full enum registry from Dingo source without transforming it.
+// This includes both sum type enums and value enums with their metadata.
+// Returns nil if no enums are found.
+func ExtractFullEnumRegistry(src []byte) *EnumRegistry {
 	enumPositions := FindEnumDeclarations(src)
 	if len(enumPositions) == 0 {
-		return src, nil
+		return nil
 	}
 
-	// Registry maps variant names to enum names for match expression support
-	registry := make(map[string]string)
-
-	result := make([]byte, 0, len(src)+500)
-	lastPos := 0
+	registry := NewEnumRegistry()
 
 	for _, enumStart := range enumPositions {
-		// Copy source before this enum
-		result = append(result, src[lastPos:enumStart]...)
+		// Check if this is a value enum
+		if IsValueEnum(src[enumStart:]) {
+			// Look for attribute before the enum
+			declStart := findAttributeStart(src, enumStart)
 
-		// Parse the enum
-		parser := NewEnumParser(src[enumStart:], enumStart)
-		decl, endOffset, err := parser.ParseEnumDecl()
-		if err != nil {
-			// Parsing failed, keep original source
-			result = append(result, src[enumStart:enumStart+4]...)
-			lastPos = enumStart + 4
-			continue
-		}
+			// Parse as value enum with potential attributes
+			parser := NewValueEnumParser(src[declStart:], declStart)
+			decl, _, err := parser.ParseValueEnumWithAttributes()
+			if err != nil {
+				continue
+			}
 
-		// Register variants for match expression lookup
-		// ONLY register the bare variant name, NOT the struct name
-		for _, v := range decl.Variants {
-			registry[v.Name.Name] = decl.Name.Name
-			// DO NOT register struct name (EnumName+VariantName) as it causes
-			// double-prefix bug when transformer matches generated struct literals
-			// registry[decl.Name.Name+v.Name.Name] = decl.Name.Name  // REMOVED
-		}
+			// Check @prefix attribute
+			usePrefix, _ := ValidatePrefixAttribute(decl.Attributes)
 
-		// Calculate line:col from enumStart using token.FileSet
-		line, col := offsetToLineCol(src, enumStart)
+			// Register value enum variants
+			variantNames := make([]string, len(decl.Variants))
+			for i, v := range decl.Variants {
+				variantNames[i] = v.Name.Name
+			}
+			registry.RegisterValueEnum(decl.Name.Name, variantNames, usePrefix)
+		} else {
+			// Sum type enum
+			parser := NewEnumParser(src[enumStart:], enumStart)
+			decl, _, err := parser.ParseEnumDecl()
+			if err != nil {
+				continue
+			}
 
-		// Generate Go code with position info
-		codegen := NewEnumCodeGen()
-		goCode := codegen.Generate(decl, filename, line, col)
-		result = append(result, goCode...)
-
-		// Emit a reset //line directive after the enum block.
-		// This restores correct line numbering for code that follows the enum.
-		// The enum expansion adds many lines, shifting subsequent positions.
-		//
-		// IMPORTANT: //line directives set the position for the NEXT line.
-		// The enum ends at endLine (e.g., line 24). The next line after the enum
-		// is endLine+1 (e.g., line 25). So we emit //line:25:1 to make the
-		// following line in Go map to Dingo line 25.
-		if filename != "" {
-			// Calculate what line the code after the enum should be on
-			endLine, endCol := offsetToLineCol(src, enumStart+endOffset)
-			if endLine > 0 && endCol > 0 {
-				// endLine is the line of closing }, so next line is endLine+1
-				resetDirective := FormatLineDirective(filename, endLine+1, 1)
-				result = append(result, resetDirective...)
+			// Register sum type variants
+			for _, v := range decl.Variants {
+				registry.RegisterSumTypeVariant(v.Name.Name, decl.Name.Name)
 			}
 		}
-
-		lastPos = enumStart + endOffset
 	}
 
-	// Copy remaining source
-	result = append(result, src[lastPos:]...)
+	return registry
+}
 
-	return result, registry
+// TransformEnumSource transforms Dingo source containing enums to Go source.
+// This is the main entry point that handles both sum type enums and value enums.
+// If filename is provided, emits //line directives for accurate error reporting.
+//
+// Returns:
+//   - transformed source code
+//   - legacy registry (map[string]string) for backward compatibility
+//
+// For the new EnumRegistry with value enum support, use TransformEnumSourceWithRegistry.
+func TransformEnumSource(src []byte, filename string) ([]byte, map[string]string) {
+	result, registry := TransformEnumSourceWithRegistry(src, filename)
+	if registry == nil {
+		return result, nil
+	}
+	return result, registry.ToLegacyMap()
+}
+
+// TransformEnumSourceWithRegistry transforms Dingo source containing enums to Go source.
+// Returns the new EnumRegistry which supports both sum types and value enums.
+func TransformEnumSourceWithRegistry(src []byte, filename string) ([]byte, *EnumRegistry) {
+	// Use the unified transform function from value_enum_codegen.go
+	// which handles both value enums and sum types
+	return TransformValueEnumSource(src, filename)
 }
 
 // offsetToLineCol converts a byte offset in source to 1-indexed line:col.

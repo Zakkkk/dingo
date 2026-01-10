@@ -117,6 +117,7 @@ type Config struct {
 	Debug         DebugConfig         `toml:"debug"`
 	Build         BuildConfig         `toml:"build"`
 	TypeInference TypeInferenceConfig `toml:"type_inference"`
+	Watch         WatchConfig         `toml:"watch"`
 }
 
 // FeatureMatrix controls which language features are enabled/disabled.
@@ -283,6 +284,19 @@ type SourceMapConfig struct {
 	Format SourceMapFormat `toml:"format"`
 }
 
+// WatchConfig controls dingo watch behavior
+type WatchConfig struct {
+	// Paths specifies which directories or files to watch
+	// When empty, watches the current directory
+	// Can be package paths (./cmd/api) or file patterns
+	// Example: ["./cmd/api", "./internal/..."]
+	Paths []string `toml:"paths"`
+
+	// Exclude specifies patterns to exclude from watching
+	// Example: ["vendor", "node_modules", "*.gen.go"]
+	Exclude []string `toml:"exclude"`
+}
+
 // NilSafetyMode represents nil safety check modes
 type NilSafetyMode int
 
@@ -331,6 +345,10 @@ func DefaultConfig() *Config {
 			GoplsEnabled: false, // Default to disabled for CI compatibility
 			GoplsTimeout: "5s",  // Default to 5 second timeout
 			GoplsPath:    "",    // Default to using PATH
+		},
+		Watch: WatchConfig{
+			Paths:   []string{}, // Empty means watch specified files or current dir
+			Exclude: []string{"vendor", "node_modules", ".git", "build", "*.dmap"},
 		},
 	}
 }

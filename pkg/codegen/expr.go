@@ -13,6 +13,7 @@ type GenContext struct {
 	StatementStart int                  // Byte offset of containing statement start
 	StatementEnd   int                  // Byte offset of containing statement end
 	EnumRegistry   map[string]string    // Maps variant name to enum type name (e.g., "UserCreated" -> "Event")
+	ValueEnumReg   *ast.EnumRegistry    // Full registry for value enum detection in match expressions
 	TempCounter    *int                 // Shared counter for unique temp var names across expressions
 	TypeChecker    *typechecker.Checker // For go/types queries (e.g., detecting Option/Result types in match)
 }
@@ -41,6 +42,7 @@ func GenerateExprWithContext(expr ast.Expr, ctx *GenContext) ast.CodeGenResult {
 		}
 		if ctx != nil {
 			gen.Context = ctx
+			gen.ValueEnumReg = ctx.ValueEnumReg
 		}
 		return gen.Generate()
 	case *ast.NullCoalesceExpr:

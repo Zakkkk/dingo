@@ -38,10 +38,22 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const goldenFileSupport_1 = require("./goldenFileSupport");
 const lspClient_1 = require("./lspClient");
+const taskProvider_1 = require("./taskProvider");
+const debugProvider_1 = require("./debugProvider");
+const dingoDebugAdapter_1 = require("./dingoDebugAdapter");
 async function activate(context) {
     console.log('Dingo extension activating...');
     // Activate LSP client
     await (0, lspClient_1.activateLSPClient)(context);
+    // Register task provider for build/run tasks
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const taskProvider = new taskProvider_1.DingoTaskProvider(workspaceRoot);
+    context.subscriptions.push(vscode.tasks.registerTaskProvider(taskProvider_1.DingoTaskProvider.DingoType, taskProvider));
+    // Register Dingo debugger (delegates to Go debugger)
+    (0, dingoDebugAdapter_1.registerDingoDebugger)(context);
+    // Register build and debug commands
+    (0, taskProvider_1.registerBuildCommands)(context);
+    (0, debugProvider_1.registerDebugCommands)(context);
     // Command: Compare with source/golden file
     const goldenFileSupport = new goldenFileSupport_1.GoldenFileSupport();
     context.subscriptions.push(vscode.commands.registerCommand('dingo.compareWithSource', () => {

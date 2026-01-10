@@ -161,7 +161,8 @@ func fixColumnMappingGoLines(colMappings []sourcemap.ColumnMapping, lineMappings
 //     d. Splice generated code back into result
 //  4. Return transformed source
 //
-// enumRegistry provides enum name resolution for match expressions.
+// enumRegistry provides enum name resolution for match expressions (legacy format).
+// fullEnumRegistry provides full registry with value enum metadata for match expressions.
 // originalSrc is the original Dingo source (before transforms) for //line directives.
 // filename is used to generate //line directives for accurate error reporting.
 //
@@ -169,7 +170,7 @@ func fixColumnMappingGoLines(colMappings []sourcemap.ColumnMapping, lineMappings
 // Line mappings enable the semantic builder to map Go positions back to Dingo
 // for constructs that expand to multiple lines (safe nav, match, null coalesce).
 // No machine comments are added to the generated code - mappings are pure metadata.
-func transformASTExpressions(src []byte, enumRegistry map[string]string, originalSrc []byte, filename string) ([]byte, []sourcemap.LineMapping, error) {
+func transformASTExpressions(src []byte, enumRegistry map[string]string, fullEnumRegistry *ast.EnumRegistry, originalSrc []byte, filename string) ([]byte, []sourcemap.LineMapping, error) {
 	// Find all Dingo expressions in the (potentially transformed) source
 	locations, err := ast.FindDingoExpressions(src)
 	if err != nil {
@@ -336,8 +337,9 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 				VarName:        loc.VarName,
 				StatementStart: loc.StatementStart,
 				StatementEnd:   loc.StatementEnd,
-				EnumRegistry:   enumRegistry, // Pass enum registry for match pattern resolution
-				TempCounter:    &tempCounter, // Share counter for unique temp var names
+				EnumRegistry:   enumRegistry,     // Pass enum registry for match pattern resolution
+				ValueEnumReg:   fullEnumRegistry, // Pass full registry for value enum detection in match
+				TempCounter:    &tempCounter,     // Share counter for unique temp var names
 			}
 
 			// For assignments and arguments, try to infer the type
@@ -368,6 +370,7 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, origina
 			if loc.Kind == ast.ExprMatch {
 				ctx := &codegen.GenContext{
 					EnumRegistry: enumRegistry,
+					ValueEnumReg: fullEnumRegistry,
 					TempCounter:  &tempCounter,
 				}
 				genResult = codegen.GenerateExprWithContext(expr, ctx)

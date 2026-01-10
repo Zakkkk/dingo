@@ -7,7 +7,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
+	"github.com/MadAppGang/dingo/pkg/transpiler"
 )
 
 // SourceMapGetter is an interface for retrieving source maps
@@ -24,27 +26,60 @@ type SourceMapCache struct {
 	maps    map[string]*dmap.Reader // dingoPath -> dmap.Reader
 	logger  Logger
 	maxSize int
+	config  *config.Config // Dingo config for path calculations
 }
 
 // NewSourceMapCache creates a new source map cache
 func NewSourceMapCache(logger Logger) (*SourceMapCache, error) {
+	return NewSourceMapCacheWithConfig(logger, nil)
+}
+
+// NewSourceMapCacheWithConfig creates a source map cache with explicit config
+func NewSourceMapCacheWithConfig(logger Logger, cfg *config.Config) (*SourceMapCache, error) {
+	if cfg == nil {
+		// Load config or use defaults
+		cfg, _ = config.Load(nil)
+		if cfg == nil {
+			cfg = config.DefaultConfig()
+		}
+	}
 	return &SourceMapCache{
 		maps:    make(map[string]*dmap.Reader),
 		logger:  logger,
 		maxSize: 100, // LRU limit (future: implement eviction)
+		config:  cfg,
 	}, nil
+}
+
+// SetConfig updates the config used for path calculations
+func (c *SourceMapCache) SetConfig(cfg *config.Config) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.config = cfg
 }
 
 // Get retrieves a source map from cache or loads it from disk.
 // Path translation: goFilePath (.go) → dingoPath (.dingo) → .dmap/<relPath>.dmap
+// Handles shadow builds: build/foo.go → foo.dingo (not build/foo.dingo)
 func (c *SourceMapCache) Get(goFilePath string) (*dmap.Reader, error) {
-	// Translate: foo.go -> foo.dingo
-	dingoPath := strings.TrimSuffix(goFilePath, ".go") + ".dingo"
+	// CRITICAL: Copy config under read lock to avoid data race with SetConfig
+	c.mu.RLock()
+	cfg := c.config
+	c.mu.RUnlock()
+
+	// Use config-aware path translation to handle shadow builds
+	// This properly converts build/foo.go -> foo.dingo (strips build/ prefix)
+	dingoPath, err := transpiler.GoPathToDingoPath(goFilePath, cfg)
+	if err != nil {
+		// Fallback to simple suffix replacement for non-shadow builds
+		dingoPath = strings.TrimSuffix(goFilePath, ".go") + ".dingo"
+		c.logger.Debugf("[SourceMapCache] GoPathToDingoPath failed, using fallback: %v", err)
+	}
 
 	c.logger.Debugf("[SourceMapCache] Get called: goFilePath=%s -> dingoPath=%s", goFilePath, dingoPath)
 
 	// Calculate .dmap path in project root .dmap/ folder
-	dmapPath, err := calculateDmapPath(dingoPath)
+	dmapPath, err := calculateDmapPathWithConfig(dingoPath, cfg)
 	if err != nil {
 		c.logger.Debugf("[SourceMapCache] Failed to calculate dmap path: %v", err)
 		return nil, fmt.Errorf("failed to calculate dmap path: %w", err)
@@ -124,6 +159,12 @@ func (c *SourceMapCache) Size() int {
 // calculateDmapPath calculates the .dmap file path in the project root .dmap/ folder.
 // Example: /project/examples/03_option/user.dingo -> /project/.dmap/examples/03_option/user.dmap
 func calculateDmapPath(dingoPath string) (string, error) {
+	return calculateDmapPathWithConfig(dingoPath, nil)
+}
+
+// calculateDmapPathWithConfig calculates the .dmap file path using config settings.
+// The dmap directory is always ".dmap" at the workspace root.
+func calculateDmapPathWithConfig(dingoPath string, cfg *config.Config) (string, error) {
 	// Convert to absolute path
 	absPath, err := filepath.Abs(dingoPath)
 	if err != nil {
@@ -148,6 +189,7 @@ func calculateDmapPath(dingoPath string) (string, error) {
 	relDmap := strings.TrimSuffix(relPath, ".dingo") + ".dmap"
 
 	// Build final path: workspaceRoot/.dmap/relPath
+	// Note: dmap directory is always ".dmap" (not configurable)
 	return filepath.Join(workspaceRoot, ".dmap", relDmap), nil
 }
 

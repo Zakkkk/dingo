@@ -38,8 +38,9 @@ func (s *Server) handleCodeAction(ctx context.Context, reply jsonrpc2.Replier, r
 	dingoPath := params.TextDocument.URI.Filename()
 	src, err := os.ReadFile(dingoPath)
 	if err != nil {
-		s.config.Logger.Warnf("[CodeAction] Failed to read file: %v", err)
-		return reply(ctx, nil, err)
+		// File might not exist yet or be inaccessible - return empty actions
+		s.config.Logger.Debugf("[CodeAction] File not readable, returning empty actions: %v", err)
+		return reply(ctx, []protocol.CodeAction{}, nil)
 	}
 
 	// Create lint runner with refactoring analyzer
@@ -48,8 +49,10 @@ func (s *Server) handleCodeAction(ctx context.Context, reply jsonrpc2.Replier, r
 	// Run refactoring analyzer
 	diagnostics, err := runner.Run(dingoPath, src)
 	if err != nil {
-		s.config.Logger.Warnf("[CodeAction] Refactoring analysis failed: %v", err)
-		return reply(ctx, nil, err)
+		// Parse errors are expected when user is actively editing with syntax errors.
+		// Return empty code actions instead of failing - this is graceful degradation.
+		s.config.Logger.Debugf("[CodeAction] Refactoring analysis skipped (parse error): %v", err)
+		return reply(ctx, []protocol.CodeAction{}, nil)
 	}
 
 	s.config.Logger.Debugf("[CodeAction] Found %d diagnostics from refactoring analyzer", len(diagnostics))

@@ -2,4 +2,4 @@
 package version
 
 // Version is the current version of Dingo
-const Version = "0.12.1"
+const Version = "0.13.0"

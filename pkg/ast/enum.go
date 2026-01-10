@@ -176,3 +176,104 @@ func (e *EnumDecl) String() string {
 	s += "}"
 	return s
 }
+
+// =============================================================================
+// Value Enums (typed constants)
+// =============================================================================
+
+// ValueEnumDecl represents a value enum (typed constants)
+// Examples:
+//   - @prefix(false) enum contextKey: string { UserID = "user_id" }
+//   - enum Status: int { Pending, Active, Closed }
+type ValueEnumDecl struct {
+	Enum       token.Pos            // Position of 'enum' keyword
+	Name       *Ident               // Enum name
+	Colon      token.Pos            // Position of ':' (distinguisher from sum types)
+	BaseType   *TypeExpr            // Base type (string, int, byte, etc.)
+	LBrace     token.Pos            // Position of '{'
+	Variants   []*ValueEnumVariant  // Enum values
+	RBrace     token.Pos            // Position of '}'
+	Attributes []*Attribute         // @prefix(false), etc.
+}
+
+// ValueEnumVariant represents one value in a value enum
+// Examples:
+//   - UserID = "user_id" (explicit value)
+//   - Pending (auto-increment with iota)
+type ValueEnumVariant struct {
+	Name   *Ident    // Variant name
+	Assign token.Pos // Position of '=' (zero if auto-increment)
+	Value  Expr      // Value expression (nil for iota)
+	Comma  token.Pos // Position of trailing comma (if present)
+}
+
+// Attribute represents a declaration attribute
+// Example: @prefix(false)
+type Attribute struct {
+	At     token.Pos // Position of '@'
+	Name   *Ident    // Attribute name
+	LParen token.Pos // Position of '(' (zero if no arguments)
+	Args   []Expr    // Attribute arguments
+	RParen token.Pos // Position of ')' (zero if no arguments)
+}
+
+// Implement Decl interface for ValueEnumDecl
+func (v *ValueEnumDecl) Node()          {}
+func (v *ValueEnumDecl) declNode()      {}
+func (v *ValueEnumDecl) Pos() token.Pos { return v.Enum }
+func (v *ValueEnumDecl) End() token.Pos {
+	if v.RBrace.IsValid() {
+		return v.RBrace + 1
+	}
+	return v.Enum
+}
+
+func (v *ValueEnumDecl) String() string {
+	s := "enum " + v.Name.Name + ": " + v.BaseType.Text + " {"
+	if len(v.Variants) > 0 {
+		variants := make([]string, len(v.Variants))
+		for i, variant := range v.Variants {
+			variants[i] = variant.String()
+		}
+		s += " " + strings.Join(variants, ", ") + " "
+	}
+	s += "}"
+	return s
+}
+
+// Implement DingoNode interface for ValueEnumDecl
+func (v *ValueEnumDecl) dingoNode() {}
+
+func (ve *ValueEnumVariant) Pos() token.Pos { return ve.Name.Pos() }
+func (ve *ValueEnumVariant) End() token.Pos {
+	if ve.Value != nil {
+		return ve.Value.End()
+	}
+	return ve.Name.End()
+}
+func (ve *ValueEnumVariant) String() string {
+	s := ve.Name.Name
+	if ve.Value != nil {
+		s += " = " + ve.Value.String()
+	}
+	return s
+}
+
+func (a *Attribute) Pos() token.Pos { return a.At }
+func (a *Attribute) End() token.Pos {
+	if a.RParen.IsValid() {
+		return a.RParen + 1
+	}
+	return a.Name.End()
+}
+func (a *Attribute) String() string {
+	s := "@" + a.Name.Name
+	if len(a.Args) > 0 {
+		args := make([]string, len(a.Args))
+		for i, arg := range a.Args {
+			args[i] = arg.String()
+		}
+		s += "(" + strings.Join(args, ", ") + ")"
+	}
+	return s
+}

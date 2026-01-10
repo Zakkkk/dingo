@@ -380,3 +380,358 @@ func TestMatchCodeGen_NoConstructorPatterns(t *testing.T) {
 		t.Errorf("Expected switch using cached val, got: %s", code)
 	}
 }
+
+// =============================================================================
+// Value Enum Match Tests (Phase 3)
+// =============================================================================
+
+// TestMatchCodeGen_ValueEnumDetection tests detection of value enum patterns.
+func TestMatchCodeGen_ValueEnumDetection(t *testing.T) {
+	// Create a value enum registry
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Status", []string{"Pending", "Active", "Closed"}, true)
+
+	match := &ast.MatchExpr{
+		Match: 1,
+		Scrutinee: &ast.RawExpr{
+			Text: "status",
+		},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Pending"},
+				Body:    &ast.RawExpr{Text: `"waiting"`},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Active"},
+				Body:    &ast.RawExpr{Text: `"running"`},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Closed"},
+				Body:    &ast.RawExpr{Text: `"done"`},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	// Test detection
+	info := gen.detectValueEnum()
+	if info == nil {
+		t.Fatal("Expected value enum to be detected")
+	}
+
+	if info.EnumName != "Status" {
+		t.Errorf("EnumName = %q, want %q", info.EnumName, "Status")
+	}
+
+	if !info.UsePrefix {
+		t.Error("UsePrefix = false, want true (default)")
+	}
+
+	if len(info.Variants) != 3 {
+		t.Errorf("Variants count = %d, want 3", len(info.Variants))
+	}
+}
+
+// TestMatchCodeGen_ValueEnumCodeGen tests code generation for value enum match.
+func TestMatchCodeGen_ValueEnumCodeGen(t *testing.T) {
+	// Create a value enum registry
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Status", []string{"Pending", "Active", "Closed"}, true)
+
+	match := &ast.MatchExpr{
+		Match: 1,
+		Scrutinee: &ast.RawExpr{
+			Text: "status",
+		},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Pending"},
+				Body:    &ast.RawExpr{Text: `"waiting"`},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Active"},
+				Body:    &ast.RawExpr{Text: `"running"`},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Closed"},
+				Body:    &ast.RawExpr{Text: `"done"`},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	result := gen.Generate()
+	code := string(result.Output)
+
+	// Should use value switch (NOT type switch)
+	if strings.Contains(code, ".(type)") {
+		t.Errorf("Value enum should use value switch, not type switch. Got: %s", code)
+	}
+
+	// Should have prefixed const names
+	if !strings.Contains(code, "case StatusPending:") {
+		t.Errorf("Expected 'case StatusPending:', got: %s", code)
+	}
+	if !strings.Contains(code, "case StatusActive:") {
+		t.Errorf("Expected 'case StatusActive:', got: %s", code)
+	}
+	if !strings.Contains(code, "case StatusClosed:") {
+		t.Errorf("Expected 'case StatusClosed:', got: %s", code)
+	}
+
+	// Should have body expressions
+	if !strings.Contains(code, `"waiting"`) {
+		t.Errorf("Expected body \"waiting\", got: %s", code)
+	}
+}
+
+// TestMatchCodeGen_ValueEnumNoPrefixCodeGen tests code generation with @prefix(false).
+func TestMatchCodeGen_ValueEnumNoPrefixCodeGen(t *testing.T) {
+	// Create a value enum registry with no prefix
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Flags", []string{"Read", "Write"}, false) // UsePrefix = false
+
+	match := &ast.MatchExpr{
+		Match: 1,
+		Scrutinee: &ast.RawExpr{
+			Text: "flag",
+		},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Read"},
+				Body:    &ast.RawExpr{Text: "1"},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Write"},
+				Body:    &ast.RawExpr{Text: "2"},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	result := gen.Generate()
+	code := string(result.Output)
+
+	// Should have unprefixed const names (since @prefix(false))
+	if !strings.Contains(code, "case Read:") {
+		t.Errorf("Expected unprefixed 'case Read:', got: %s", code)
+	}
+	if !strings.Contains(code, "case Write:") {
+		t.Errorf("Expected unprefixed 'case Write:', got: %s", code)
+	}
+
+	// Should NOT have prefixed names
+	if strings.Contains(code, "FlagsRead") {
+		t.Errorf("Should not have prefixed 'FlagsRead', got: %s", code)
+	}
+}
+
+// TestMatchCodeGen_ValueEnumExhaustiveness tests exhaustiveness checking.
+func TestMatchCodeGen_ValueEnumExhaustiveness(t *testing.T) {
+	tests := []struct {
+		name        string
+		arms        []*ast.MatchArm
+		expectError bool
+	}{
+		{
+			name: "exhaustive - all variants",
+			arms: []*ast.MatchArm{
+				{Pattern: &ast.ConstructorPattern{Name: "Pending"}, Body: &ast.RawExpr{Text: "1"}},
+				{Pattern: &ast.ConstructorPattern{Name: "Active"}, Body: &ast.RawExpr{Text: "2"}},
+				{Pattern: &ast.ConstructorPattern{Name: "Closed"}, Body: &ast.RawExpr{Text: "3"}},
+			},
+			expectError: false,
+		},
+		{
+			name: "exhaustive - with wildcard",
+			arms: []*ast.MatchArm{
+				{Pattern: &ast.ConstructorPattern{Name: "Pending"}, Body: &ast.RawExpr{Text: "1"}},
+				{Pattern: &ast.WildcardPattern{}, Body: &ast.RawExpr{Text: "0"}},
+			},
+			expectError: false,
+		},
+		{
+			name: "non-exhaustive - missing variant",
+			arms: []*ast.MatchArm{
+				{Pattern: &ast.ConstructorPattern{Name: "Pending"}, Body: &ast.RawExpr{Text: "1"}},
+				{Pattern: &ast.ConstructorPattern{Name: "Active"}, Body: &ast.RawExpr{Text: "2"}},
+				// Missing: Closed
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create registry
+			registry := ast.NewEnumRegistry()
+			registry.RegisterValueEnum("Status", []string{"Pending", "Active", "Closed"}, true)
+
+			match := &ast.MatchExpr{
+				Match:     1,
+				Scrutinee: &ast.RawExpr{Text: "status"},
+				Arms:      tt.arms,
+				IsExpr:    true, // Expression match requires exhaustiveness
+			}
+
+			gen := &MatchCodeGen{
+				BaseGenerator: NewBaseGenerator(),
+				Match:         match,
+				ValueEnumReg:  registry,
+			}
+
+			result := gen.Generate()
+
+			if tt.expectError {
+				if result.Error == nil {
+					t.Error("Expected exhaustiveness error, got none")
+				} else if !strings.Contains(result.Error.Message, "non-exhaustive") {
+					t.Errorf("Expected 'non-exhaustive' in error, got: %s", result.Error.Message)
+				}
+			} else {
+				if result.Error != nil {
+					t.Errorf("Expected no error, got: %s", result.Error.Message)
+				}
+			}
+		})
+	}
+}
+
+// TestMatchCodeGen_ValueEnumWithGuard tests value enum match with guard conditions.
+func TestMatchCodeGen_ValueEnumWithGuard(t *testing.T) {
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Status", []string{"Pending", "Active", "Closed"}, true)
+
+	match := &ast.MatchExpr{
+		Match: 1,
+		Scrutinee: &ast.RawExpr{
+			Text: "status",
+		},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Pending"},
+				Guard:   &ast.RawExpr{Text: "urgent"},
+				Body:    &ast.RawExpr{Text: `"urgent pending"`},
+			},
+			{
+				Pattern: &ast.WildcardPattern{},
+				Body:    &ast.RawExpr{Text: `"other"`},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	result := gen.Generate()
+	code := string(result.Output)
+
+	// Should have guard condition
+	if !strings.Contains(code, "if urgent") {
+		t.Errorf("Expected guard condition 'if urgent', got: %s", code)
+	}
+
+	// Should have case for Pending
+	if !strings.Contains(code, "case StatusPending:") {
+		t.Errorf("Expected 'case StatusPending:', got: %s", code)
+	}
+}
+
+// TestMatchCodeGen_NotValueEnum tests that sum type enums are NOT detected as value enums.
+func TestMatchCodeGen_NotValueEnum(t *testing.T) {
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Status", []string{"Pending", "Active"}, true)
+
+	// Match with constructor pattern that has params = sum type, not value enum
+	match := &ast.MatchExpr{
+		Match:     1,
+		Scrutinee: &ast.RawExpr{Text: "result"},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{
+					Name:   "Ok",
+					Params: []ast.Pattern{&ast.VariablePattern{Name: "x"}}, // Has params!
+				},
+				Body: &ast.RawExpr{Text: "x"},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{
+					Name:   "Err",
+					Params: []ast.Pattern{&ast.VariablePattern{Name: "e"}},
+				},
+				Body: &ast.RawExpr{Text: "0"},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	// Should NOT detect as value enum (has params)
+	info := gen.detectValueEnum()
+	if info != nil {
+		t.Error("Should NOT detect sum type (with params) as value enum")
+	}
+}
+
+// TestMatchCodeGen_MixedPatterns tests that mixed patterns don't match value enum.
+func TestMatchCodeGen_MixedPatterns(t *testing.T) {
+	registry := ast.NewEnumRegistry()
+	registry.RegisterValueEnum("Status", []string{"Pending", "Active"}, true)
+	registry.RegisterValueEnum("Flags", []string{"Read", "Write"}, false)
+
+	// Match mixing variants from different enums
+	match := &ast.MatchExpr{
+		Match:     1,
+		Scrutinee: &ast.RawExpr{Text: "val"},
+		Arms: []*ast.MatchArm{
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Pending"}, // From Status
+				Body:    &ast.RawExpr{Text: "1"},
+			},
+			{
+				Pattern: &ast.ConstructorPattern{Name: "Read"}, // From Flags!
+				Body:    &ast.RawExpr{Text: "2"},
+			},
+		},
+		IsExpr: false,
+	}
+
+	gen := &MatchCodeGen{
+		BaseGenerator: NewBaseGenerator(),
+		Match:         match,
+		ValueEnumReg:  registry,
+	}
+
+	// Should NOT detect as value enum (mixed enums)
+	info := gen.detectValueEnum()
+	if info != nil {
+		t.Error("Should NOT detect mixed enum patterns as value enum")
+	}
+}

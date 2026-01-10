@@ -132,6 +132,10 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// This is used by match expressions to prefix variant names correctly
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
 
+	// Extract full enum registry (includes value enum metadata for match expressions)
+	// Value enums need special handling: they use simple switch instead of type switch
+	fullEnumRegistry := dingoast.ExtractFullEnumRegistry(source)
+
 	// Step 1: Transform Dingo syntax to Go using token-based transformations
 	transformedSource, err := dingoast.TransformSource(source, filename)
 	if err != nil {
@@ -198,7 +202,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Note: //line directives are disabled - position mapping is handled via .dmap files
 	// Returns line mappings for multi-line transforms (safe nav, match, null coalesce)
 	var astLineMappings []sourcemap.LineMapping
-	transformedSource, astLineMappings, err = transformASTExpressions(transformedSource, enumRegistry, source, filename)
+	transformedSource, astLineMappings, err = transformASTExpressions(transformedSource, enumRegistry, fullEnumRegistry, source, filename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}

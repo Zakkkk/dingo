@@ -103,8 +103,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		return nil, fmt.Errorf("failed to start gopls: %w", err)
 	}
 
-	// Initialize source map cache
-	mapCache, err := NewSourceMapCache(cfg.Logger)
+	// Initialize source map cache with config for shadow build support
+	mapCache, err := NewSourceMapCacheWithConfig(cfg.Logger, dingoConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create source map cache: %w", err)
 	}
@@ -195,6 +195,8 @@ func (s *Server) detectShadowBuild(workspacePath string) string {
 
 	// Store the config for later use
 	s.dingoConfig = cfg
+	// Update cache config for shadow build path calculations
+	s.mapCache.SetConfig(cfg)
 
 	// Check if shadow build is enabled
 	if !cfg.Build.Shadow {

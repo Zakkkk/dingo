@@ -428,6 +428,7 @@ func PrintDingoHelp(version string) {
 	commands := []struct{ name, desc string }{
 		{"build", "Compile Dingo sources to binary (like go build)"},
 		{"run", "Compile and run Dingo program (like go run)"},
+		{"watch", "Watch for changes and auto-rebuild/restart"},
 		{"go", "Transpile Dingo to Go only (no compilation)"},
 		{"lint", "Run Dingo linter on source files"},
 		{"fmt", "Format Dingo source files"},

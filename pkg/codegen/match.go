@@ -3,6 +3,7 @@ package codegen
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
@@ -35,8 +36,9 @@ import (
 type MatchCodeGen struct {
 	*BaseGenerator
 	Match            *ast.MatchExpr
-	Context          *GenContext // Optional context for human-like code generation
-	scrutineeTempVar string      // Temp var name for scrutinee in type switch (e.g., "v")
+	Context          *GenContext         // Optional context for human-like code generation
+	scrutineeTempVar string              // Temp var name for scrutinee in type switch (e.g., "v")
+	ValueEnumReg     *ast.EnumRegistry   // Registry for value enum detection (from Phase 1/2)
 }
 
 // SharedTempVar generates unique temp var names using shared counter if available.
@@ -71,7 +73,19 @@ func (g *MatchCodeGen) Generate() ast.CodeGenResult {
 		return g.generateOptionResultMatch(info)
 	}
 
-	// Check exhaustiveness for expression matches
+	// Check for value enum patterns SECOND
+	// Value enums are typed constants, so they use simple switch (not type switch)
+	if info := g.detectValueEnum(); info != nil {
+		// Check exhaustiveness for expression matches
+		if g.Match.IsExpr {
+			if errResult := g.checkValueEnumExhaustiveness(info); errResult.Error != nil {
+				return errResult
+			}
+		}
+		return g.generateValueEnumMatch(info)
+	}
+
+	// Check exhaustiveness for expression matches (sum types)
 	if g.Match.IsExpr {
 		if errResult := g.checkExhaustiveness(); len(errResult.Output) > 0 {
 			// Error result has non-empty Output containing error code
@@ -1502,4 +1516,280 @@ func (g *MatchCodeGen) wrapInIIFE(inner ast.CodeGenResult) ast.CodeGenResult {
 	return ast.CodeGenResult{
 		Output: buf.Bytes(),
 	}
+}
+
+// =============================================================================
+// Value Enum Match Support (Phase 3)
+// =============================================================================
+
+// ValueEnumMatchInfo contains information about a value enum match.
+// Used by detectValueEnum to return enum metadata for code generation.
+type ValueEnumMatchInfo struct {
+	EnumName  string   // "Status"
+	Variants  []string // ["Pending", "Active", "Closed"]
+	UsePrefix bool     // true -> StatusPending, false -> Pending
+}
+
+// detectValueEnum checks if all patterns in the match are value enum variants.
+// Returns info if all patterns belong to a single value enum, nil otherwise.
+//
+// Detection strategy:
+// 1. All patterns must be ConstructorPatterns with no params (value enums have no fields)
+// 2. All pattern names must be found in ValueEnumReg
+// 3. All patterns must belong to the same enum
+func (g *MatchCodeGen) detectValueEnum() *ValueEnumMatchInfo {
+	if g.Match == nil || len(g.Match.Arms) == 0 {
+		return nil
+	}
+
+	// Need registry to detect value enums
+	if g.ValueEnumReg == nil {
+		return nil
+	}
+
+	var enumInfo *ast.ValueEnumInfo
+	var foundPatterns []string
+
+	for _, arm := range g.Match.Arms {
+		// Wildcards and variables are allowed (they become default case)
+		if _, ok := arm.Pattern.(*ast.WildcardPattern); ok {
+			continue
+		}
+		if _, ok := arm.Pattern.(*ast.VariablePattern); ok {
+			continue
+		}
+
+		// For value enums, patterns must be simple ConstructorPatterns with NO params
+		cp, ok := arm.Pattern.(*ast.ConstructorPattern)
+		if !ok {
+			return nil // Not a constructor pattern - not a value enum match
+		}
+
+		// Value enums don't have fields, so params must be empty
+		if len(cp.Params) > 0 {
+			return nil // Has params - this is a sum type match
+		}
+
+		// Look up in value enum registry
+		info := g.ValueEnumReg.LookupVariant(cp.Name)
+		if info == nil {
+			return nil // Not a value enum variant
+		}
+
+		// All patterns must be from the same enum
+		if enumInfo == nil {
+			enumInfo = info
+		} else if enumInfo.EnumName != info.EnumName {
+			return nil // Mixed enums - not supported
+		}
+
+		foundPatterns = append(foundPatterns, cp.Name)
+	}
+
+	if enumInfo == nil {
+		return nil // No enum patterns found
+	}
+
+	return &ValueEnumMatchInfo{
+		EnumName:  enumInfo.EnumName,
+		Variants:  enumInfo.Variants,
+		UsePrefix: enumInfo.UsePrefix,
+	}
+}
+
+// generateValueEnumMatch generates a simple switch statement for value enum matching.
+// Value enums are typed constants, so we use value switch instead of type switch.
+//
+// Example output for: match status { Pending => "waiting", Active => "running" }
+//
+//	switch status {
+//	case StatusPending:
+//	    return "waiting"
+//	case StatusActive:
+//	    return "running"
+//	}
+func (g *MatchCodeGen) generateValueEnumMatch(info *ValueEnumMatchInfo) ast.CodeGenResult {
+	// Generate scrutinee
+	scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+	scrutineeCode := string(scrutineeResult.Output)
+
+	// Store scrutinee in temp var to avoid double evaluation
+	g.scrutineeTempVar = g.SharedTempVar("val")
+	g.Write(fmt.Sprintf("%s := %s\n", g.scrutineeTempVar, scrutineeCode))
+
+	// Generate value switch (NOT type switch)
+	g.Write("switch ")
+	g.Write(g.scrutineeTempVar)
+	g.Write(" {\n")
+
+	// Generate case for each arm
+	for _, arm := range g.Match.Arms {
+		g.generateValueEnumArm(arm, info)
+	}
+
+	g.WriteByte('}')
+
+	// For expression matches in return context, add unreachable panic
+	if g.Match.IsExpr && g.Context != nil && g.Context.Context == ast.ContextReturn {
+		g.Write("\npanic(\"unreachable: exhaustive match\")")
+	}
+
+	// Build result
+	result := g.Result()
+	if g.Match.IsExpr && g.Context != nil && g.Context.Context == ast.ContextReturn {
+		// Return context: use StatementOutput
+		result.StatementOutput = result.Output
+		result.Output = nil
+	}
+
+	return result
+}
+
+// generateValueEnumArm generates a single case clause for value enum match arm.
+func (g *MatchCodeGen) generateValueEnumArm(arm *ast.MatchArm, info *ValueEnumMatchInfo) {
+	switch p := arm.Pattern.(type) {
+	case *ast.ConstructorPattern:
+		// Value enum variant - generate: case ConstName:
+		constName := g.valueEnumConstName(p.Name, info)
+		g.Write("case ")
+		g.Write(constName)
+		g.Write(":\n")
+
+	case *ast.WildcardPattern:
+		// Wildcard - generate: default:
+		g.Write("default:\n")
+
+	case *ast.VariablePattern:
+		// Variable pattern - generate: default: with binding
+		g.Write("default:\n")
+		// Generate binding to temp var
+		g.Write("\t")
+		g.Write(p.Name)
+		g.Write(" := ")
+		g.Write(g.scrutineeTempVar)
+		if g.scrutineeTempVar == "" {
+			// Fallback - shouldn't happen normally
+			scrutineeResult := GenerateExpr(g.Match.Scrutinee)
+			g.Buf.Write(scrutineeResult.Output)
+		}
+		g.Write("\n")
+	}
+
+	// Generate guard if present
+	if arm.Guard != nil {
+		guardResult := GenerateExpr(arm.Guard)
+		g.Write("\tif ")
+		g.Buf.Write(guardResult.Output)
+		g.Write(" {\n")
+		g.generateValueEnumBody(arm)
+		g.Write("\t}\n")
+	} else {
+		g.generateValueEnumBody(arm)
+	}
+}
+
+// generateValueEnumBody generates the body of a value enum match arm.
+func (g *MatchCodeGen) generateValueEnumBody(arm *ast.MatchArm) {
+	bodyResult := GenerateExpr(arm.Body)
+	_, isReturnExpr := arm.Body.(*ast.ReturnExpr)
+
+	if g.Match.IsExpr && !isReturnExpr {
+		g.Write("\treturn ")
+		g.Buf.Write(bodyResult.Output)
+		g.WriteByte('\n')
+	} else {
+		g.WriteByte('\t')
+		g.Buf.Write(bodyResult.Output)
+		g.WriteByte('\n')
+	}
+}
+
+// valueEnumConstName returns the Go constant name for a value enum variant.
+// Respects the UsePrefix setting from the enum declaration.
+//
+// Examples:
+//   - With prefix (default): Pending -> StatusPending
+//   - Without prefix (@prefix(false)): Pending -> Pending
+func (g *MatchCodeGen) valueEnumConstName(variantName string, info *ValueEnumMatchInfo) string {
+	if info.UsePrefix {
+		return info.EnumName + variantName
+	}
+	return variantName
+}
+
+// checkValueEnumExhaustiveness verifies all enum variants are covered.
+// Returns an error result if non-exhaustive.
+//
+// For value enums:
+//   - Get all variants from ValueEnumMatchInfo
+//   - Compare with patterns in match arms
+//   - If wildcard (_) present, exhaustive
+//   - If missing variants without wildcard, error
+func (g *MatchCodeGen) checkValueEnumExhaustiveness(info *ValueEnumMatchInfo) ast.CodeGenResult {
+	// Get all expected variants
+	allVariants := make(map[string]bool)
+	for _, v := range info.Variants {
+		allVariants[v] = false // false = not covered
+	}
+
+	hasWildcard := false
+
+	// Mark covered variants
+	for _, arm := range g.Match.Arms {
+		switch p := arm.Pattern.(type) {
+		case *ast.ConstructorPattern:
+			// Mark as covered (both bare and prefixed names)
+			// Pattern must match either:
+			// 1. Bare variant name exactly (e.g., "Pending" matches "Pending")
+			// 2. Prefixed variant name exactly (e.g., "StatusPending" matches "Pending" when enum is "Status")
+			if _, exists := allVariants[p.Name]; exists {
+				allVariants[p.Name] = true
+			}
+			// Check if pattern was written with exact prefix (enumName + variantName)
+			// Use exact match to avoid false positives like StatusStatusActive matching StatusActive
+			for variantName := range allVariants {
+				if p.Name == info.EnumName+variantName {
+					allVariants[variantName] = true
+					break
+				}
+			}
+
+		case *ast.WildcardPattern, *ast.VariablePattern:
+			hasWildcard = true
+		}
+	}
+
+	// If wildcard present, all cases are covered
+	if hasWildcard {
+		return ast.CodeGenResult{}
+	}
+
+	// Check for missing variants
+	var missing []string
+	for variant, covered := range allVariants {
+		if !covered {
+			missing = append(missing, variant)
+		}
+	}
+	// Sort for deterministic error messages (map iteration is random)
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		msg := fmt.Sprintf(
+			"non-exhaustive match on %s: missing variants: %s",
+			info.EnumName,
+			formatVariantList(missing),
+		)
+		hint := "add missing variants or use a wildcard pattern (_)"
+
+		return ast.CodeGenResult{
+			Error: &ast.CodeGenError{
+				Position: int(g.Match.Match),
+				Message:  msg,
+				Hint:     hint,
+			},
+		}
+	}
+
+	return ast.CodeGenResult{}
 }

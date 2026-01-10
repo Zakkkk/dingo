@@ -11,9 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MadAppGang/dingo/pkg/build"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
+	"github.com/MadAppGang/dingo/pkg/ui"
+	"github.com/MadAppGang/dingo/pkg/ui/mascot"
 	"github.com/MadAppGang/dingo/pkg/version"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fsnotify/fsnotify"
@@ -147,6 +150,130 @@ func (pm *ProcessManager) Stop() {
 	}
 }
 
+// DependencyTracker manages file dependencies for watch mode
+type DependencyTracker struct {
+	workspaceRoot string
+	mainFiles     []string // User-specified .dingo files
+
+	// Computed dependencies
+	allDingoFiles map[string]bool // All .dingo files to watch
+	allGoFiles    map[string]bool // All .go files to watch
+
+	mu sync.RWMutex
+}
+
+// NewDependencyTracker creates a dependency tracker
+func NewDependencyTracker(workspaceRoot string, mainFiles []string) *DependencyTracker {
+	return &DependencyTracker{
+		workspaceRoot: workspaceRoot,
+		mainFiles:     mainFiles,
+		allDingoFiles: make(map[string]bool),
+		allGoFiles:    make(map[string]bool),
+	}
+}
+
+// Discover scans import statements and builds dependency set
+func (dt *DependencyTracker) Discover() error {
+	dt.mu.Lock()
+	defer dt.mu.Unlock()
+
+	// Reset maps
+	dt.allDingoFiles = make(map[string]bool)
+	dt.allGoFiles = make(map[string]bool)
+
+	// Add main files to watch set
+	for _, mainFile := range dt.mainFiles {
+		absPath, err := filepath.Abs(mainFile)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for %s: %w", mainFile, err)
+		}
+		dt.allDingoFiles[absPath] = true
+	}
+
+	// Build packages list for dependency graph
+	packages := make([]build.Package, 0)
+	dirMap := make(map[string][]string) // Dir -> dingo files
+
+	// Group files by directory
+	for _, mainFile := range dt.mainFiles {
+		absPath, _ := filepath.Abs(mainFile)
+		dir := filepath.Dir(absPath)
+		dirMap[dir] = append(dirMap[dir], filepath.Base(absPath))
+	}
+
+	// Create packages
+	for dir, files := range dirMap {
+		relDir, err := filepath.Rel(dt.workspaceRoot, dir)
+		if err != nil {
+			relDir = dir
+		}
+		packages = append(packages, build.Package{
+			Path:       relDir,
+			DingoFiles: files,
+		})
+	}
+
+	// Build dependency graph (only if workspace root has go.mod)
+	if _, err := os.Stat(filepath.Join(dt.workspaceRoot, "go.mod")); err == nil {
+		// Dependency graph analysis would go here
+		// For now, we watch the directories containing the main files
+		// and their parent directories (simple approach)
+	}
+
+	// Also watch pure .go files in the same directories
+	for dir := range dirMap {
+		goFiles, err := filepath.Glob(filepath.Join(dir, "*.go"))
+		if err == nil {
+			for _, goFile := range goFiles {
+				absPath, _ := filepath.Abs(goFile)
+				dt.allGoFiles[absPath] = true
+			}
+		}
+	}
+
+	return nil
+}
+
+// IsWatched checks if a file path should trigger rebuild
+func (dt *DependencyTracker) IsWatched(path string) bool {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+
+	return dt.allDingoFiles[absPath] || dt.allGoFiles[absPath]
+}
+
+// RefreshDependencies re-scans dependencies (after successful build)
+func (dt *DependencyTracker) RefreshDependencies() error {
+	return dt.Discover()
+}
+
+// Count returns total number of watched files
+func (dt *DependencyTracker) Count() int {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+	return len(dt.allDingoFiles) + len(dt.allGoFiles)
+}
+
+// GetWatchPaths returns all paths to watch
+func (dt *DependencyTracker) GetWatchPaths() []string {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+
+	paths := make([]string, 0, dt.Count())
+	for path := range dt.allDingoFiles {
+		paths = append(paths, path)
+	}
+	for path := range dt.allGoFiles {
+		paths = append(paths, path)
+	}
+	return paths
+}
+
 // WatchRunner manages the watch loop
 type WatchRunner struct {
 	dingoFiles     []string
@@ -159,6 +286,11 @@ type WatchRunner struct {
 	mu             sync.Mutex      // Protects generatedFiles and rebuild operations
 	workspaceRoot  string          // Path to go.mod
 	shadowBuilder  *shadow.Builder // Shadow build manager
+
+	// NEW: UI and dependency tracking
+	ui         *ui.WatchUI
+	depTracker *DependencyTracker
+	noMascot   bool // Disable UI
 }
 
 type watchStyles struct {
@@ -221,7 +353,7 @@ Examples:
 
 func runWatch(args []string) error {
 	// Parse arguments similar to run command
-	opts, err := parseWatchArgs(args)
+	opts, noMascot, err := parseWatchArgs(args)
 	if err != nil {
 		return err
 	}
@@ -232,13 +364,31 @@ func runWatch(args []string) error {
 		cfg = config.DefaultConfig()
 	}
 
+	// If no paths specified on CLI, use config paths
+	if len(opts.DingoFiles) == 0 && len(opts.PackagePaths) == 0 {
+		if len(cfg.Watch.Paths) > 0 {
+			opts.PackagePaths = cfg.Watch.Paths
+		}
+	}
+
 	// Resolve package paths to .dingo files
 	if err := resolveDingoFiles(opts); err != nil {
 		return err
 	}
 
 	if len(opts.DingoFiles) == 0 {
-		return fmt.Errorf("no .dingo files found")
+		return fmt.Errorf("no .dingo files found\n\nSpecify paths to watch:\n  dingo watch ./cmd/api\n  dingo watch main.dingo\n\nOr configure in dingo.toml:\n  [watch]\n  paths = [\"./cmd/api\"]")
+	}
+
+	// Verify all files are in the same directory (Go build requirement)
+	if len(opts.DingoFiles) > 1 {
+		firstDir := filepath.Dir(opts.DingoFiles[0])
+		for _, f := range opts.DingoFiles[1:] {
+			if filepath.Dir(f) != firstDir {
+				return fmt.Errorf("all .dingo files must be in the same directory for 'go run'\n\nFound files in multiple directories:\n  %s\n  %s\n\nSpecify a single package: dingo watch ./cmd/api",
+					opts.DingoFiles[0], f)
+			}
+		}
 	}
 
 	wr := &WatchRunner{
@@ -248,6 +398,7 @@ func runWatch(args []string) error {
 		pm:             &ProcessManager{},
 		styles:         newWatchStyles(),
 		generatedFiles: make(map[string]bool),
+		noMascot:       noMascot,
 	}
 
 	// Set up shadow builder if shadow mode is enabled
@@ -271,10 +422,11 @@ func runWatch(args []string) error {
 	return wr.Run()
 }
 
-func parseWatchArgs(args []string) (*CompileOptions, error) {
+func parseWatchArgs(args []string) (*CompileOptions, bool, error) {
 	opts := &CompileOptions{}
 	var programArgs []string
 	inProgramArgs := false
+	noMascot := false
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -287,6 +439,12 @@ func parseWatchArgs(args []string) (*CompileOptions, error) {
 
 		if inProgramArgs {
 			programArgs = append(programArgs, arg)
+			continue
+		}
+
+		// Check for --no-mascot flag
+		if arg == "--no-mascot" {
+			noMascot = true
 			continue
 		}
 
@@ -305,14 +463,50 @@ func parseWatchArgs(args []string) (*CompileOptions, error) {
 	// Store program args in GoArgs
 	opts.GoArgs = programArgs
 
-	return opts, nil
+	return opts, noMascot, nil
 }
 
 func (wr *WatchRunner) Run() error {
-	// Print header
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
-	versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
-	fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo Watch"), versionStyle.Render("v"+version.Version))
+	// Initialize UI (if not disabled)
+	if !wr.noMascot {
+		wr.ui = ui.NewWatchUI()
+		wr.ui.Start()
+		defer wr.ui.Stop()
+	} else {
+		// Print simple header for non-UI mode
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4"))
+		versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086"))
+		fmt.Printf("%s %s\n\n", titleStyle.Render("🐕 Dingo Watch"), versionStyle.Render("v"+version.Version))
+	}
+
+	// Determine workspace root
+	var workspaceRoot string
+	if wr.shadowBuilder != nil {
+		workspaceRoot = wr.workspaceRoot
+	} else {
+		// Find workspace root from first dingo file
+		var err error
+		workspaceRoot, err = shadow.FindWorkspaceRoot(wr.dingoFiles[0])
+		if err != nil {
+			workspaceRoot = filepath.Dir(wr.dingoFiles[0])
+		}
+	}
+
+	// Initialize dependency tracker
+	wr.depTracker = NewDependencyTracker(workspaceRoot, wr.dingoFiles)
+	if err := wr.depTracker.Discover(); err != nil {
+		return fmt.Errorf("failed to discover dependencies: %w", err)
+	}
+
+	// Add startup event
+	if wr.ui != nil {
+		wr.ui.SetState(mascot.StateIdle, "Initializing...", "")
+		wr.ui.AddEvent(ui.BuildEvent{
+			Timestamp: time.Now(),
+			EventType: ui.EventStartup,
+			Message:   "Dingo Watch started",
+		})
+	}
 
 	// Collect all directories to watch
 	watchDirs, err := wr.collectWatchDirs()
@@ -334,15 +528,59 @@ func (wr *WatchRunner) Run() error {
 		}
 	}
 
-	wr.log("%s Watching %d directories for .dingo and .go files",
-		wr.styles.event.Render("👀"),
-		len(watchDirs))
+	// Update status
+	depCount := wr.depTracker.Count()
+	if wr.ui != nil {
+		wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", depCount))
+	} else {
+		wr.log("%s Watching %d directories (%d dependencies)",
+			wr.styles.event.Render("👀"),
+			len(watchDirs),
+			depCount)
+	}
 
 	// Initial build and run
+	if wr.ui != nil {
+		wr.ui.SetState(mascot.StateCompiling, "Building...", "Initial build")
+	}
+
+	start := time.Now()
 	_, err = wr.buildAndRun()
+	duration := time.Since(start)
+
 	if err != nil {
-		wr.log("%s Initial build failed: %v", wr.styles.error.Render("✗"), err)
+		if wr.ui != nil {
+			wr.ui.SetState(mascot.StateFailed, "Build Failed", err.Error())
+			wr.ui.AddEvent(ui.BuildEvent{
+				Timestamp: time.Now(),
+				EventType: ui.EventBuildFailed,
+				Message:   fmt.Sprintf("Initial build failed: %v", err),
+				Duration:  duration,
+			})
+		} else {
+			wr.log("%s Initial build failed: %v", wr.styles.error.Render("✗"), err)
+		}
 		// Continue watching, don't exit
+	} else {
+		if wr.ui != nil {
+			wr.ui.SetState(mascot.StateSuccess, "Running", "Build successful")
+			wr.ui.AddEvent(ui.BuildEvent{
+				Timestamp: time.Now(),
+				EventType: ui.EventBuildSuccess,
+				Message:   "Initial build successful",
+				Duration:  duration,
+			})
+
+			// Refresh dependencies after successful build
+			_ = wr.depTracker.RefreshDependencies()
+
+			// Transition to idle after celebration
+			time.AfterFunc(2*time.Second, func() {
+				wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", wr.depTracker.Count()))
+			})
+		} else {
+			wr.log("%s Initial build successful", wr.styles.success.Render("✓"))
+		}
 	}
 
 	// Set up signal handling (cross-platform)
@@ -360,7 +598,16 @@ func (wr *WatchRunner) Run() error {
 	for {
 		select {
 		case <-sigCh:
-			wr.log("%s Stopping...", wr.styles.event.Render("⏹"))
+			if wr.ui != nil {
+				wr.ui.SetState(mascot.StateIdle, "Stopping...", "")
+				wr.ui.AddEvent(ui.BuildEvent{
+					Timestamp: time.Now(),
+					EventType: ui.EventShutdown,
+					Message:   "Watch stopped by user",
+				})
+			} else {
+				wr.log("%s Stopping...", wr.styles.event.Render("⏹"))
+			}
 			wr.pm.Stop()
 			return nil
 
@@ -369,8 +616,8 @@ func (wr *WatchRunner) Run() error {
 				return nil
 			}
 
-			// Filter for .dingo and .go files only
-			if !wr.isWatchedFile(event.Name) {
+			// Check if file is in dependency set or is a watched file
+			if !wr.depTracker.IsWatched(event.Name) && !wr.isWatchedFile(event.Name) {
 				continue
 			}
 
@@ -395,28 +642,78 @@ func (wr *WatchRunner) Run() error {
 			})
 
 		case changedFile := <-rebuildCh:
-			// Perform rebuild synchronously in main loop
-			wr.log("%s Change detected: %s",
-				wr.styles.event.Render("📝"),
-				wr.styles.file.Render(filepath.Base(changedFile)))
-			wr.log("%s Rebuilding...", wr.styles.event.Render("🔄"))
+			// Add file changed event
+			if wr.ui != nil {
+				wr.ui.AddEvent(ui.BuildEvent{
+					Timestamp: time.Now(),
+					EventType: ui.EventFileChanged,
+					Message:   filepath.Base(changedFile),
+					FilePath:  changedFile,
+				})
+				wr.ui.SetState(mascot.StateCompiling, "Rebuilding...", filepath.Base(changedFile))
+			} else {
+				wr.log("%s Change detected: %s",
+					wr.styles.event.Render("📝"),
+					wr.styles.file.Render(filepath.Base(changedFile)))
+				wr.log("%s Rebuilding...", wr.styles.event.Render("🔄"))
+			}
 
 			// Stop current process
 			wr.pm.Stop()
 
 			// Rebuild and restart
+			start := time.Now()
 			_, err := wr.buildAndRun()
+			duration := time.Since(start)
+
 			if err != nil {
-				wr.log("%s Build failed: %v", wr.styles.error.Render("✗"), err)
+				if wr.ui != nil {
+					wr.ui.SetState(mascot.StateFailed, "Build Failed", err.Error())
+					wr.ui.AddEvent(ui.BuildEvent{
+						Timestamp: time.Now(),
+						EventType: ui.EventBuildFailed,
+						Message:   fmt.Sprintf("Build failed: %v", err),
+						Duration:  duration,
+					})
+				} else {
+					wr.log("%s Build failed: %v", wr.styles.error.Render("✗"), err)
+				}
 			} else {
-				wr.log("%s Restarted", wr.styles.success.Render("✓"))
+				if wr.ui != nil {
+					wr.ui.SetState(mascot.StateSuccess, "Running", "Build successful")
+					wr.ui.AddEvent(ui.BuildEvent{
+						Timestamp: time.Now(),
+						EventType: ui.EventBuildSuccess,
+						Message:   "Build successful",
+						Duration:  duration,
+					})
+					wr.ui.AddEvent(ui.BuildEvent{
+						Timestamp: time.Now(),
+						EventType: ui.EventRestart,
+						Message:   "Program restarted",
+					})
+
+					// Refresh dependencies
+					_ = wr.depTracker.RefreshDependencies()
+
+					// Return to idle after celebration
+					time.AfterFunc(2*time.Second, func() {
+						wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", wr.depTracker.Count()))
+					})
+				} else {
+					wr.log("%s Restarted", wr.styles.success.Render("✓"))
+				}
 			}
 
 		case err, ok := <-wr.watcher.Errors:
 			if !ok {
 				return nil
 			}
-			wr.log("%s Watcher error: %v", wr.styles.error.Render("⚠"), err)
+			if wr.ui != nil {
+				// Don't add watcher errors to history, just log them
+			} else {
+				wr.log("%s Watcher error: %v", wr.styles.error.Render("⚠"), err)
+			}
 		}
 	}
 }
@@ -430,14 +727,17 @@ func (wr *WatchRunner) collectWatchDirs() ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		dirSet[filepath.Dir(absPath)] = struct{}{}
+		dir := filepath.Dir(absPath)
+		if !wr.isExcludedDir(dir) {
+			dirSet[dir] = struct{}{}
+		}
 	}
 
 	// For each dingo file directory, also watch parent directory if it contains pkg/ or internal/
 	// This helps catch related Go file changes
 	for dir := range dirSet {
 		parent := filepath.Dir(dir)
-		if parent != dir && parent != "." {
+		if parent != dir && parent != "." && !wr.isExcludedDir(parent) {
 			dirSet[parent] = struct{}{}
 		}
 	}
@@ -449,10 +749,43 @@ func (wr *WatchRunner) collectWatchDirs() ([]string, error) {
 	return dirs, nil
 }
 
+func (wr *WatchRunner) isExcludedDir(dir string) bool {
+	baseName := filepath.Base(dir)
+	for _, pattern := range wr.cfg.Watch.Exclude {
+		// Skip glob patterns (those are for files)
+		if strings.HasPrefix(pattern, "*") {
+			continue
+		}
+		// Check if directory name matches exclude pattern
+		if baseName == pattern {
+			return true
+		}
+	}
+	return false
+}
+
 func (wr *WatchRunner) isWatchedFile(path string) bool {
 	ext := filepath.Ext(path)
 	if ext != ".dingo" && ext != ".go" {
 		return false
+	}
+
+	// Ignore .dmap files
+	if ext == ".dmap" {
+		return false
+	}
+
+	// Check exclude patterns from config
+	baseName := filepath.Base(path)
+	for _, pattern := range wr.cfg.Watch.Exclude {
+		// Check if path contains excluded directory
+		if !strings.HasPrefix(pattern, "*") && strings.Contains(path, pattern+string(filepath.Separator)) {
+			return false
+		}
+		// Check if file matches glob pattern
+		if matched, _ := filepath.Match(pattern, baseName); matched {
+			return false
+		}
 	}
 
 	// Ignore generated .go files (they correspond to our .dingo files)

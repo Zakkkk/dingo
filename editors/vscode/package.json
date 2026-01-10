@@ -2,7 +2,7 @@
   "name": "dingo",
   "displayName": "Dingo Language Support",
   "description": "Syntax highlighting and language support for Dingo - a modern meta-language for Go",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "publisher": "MadAppGang",
   "icon": "dingo-logo.png",
   "homepage": "https://dingolang.com",
@@ -136,6 +136,145 @@
         "command": "dingo.compareWithSource",
         "title": "Dingo: Compare with Source File",
         "icon": "$(diff)"
+      },
+      {
+        "command": "dingo.buildCurrentFile",
+        "title": "Dingo: Build Current File",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "dingo.runCurrentFile",
+        "title": "Dingo: Run Current File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "dingo.buildWorkspace",
+        "title": "Dingo: Build Workspace",
+        "icon": "$(package)"
+      },
+      {
+        "command": "dingo.generateDebugConfig",
+        "title": "Dingo: Generate Debug Configuration"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "dingo",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The dingo command to run (build, run, go)",
+            "enum": ["build", "run", "go"]
+          },
+          "target": {
+            "type": "string",
+            "description": "File or directory to build/run"
+          },
+          "args": {
+            "type": "array",
+            "description": "Additional arguments to pass to dingo",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "dingo",
+        "label": "Dingo",
+        "languages": ["dingo"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to .dingo file to debug",
+                "default": "${file}"
+              },
+              "args": {
+                "type": "array",
+                "description": "Command line arguments passed to the program",
+                "items": { "type": "string" },
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the program",
+                "default": "${workspaceFolder}"
+              },
+              "env": {
+                "type": "object",
+                "description": "Environment variables",
+                "default": {}
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "dingo",
+            "request": "launch",
+            "name": "Debug Dingo File",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Dingo: Debug File",
+            "description": "Build and debug a .dingo file",
+            "body": {
+              "type": "dingo",
+              "request": "launch",
+              "name": "Debug Dingo File",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "Dingo: Debug Package",
+            "description": "Build and debug a Dingo package",
+            "body": {
+              "type": "dingo",
+              "request": "launch",
+              "name": "Debug Dingo Package",
+              "program": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "dingo",
+        "owner": "dingo",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(error|warning):\\s+(.+)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "severity": 4,
+            "message": 5
+          }
+        ]
+      },
+      {
+        "name": "dingo-go",
+        "owner": "dingo",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^(.+\\.go):(\\d+):(\\d+):\\s+(.+)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          }
+        ]
       }
     ],
     "keybindings": [
@@ -144,6 +283,18 @@
         "key": "ctrl+shift+d",
         "mac": "cmd+shift+d",
         "when": "resourceExtname == .dingo || resourceExtname == .golden"
+      },
+      {
+        "command": "dingo.buildCurrentFile",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "resourceExtname == .dingo"
+      },
+      {
+        "command": "dingo.runCurrentFile",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "resourceExtname == .dingo"
       }
     ]
   },
