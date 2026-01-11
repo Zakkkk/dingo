@@ -1,17 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/MadAppGang/dingo/pkg/build"
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/shadow"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
@@ -40,11 +44,188 @@ const gracefulShutdownTimeout = 2 * time.Second
 
 // ProcessManager handles the running child process (cross-platform)
 type ProcessManager struct {
-	cmd     *exec.Cmd
-	cancel  context.CancelFunc
-	mu      sync.Mutex
-	running bool
-	doneCh  chan struct{}
+	cmd      *exec.Cmd
+	cancel   context.CancelFunc
+	mu       sync.Mutex
+	running  bool
+	doneCh   chan struct{}
+	exitCh   chan error  // Sends exit error (nil = clean exit, non-nil = crash)
+	exitErr  error       // Last exit error
+	exitMsg  string      // Last error message from stderr
+	stopping bool        // True if we intentionally stopped the process
+	stderr   *stderrCapture // Captures stderr for error messages
+}
+
+// stderrCapture captures stderr while also writing to os.Stderr
+type stderrCapture struct {
+	buf   []byte
+	mu    sync.Mutex
+	limit int // Max bytes to keep
+}
+
+func newStderrCapture(limit int) *stderrCapture {
+	return &stderrCapture{limit: limit}
+}
+
+func (s *stderrCapture) Write(p []byte) (n int, err error) {
+	// Write to actual stderr
+	n, err = os.Stderr.Write(p)
+
+	// Capture last N bytes
+	s.mu.Lock()
+	s.buf = append(s.buf, p...)
+	if len(s.buf) > s.limit {
+		s.buf = s.buf[len(s.buf)-s.limit:]
+	}
+	s.mu.Unlock()
+
+	return n, err
+}
+
+// CrashInfo contains parsed information about a crash
+type CrashInfo struct {
+	Message  string // e.g., "panic: called MustOk on an Err value"
+	File     string // e.g., "main.go"
+	Line     int    // e.g., 274
+	FullPath string // Full path to the file
+}
+
+func (s *stderrCapture) ParseCrash() *CrashInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.buf) == 0 {
+		return nil
+	}
+
+	lines := strings.Split(string(s.buf), "\n")
+	info := &CrashInfo{}
+
+	// Look for panic message and location
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Capture panic message
+		if strings.HasPrefix(trimmed, "panic:") {
+			info.Message = trimmed
+			continue
+		}
+		if strings.HasPrefix(trimmed, "fatal error:") {
+			info.Message = trimmed
+			continue
+		}
+
+		// Look for file:line location in stack trace (lines starting with whitespace containing .go:)
+		if info.Message != "" && info.FullPath == "" && strings.HasPrefix(line, "\t") {
+			// Skip internal dgo package frames, find user code
+			if strings.Contains(trimmed, ".go:") && !strings.Contains(trimmed, "/dgo/") {
+				// Extract full path and line number
+				// Format: /path/to/file.go:123 +0x...
+				pathEnd := strings.Index(trimmed, " ")
+				if pathEnd < 0 {
+					pathEnd = len(trimmed)
+				}
+				fullLoc := trimmed[:pathEnd]
+
+				// Parse path and line number
+				if colonIdx := strings.LastIndex(fullLoc, ":"); colonIdx > 0 {
+					info.FullPath = fullLoc[:colonIdx]
+					if lineNum, err := strconv.Atoi(fullLoc[colonIdx+1:]); err == nil {
+						info.Line = lineNum
+					}
+					// Extract just filename
+					if slashIdx := strings.LastIndex(info.FullPath, "/"); slashIdx >= 0 {
+						info.File = info.FullPath[slashIdx+1:]
+					} else {
+						info.File = info.FullPath
+					}
+				}
+			}
+		}
+
+		// Also check for regular error messages
+		if info.Message == "" {
+			if strings.HasPrefix(trimmed, "Error:") || strings.HasPrefix(trimmed, "error:") {
+				info.Message = trimmed
+			}
+		}
+
+		// Stop after finding both
+		if info.Message != "" && info.FullPath != "" {
+			break
+		}
+
+		// Don't look too far
+		if i > 20 {
+			break
+		}
+	}
+
+	if info.Message == "" {
+		return nil
+	}
+	return info
+}
+
+func (s *stderrCapture) LastError() string {
+	info := s.ParseCrash()
+	if info == nil {
+		return ""
+	}
+	if info.File != "" && info.Line > 0 {
+		return fmt.Sprintf("%s at %s:%d", info.Message, info.File, info.Line)
+	}
+	return info.Message
+}
+
+// GetSourceContext reads source lines around a crash location
+func GetSourceContext(filePath string, line int, contextLines int) string {
+	if filePath == "" || line <= 0 {
+		return ""
+	}
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if line > len(lines) {
+		return ""
+	}
+
+	// Calculate range
+	startLine := line - contextLines
+	if startLine < 1 {
+		startLine = 1
+	}
+	endLine := line + contextLines
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+
+	var result strings.Builder
+	for i := startLine; i <= endLine; i++ {
+		lineContent := lines[i-1]
+		// Truncate long lines
+		if len(lineContent) > 60 {
+			lineContent = lineContent[:57] + "..."
+		}
+		// Mark the crash line
+		if i == line {
+			result.WriteString(fmt.Sprintf("  → %4d │ %s\n", i, lineContent))
+		} else {
+			result.WriteString(fmt.Sprintf("    %4d │ %s\n", i, lineContent))
+		}
+	}
+
+	return result.String()
+}
+
+func (s *stderrCapture) Reset() {
+	s.mu.Lock()
+	s.buf = nil
+	s.mu.Unlock()
 }
 
 // Start starts the process with the given command and arguments
@@ -117,6 +298,7 @@ func (pm *ProcessManager) Stop() {
 		pm.mu.Unlock()
 		return
 	}
+	pm.stopping = true // Mark as intentional stop
 	doneCh := pm.doneCh
 	cancel := pm.cancel
 	process := pm.cmd.Process
@@ -150,14 +332,108 @@ func (pm *ProcessManager) Stop() {
 	}
 }
 
+// StartPackage starts the process using "go run ." from a package directory
+// This allows Go to properly resolve local module imports
+func (pm *ProcessManager) StartPackage(pkgDir string, programArgs []string) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Create cancellable context for this process
+	ctx, cancel := context.WithCancel(context.Background())
+	pm.cancel = cancel
+	pm.doneCh = make(chan struct{})
+	pm.exitCh = make(chan error, 1)
+	pm.exitErr = nil
+	pm.exitMsg = ""
+	pm.stopping = false
+	pm.stderr = newStderrCapture(8192) // Capture last 8KB of stderr
+
+	// Build args: go run . [programArgs...]
+	args := []string{"run", "."}
+	if len(programArgs) > 0 {
+		args = append(args, programArgs...)
+	}
+
+	pm.cmd = exec.CommandContext(ctx, "go", args...)
+	pm.cmd.Dir = pkgDir
+	pm.cmd.Stdout = os.Stdout
+	pm.cmd.Stderr = pm.stderr // Capture stderr while still displaying
+	pm.cmd.Stdin = os.Stdin
+
+	if err := pm.cmd.Start(); err != nil {
+		cancel()
+		return fmt.Errorf("failed to start process: %w", err)
+	}
+
+	pm.running = true
+
+	// Monitor the process in the background
+	go func() {
+		err := pm.cmd.Wait()
+		pm.mu.Lock()
+		pm.running = false
+		pm.exitErr = err
+		if err != nil && pm.stderr != nil {
+			pm.exitMsg = pm.stderr.LastError()
+		}
+		stopping := pm.stopping
+		exitCh := pm.exitCh
+		pm.mu.Unlock()
+		close(pm.doneCh)
+
+		// Only notify if we didn't intentionally stop and there was an error
+		if !stopping && err != nil && exitCh != nil {
+			select {
+			case exitCh <- err:
+			default:
+			}
+		}
+	}()
+
+	return nil
+}
+
+// LastErrorMessage returns the last error message captured from stderr
+func (pm *ProcessManager) LastErrorMessage() string {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	return pm.exitMsg
+}
+
+// ParseCrash returns parsed crash information from stderr
+func (pm *ProcessManager) ParseCrash() *CrashInfo {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if pm.stderr == nil {
+		return nil
+	}
+	return pm.stderr.ParseCrash()
+}
+
+// IsRunning returns true if the process is currently running
+func (pm *ProcessManager) IsRunning() bool {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	return pm.running
+}
+
+// ExitCh returns a channel that receives the exit error when the process crashes
+func (pm *ProcessManager) ExitCh() <-chan error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	return pm.exitCh
+}
+
 // DependencyTracker manages file dependencies for watch mode
 type DependencyTracker struct {
 	workspaceRoot string
 	mainFiles     []string // User-specified .dingo files
+	modulePath    string   // Module path from go.mod
 
 	// Computed dependencies
 	allDingoFiles map[string]bool // All .dingo files to watch
 	allGoFiles    map[string]bool // All .go files to watch
+	allDirs       map[string]bool // All directories containing watched files
 
 	mu sync.RWMutex
 }
@@ -169,7 +445,174 @@ func NewDependencyTracker(workspaceRoot string, mainFiles []string) *DependencyT
 		mainFiles:     mainFiles,
 		allDingoFiles: make(map[string]bool),
 		allGoFiles:    make(map[string]bool),
+		allDirs:       make(map[string]bool),
 	}
+}
+
+// readModulePath reads the module path from go.mod
+func (dt *DependencyTracker) readModulePath() error {
+	goModPath := filepath.Join(dt.workspaceRoot, "go.mod")
+	file, err := os.Open(goModPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	moduleRegex := regexp.MustCompile(`^module\s+(.+)$`)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if matches := moduleRegex.FindStringSubmatch(line); len(matches) == 2 {
+			dt.modulePath = matches[1]
+			return nil
+		}
+	}
+	return fmt.Errorf("module path not found in go.mod")
+}
+
+// extractImportsFromDingo extracts import paths from a .dingo file
+func (dt *DependencyTracker) extractImportsFromDingo(filePath string) ([]string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var imports []string
+	lines := strings.Split(string(content), "\n")
+	inImportBlock := false
+
+	// Match single import: import "path" or import ( block
+	singleImportRegex := regexp.MustCompile(`^\s*import\s+"([^"]+)"`)
+	importPathRegex := regexp.MustCompile(`^\s*"([^"]+)"`)
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Check for import block start
+		if strings.HasPrefix(trimmed, "import (") {
+			inImportBlock = true
+			continue
+		}
+
+		// Check for import block end
+		if inImportBlock && trimmed == ")" {
+			inImportBlock = false
+			continue
+		}
+
+		// Inside import block
+		if inImportBlock {
+			if matches := importPathRegex.FindStringSubmatch(line); len(matches) == 2 {
+				imports = append(imports, matches[1])
+			}
+			continue
+		}
+
+		// Single import statement
+		if matches := singleImportRegex.FindStringSubmatch(line); len(matches) == 2 {
+			imports = append(imports, matches[1])
+		}
+	}
+
+	return imports, nil
+}
+
+// extractImportsFromGo extracts import paths from a .go file using go/parser
+func (dt *DependencyTracker) extractImportsFromGo(filePath string) ([]string, error) {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ImportsOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	var imports []string
+	for _, imp := range node.Imports {
+		// Remove quotes from import path
+		path := strings.Trim(imp.Path.Value, `"`)
+		imports = append(imports, path)
+	}
+	return imports, nil
+}
+
+// isLocalImport checks if an import path is local to this module
+func (dt *DependencyTracker) isLocalImport(importPath string) bool {
+	return strings.HasPrefix(importPath, dt.modulePath)
+}
+
+// resolveImportToDir converts a local import path to an absolute directory
+func (dt *DependencyTracker) resolveImportToDir(importPath string) string {
+	// Strip module path prefix to get relative path
+	relPath := strings.TrimPrefix(importPath, dt.modulePath)
+	relPath = strings.TrimPrefix(relPath, "/")
+	return filepath.Join(dt.workspaceRoot, relPath)
+}
+
+// discoverDir scans a directory for .dingo and .go files and their imports
+func (dt *DependencyTracker) discoverDir(dir string, visited map[string]bool) error {
+	if visited[dir] {
+		return nil
+	}
+	visited[dir] = true
+
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
+
+	dt.allDirs[dir] = true
+
+	// Find all .dingo files
+	dingoFiles, _ := filepath.Glob(filepath.Join(dir, "*.dingo"))
+	for _, f := range dingoFiles {
+		absPath, _ := filepath.Abs(f)
+		dt.allDingoFiles[absPath] = true
+
+		// Extract imports from this file
+		imports, err := dt.extractImportsFromDingo(absPath)
+		if err != nil {
+			continue
+		}
+
+		// Recursively discover local imports
+		for _, imp := range imports {
+			if dt.isLocalImport(imp) {
+				impDir := dt.resolveImportToDir(imp)
+				if err := dt.discoverDir(impDir, visited); err != nil {
+					continue
+				}
+			}
+		}
+	}
+
+	// Find all .go files
+	goFiles, _ := filepath.Glob(filepath.Join(dir, "*.go"))
+	for _, f := range goFiles {
+		absPath, _ := filepath.Abs(f)
+		// Skip test files
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		dt.allGoFiles[absPath] = true
+
+		// Extract imports from this file
+		imports, err := dt.extractImportsFromGo(absPath)
+		if err != nil {
+			continue
+		}
+
+		// Recursively discover local imports
+		for _, imp := range imports {
+			if dt.isLocalImport(imp) {
+				impDir := dt.resolveImportToDir(imp)
+				if err := dt.discoverDir(impDir, visited); err != nil {
+					continue
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // Discover scans import statements and builds dependency set
@@ -180,54 +623,27 @@ func (dt *DependencyTracker) Discover() error {
 	// Reset maps
 	dt.allDingoFiles = make(map[string]bool)
 	dt.allGoFiles = make(map[string]bool)
+	dt.allDirs = make(map[string]bool)
 
-	// Add main files to watch set
+	// Read module path from go.mod
+	if err := dt.readModulePath(); err != nil {
+		// If no go.mod, fall back to simple directory watching
+		dt.modulePath = ""
+	}
+
+	// Track visited directories to avoid cycles
+	visited := make(map[string]bool)
+
+	// Start discovery from directories containing main files
 	for _, mainFile := range dt.mainFiles {
 		absPath, err := filepath.Abs(mainFile)
 		if err != nil {
 			return fmt.Errorf("failed to get absolute path for %s: %w", mainFile, err)
 		}
-		dt.allDingoFiles[absPath] = true
-	}
 
-	// Build packages list for dependency graph
-	packages := make([]build.Package, 0)
-	dirMap := make(map[string][]string) // Dir -> dingo files
-
-	// Group files by directory
-	for _, mainFile := range dt.mainFiles {
-		absPath, _ := filepath.Abs(mainFile)
 		dir := filepath.Dir(absPath)
-		dirMap[dir] = append(dirMap[dir], filepath.Base(absPath))
-	}
-
-	// Create packages
-	for dir, files := range dirMap {
-		relDir, err := filepath.Rel(dt.workspaceRoot, dir)
-		if err != nil {
-			relDir = dir
-		}
-		packages = append(packages, build.Package{
-			Path:       relDir,
-			DingoFiles: files,
-		})
-	}
-
-	// Build dependency graph (only if workspace root has go.mod)
-	if _, err := os.Stat(filepath.Join(dt.workspaceRoot, "go.mod")); err == nil {
-		// Dependency graph analysis would go here
-		// For now, we watch the directories containing the main files
-		// and their parent directories (simple approach)
-	}
-
-	// Also watch pure .go files in the same directories
-	for dir := range dirMap {
-		goFiles, err := filepath.Glob(filepath.Join(dir, "*.go"))
-		if err == nil {
-			for _, goFile := range goFiles {
-				absPath, _ := filepath.Abs(goFile)
-				dt.allGoFiles[absPath] = true
-			}
+		if err := dt.discoverDir(dir, visited); err != nil {
+			return err
 		}
 	}
 
@@ -259,6 +675,20 @@ func (dt *DependencyTracker) Count() int {
 	return len(dt.allDingoFiles) + len(dt.allGoFiles)
 }
 
+// DirCount returns number of directories being watched
+func (dt *DependencyTracker) DirCount() int {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+	return len(dt.allDirs)
+}
+
+// Summary returns a human-readable summary of watched files
+func (dt *DependencyTracker) Summary() string {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+	return fmt.Sprintf("%d files in %d dirs", len(dt.allDingoFiles)+len(dt.allGoFiles), len(dt.allDirs))
+}
+
 // GetWatchPaths returns all paths to watch
 func (dt *DependencyTracker) GetWatchPaths() []string {
 	dt.mu.RLock()
@@ -272,6 +702,18 @@ func (dt *DependencyTracker) GetWatchPaths() []string {
 		paths = append(paths, path)
 	}
 	return paths
+}
+
+// GetDingoFiles returns all .dingo files to transpile
+func (dt *DependencyTracker) GetDingoFiles() []string {
+	dt.mu.RLock()
+	defer dt.mu.RUnlock()
+
+	files := make([]string, 0, len(dt.allDingoFiles))
+	for path := range dt.allDingoFiles {
+		files = append(files, path)
+	}
+	return files
 }
 
 // WatchRunner manages the watch loop
@@ -529,14 +971,44 @@ func (wr *WatchRunner) Run() error {
 	}
 
 	// Update status
-	depCount := wr.depTracker.Count()
 	if wr.ui != nil {
-		wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", depCount))
+		wr.ui.SetState(mascot.StateIdle, "Watching...", wr.depTracker.Summary())
 	} else {
-		wr.log("%s Watching %d directories (%d dependencies)",
+		wr.log("%s Watching %s",
 			wr.styles.event.Render("👀"),
-			len(watchDirs),
-			depCount)
+			wr.depTracker.Summary())
+	}
+
+	// Timer for transitioning to idle state (can be cancelled on crash)
+	var idleTimer *time.Timer
+	var idleTimerMu sync.Mutex
+
+	// Helper to schedule transition to idle state
+	scheduleIdleTransition := func() {
+		if wr.ui == nil {
+			return
+		}
+		idleTimerMu.Lock()
+		defer idleTimerMu.Unlock()
+		if idleTimer != nil {
+			idleTimer.Stop()
+		}
+		idleTimer = time.AfterFunc(2*time.Second, func() {
+			// Only transition to idle if process is still running
+			if wr.pm.IsRunning() {
+				wr.ui.SetState(mascot.StateIdle, "Watching...", wr.depTracker.Summary())
+			}
+		})
+	}
+
+	// Helper to cancel idle transition (called on crash)
+	cancelIdleTransition := func() {
+		idleTimerMu.Lock()
+		defer idleTimerMu.Unlock()
+		if idleTimer != nil {
+			idleTimer.Stop()
+			idleTimer = nil
+		}
 	}
 
 	// Initial build and run
@@ -574,10 +1046,8 @@ func (wr *WatchRunner) Run() error {
 			// Refresh dependencies after successful build
 			_ = wr.depTracker.RefreshDependencies()
 
-			// Transition to idle after celebration
-			time.AfterFunc(2*time.Second, func() {
-				wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", wr.depTracker.Count()))
-			})
+			// Transition to idle after celebration (will be cancelled if process crashes)
+			scheduleIdleTransition()
 		} else {
 			wr.log("%s Initial build successful", wr.styles.success.Render("✓"))
 		}
@@ -594,9 +1064,60 @@ func (wr *WatchRunner) Run() error {
 	var debounceTimer *time.Timer
 	var pendingFile string
 
+	// Helper to get exit channel (may be nil)
+	getExitCh := func() <-chan error {
+		return wr.pm.ExitCh()
+	}
+
 	// Main event loop
 	for {
+		exitCh := getExitCh()
 		select {
+		case exitErr := <-exitCh:
+			// Process crashed unexpectedly
+			if exitErr != nil {
+				// Cancel any pending transition to idle state
+				cancelIdleTransition()
+
+				// Parse crash info from stderr
+				crashInfo := wr.pm.ParseCrash()
+
+				// Get the actual error message from stderr (e.g., "panic: ...")
+				errMsg := wr.pm.LastErrorMessage()
+				if errMsg == "" {
+					// Fallback to exit status if no stderr message
+					if exitError, ok := exitErr.(*exec.ExitError); ok {
+						errMsg = fmt.Sprintf("exit status %d", exitError.ExitCode())
+					} else {
+						errMsg = exitErr.Error()
+					}
+				}
+
+				// Build detailed crash message with source context
+				var detailedMsg string
+				if crashInfo != nil && crashInfo.FullPath != "" && crashInfo.Line > 0 {
+					sourceContext := GetSourceContext(crashInfo.FullPath, crashInfo.Line, 5)
+					if sourceContext != "" {
+						detailedMsg = fmt.Sprintf("%s\n\n%s", errMsg, sourceContext)
+					} else {
+						detailedMsg = errMsg
+					}
+				} else {
+					detailedMsg = errMsg
+				}
+
+				if wr.ui != nil {
+					wr.ui.SetState(mascot.StateFailed, "Crashed", errMsg)
+					wr.ui.AddEvent(ui.BuildEvent{
+						Timestamp: time.Now(),
+						EventType: ui.EventBuildFailed,
+						Message:   fmt.Sprintf("Program crashed: %s", detailedMsg),
+					})
+				} else {
+					wr.log("%s Program crashed: %s", wr.styles.error.Render("✗"), detailedMsg)
+				}
+			}
+
 		case <-sigCh:
 			if wr.ui != nil {
 				wr.ui.SetState(mascot.StateIdle, "Stopping...", "")
@@ -696,10 +1217,8 @@ func (wr *WatchRunner) Run() error {
 					// Refresh dependencies
 					_ = wr.depTracker.RefreshDependencies()
 
-					// Return to idle after celebration
-					time.AfterFunc(2*time.Second, func() {
-						wr.ui.SetState(mascot.StateIdle, "Watching...", fmt.Sprintf("%d dependencies", wr.depTracker.Count()))
-					})
+					// Return to idle after celebration (will be cancelled if process crashes)
+					scheduleIdleTransition()
 				} else {
 					wr.log("%s Restarted", wr.styles.success.Render("✓"))
 				}
@@ -719,32 +1238,15 @@ func (wr *WatchRunner) Run() error {
 }
 
 func (wr *WatchRunner) collectWatchDirs() ([]string, error) {
-	dirSet := make(map[string]struct{})
+	// Use directories discovered by dependency tracker
+	wr.depTracker.mu.RLock()
+	defer wr.depTracker.mu.RUnlock()
 
-	// Add directories containing .dingo files
-	for _, f := range wr.dingoFiles {
-		absPath, err := filepath.Abs(f)
-		if err != nil {
-			return nil, err
-		}
-		dir := filepath.Dir(absPath)
+	dirs := make([]string, 0, len(wr.depTracker.allDirs))
+	for dir := range wr.depTracker.allDirs {
 		if !wr.isExcludedDir(dir) {
-			dirSet[dir] = struct{}{}
+			dirs = append(dirs, dir)
 		}
-	}
-
-	// For each dingo file directory, also watch parent directory if it contains pkg/ or internal/
-	// This helps catch related Go file changes
-	for dir := range dirSet {
-		parent := filepath.Dir(dir)
-		if parent != dir && parent != "." && !wr.isExcludedDir(parent) {
-			dirSet[parent] = struct{}{}
-		}
-	}
-
-	dirs := make([]string, 0, len(dirSet))
-	for d := range dirSet {
-		dirs = append(dirs, d)
 	}
 	return dirs, nil
 }
@@ -824,8 +1326,30 @@ func (wr *WatchRunner) buildAndRunShadow() ([]string, error) {
 	}
 	wr.mu.Unlock()
 
-	// Start the process from shadow directory
-	if err := wr.pm.StartFromDir(result.ShadowDir, result.GeneratedFiles, wr.programArgs); err != nil {
+	// Determine the main package directory within the shadow dir
+	// Find the relative path of the main file from workspace root
+	var mainPkgDir string
+	for _, mainFile := range wr.dingoFiles {
+		absMainFile, err := filepath.Abs(mainFile)
+		if err != nil {
+			continue
+		}
+		relPath, err := filepath.Rel(wr.workspaceRoot, absMainFile)
+		if err != nil {
+			continue
+		}
+		// The main package dir in shadow is: shadowDir + dirname(relPath)
+		mainPkgDir = filepath.Join(result.ShadowDir, filepath.Dir(relPath))
+		break
+	}
+
+	if mainPkgDir == "" {
+		mainPkgDir = result.ShadowDir
+	}
+
+	// Start the process using "go run ." from the main package directory
+	// This allows Go to properly resolve local imports within the shadow dir
+	if err := wr.pm.StartPackage(mainPkgDir, wr.programArgs); err != nil {
 		return nil, err
 	}
 
@@ -833,10 +1357,14 @@ func (wr *WatchRunner) buildAndRunShadow() ([]string, error) {
 }
 
 func (wr *WatchRunner) buildAndRunInPlace() ([]string, error) {
-	// Transpile .dingo files in-place
+	// Transpile ALL discovered .dingo files (including dependencies)
 	var goFiles []string
+	var mainPkgDir string
 
-	for _, dingoFile := range wr.dingoFiles {
+	// Get all .dingo files from dependency tracker
+	allDingoFiles := wr.depTracker.GetDingoFiles()
+
+	for _, dingoFile := range allDingoFiles {
 		// Read source
 		src, err := os.ReadFile(dingoFile)
 		if err != nil {
@@ -868,8 +1396,18 @@ func (wr *WatchRunner) buildAndRunInPlace() ([]string, error) {
 		goFiles = append(goFiles, goFile)
 	}
 
-	// Start the process
-	if err := wr.pm.Start(goFiles, wr.programArgs); err != nil {
+	// Determine the main package directory from original main files
+	for _, mainFile := range wr.dingoFiles {
+		absPath, err := filepath.Abs(mainFile)
+		if err == nil {
+			mainPkgDir = filepath.Dir(absPath)
+			break
+		}
+	}
+
+	// Start the process using "go run ." from the main package directory
+	// This allows Go to properly resolve local imports
+	if err := wr.pm.StartPackage(mainPkgDir, wr.programArgs); err != nil {
 		return nil, err
 	}
 
