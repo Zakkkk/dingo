@@ -10,6 +10,12 @@ import {
 let client: LanguageClient | null = null;
 
 export async function activateLSPClient(context: vscode.ExtensionContext): Promise<void> {
+    // Guard against double initialization (can happen with multiple activation events)
+    if (client) {
+        console.log('Dingo LSP client already running, skipping duplicate activation');
+        return;
+    }
+
     const config = vscode.workspace.getConfiguration('dingo');
 
     // Check if LSP is enabled (could add opt-out setting later)
@@ -69,6 +75,46 @@ export async function activateLSPClient(context: vscode.ExtensionContext): Promi
                 }
             });
             return false; // Don't retry immediately
+        },
+        // Middleware to deduplicate results (prevents duplicates from multiple providers)
+        middleware: {
+            provideHover: (document, position, token, next) => {
+                const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                console.log(`[Dingo Hover ${requestId}] START: ${document.uri.toString()}:${position.line}:${position.character}`);
+                return Promise.resolve(next(document, position, token)).then(result => {
+                    console.log(`[Dingo Hover ${requestId}] RESULT: ${result ? 'present' : 'null'}`);
+                    if (result && (result as any).contents) {
+                        const contents = (result as any).contents;
+                        console.log(`[Dingo Hover ${requestId}] Content type: ${typeof contents}, kind: ${contents.kind || 'N/A'}`);
+                        if (contents.value) {
+                            console.log(`[Dingo Hover ${requestId}] Content preview: ${contents.value.substring(0, 100)}...`);
+                        }
+                    }
+                    return result;
+                });
+            },
+            provideDefinition: (document, position, token, next) => {
+                return Promise.resolve(next(document, position, token)).then(result => {
+                    if (!result || !Array.isArray(result)) {
+                        return result;
+                    }
+                    // Deduplicate locations by URI + range
+                    const seen = new Set<string>();
+                    const filtered = (result as any[]).filter((loc: any) => {
+                        const uri = loc.uri?.toString() || loc.targetUri?.toString() || '';
+                        const range = loc.range || loc.targetRange;
+                        const key = `${uri}:${range?.start?.line}:${range?.start?.character}`;
+                        if (seen.has(key)) {
+                            console.log('Dingo definition middleware: filtered duplicate', key);
+                            return false;
+                        }
+                        seen.add(key);
+                        return true;
+                    });
+                    console.log(`Dingo definition middleware: ${result.length} -> ${filtered.length} results`);
+                    return filtered as any;
+                });
+            }
         }
     };
 
@@ -116,43 +162,49 @@ export async function activateLSPClient(context: vscode.ExtensionContext): Promi
         }
     }
 
-    // Register command: Transpile current file
-    context.subscriptions.push(
-        vscode.commands.registerCommand('dingo.transpileCurrentFile', async () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || editor.document.languageId !== 'dingo') {
-                vscode.window.showErrorMessage('Not a Dingo file');
-                return;
-            }
+    // Register commands only if not already registered (prevents double-registration errors)
+    const commands = await vscode.commands.getCommands(true);
 
-            const filePath = editor.document.uri.fsPath;
-            const terminal = vscode.window.createTerminal('Dingo Transpile');
-            terminal.sendText(`dingo build ${filePath}`);
-            terminal.show();
-        })
-    );
+    if (!commands.includes('dingo.transpileCurrentFile')) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dingo.transpileCurrentFile', async () => {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor || editor.document.languageId !== 'dingo') {
+                    vscode.window.showErrorMessage('Not a Dingo file');
+                    return;
+                }
 
-    // Register command: Transpile workspace
-    context.subscriptions.push(
-        vscode.commands.registerCommand('dingo.transpileWorkspace', async () => {
-            const terminal = vscode.window.createTerminal('Dingo Transpile');
-            terminal.sendText('dingo build ./...');
-            terminal.show();
-        })
-    );
+                const filePath = editor.document.uri.fsPath;
+                const terminal = vscode.window.createTerminal('Dingo Transpile');
+                terminal.sendText(`dingo build ${filePath}`);
+                terminal.show();
+            })
+        );
+    }
 
-    // Register command: Restart LSP
-    context.subscriptions.push(
-        vscode.commands.registerCommand('dingo.restartLSP', async () => {
-            if (client) {
-                await client.stop();
-                await client.start();
-                vscode.window.showInformationMessage('Dingo LSP restarted');
-            } else {
-                vscode.window.showWarningMessage('Dingo LSP is not running');
-            }
-        })
-    );
+    if (!commands.includes('dingo.transpileWorkspace')) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dingo.transpileWorkspace', async () => {
+                const terminal = vscode.window.createTerminal('Dingo Transpile');
+                terminal.sendText('dingo build ./...');
+                terminal.show();
+            })
+        );
+    }
+
+    if (!commands.includes('dingo.restartLSP')) {
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dingo.restartLSP', async () => {
+                if (client) {
+                    await client.stop();
+                    await client.start();
+                    vscode.window.showInformationMessage('Dingo LSP restarted');
+                } else {
+                    vscode.window.showWarningMessage('Dingo LSP is not running');
+                }
+            })
+        );
+    }
 }
 
 export async function deactivateLSPClient(): Promise<void> {
