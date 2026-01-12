@@ -59,12 +59,14 @@ class DingoDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescripto
 
     private async buildDingo(program: string, cwd: string): Promise<boolean> {
         return new Promise((resolve) => {
+            // Use --debug flag to emit //line directives for source mapping
+            // and disable optimizations (-gcflags=-N -l) for better debugging
             const task = new vscode.Task(
                 { type: 'dingo', command: 'build' },
                 vscode.TaskScope.Workspace,
                 'Build for Debug',
                 'dingo',
-                new vscode.ShellExecution(`dingo build --no-mascot "${program}"`)
+                new vscode.ShellExecution(`dingo build --debug --no-mascot "${program}"`)
             );
 
             vscode.tasks.executeTask(task).then(

@@ -404,6 +404,34 @@ func (r *Reader) DingoLineLength(line int) int {
 	return length
 }
 
+// GoLineLength returns the length of a 1-indexed Go line in bytes.
+// This is useful for clamping columns to valid positions in DingoToGo translations.
+// Returns -1 if line number is out of range.
+func (r *Reader) GoLineLength(line int) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if line < 1 || line > len(r.goLines) {
+		return -1
+	}
+
+	lineStart := int(r.goLines[line-1])
+	var lineEnd int
+	if line < len(r.goLines) {
+		lineEnd = int(r.goLines[line])
+	} else {
+		// Last line - use GoLen from header
+		lineEnd = int(r.hdr.GoLen)
+	}
+
+	// Subtract 1 for newline character (if present)
+	length := lineEnd - lineStart
+	if length > 0 {
+		length-- // Exclude newline
+	}
+	return length
+}
+
 // GoLineToDingoLine converts a Go line to Dingo line using v2 line mappings.
 // Returns the Dingo line and kind string if a mapping is found.
 // For unmapped lines, uses cumulative delta to compute approximate Dingo line.

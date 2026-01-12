@@ -118,6 +118,17 @@ func (t *Translator) TranslatePosition(
 			// newCol stays as col (identity mapping)
 		}
 
+		// Clamp column to Go line bounds to prevent "column is beyond end of line" errors.
+		// This can happen when:
+		// - Error propagation transforms shorten the line (e.g., removes trailing ?)
+		// - Dingo line has trailing whitespace not present in Go
+		// Note: Allow lineLen+1 for exclusive end positions in LSP ranges.
+		goLineLen := reader.GoLineLength(newLine)
+		if goLineLen >= 0 && newCol > goLineLen+1 {
+			log.Printf("[LSP Translator] DingoToGo: clamped column %d -> %d (go line length %d)", newCol, goLineLen+1, goLineLen)
+			newCol = goLineLen + 1
+		}
+
 		log.Printf("[LSP Translator] DingoToGo: dingoLine=%d -> goLine=%d", line, newLine)
 		log.Printf("[LSP Translator] AFTER DingoToGo: newLine=%d, newCol=%d", newLine, newCol)
 		newURI = lspuri.File(goPath)

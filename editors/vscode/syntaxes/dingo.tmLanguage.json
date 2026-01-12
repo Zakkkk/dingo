@@ -244,16 +244,26 @@
     "lambdas": {
       "patterns": [
         {
-          "name": "meta.function.lambda.dingo",
-          "begin": "\\|",
-          "beginCaptures": {
+          "name": "meta.function.lambda.empty.dingo",
+          "match": "\\|\\|",
+          "captures": {
             "0": {
+              "name": "punctuation.definition.parameters.lambda.dingo"
+            }
+          },
+          "comment": "Empty lambda parameters ||"
+        },
+        {
+          "name": "meta.function.lambda.dingo",
+          "begin": "(\\|)(?=[a-zA-Z_])",
+          "beginCaptures": {
+            "1": {
               "name": "punctuation.definition.parameters.begin.lambda.dingo"
             }
           },
-          "end": "\\|",
+          "end": "(\\|)",
           "endCaptures": {
-            "0": {
+            "1": {
               "name": "punctuation.definition.parameters.end.lambda.dingo"
             }
           },
@@ -262,7 +272,7 @@
               "include": "#parameters"
             }
           ],
-          "comment": "Rust-style lambda parameters |a, b|"
+          "comment": "Rust-style lambda parameters |a, b| - requires identifier after opening |"
         }
       ]
     },

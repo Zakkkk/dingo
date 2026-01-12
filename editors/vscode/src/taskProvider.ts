@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as cp from 'child_process';
+import { DingoErrorPanel } from './errorPanel';
 
 /**
  * Dingo Task Provider
@@ -131,9 +133,7 @@ export function registerBuildCommands(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const terminal = vscode.window.createTerminal('Dingo Build');
-            terminal.show();
-            terminal.sendText(`dingo build "${editor.document.fileName}"`);
+            await runDingoCommand(context.extensionUri, 'build', editor.document.fileName);
         })
     );
 
@@ -146,9 +146,7 @@ export function registerBuildCommands(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const terminal = vscode.window.createTerminal('Dingo Run');
-            terminal.show();
-            terminal.sendText(`dingo run "${editor.document.fileName}"`);
+            await runDingoCommand(context.extensionUri, 'run', editor.document.fileName);
         })
     );
 
@@ -161,9 +159,80 @@ export function registerBuildCommands(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const terminal = vscode.window.createTerminal('Dingo Build');
-            terminal.show();
-            terminal.sendText(`cd "${workspaceFolder.uri.fsPath}" && dingo build .`);
+            await runDingoCommand(context.extensionUri, 'build', '.', workspaceFolder.uri.fsPath);
         })
     );
+}
+
+/**
+ * Run a dingo command and show error panel on failure
+ */
+async function runDingoCommand(
+    extensionUri: vscode.Uri,
+    command: 'build' | 'run',
+    target: string,
+    cwd?: string
+): Promise<void> {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workingDir = cwd || (workspaceFolder?.uri.fsPath) || path.dirname(target);
+
+    // Show output channel for live output
+    const outputChannel = vscode.window.createOutputChannel('Dingo');
+    outputChannel.show();
+    outputChannel.appendLine(`🐕 Running: dingo ${command} "${target}"`);
+    outputChannel.appendLine('');
+
+    return new Promise((resolve) => {
+        let output = '';
+        let errorOutput = '';
+
+        const process = cp.spawn('dingo', [command, target], {
+            cwd: workingDir,
+            shell: true
+        });
+
+        process.stdout?.on('data', (data: Buffer) => {
+            const text = data.toString();
+            output += text;
+            outputChannel.append(text);
+        });
+
+        process.stderr?.on('data', (data: Buffer) => {
+            const text = data.toString();
+            errorOutput += text;
+            outputChannel.append(text);
+        });
+
+        process.on('close', (code) => {
+            if (code !== 0) {
+                const fullOutput = output + errorOutput;
+                outputChannel.appendLine('');
+                outputChannel.appendLine(`❌ Process exited with code ${code}`);
+
+                // Detect panic or error and show error panel
+                if (fullOutput.includes('panic:')) {
+                    DingoErrorPanel.show(extensionUri, 'panic', fullOutput, target);
+                } else if (command === 'build') {
+                    DingoErrorPanel.show(extensionUri, 'build', fullOutput, target);
+                } else {
+                    DingoErrorPanel.show(extensionUri, 'run', fullOutput, target);
+                }
+            } else {
+                outputChannel.appendLine('');
+                outputChannel.appendLine(`✅ ${command === 'build' ? 'Build' : 'Run'} completed successfully`);
+
+                // Auto-hide output channel on success after a short delay
+                setTimeout(() => {
+                    // Don't hide if user is looking at it
+                }, 2000);
+            }
+            resolve();
+        });
+
+        process.on('error', (err) => {
+            outputChannel.appendLine(`❌ Failed to start process: ${err.message}`);
+            DingoErrorPanel.show(extensionUri, command, `Failed to start dingo: ${err.message}`, target);
+            resolve();
+        });
+    });
 }

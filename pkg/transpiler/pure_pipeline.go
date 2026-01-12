@@ -89,6 +89,27 @@ WHY token.Pos INSTEAD OF BYTE OFFSETS:
   we store the token.Pos value, not a byte offset that becomes stale.
 */
 
+// TranspileOptions configures the transpilation behavior.
+type TranspileOptions struct {
+	// InferTypes enables type inference for lambdas and other constructs.
+	// Default: true
+	InferTypes bool
+
+	// Debug enables debug mode which emits //line directives for Delve debugging.
+	// When false (default), generated Go code is clean without //line directives.
+	// Position mapping is handled via .dmap files instead.
+	Debug bool
+}
+
+// DefaultTranspileOptions returns the default transpile options.
+// Type inference enabled, debug mode disabled.
+func DefaultTranspileOptions() TranspileOptions {
+	return TranspileOptions{
+		InferTypes: true,
+		Debug:      false,
+	}
+}
+
 // PureASTTranspile uses AST-based transformation for all Dingo features.
 //
 // Currently handles:
@@ -118,7 +139,11 @@ func PureASTTranspile(source []byte, filename string) ([]byte, error) {
 // PureASTTranspileWithOptions transpiles with optional type inference.
 // Set inferTypes to false to disable type inference (faster but uses interface{}).
 func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool) ([]byte, error) {
-	result, err := PureASTTranspileWithMappings(source, filename, inferTypes)
+	opts := TranspileOptions{
+		InferTypes: inferTypes,
+		Debug:      false,
+	}
+	result, err := PureASTTranspileWithMappingsOpts(source, filename, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +152,22 @@ func PureASTTranspileWithOptions(source []byte, filename string, inferTypes bool
 
 // PureASTTranspileWithMappings transpiles and returns source mappings for LSP integration.
 // This is the full-featured version that returns all transformation metadata.
+// For debug builds (with //line directives), use PureASTTranspileWithMappingsOpts with Debug=true.
 func PureASTTranspileWithMappings(source []byte, filename string, inferTypes bool) (TranspileResult, error) {
+	opts := TranspileOptions{
+		InferTypes: inferTypes,
+		Debug:      false,
+	}
+	return PureASTTranspileWithMappingsOpts(source, filename, opts)
+}
+
+// PureASTTranspileWithMappingsOpts is the full-featured transpilation entry point.
+// It accepts TranspileOptions for fine-grained control over transpilation behavior.
+//
+// When opts.Debug is true, //line directives are emitted in the generated Go code.
+// This enables Delve debugger to map Go code back to Dingo source positions.
+// Debug mode should only be used for debugging - release builds use .dmap files instead.
+func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts TranspileOptions) (TranspileResult, error) {
 	// Extract enum registry from ORIGINAL source (before transformation)
 	// This is used by match expressions to prefix variant names correctly
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
@@ -182,16 +222,21 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	}
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
-	// Note: //line directives are disabled - position mapping is handled via line/column mappings
-	// Pass filename for TypeResolver (needed for cross-file type resolution), but disable directives
-	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename, false)
+	// In debug mode (opts.Debug=true), //line directives are emitted for Delve debugging.
+	// In release mode, position mapping is handled via .dmap files instead.
+	// Pass filename for TypeResolver (needed for cross-file type resolution).
+	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename, opts.Debug)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
 
 	// Step 2.5: Transform guard statements (MUST run after error propagation, before expressions)
-	// Note: //line directives are disabled - position mapping is handled via .dmap files
-	transformedSource, err = transformGuardStatements(transformedSource, source, "")
+	// In debug mode, pass filename for //line directives. Otherwise, pass "" to disable them.
+	guardFilename := ""
+	if opts.Debug {
+		guardFilename = filename
+	}
+	transformedSource, err = transformGuardStatements(transformedSource, source, guardFilename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("guard transform error: %w", err)
 	}
@@ -199,10 +244,14 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	// Also pass original source for accurate position mapping (earlier transforms shift positions)
-	// Note: //line directives are disabled - position mapping is handled via .dmap files
+	// In debug mode, pass filename for //line directives. Otherwise, pass "" to disable them.
 	// Returns line mappings for multi-line transforms (safe nav, match, null coalesce)
 	var astLineMappings []sourcemap.LineMapping
-	transformedSource, astLineMappings, err = transformASTExpressions(transformedSource, enumRegistry, fullEnumRegistry, source, filename)
+	astFilename := ""
+	if opts.Debug {
+		astFilename = filename
+	}
+	transformedSource, astLineMappings, err = transformASTExpressions(transformedSource, enumRegistry, fullEnumRegistry, source, astFilename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
@@ -262,7 +311,7 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 
 	// Step 4: Run type inference to replace interface{} with actual types
 	var checker *typechecker.Checker
-	if inferTypes {
+	if opts.InferTypes {
 		// Reuse type checker from tuple Pass 2 if available
 		if typeErr == nil && typeChecker != nil {
 			checker = typeChecker
@@ -353,8 +402,15 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 		return TranspileResult{}, fmt.Errorf("print error: %w", err)
 	}
 
-	// Final Go code - no //line directives, position mapping handled via mappings
+	// Final Go code
 	finalGoCode := buf.Bytes()
+
+	// In debug mode, fix //line directive indentation.
+	// go/printer adds indentation to comments, but Go's parser requires //line
+	// directives to start at column 1. Fix them after printing.
+	if opts.Debug {
+		finalGoCode = fixLineDirectiveIndentation(finalGoCode)
+	}
 
 	// Step 5.5: Adjust line mappings for go/printer offset
 	// go/printer may reformat comments (e.g., removing empty comment lines),

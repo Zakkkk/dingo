@@ -41,6 +41,11 @@ type CompileOptions struct {
 	// NoMascot disables mascot animation
 	NoMascot bool
 
+	// Debug enables debug mode: emits //line directives for Delve debugging
+	// and adds -gcflags=-N -l to disable optimizations.
+	// Can also be enabled via DINGO_DEBUG=1 environment variable.
+	Debug bool
+
 	// DingoFiles are .dingo source files to transpile first
 	DingoFiles []string
 
@@ -68,12 +73,21 @@ func goBuildCmd() *cobra.Command {
 
 All go build flags are supported and passed through directly.
 
+Dingo-specific flags:
+  --debug      Enable debug mode: emits //line directives in generated Go code
+               for Delve source mapping, and adds -gcflags=-N -l to disable
+               compiler optimizations. Use for debugging only.
+               Can also be enabled via DINGO_DEBUG=1 environment variable.
+  --verbose    Print the go build command before execution
+  --no-mascot  Disable mascot animation during build
+
 Examples:
   dingo build main.dingo                    # Compile single file
   dingo build -o myapp main.dingo           # With output name
   dingo build ./cmd/myapp                   # Package mode
   dingo build --verbose -race ./...         # Verbose with race detector
-  dingo build -ldflags="-s -w" main.dingo   # With linker flags`,
+  dingo build -ldflags="-s -w" main.dingo   # With linker flags
+  dingo build --debug main.dingo            # Debug build for Delve`,
 		DisableFlagParsing: true, // Take raw args for go build passthrough
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGoCommand(args, "build")
@@ -91,12 +105,18 @@ func goRunCmd() *cobra.Command {
 All go run flags are supported and passed through directly.
 Arguments after -- are passed to the program.
 
+Dingo-specific flags:
+  --debug      Enable debug mode: emits //line directives and disables
+               optimizations. Useful for debugging with Delve.
+  --verbose    Print the go run command before execution
+
 Examples:
   dingo run main.dingo                    # Run single file
   dingo run ./cmd/myapp                   # Run package
   dingo run --verbose main.dingo          # Show go run command
   dingo run main.dingo -- --port 8080     # Pass args to program
-  dingo run -race main.dingo              # Run with race detector`,
+  dingo run -race main.dingo              # Run with race detector
+  dingo run --debug main.dingo            # Debug run for Delve`,
 		DisableFlagParsing: true, // Take raw args for go run passthrough
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGoCommand(args, "run")
@@ -277,6 +297,7 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	// Create shadow builder
 	builder := shadow.NewBuilder(workspaceRoot, shadowDir, cfg)
+	builder.Debug = opts.Debug // Pass debug flag for //line directive emission
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
@@ -579,6 +600,13 @@ func invokeGoToolFromShadow(opts *CompileOptions, result *shadow.BuildResult, go
 	// Build argument list
 	args := []string{goCmd}
 
+	// Add debug flags: disable optimizations and inlining for better debugging
+	// -N: disable optimizations
+	// -l: disable inlining
+	if opts.Debug {
+		args = append(args, "-gcflags=all=-N -l")
+	}
+
 	// Add -o flag with path relative to shadow (output goes to workspace root)
 	if opts.OutputPath != "" && goCmd == "build" {
 		// Make output path absolute relative to workspace root
@@ -643,6 +671,11 @@ func invokeGoToolFromShadow(opts *CompileOptions, result *shadow.BuildResult, go
 func parseCompileArgs(args []string) (*CompileOptions, error) {
 	opts := &CompileOptions{}
 
+	// Check DINGO_DEBUG environment variable
+	if os.Getenv("DINGO_DEBUG") == "1" {
+		opts.Debug = true
+	}
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -655,6 +688,12 @@ func parseCompileArgs(args []string) (*CompileOptions, error) {
 		// Dingo-specific: --no-mascot (disable mascot animation)
 		if arg == "--no-mascot" {
 			opts.NoMascot = true
+			continue
+		}
+
+		// Dingo-specific: --debug (enable debug mode with //line directives)
+		if arg == "--debug" {
+			opts.Debug = true
 			continue
 		}
 
@@ -819,18 +858,24 @@ func transpileDingoFilesWithUI(opts *CompileOptions, buildUI *ui.SimpleBuildUI) 
 		var transpileDuration time.Duration
 		var transpileErr error
 
+		// Configure transpile options (debug mode emits //line directives for Delve)
+		transpileOpts := transpiler.TranspileOptions{
+			InferTypes: true,
+			Debug:      opts.Debug,
+		}
+
 		if buildUI != nil {
 			buildUI.SetStatus(mascot.StateCompiling, "Transpiling...", filepath.Base(dingoFile))
 			transpileErr = runWithSpinnerCompile("Transpile", buildUI, func() error {
 				start := time.Now()
 				var err error
-				result, err = transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
+				result, err = transpiler.PureASTTranspileWithMappingsOpts(src, dingoFile, transpileOpts)
 				transpileDuration = time.Since(start)
 				return err
 			})
 		} else {
 			start := time.Now()
-			result, transpileErr = transpiler.PureASTTranspileWithMappings(src, dingoFile, true)
+			result, transpileErr = transpiler.PureASTTranspileWithMappingsOpts(src, dingoFile, transpileOpts)
 			transpileDuration = time.Since(start)
 		}
 
@@ -1106,6 +1151,13 @@ func invokeGoToolSilent(opts *CompileOptions, generatedGoFiles []string, goCmd s
 func invokeGoToolWithOutput(opts *CompileOptions, generatedGoFiles []string, goCmd string, showVerbose bool) error {
 	// Build final argument list
 	args := []string{goCmd}
+
+	// Add debug flags: disable optimizations and inlining for better debugging
+	// -N: disable optimizations
+	// -l: disable inlining
+	if opts.Debug {
+		args = append(args, "-gcflags=all=-N -l")
+	}
 
 	// Add -o flag if specified (only for build, not run)
 	if opts.OutputPath != "" && goCmd == "build" {

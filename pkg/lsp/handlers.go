@@ -92,14 +92,27 @@ func (t *Translator) TranslateDefinitionLocations(
 		return locations, nil
 	}
 
+	// Use map for deduplication (prevents duplicate results from multiple providers)
+	seen := make(map[string]bool)
 	translatedLocations := make([]protocol.Location, 0, len(locations))
+
 	for _, loc := range locations {
 		translatedLoc, err := t.TranslateLocation(loc, dir)
 		if err != nil {
 			// Skip locations that can't be translated
 			continue
 		}
-		translatedLocations = append(translatedLocations, translatedLoc)
+
+		// Deduplicate by URI + range
+		key := fmt.Sprintf("%s:%d:%d-%d:%d",
+			translatedLoc.URI,
+			translatedLoc.Range.Start.Line, translatedLoc.Range.Start.Character,
+			translatedLoc.Range.End.Line, translatedLoc.Range.End.Character)
+
+		if !seen[key] {
+			seen[key] = true
+			translatedLocations = append(translatedLocations, translatedLoc)
+		}
 	}
 
 	return translatedLocations, nil

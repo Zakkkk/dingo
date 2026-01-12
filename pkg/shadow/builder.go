@@ -33,6 +33,9 @@ type Builder struct {
 	// Verbose enables verbose output
 	Verbose bool
 
+	// Debug enables debug mode: emits //line directives for Delve debugging
+	Debug bool
+
 	// OnProgress is called during transpilation to report progress
 	OnProgress ProgressCallback
 
@@ -290,8 +293,12 @@ func (b *Builder) transpileFile(dingoFile string) (string, error) {
 		return "", err
 	}
 
-	// Transpile
-	result, err := transpiler.PureASTTranspileWithMappings(src, absDingoFile, true)
+	// Transpile with options (debug mode emits //line directives for Delve)
+	opts := transpiler.TranspileOptions{
+		InferTypes: true,
+		Debug:      b.Debug,
+	}
+	result, err := transpiler.PureASTTranspileWithMappingsOpts(src, absDingoFile, opts)
 	if err != nil {
 		return "", err
 	}
