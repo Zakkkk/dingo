@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/MadAppGang/dingo/pkg/config"
 	"github.com/MadAppGang/dingo/pkg/sourcemap/dmap"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
+	"github.com/MadAppGang/dingo/pkg/typeloader"
 )
 
 // ProgressCallback is called during build to report progress
@@ -41,6 +43,12 @@ type Builder struct {
 
 	// generatedFiles tracks files we've transpiled (to avoid copying them as pure Go)
 	generatedFiles map[string]bool
+
+	// TypeCache provides pre-loaded type information for multi-file builds.
+	// When DINGO_FULL_TYPE_RESOLUTION=1, this cache is populated before
+	// transpilation with all imports from all files, enabling fast type
+	// lookup during transpilation (~0.02ms instead of ~1.4s per file).
+	TypeCache *typeloader.BuildCache
 }
 
 // NewBuilder creates a new shadow builder
@@ -66,6 +74,12 @@ type BuildResult struct {
 
 	// CopiedFiles is the list of files copied to the shadow directory
 	CopiedFiles []string
+
+	// TranspiledCount is the number of files actually transpiled (not skipped)
+	TranspiledCount int
+
+	// SkippedCount is the number of files skipped (already up to date)
+	SkippedCount int
 }
 
 // Build creates the shadow directory with all necessary files.
@@ -87,15 +101,20 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 	}
 	result.CopiedFiles = append(result.CopiedFiles, "go.mod", "go.sum")
 
-	// 3. Discover all .dingo files
-	allDingoFiles, err := b.findAllDingoFiles()
+	// 3. Discover ALL .dingo files in the workspace
+	// We must transpile all .dingo files for the module to build correctly,
+	// since pure Go files are skipped if they have a .dingo counterpart.
+	// The dingoFiles parameter only affects which package is built at the end,
+	// not which files are transpiled.
+	targetDingoFiles, err := b.findAllDingoFiles()
 	if err != nil {
 		return nil, fmt.Errorf("failed to find .dingo files: %w", err)
 	}
+	_ = dingoFiles // dingoFiles is used by caller for go build path, not for transpilation
 
 	// 4. Filter to only files that need transpilation (incremental build)
 	var filesToTranspile []string
-	for _, dingoFile := range allDingoFiles {
+	for _, dingoFile := range targetDingoFiles {
 		if b.needsTranspile(dingoFile) {
 			filesToTranspile = append(filesToTranspile, dingoFile)
 		} else {
@@ -106,6 +125,35 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 			// Add to result (existing file)
 			goFile := filepath.Join(b.ShadowDir, goRelPath)
 			result.GeneratedFiles = append(result.GeneratedFiles, goFile)
+			result.SkippedCount++
+		}
+	}
+
+	// 4.5. Pre-load types for all files (performance optimization)
+	// Load types for ALL imports ONCE before transpilation.
+	// This is fast (~150ms total) and enables accurate cross-file type resolution.
+	if len(filesToTranspile) > 0 {
+		if b.Verbose {
+			fmt.Println("Pre-loading types for all files...")
+		}
+
+		startTime := time.Now()
+		allImports := b.collectAllImports(filesToTranspile)
+
+		b.TypeCache = typeloader.NewBuildCache(typeloader.LoaderConfig{
+			WorkingDir: b.WorkspaceRoot,
+			FailFast:   false, // Don't fail on first error - continue with partial type info
+		})
+
+		_, err := b.TypeCache.LoadImports(allImports)
+		if err != nil {
+			// Non-fatal: continue without type cache
+			if b.Verbose {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to pre-load types: %v\n", err)
+			}
+			b.TypeCache = nil
+		} else if b.Verbose {
+			fmt.Printf("Pre-loaded %d packages in %v\n", len(allImports), time.Since(startTime))
 		}
 	}
 
@@ -123,6 +171,7 @@ func (b *Builder) Build(dingoFiles []string) (*BuildResult, error) {
 			return nil, fmt.Errorf("failed to transpile %s: %w", dingoFile, err)
 		}
 		result.GeneratedFiles = append(result.GeneratedFiles, goFile)
+		result.TranspiledCount++
 
 		// Track generated file to avoid copying it as pure Go
 		relPath, _ := filepath.Rel(b.WorkspaceRoot, dingoFile)
@@ -279,6 +328,76 @@ func (b *Builder) copyGoMod(src, dst string) error {
 	return scanner.Err()
 }
 
+// collectAllImports scans all files and returns unique imports.
+// This is fast (~1ms per file) because it only tokenizes imports, not full parsing.
+// Used for pre-loading all types before transpilation.
+//
+// IMPORTANT: Excludes imports from the current module (local packages).
+// Local packages may contain .dingo files that haven't been transpiled yet,
+// so go/packages.Load() would fail on them.
+func (b *Builder) collectAllImports(files []string) []string {
+	collector := transpiler.ImportCollector{}
+	importSet := make(map[string]bool)
+
+	// Get the current module name to filter out local imports
+	moduleName := b.getModuleName()
+
+	for _, file := range files {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			if b.Verbose {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to read %s: %v\n", file, err)
+			}
+			continue
+		}
+
+		imports, err := collector.CollectImports(src)
+		if err != nil {
+			if b.Verbose {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to collect imports from %s: %v\n", file, err)
+			}
+			continue
+		}
+
+		for _, imp := range imports {
+			// Skip local imports (from the current module)
+			// These can't be loaded via go/packages because they may contain .dingo files
+			if moduleName != "" && strings.HasPrefix(imp, moduleName) {
+				continue
+			}
+			importSet[imp] = true
+		}
+	}
+
+	// Convert set to slice
+	allImports := make([]string, 0, len(importSet))
+	for imp := range importSet {
+		allImports = append(allImports, imp)
+	}
+
+	return allImports
+}
+
+// getModuleName reads the module name from go.mod in the workspace root.
+// Returns empty string if go.mod doesn't exist or can't be read.
+func (b *Builder) getModuleName() string {
+	goModPath := filepath.Join(b.WorkspaceRoot, "go.mod")
+	f, err := os.Open(goModPath)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
+}
+
 // transpileFile transpiles a single .dingo file to the shadow directory
 func (b *Builder) transpileFile(dingoFile string) (string, error) {
 	// Make path absolute for reliable relative path calculation
@@ -297,6 +416,7 @@ func (b *Builder) transpileFile(dingoFile string) (string, error) {
 	opts := transpiler.TranspileOptions{
 		InferTypes: true,
 		Debug:      b.Debug,
+		TypeCache:  b.TypeCache, // Pass pre-loaded types for performance
 	}
 	result, err := transpiler.PureASTTranspileWithMappingsOpts(src, absDingoFile, opts)
 	if err != nil {

@@ -39,6 +39,11 @@ func untypedToTypedName(kind types.BasicKind) string {
 	}
 }
 
+// sourceImportCache caches packages loaded via source importer.
+// This prevents repeated expensive source parsing when the GC importer
+// fails to fully populate package scopes.
+var sourceImportCache = make(map[string]*types.Package)
+
 // LambdaTypeInferrer rewrites function literal parameter and return types
 // based on the expected function type from call context.
 //
@@ -87,11 +92,35 @@ func NewLambdaTypeInferrerWithConfig(fset *token.FileSet, file *ast.File, info *
 // Returns true if any changes were made.
 func (inf *LambdaTypeInferrer) Infer() bool {
 	inf.changed = false
+
+	// Fast path: check if there are any function literals in the file
+	// If not, skip all the expensive type resolution work
+	if !inf.hasAnyFuncLiterals() {
+		return false
+	}
+
 	// Layer 1-4: Infer types from call context
 	ast.Inspect(inf.file, inf.visit)
 	// Layer 5: Infer return types for standalone lambdas with typed parameters
 	inf.inferStandaloneLambdas()
 	return inf.changed
+}
+
+// hasAnyFuncLiterals does a fast check to see if the file has any function literals.
+// This is an O(n) scan that avoids expensive type resolution for files without lambdas.
+func (inf *LambdaTypeInferrer) hasAnyFuncLiterals() bool {
+	found := false
+	ast.Inspect(inf.file, func(n ast.Node) bool {
+		if found {
+			return false // Already found one, stop
+		}
+		if _, ok := n.(*ast.FuncLit); ok {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // visit is the AST visitor that looks for call expressions with function literal arguments.
@@ -950,15 +979,27 @@ func (inf *LambdaTypeInferrer) resolveExternalFunction(sel *ast.SelectorExpr) ty
 
 // resolveExternalFunctionViaSourceImporter uses the source importer as a fallback
 // when the gc importer fails to populate package scopes due to type errors.
+// Uses a package-level cache to avoid repeated expensive source parsing.
 func (inf *LambdaTypeInferrer) resolveExternalFunctionViaSourceImporter(pkgPath, funcName string) types.Object {
+	// Check cache first
+	if pkg, ok := sourceImportCache[pkgPath]; ok {
+		if pkg == nil {
+			return nil // Previous import failed
+		}
+		return pkg.Scope().Lookup(funcName)
+	}
+
 	// Use the source importer which parses Go source files
 	imp := importer.ForCompiler(inf.fset, "source", nil)
 
 	pkg, err := imp.Import(pkgPath)
 	if err != nil {
+		sourceImportCache[pkgPath] = nil // Cache the failure
 		return nil
 	}
 
+	// Cache the successfully imported package
+	sourceImportCache[pkgPath] = pkg
 	return pkg.Scope().Lookup(funcName)
 }
 

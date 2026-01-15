@@ -7,12 +7,27 @@ import (
 	"go/printer"
 	"go/scanner"
 	"go/token"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
+	"github.com/MadAppGang/dingo/pkg/typeloader"
+	"github.com/MadAppGang/dingo/pkg/validator"
 )
+
+// profileTranspile enables timing output for each transpilation stage.
+// Set DINGO_PROFILE=1 to enable.
+var profileTranspile = os.Getenv("DINGO_PROFILE") == "1"
+
+func logTiming(stage string, start time.Time) {
+	if profileTranspile {
+		fmt.Fprintf(os.Stderr, "  [PROFILE] %-40s %v\n", stage, time.Since(start))
+	}
+}
 
 /*
 DINGO TRANSPILATION PIPELINE (v4 Architecture - No //line directives)
@@ -99,6 +114,12 @@ type TranspileOptions struct {
 	// When false (default), generated Go code is clean without //line directives.
 	// Position mapping is handled via .dmap files instead.
 	Debug bool
+
+	// TypeCache provides pre-loaded type information for multi-file builds.
+	// When set, skips per-file packages.Load() calls (~1.4s each) and uses
+	// cached types instead (~0.02ms cache lookup).
+	// This is set by shadow.Builder for performance optimization.
+	TypeCache *typeloader.BuildCache
 }
 
 // DefaultTranspileOptions returns the default transpile options.
@@ -168,40 +189,66 @@ func PureASTTranspileWithMappings(source []byte, filename string, inferTypes boo
 // This enables Delve debugger to map Go code back to Dingo source positions.
 // Debug mode should only be used for debugging - release builds use .dmap files instead.
 func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts TranspileOptions) (TranspileResult, error) {
+	var stageStart time.Time
+
+	// PHASE 0: Semantic validation BEFORE any transformation
+	// This catches common errors early with clear diagnostics.
+	// Validation runs on the original Dingo source.
+	stageStart = time.Now()
+	workingDir := filepath.Dir(filename)
+	if workingDir == "" || workingDir == "." {
+		workingDir, _ = filepath.Abs(".")
+	}
+	if validationErr := validateSemantics(source, filename, workingDir, opts.TypeCache); validationErr != nil {
+		return TranspileResult{}, validationErr
+	}
+	logTiming("Phase 0: Semantic validation", stageStart)
+
 	// Extract enum registry from ORIGINAL source (before transformation)
 	// This is used by match expressions to prefix variant names correctly
+	stageStart = time.Now()
 	enumRegistry := dingoast.ExtractEnumRegistry(source)
+	logTiming("Extract enum registry", stageStart)
 
 	// Extract full enum registry (includes value enum metadata for match expressions)
 	// Value enums need special handling: they use simple switch instead of type switch
+	stageStart = time.Now()
 	fullEnumRegistry := dingoast.ExtractFullEnumRegistry(source)
+	logTiming("Extract full enum registry", stageStart)
 
 	// Step 1: Transform Dingo syntax to Go using token-based transformations
+	stageStart = time.Now()
 	transformedSource, err := dingoast.TransformSource(source, filename)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("transform error: %w", err)
 	}
+	logTiming("Step 1: TransformSource (AST)", stageStart)
 
 	// Step 2a: Transform tuple type aliases (must run before Go parser)
 	// Pattern: type Point = (int, int) → type Point = __tupleType2__(int, int)
+	stageStart = time.Now()
 	transformedSource, err = transformTupleTypeAliases(transformedSource)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("tuple type alias error: %w", err)
 	}
+	logTiming("Step 2a: Tuple type aliases", stageStart)
 
 	// Step 2a1: Transform tuple destructuring (must run before tuple literals)
 	// Pattern: (x, y) := expr → _ = __tupleDest2__("x:0", "y:1", expr)
 	// This MUST run before transformTupleLiterals to avoid treating the LHS as a tuple literal
+	stageStart = time.Now()
 	transformedSource, err = transformTupleDestructuring(transformedSource)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("tuple destructuring error: %w", err)
 	}
+	logTiming("Step 2a1: Tuple destructuring", stageStart)
 
 	// Step 2a2: Transform tuple literals (must run before Go parser)
 	// Pattern: (a, b) → __tuple2__(a, b)
 	// Run in a loop to handle nested tuples: ((a, b), (c, d)) needs multiple passes
 	// First pass: inner tuples (a, b) → __tuple2__(a, b)
 	// Second pass: outer tuple (__tuple2__(a, b), __tuple2__(c, d)) → __tuple2__(__tuple2__(a, b), __tuple2__(c, d))
+	stageStart = time.Now()
 	const maxTupleLiteralPasses = 5 // Prevent infinite loops on malformed input
 	for pass := 0; pass < maxTupleLiteralPasses; pass++ {
 		prevLen := len(transformedSource)
@@ -214,24 +261,31 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 			break
 		}
 	}
+	logTiming("Step 2a2: Tuple literals", stageStart)
 
 	// Step 2b: Transform tuples - Pass 1 (syntax to markers)
+	stageStart = time.Now()
 	transformedSource, err = transformTuplePass1(transformedSource)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("tuple pass 1 error: %w", err)
 	}
+	logTiming("Step 2b: Tuple pass 1", stageStart)
 
 	// Step 2.1: Transform statement-level error propagation (MUST run before expression transforms)
 	// In debug mode (opts.Debug=true), //line directives are emitted for Delve debugging.
 	// In release mode, position mapping is handled via .dmap files instead.
 	// Pass filename for TypeResolver (needed for cross-file type resolution).
-	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename, opts.Debug)
+	// Pass TypeCache for pre-loaded types (performance optimization for multi-file builds).
+	stageStart = time.Now()
+	transformedSource, lineMappings, columnMappings, err := transformErrorPropStatements(transformedSource, source, filename, opts.Debug, opts.TypeCache)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("statement transform error: %w", err)
 	}
+	logTiming("Step 2.1: Error propagation statements", stageStart)
 
 	// Step 2.5: Transform guard statements (MUST run after error propagation, before expressions)
 	// In debug mode, pass filename for //line directives. Otherwise, pass "" to disable them.
+	stageStart = time.Now()
 	guardFilename := ""
 	if opts.Debug {
 		guardFilename = filename
@@ -240,12 +294,14 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("guard transform error: %w", err)
 	}
+	logTiming("Step 2.5: Guard statements", stageStart)
 
 	// Step 3: Transform match/lambda expressions using AST-based codegen
 	// Pass enum registry so match expressions can prefix variant names correctly
 	// Also pass original source for accurate position mapping (earlier transforms shift positions)
 	// In debug mode, pass filename for //line directives. Otherwise, pass "" to disable them.
 	// Returns line mappings for multi-line transforms (safe nav, match, null coalesce)
+	stageStart = time.Now()
 	var astLineMappings []sourcemap.LineMapping
 	astFilename := ""
 	if opts.Debug {
@@ -255,24 +311,30 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("AST transform error: %w", err)
 	}
+	logTiming("Step 3: AST expressions (match/lambda)", stageStart)
 
 	// Merge AST line mappings with error prop line mappings
 	// Both are metadata - no machine comments in the generated code
 	lineMappings = append(lineMappings, astLineMappings...)
 
 	// Step 3: Parse the transformed Go source with standard go/parser
+	stageStart = time.Now()
 	fset := token.NewFileSet()
 	goFile, err := goparser.ParseFile(fset, filename, transformedSource, goparser.ParseComments)
 	if err != nil {
 		return TranspileResult{}, fmt.Errorf("parse error: %w", humanizeParseError(err))
 	}
+	logTiming("Step 3 (parse): go/parser.ParseFile", stageStart)
 
 	// Step 3.1: Type-check the Go AST (needed for tuple Pass 2)
+	stageStart = time.Now()
 	pkgName := goFile.Name.Name
 	typeChecker, typeErr := typechecker.New(fset, goFile, pkgName)
+	logTiming("Step 3.1: typechecker.New (1st)", stageStart)
 
 	// Step 3.2: Transform tuples - Pass 2 (resolve types and generate final structs)
 	// This must happen AFTER go/types has analyzed the AST
+	stageStart = time.Now()
 	if typeErr == nil && typeChecker != nil {
 		tuplePass2Result, tupleLineMappings, tupleErr := transformTuplePass2(fset, goFile, typeChecker, transformedSource)
 		if tupleErr == nil {
@@ -290,26 +352,32 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 		}
 		// If tuple Pass 2 fails, continue with markers (they're valid Go)
 	}
+	logTiming("Step 3.2: Tuple pass 2", stageStart)
 
 	// Step 3.4: Transform bare enum variant identifiers to constructor calls
 	// Example: `return Active` → `return NewStatusActive()` when Active is a Status variant
 	// This must run AFTER tuple pass 2 (which may re-parse) but before type checking.
+	stageStart = time.Now()
 	if len(enumRegistry) > 0 {
 		variantTransformer := NewEnumVariantTransformer(fset, goFile, enumRegistry)
 		variantTransformer.Transform()
 	}
+	logTiming("Step 3.4: Enum variant transform", stageStart)
 
 	// Step 3.5: None inference - rewrite bare None/None() to None[T]()
 	// This must run BEFORE QualifyDingoTypes so we can access the original type names
+	stageStart = time.Now()
 	noneTransformer := NewNoneInferenceTransformer(fset, goFile)
 	if err := noneTransformer.Transform(); err != nil {
 		return TranspileResult{}, fmt.Errorf("none inference: %w", err)
 	}
+	logTiming("Step 3.5: None inference", stageStart)
 
 	// Step 3.6: Inject dgo import if Result/Option types are detected
 	InjectDgoImport(fset, goFile)
 
 	// Step 4: Run type inference to replace interface{} with actual types
+	stageStart = time.Now()
 	var checker *typechecker.Checker
 	if opts.InferTypes {
 		// Reuse type checker from tuple Pass 2 if available
@@ -323,6 +391,7 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 			// Type checker unavailable - will fall back to AST-based heuristics
 			// for Result/Option wrapping (checks error variable names, function calls)
 		}
+		logTiming("Step 4: typechecker.New (reuse or create)", stageStart)
 
 		// Step 4.1: Multi-pass lambda type inference from call context
 		// We run multiple passes because lambda inference may resolve types
@@ -331,6 +400,7 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 		//          Map(eligible, |u| ...) → now we can infer u is User
 		// Without multi-pass, Map's arg type would be "invalid type" because
 		// eligible's type depends on Filter's lambda being correctly typed first.
+		stageStart = time.Now()
 		if checker != nil {
 			const maxPasses = 5 // Prevent infinite loops
 			var lastInferrer *typechecker.LambdaTypeInferrer
@@ -351,6 +421,7 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 					break // Type checker failed, stop
 				}
 			}
+			logTiming("Step 4.1: Lambda type inference (multi-pass)", stageStart)
 
 			// Step 4.1.1: Check for unresolved lambda types (fail-fast)
 			// If any lambdas still have 'any' types after inference, error with helpful message
@@ -376,23 +447,30 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 		}
 
 		// Step 4.2: General type inference (IIFE return types, etc.)
+		stageStart = time.Now()
 		_, err = typechecker.RewriteSource(fset, goFile)
 		if err != nil {
 			// Type inference failed - continue without it
 			// This is acceptable since interface{} is valid Go
 		}
+		logTiming("Step 4.2: RewriteSource", stageStart)
 
 		// Step 4.3: Convert IIFEs to human-like if statements
 		// Transforms IIFE patterns from safe navigation into readable if statements
+		stageStart = time.Now()
 		converter := typechecker.NewIIFEConverter(fset, goFile)
 		converter.Convert()
+		logTiming("Step 4.3: IIFE conversion", stageStart)
 	}
 
 	// Step 4.5: Wrap Result/Option return statements with dgo constructors
+	stageStart = time.Now()
 	wrapper := NewResultWrapperTransformer(fset, goFile, checker)
 	wrapper.Transform()
+	logTiming("Step 4.5: Result wrapper", stageStart)
 
 	// Step 5: Print Go AST to source
+	stageStart = time.Now()
 	var buf bytes.Buffer
 	cfg := printer.Config{
 		Mode:     printer.UseSpaces | printer.TabIndent,
@@ -401,6 +479,7 @@ func PureASTTranspileWithMappingsOpts(source []byte, filename string, opts Trans
 	if err := cfg.Fprint(&buf, fset, goFile); err != nil {
 		return TranspileResult{}, fmt.Errorf("print error: %w", err)
 	}
+	logTiming("Step 5: go/printer", stageStart)
 
 	// Final Go code
 	finalGoCode := buf.Bytes()
@@ -1006,4 +1085,22 @@ func humanizeParseError(err error) error {
 	}
 
 	return err
+}
+
+// validateSemantics runs semantic validation on Dingo source before transformation.
+// This catches common errors early and provides helpful diagnostics.
+//
+// Currently validates:
+// - Result tuple unpacking: detects incorrect `x, err := ResultReturningFunc()`
+//
+// Parameters:
+//   - typeCache: Pre-loaded type cache for fast path (nil = per-file loading)
+//
+// Returns nil if validation passes, or an error (typically *errors.EnhancedError)
+// with position information and suggestions if validation fails.
+func validateSemantics(source []byte, filename string, workingDir string, typeCache *typeloader.BuildCache) error {
+	// Validate Result tuple unpacking
+	// This catches: x, err := FuncReturningResult()
+	// Where FuncReturningResult() returns dgo.Result[T, E] (single value, not tuple)
+	return validator.ValidateSourceWithCache(source, filename, workingDir, typeCache)
 }

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"go/scanner"
 	"go/token"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MadAppGang/dingo/pkg/ast"
 	"github.com/MadAppGang/dingo/pkg/codegen"
@@ -16,6 +18,7 @@ import (
 	"github.com/MadAppGang/dingo/pkg/sourcemap"
 	"github.com/MadAppGang/dingo/pkg/tokenizer"
 	"github.com/MadAppGang/dingo/pkg/typechecker"
+	"github.com/MadAppGang/dingo/pkg/typeloader"
 )
 
 // extractLineMappingsFromGoAST extracts line mappings using Go's scanner.
@@ -638,11 +641,22 @@ func buildOriginalLineMap(originalSrc []byte) []originalLineInfo {
 // originalSrc should be the original Dingo source (before any transforms) for accurate position tracking.
 // filename is used for TypeResolver (cross-file type resolution) and optionally //line directives.
 // emitDirectives controls whether //line directives are emitted (false for clean output).
+// typeCache provides pre-loaded types for multi-file builds (nil falls back to per-file loading).
 // Returns line mappings and column mappings for precise hover/go-to-definition.
-func transformErrorPropStatements(src []byte, originalSrc []byte, filename string, emitDirectives bool) ([]byte, []sourcemap.LineMapping, []sourcemap.ColumnMapping, error) {
+func transformErrorPropStatements(src []byte, originalSrc []byte, filename string, emitDirectives bool, typeCache *typeloader.BuildCache) ([]byte, []sourcemap.LineMapping, []sourcemap.ColumnMapping, error) {
+	var profileStart time.Time
+	if os.Getenv("DINGO_PROFILE") == "1" {
+		profileStart = time.Now()
+	}
+
 	locations, err := ast.FindErrorPropStatements(src)
 	if err != nil {
 		return src, nil, nil, err
+	}
+
+	if os.Getenv("DINGO_PROFILE") == "1" {
+		fmt.Fprintf(os.Stderr, "    [PROFILE] FindErrorPropStatements           %v\n", time.Since(profileStart))
+		profileStart = time.Now()
 	}
 
 	if len(locations) == 0 {
@@ -651,10 +665,21 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 
 	// Create TypeResolver for accurate cross-file type resolution.
 	// This is OPTIONAL - if it fails, we fall back to local search.
-	// Extract working directory from filename.
+	var resolver *codegen.TypeResolver
 	workingDir := extractWorkingDir(filename)
-	resolver, _ := codegen.NewTypeResolver(src, workingDir)
+	if typeCache != nil {
+		// Fast path: use pre-loaded cache (~0.05ms per file)
+		resolver, _ = codegen.NewTypeResolverWithCache(src, workingDir, typeCache)
+	} else {
+		// Fallback: per-file loading (slower, used for single-file transpilation)
+		resolver, _ = codegen.NewTypeResolver(src, workingDir)
+	}
 	// Ignore resolver creation errors - it's an optimization, not a requirement
+
+	if os.Getenv("DINGO_PROFILE") == "1" {
+		fmt.Fprintf(os.Stderr, "    [PROFILE] NewTypeResolver                   %v (skipped=%v)\n", time.Since(profileStart), resolver == nil)
+		profileStart = time.Now()
+	}
 
 	// Pre-scan original source to get accurate line numbers
 	// Earlier transforms (like enum expansion) change line counts, so we need original positions

@@ -10,9 +10,41 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/MadAppGang/dingo/pkg/typeloader"
 )
+
+// globalTypeCache caches type loading results across multiple file transpilations.
+// This is critical for performance - packages.Load() is very expensive (1+ second).
+var globalTypeCache = &typeCache{
+	results: make(map[string]*typeloader.LoadResult),
+}
+
+type typeCache struct {
+	mu      sync.RWMutex
+	results map[string]*typeloader.LoadResult // key is sorted, comma-joined imports
+}
+
+// ClearTypeCache clears the global type cache. Call this at the start of a new build.
+func ClearTypeCache() {
+	globalTypeCache.mu.Lock()
+	defer globalTypeCache.mu.Unlock()
+	globalTypeCache.results = make(map[string]*typeloader.LoadResult)
+}
+
+func (c *typeCache) get(key string) (*typeloader.LoadResult, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result, ok := c.results[key]
+	return result, ok
+}
+
+func (c *typeCache) set(key string, result *typeloader.LoadResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.results[key] = result
+}
 
 // TypeResolver provides type information for expressions using go/types.
 // It handles cross-file and cross-package type resolution.
@@ -20,14 +52,15 @@ import (
 // This resolver is optional - if it fails to load types, callers should
 // fall back to existing local-only search behavior.
 type TypeResolver struct {
-	fset          *token.FileSet
-	file          *ast.File
-	typeInfo      *types.Info
-	pkg           *types.Package
-	loadResult    *typeloader.LoadResult
-	importAliases map[string]string                              // maps alias (e.g., "util") to full path
-	dingoFuncs    map[string]map[string]*typeloader.FunctionSignature // maps pkgAlias -> funcName -> signature (from Dingo sources)
-	workingDir    string                                          // directory where source file lives
+	fset             *token.FileSet
+	file             *ast.File
+	typeInfo         *types.Info
+	pkg              *types.Package
+	loadResult       *typeloader.LoadResult
+	importAliases    map[string]string                                   // maps alias (e.g., "util") to full path
+	dingoFuncs       map[string]map[string]*typeloader.FunctionSignature // maps pkgAlias -> funcName -> signature (from Dingo sources)
+	interfaceMethods map[string]*typeloader.FunctionSignature            // maps methodName -> signature (from interface definitions)
+	workingDir       string                                              // directory where source file lives
 }
 
 // NewTypeResolver creates a resolver from Dingo source.
@@ -47,7 +80,7 @@ func NewTypeResolver(src []byte, workingDir string) (*TypeResolver, error) {
 	// Replace '?' with space to make source parseable
 	// Also replace 'match' keyword with spaces (same length)
 	// This preserves byte positions while making valid Go
-	sanitized := sanitizeDingoSource(src)
+	sanitized := SanitizeDingoSource(src)
 
 	// Step 2: Parse with go/parser to get AST
 	fset := token.NewFileSet()
@@ -76,15 +109,38 @@ func NewTypeResolver(src []byte, workingDir string) (*TypeResolver, error) {
 		workingDir, _ = filepath.Abs(workingDir)
 	}
 
-	loader := typeloader.NewLoader(typeloader.LoaderConfig{
-		WorkingDir: workingDir,
-		FailFast:   false, // Don't fail on first error
-	})
+	// Create cache key from imports (sorted for consistency)
+	sortedImports := make([]string, len(imports))
+	copy(sortedImports, imports)
+	// Simple sort for cache key
+	for i := 0; i < len(sortedImports); i++ {
+		for j := i + 1; j < len(sortedImports); j++ {
+			if sortedImports[i] > sortedImports[j] {
+				sortedImports[i], sortedImports[j] = sortedImports[j], sortedImports[i]
+			}
+		}
+	}
+	cacheKey := workingDir + ":" + strings.Join(sortedImports, ",")
 
-	loadResult, loadErr := loader.LoadFromImports(imports)
-	// Non-fatal: we can still do local type checking even if imports fail
-	if loadErr != nil {
-		loadResult = nil
+	// Try cache first
+	var loadResult *typeloader.LoadResult
+	if cached, ok := globalTypeCache.get(cacheKey); ok {
+		loadResult = cached
+	} else {
+		// Cache miss - load from packages (expensive!)
+		loader := typeloader.NewLoader(typeloader.LoaderConfig{
+			WorkingDir: workingDir,
+			FailFast:   false, // Don't fail on first error
+		})
+
+		var loadErr error
+		loadResult, loadErr = loader.LoadFromImports(imports)
+		// Non-fatal: we can still do local type checking even if imports fail
+		if loadErr != nil {
+			loadResult = nil
+		}
+		// Cache the result (even if nil, to avoid retrying)
+		globalTypeCache.set(cacheKey, loadResult)
 	}
 
 	// Step 5: Run go/types type checker
@@ -111,6 +167,93 @@ func NewTypeResolver(src []byte, workingDir string) (*TypeResolver, error) {
 		file:          file,
 		typeInfo:      typeInfo,
 		pkg:           pkg,
+		loadResult:    loadResult,
+		importAliases: importAliases,
+		workingDir:    workingDir,
+	}
+
+	// Step 6: Load function signatures from Dingo source files in imported packages
+	// This handles cross-package calls where the imported package is written in Dingo
+	resolver.loadDingoFunctions()
+
+	return resolver, nil
+}
+
+// NewTypeResolverWithCache creates a resolver using pre-loaded types from BuildCache.
+// This is the performance-optimized path for multi-file builds.
+//
+// Instead of calling packages.Load() (~1.4s per file), we look up types from the
+// pre-loaded cache (~0.02ms). The cache is populated once for all files by shadow.Builder.
+//
+// Parameters:
+//   - src: Dingo source code (will be sanitized internally)
+//   - workingDir: Directory for resolving imports
+//   - cache: Pre-loaded BuildCache from shadow.Builder
+//
+// Returns error if source cannot be parsed. Type checking errors are
+// silently ignored - we want partial type info even if some expressions fail.
+func NewTypeResolverWithCache(src []byte, workingDir string, cache *typeloader.BuildCache) (*TypeResolver, error) {
+	if cache == nil {
+		// Fallback to regular NewTypeResolver if no cache provided
+		return NewTypeResolver(src, workingDir)
+	}
+
+	// Step 1: Sanitize Dingo syntax for go/parser (same as NewTypeResolver)
+	sanitized := SanitizeDingoSource(src)
+
+	// Step 2: Parse with go/parser to get AST
+	fset := token.NewFileSet()
+	file, parseErr := parser.ParseFile(fset, "", sanitized, parser.ParseComments)
+
+	// Step 3: Extract imports and aliases from AST
+	// Even if parsing failed, we may have partial AST for imports
+	var imports []string
+	var importAliases map[string]string
+	if file != nil {
+		imports = extractImportsFromAST(file)
+		importAliases = extractImportAliasesFromAST(file)
+	}
+
+	// If parsing failed completely (no valid package declaration), return error
+	if file == nil || file.Name == nil || file.Name.Name == "" {
+		return nil, parseErr
+	}
+
+	// Step 4: Get types from pre-loaded cache (FAST!)
+	// This is the key difference from NewTypeResolver - uses cache.LoadImports()
+	// which returns cached results (~0.02ms) instead of packages.Load() (~1.4s)
+	if workingDir == "" || workingDir == "." {
+		workingDir, _ = filepath.Abs(".")
+	} else {
+		workingDir, _ = filepath.Abs(workingDir)
+	}
+
+	loadResult, loadErr := cache.LoadImports(imports)
+	if loadErr != nil {
+		// Non-fatal: we can still do local type checking
+		loadResult = nil
+	}
+
+	// Step 5: SKIP go/types type checker for cached version
+	// The expensive types.Config.Check() uses importer.ForCompiler() which
+	// calls packages.Load() again for each import (~200ms per import).
+	// Instead, we rely entirely on loadResult (Strategy 2 in GetReturnCount).
+	// This is the key optimization: O(1) cache lookup vs O(n * 200ms) type checking.
+	//
+	// We create empty typeInfo so GetReturnCount's Strategy 1 falls through
+	// to Strategy 2 which uses our cached function signatures.
+	typeInfo := &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+	}
+
+	resolver := &TypeResolver{
+		fset:          fset,
+		file:          file,
+		typeInfo:      typeInfo,
+		pkg:           nil, // No package - we skip type checking
 		loadResult:    loadResult,
 		importAliases: importAliases,
 		workingDir:    workingDir,
@@ -190,20 +333,43 @@ func (r *TypeResolver) GetReturnCount(exprBytes []byte) int {
 	return -1
 }
 
-// sanitizeDingoSource replaces Dingo-specific syntax with valid Go.
+// SanitizeDingoSource replaces Dingo-specific syntax with valid Go.
 // Handles:
-//   - ? -> space (for error propagation)
+//   - ? "context" -> // "context" (error propagation with context becomes comment)
+//   - ? -> space (basic error propagation)
 //   - match -> switch (preserves spacing since both are 5 chars)
 //   - => -> {  (arrow to brace, adds padding for length)
 //
-// This is NOT byte-based code transformation - it's preprocessing to make
-// Dingo source parseable by go/parser. All actual analysis is done via
-// go/ast and go/types.
-func sanitizeDingoSource(src []byte) []byte {
+// This is NOT byte-based code transformation (forbidden by CLAUDE.md for position tracking).
+// It's a preprocessing step to make Dingo source parseable by go/parser.
+// All actual analysis is done via go/ast and go/types (token-based).
+//
+// The byte positions are preserved (same-length replacements) so AST node positions
+// remain valid for the original source.
+func SanitizeDingoSource(src []byte) []byte {
 	sanitized := make([]byte, len(src))
 	copy(sanitized, src)
 
-	// Replace '?' with space
+	// First pass: Replace '? "' with '// ' (turns error context into comment)
+	// This handles: expr? "context message" -> expr// "context message"
+	for i := 0; i < len(sanitized)-1; i++ {
+		if sanitized[i] == '?' {
+			// Look for optional whitespace then quote
+			j := i + 1
+			for j < len(sanitized) && (sanitized[j] == ' ' || sanitized[j] == '\t') {
+				j++
+			}
+			if j < len(sanitized) && sanitized[j] == '"' {
+				// Replace ? with / and following char with /
+				sanitized[i] = '/'
+				sanitized[i+1] = '/'
+				i++ // Skip the second / we just wrote
+				continue
+			}
+		}
+	}
+
+	// Second pass: Replace remaining '?' with space
 	for i := 0; i < len(sanitized); i++ {
 		if sanitized[i] == '?' {
 			sanitized[i] = ' '
@@ -403,14 +569,12 @@ func extractMethodFromCallExpr(call *ast.CallExpr) string {
 	return ""
 }
 
-// extractLastIdent extracts the last identifier from a selector chain.
+// extractLastIdent extracts the last identifier before the method name from a selector chain.
+// For "s.companyRepo.GetByID", the selector passed here is "s.companyRepo",
+// and we want to return "companyRepo" (the field holding the interface).
 func extractLastIdent(sel *ast.SelectorExpr) string {
-	switch x := sel.X.(type) {
-	case *ast.Ident:
-		return x.Name
-	case *ast.SelectorExpr:
-		return sel.Sel.Name
-	}
+	// For any selector a.b, return "b" (the rightmost identifier before the method)
+	// This is sel.Sel.Name, not sel.X
 	return sel.Sel.Name
 }
 
@@ -450,7 +614,16 @@ func (r *TypeResolver) GetReturnTypeInfo(exprBytes []byte) (isResult bool, okTyp
 	if r.dingoFuncs != nil {
 		alias, funcName := splitMethodName(methodName)
 		if alias != "" && funcName != "" {
+			// First try direct alias lookup (e.g., "service.Create" -> dingoFuncs["service"]["Create"])
 			if pkgFuncs, found := r.dingoFuncs[alias]; found {
+				if sig, found := pkgFuncs[funcName]; found {
+					return checkSignatureForResult(sig)
+				}
+			}
+
+			// Fallback: alias might be a field name (e.g., "userService.ListByCompany")
+			// Search all packages for the method name
+			for _, pkgFuncs := range r.dingoFuncs {
 				if sig, found := pkgFuncs[funcName]; found {
 					return checkSignatureForResult(sig)
 				}
@@ -476,6 +649,27 @@ func (r *TypeResolver) GetReturnTypeInfo(exprBytes []byte) (isResult bool, okTyp
 
 		// Check local functions
 		if sig, found := r.loadResult.LocalFunctions[methodName]; found {
+			return checkSignatureForResult(sig)
+		}
+	}
+
+	// Strategy 3: Check interface methods from Dingo source packages
+	// For calls like s.userRepo.GetByEmail(...), extract just the method name
+	// and look it up in interface methods. This handles cross-file interface calls.
+	//
+	// Note: This CAN have collisions when multiple interfaces have the same method name
+	// (e.g., GetByID in both CompanyRepository and UserRepository). However:
+	// - For error propagation: If the method returns Result, we use Result pattern.
+	//   If it doesn't, we use tuple pattern. Both are valid if signatures match.
+	// - For validation: If ANY matching interface method returns Result, flagging
+	//   tuple unpacking is correct - the user should investigate.
+	if r.interfaceMethods != nil {
+		// Extract just the method name (last part after the dot)
+		justMethodName := methodName
+		if dotIdx := strings.LastIndex(methodName, "."); dotIdx >= 0 {
+			justMethodName = methodName[dotIdx+1:]
+		}
+		if sig, found := r.interfaceMethods[justMethodName]; found {
 			return checkSignatureForResult(sig)
 		}
 	}
@@ -545,6 +739,7 @@ func (r *TypeResolver) loadDingoFunctions() {
 	}
 
 	r.dingoFuncs = make(map[string]map[string]*typeloader.FunctionSignature)
+	r.interfaceMethods = make(map[string]*typeloader.FunctionSignature)
 
 	// Find go.mod to determine module name and root
 	modName, modRoot := findModuleInfo(r.workingDir)
@@ -573,7 +768,7 @@ func (r *TypeResolver) loadDingoFunctions() {
 			continue
 		}
 
-		// Parse each .dingo file to extract function signatures
+		// Parse each .dingo file to extract function signatures and interface methods
 		funcs := make(map[string]*typeloader.FunctionSignature)
 		for _, file := range dingoFiles {
 			src, err := os.ReadFile(file)
@@ -581,6 +776,7 @@ func (r *TypeResolver) loadDingoFunctions() {
 				continue
 			}
 
+			// Extract function signatures
 			fileFuncs, err := lfp.ParseLocalFunctions(src)
 			if err != nil {
 				continue
@@ -588,6 +784,18 @@ func (r *TypeResolver) loadDingoFunctions() {
 
 			for name, sig := range fileFuncs {
 				funcs[name] = sig
+			}
+
+			// Extract interface method signatures
+			// These are stored globally (not per-package) since interface methods
+			// can be called through any variable holding that interface type
+			ifaceMethods, err := lfp.ParseInterfaceMethods(src)
+			if err != nil {
+				continue
+			}
+
+			for name, sig := range ifaceMethods {
+				r.interfaceMethods[name] = sig
 			}
 		}
 
