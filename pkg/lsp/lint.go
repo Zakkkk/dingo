@@ -82,11 +82,13 @@ func convertToLSPDiagnostic(d analyzer.Diagnostic) protocol.Diagnostic {
 		},
 	}
 
-	// All diagnostics are warnings (advisory mode)
+	// Default to warning
 	severity := protocol.DiagnosticSeverityWarning
 
-	// Convert analyzer.Severity to LSP severity if needed
+	// Convert analyzer.Severity to LSP severity
 	switch d.Severity {
+	case analyzer.SeverityError:
+		severity = protocol.DiagnosticSeverityError
 	case analyzer.SeverityHint:
 		severity = protocol.DiagnosticSeverityHint
 	case analyzer.SeverityInfo:

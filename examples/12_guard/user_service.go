@@ -50,12 +50,12 @@ func loadUser(id int) dgo.Result[string, string] {
 	// guard with := declares new variable, |err| binds the error
 	tmp := findUser(id)
 	if tmp.IsErr() {
-		err := *tmp.Err
+		err := tmp.Err
 
 		return dgo.Err[string](fmt.Sprintf("load failed: %s", err))
 
 	}
-	user := *tmp.Ok
+	user := tmp.Ok
 
 	return dgo.Ok[string, string](user.Name)
 }
@@ -70,7 +70,7 @@ func getUserTheme(id int) string {
 		return "default"
 
 	}
-	theme := *tmp1.Some
+	theme := tmp1.Some
 
 	return theme
 }
@@ -83,12 +83,12 @@ func refreshUser(id int) dgo.Result[User, string] {
 	// guard with = reassigns instead of declaring
 	tmp2 := findUser(id)
 	if tmp2.IsErr() {
-		err := *tmp2.Err
+		err := tmp2.Err
 
 		return dgo.Err[User](err)
 
 	}
-	user = *tmp2.Ok
+	user = tmp2.Ok
 
 	return dgo.Ok[User, string](user)
 }
@@ -98,12 +98,12 @@ func refreshUser(id int) dgo.Result[User, string] {
 func getPosition() dgo.Result[string, string] {
 	tmp3 := getCoords()
 	if tmp3.IsErr() {
-		err := *tmp3.Err
+		err := tmp3.Err
 
 		return dgo.Err[string](err)
 
 	}
-	pt := *tmp3.Ok
+	pt := tmp3.Ok
 
 	return dgo.Ok[string, string](fmt.Sprintf("(%d, %d)", pt.X, pt.Y))
 }
@@ -113,12 +113,12 @@ func getPosition() dgo.Result[string, string] {
 func getUserWithTheme(id int) dgo.Result[string, string] {
 	tmp4 := findUser(id)
 	if tmp4.IsErr() {
-		err := *tmp4.Err
+		err := tmp4.Err
 
 		return dgo.Err[string](err)
 
 	}
-	user := *tmp4.Ok
+	user := tmp4.Ok
 
 	tmp5 := getTheme(user.ID)
 	if tmp5.IsNone() {
@@ -126,7 +126,7 @@ func getUserWithTheme(id int) dgo.Result[string, string] {
 		return dgo.Ok[string, string](fmt.Sprintf("%s (no theme)", user.Name))
 
 	}
-	theme := *tmp5.Some
+	theme := tmp5.Some
 
 	return dgo.Ok[string, string](fmt.Sprintf("%s (%s)", user.Name, theme))
 }

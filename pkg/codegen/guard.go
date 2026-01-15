@@ -64,10 +64,10 @@ func InferExprTypeWithBinding(exprText string, hasBinding bool) (ExprType, error
 //
 //	tmp := FindUser(id)
 //	if tmp.IsErr() {
-//	    err := *tmp.err
+//	    err := tmp.Err
 //	    return ResultErr(err)
 //	}
-//	user := *tmp.ok
+//	user := tmp.Ok
 //
 // Variable naming convention:
 //   - First: tmp, err
@@ -122,7 +122,7 @@ func (g *GuardGenerator) generateCheck(tmpVar string) {
 		if g.Location.HasBinding {
 			g.Write("\t")
 			g.Write(g.Location.BindingName)
-			g.Write(" := *")
+			g.Write(" := ")
 			g.Write(tmpVar)
 			g.Write(".Err\n")
 		}
@@ -173,23 +173,21 @@ func (g *GuardGenerator) generateBindings(tmpVar string) {
 	}
 
 	if g.Location.IsTuple {
-		// Tuple destructuring: name := (*tmp.ok).Item1 or name = (*tmp.ok).Item1
+		// Tuple destructuring: name := tmp.Ok.Item1 or name = tmp.Ok.Item1
 		for i, name := range g.Location.VarNames {
 			g.Write(name)
 			g.Write(assignOp)
-			g.Write("(*")
 			g.Write(tmpVar)
 			g.Write(".")
 			g.Write(valueField)
-			g.Write(").Item")
+			g.Write(".Item")
 			g.Write(fmt.Sprintf("%d", i+1))
 			g.WriteByte('\n')
 		}
 	} else {
-		// Single binding: user := *tmp.ok or user = *tmp.ok
+		// Single binding: user := tmp.Ok or user = tmp.Ok
 		g.Write(g.Location.VarNames[0])
 		g.Write(assignOp)
-		g.Write("*")
 		g.Write(tmpVar)
 		g.Write(".")
 		g.Write(valueField)

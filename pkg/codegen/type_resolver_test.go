@@ -174,9 +174,9 @@ func TestSanitizeDingoSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeDingoSource([]byte(tt.input))
+			result := SanitizeDingoSource([]byte(tt.input))
 			if string(result) != tt.expected {
-				t.Errorf("sanitizeDingoSource(%q) = %q, want %q", tt.input, string(result), tt.expected)
+				t.Errorf("SanitizeDingoSource(%q) = %q, want %q", tt.input, string(result), tt.expected)
 			}
 		})
 	}

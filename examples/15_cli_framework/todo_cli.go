@@ -13,10 +13,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/MadAppGang/dingo/pkg/dgo"
 	"os"
 	"strconv"
 	"strings"
+	"github.com/MadAppGang/dingo/pkg/dgo"
 )
 
 // =============================================================================
@@ -43,6 +43,7 @@ func requireArgs(args []string, message string) dgo.Result[string, error] {
 // Sum types make subcommands exhaustive - compiler enforces all cases handled
 // =============================================================================
 
+//line examples/15_cli_framework/todo_cli.dingo:45:1
 type Command interface{ isCommand() }
 
 type CommandAdd struct{ description string }
@@ -69,6 +70,8 @@ type CommandHelp struct{}
 
 func (CommandHelp) isCommand() {}
 func NewCommandHelp() Command  { return CommandHelp{} }
+
+//line examples/15_cli_framework/todo_cli.dingo:52:1
 
 // =============================================================================
 // DOMAIN TYPES
@@ -126,12 +129,12 @@ func parseAddCommand(args []string) (Command, error) {
 	// guard unwraps Result - returns early on Err
 	tmp := validateDescription(strings.Join(args, " "))
 	if tmp.IsErr() {
-		err := *tmp.Err
+		err := tmp.Err
 
 		return nil, err
 
 	}
-	description := *tmp.Ok
+	description := tmp.Ok
 
 	return NewCommandAdd(description), nil
 }

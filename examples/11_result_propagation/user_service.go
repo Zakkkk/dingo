@@ -94,10 +94,10 @@ func FindUser(db *sql.DB, id int) dgo.Result[User, ServiceError] {
 	var user User
 	err := row.Scan(&user.ID, &user.Name, &user.Email)
 	if err == sql.ErrNoRows {
-		return dgo.Err[User](ServiceError{Code: "NOT_FOUND", Message: "user not found"})
+		return dgo.Err[User, ServiceError](ServiceError{Code: "NOT_FOUND", Message: "user not found"})
 	}
 	if err != nil {
-		return dgo.Err[User](ServiceError{Code: "DB_ERROR", Message: err.Error()})
+		return dgo.Err[User, ServiceError](ServiceError{Code: "DB_ERROR", Message: err.Error()})
 	}
 
 	return dgo.Ok[User, ServiceError](user)
@@ -108,7 +108,7 @@ func FindOrdersByUser(db *sql.DB, userID int) dgo.Result[[]Order, ServiceError] 
 	// Note: db.Query returns (*sql.Rows, error) - supports ?
 	tmp, err := db.Query("SELECT id, user_id, total FROM orders WHERE user_id = ?", userID)
 	if err != nil {
-		return dgo.Err[[]Order](ServiceError{Code: "DB_ERROR", Message: err.Error()})
+		return dgo.Err[[]Order, ServiceError](ServiceError{Code: "DB_ERROR", Message: err.Error()})
 	}
 	rows := tmp
 	defer rows.Close()
@@ -119,7 +119,7 @@ func FindOrdersByUser(db *sql.DB, userID int) dgo.Result[[]Order, ServiceError] 
 		// Note: Scan returns only error, so use explicit error handling
 		err := rows.Scan(&order.ID, &order.UserID, &order.Total)
 		if err != nil {
-			return dgo.Err[[]Order](ServiceError{Code: "SCAN_ERROR", Message: err.Error()})
+			return dgo.Err[[]Order, ServiceError](ServiceError{Code: "SCAN_ERROR", Message: err.Error()})
 		}
 		orders = append(orders, order)
 	}
@@ -134,17 +134,17 @@ func GetUserOrderTotal(db *sql.DB, userID int) dgo.Result[float64, ServiceError]
 	// Note: Err[float64] explicit type parameter needed for type inference
 	tmp := FindUser(db, userID)
 	if tmp.IsErr() {
-		err := *tmp.Err
+		err := tmp.Err
 		return dgo.Err[float64](err)
 	}
-	user := *tmp.Ok
+	user := tmp.Ok
 
 	tmp1 := FindOrdersByUser(db, user.ID)
 	if tmp1.IsErr() {
-		err := *tmp1.Err
+		err := tmp1.Err
 		return dgo.Err[float64](err)
 	}
-	orders := *tmp1.Ok
+	orders := tmp1.Ok
 
 	var total float64
 	for _, order := range orders {

@@ -18,7 +18,7 @@ import (
 
 // === 1. ENUM ===
 //
-//line examples/101_combined//showcase.dingo:17:1
+//line examples/101_combined/showcase.dingo:17:1
 type Status interface{ isStatus() }
 
 type StatusPending struct{}
@@ -36,7 +36,7 @@ type StatusDone struct{ code int }
 func (StatusDone) isStatus()        {}
 func NewStatusDone(code int) Status { return StatusDone{code: code} }
 
-//line examples/101_combined//showcase.dingo:22:1
+//line examples/101_combined/showcase.dingo:22:1
 
 // === Types ===
 type User struct {
@@ -128,17 +128,17 @@ func guardLetDemo() string {
 		return "user not found"
 
 	}
-	user := *tmp.Some
+	user := tmp.Some
 
 	// Guard with Result
 	tmp1 := fetchUser(42)
 	if tmp1.IsErr() {
-		err := *tmp1.Err
+		err := tmp1.Err
 
 		return fmt.Sprintf("fetch failed: %s", err)
 
 	}
-	fetched := *tmp1.Ok
+	fetched := tmp1.Ok
 
 	return fmt.Sprintf("Found: %s, Fetched: %s", user.Name, fetched.Name)
 }
@@ -168,7 +168,6 @@ func demo() string {
 
 	// === 9. TERNARY ===
 	// BUG: Generates assignment without declaration - See BUGS.md Bug 2
-	//line examples/101_combined//showcase.dingo:124:14
 	var greeting any
 	if user.ID > 0 {
 		greeting = "Welcome"
@@ -178,7 +177,6 @@ func demo() string {
 
 	// === 2. MATCH ===
 	status := NewStatusActive("working")
-	//line examples/101_combined//showcase.dingo:128:15
 	var statusMsg string
 	val := status
 	switch v1 := val.(type) {

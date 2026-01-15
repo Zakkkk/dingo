@@ -6,18 +6,21 @@ import (
 	dingoast "github.com/MadAppGang/dingo/pkg/ast"
 )
 
-// Severity levels - all are advisory (warnings)
+// Severity levels for diagnostics
 type Severity int
 
 const (
-	SeverityWarning Severity = iota // Default for all rules (zero value)
+	SeverityWarning Severity = iota // Default for most rules (zero value)
 	SeverityInfo
 	SeverityHint
+	SeverityError // For correctness issues that will cause compilation failure
 )
 
 // String returns the string representation of the severity level
 func (s Severity) String() string {
 	switch s {
+	case SeverityError:
+		return "error"
 	case SeverityWarning:
 		return "warning"
 	case SeverityInfo:

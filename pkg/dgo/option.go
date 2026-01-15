@@ -22,14 +22,17 @@ const (
 //	    }
 //	    return None[User]()
 //	}
+//
+// The Tag field is the source of truth for determining Some vs None state.
+// Zero values are valid (e.g., Option[int] with Some=0 is valid if Tag=OptionTagSome).
 type Option[T any] struct {
-	Tag  OptionTag // Exported for pattern matching
-	Some *T        // Exported for pattern matching
+	Tag  OptionTag // Exported for pattern matching - source of truth
+	Some T         // Exported for pattern matching (value, not pointer)
 }
 
 // Some creates an Option containing the given value
 func Some[T any](value T) Option[T] {
-	return Option[T]{Tag: OptionTagSome, Some: &value}
+	return Option[T]{Tag: OptionTagSome, Some: value}
 }
 
 // None creates an empty Option
@@ -59,14 +62,14 @@ func (o Option[T]) MustSome() T {
 	if o.Tag == OptionTagNone {
 		panic("called MustSome on a None value")
 	}
-	return *o.Some
+	return o.Some
 }
 
 // SomeOr returns the contained value or the provided default
 // This follows Go's variant-based naming: "some or default"
 func (o Option[T]) SomeOr(defaultValue T) T {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return *o.Some
+	if o.Tag == OptionTagSome {
+		return o.Some
 	}
 	return defaultValue
 }
@@ -80,8 +83,8 @@ func (o Option[T]) UnwrapOr(defaultValue T) T {
 // SomeOrElse returns the contained value or computes it from the function
 // This follows Go's variant-based naming: "some or else compute"
 func (o Option[T]) SomeOrElse(fn func() T) T {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return *o.Some
+	if o.Tag == OptionTagSome {
+		return o.Some
 	}
 	return fn()
 }
@@ -94,16 +97,15 @@ func (o Option[T]) UnwrapOrElse(fn func() T) T {
 
 // Map transforms the contained value using the provided function
 func (o Option[T]) Map(fn func(T) T) Option[T] {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		newVal := fn(*o.Some)
-		return Option[T]{Tag: OptionTagSome, Some: &newVal}
+	if o.Tag == OptionTagSome {
+		return Option[T]{Tag: OptionTagSome, Some: fn(o.Some)}
 	}
 	return o
 }
 
 // Filter returns the Option unchanged if Some and predicate returns true, otherwise returns None
 func (o Option[T]) Filter(predicate func(T) bool) Option[T] {
-	if o.Tag == OptionTagSome && o.Some != nil && predicate(*o.Some) {
+	if o.Tag == OptionTagSome && predicate(o.Some) {
 		return o
 	}
 	return None[T]()
@@ -111,8 +113,8 @@ func (o Option[T]) Filter(predicate func(T) bool) Option[T] {
 
 // AndThen chains operations that return an Option (flatMap)
 func (o Option[T]) AndThen(fn func(T) Option[T]) Option[T] {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return fn(*o.Some)
+	if o.Tag == OptionTagSome {
+		return fn(o.Some)
 	}
 	return o
 }
@@ -146,14 +148,14 @@ func (o Option[T]) Expect(msg string) T {
 	if o.Tag == OptionTagNone {
 		panic(msg)
 	}
-	return *o.Some
+	return o.Some
 }
 
 // Take takes the value out of the Option, leaving None in its place
 // Note: Due to Go's value semantics, this returns the value and a new None Option
 func (o Option[T]) Take() (T, Option[T]) {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return *o.Some, None[T]()
+	if o.Tag == OptionTagSome {
+		return o.Some, None[T]()
 	}
 	var zero T
 	return zero, None[T]()
@@ -161,9 +163,8 @@ func (o Option[T]) Take() (T, Option[T]) {
 
 // Replace replaces the actual value with the given one, returning the old value
 func (o Option[T]) Replace(value T) (Option[T], T) {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		old := *o.Some
-		return Some(value), old
+	if o.Tag == OptionTagSome {
+		return Some(value), o.Some
 	}
 	var zero T
 	return Some(value), zero
@@ -175,11 +176,11 @@ func Zip[T, U any](a Option[T], b Option[U]) Option[struct {
 	First  T
 	Second U
 }] {
-	if a.Tag == OptionTagSome && b.Tag == OptionTagSome && a.Some != nil && b.Some != nil {
+	if a.Tag == OptionTagSome && b.Tag == OptionTagSome {
 		return Some(struct {
 			First  T
 			Second U
-		}{*a.Some, *b.Some})
+		}{a.Some, b.Some})
 	}
 	return None[struct {
 		First  T
@@ -189,16 +190,25 @@ func Zip[T, U any](a Option[T], b Option[U]) Option[struct {
 
 // OkOr converts an Option to a Result, using the provided error if None
 func (o Option[T]) OkOr(err error) Result[T, error] {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return Ok[T, error](*o.Some)
+	if o.Tag == OptionTagSome {
+		return Ok[T, error](o.Some)
 	}
 	return Err[T, error](err)
 }
 
 // OkOrElse converts an Option to a Result, computing the error if None
 func (o Option[T]) OkOrElse(fn func() error) Result[T, error] {
-	if o.Tag == OptionTagSome && o.Some != nil {
-		return Ok[T, error](*o.Some)
+	if o.Tag == OptionTagSome {
+		return Ok[T, error](o.Some)
 	}
 	return Err[T, error](fn())
+}
+
+// SomePtr returns the Some value as a pointer (nil if None)
+// Useful for optional-style access without panic
+func (o Option[T]) SomePtr() *T {
+	if o.Tag == OptionTagSome {
+		return &o.Some
+	}
+	return nil
 }

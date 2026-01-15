@@ -23,20 +23,23 @@ const (
 //	    }
 //	    return Ok[int, string](a / b)
 //	}
+//
+// The Tag field is the source of truth for determining Ok vs Err state.
+// Zero values are valid (e.g., Result[int, error] with Ok=0 is valid if Tag=ResultTagOk).
 type Result[T, E any] struct {
-	Tag ResultTag // Exported for pattern matching
-	Ok  *T        // Exported for pattern matching
-	Err *E        // Exported for pattern matching
+	Tag ResultTag // Exported for pattern matching - source of truth
+	Ok  T         // Exported for pattern matching (value, not pointer)
+	Err E         // Exported for pattern matching (value, not pointer)
 }
 
 // Ok creates a successful Result containing the given value
 func Ok[T, E any](value T) Result[T, E] {
-	return Result[T, E]{Tag: ResultTagOk, Ok: &value}
+	return Result[T, E]{Tag: ResultTagOk, Ok: value}
 }
 
 // Err creates a failed Result containing the given error
 func Err[T, E any](err E) Result[T, E] {
-	return Result[T, E]{Tag: ResultTagErr, Err: &err}
+	return Result[T, E]{Tag: ResultTagErr, Err: err}
 }
 
 // IsOk returns true if the Result is Ok
@@ -61,14 +64,14 @@ func (r Result[T, E]) MustOk() T {
 	if r.Tag == ResultTagErr {
 		panic("called MustOk on an Err value")
 	}
-	return *r.Ok
+	return r.Ok
 }
 
 // OkOr returns the Ok value or the provided default
 // This follows Go's variant-based naming: "ok or default"
 func (r Result[T, E]) OkOr(defaultValue T) T {
-	if r.Tag == ResultTagOk && r.Ok != nil {
-		return *r.Ok
+	if r.Tag == ResultTagOk {
+		return r.Ok
 	}
 	return defaultValue
 }
@@ -91,16 +94,16 @@ func (r Result[T, E]) MustErr() E {
 	if r.Tag == ResultTagOk {
 		panic("called MustErr on an Ok value")
 	}
-	return *r.Err
+	return r.Err
 }
 
 // OkOrElse returns the Ok value or computes it from the error
 // This follows Go's variant-based naming: "ok or else compute"
 func (r Result[T, E]) OkOrElse(fn func(E) T) T {
-	if r.Tag == ResultTagOk && r.Ok != nil {
-		return *r.Ok
+	if r.Tag == ResultTagOk {
+		return r.Ok
 	}
-	return fn(*r.Err)
+	return fn(r.Err)
 }
 
 // UnwrapOrElse returns the Ok value or computes it from the error
@@ -111,25 +114,23 @@ func (r Result[T, E]) UnwrapOrElse(fn func(E) T) T {
 
 // Map transforms the Ok value using the provided function
 func (r Result[T, E]) Map(fn func(T) T) Result[T, E] {
-	if r.Tag == ResultTagOk && r.Ok != nil {
-		newVal := fn(*r.Ok)
-		return Result[T, E]{Tag: ResultTagOk, Ok: &newVal}
+	if r.Tag == ResultTagOk {
+		return Result[T, E]{Tag: ResultTagOk, Ok: fn(r.Ok)}
 	}
 	return r
 }
 
 // MapErr transforms the Err value using the provided function
 func (r Result[T, E]) MapErr(fn func(E) E) Result[T, E] {
-	if r.Tag == ResultTagErr && r.Err != nil {
-		newErr := fn(*r.Err)
-		return Result[T, E]{Tag: ResultTagErr, Err: &newErr}
+	if r.Tag == ResultTagErr {
+		return Result[T, E]{Tag: ResultTagErr, Err: fn(r.Err)}
 	}
 	return r
 }
 
-// Filter returns the Result unchanged if Ok and predicate returns true, otherwise returns the original error
+// Filter returns the Result unchanged if Ok and predicate returns true, otherwise returns the original Result
 func (r Result[T, E]) Filter(predicate func(T) bool) Result[T, E] {
-	if r.Tag == ResultTagOk && r.Ok != nil && predicate(*r.Ok) {
+	if r.Tag == ResultTagOk && predicate(r.Ok) {
 		return r
 	}
 	return r
@@ -137,16 +138,16 @@ func (r Result[T, E]) Filter(predicate func(T) bool) Result[T, E] {
 
 // AndThen chains operations that return a Result (flatMap)
 func (r Result[T, E]) AndThen(fn func(T) Result[T, E]) Result[T, E] {
-	if r.Tag == ResultTagOk && r.Ok != nil {
-		return fn(*r.Ok)
+	if r.Tag == ResultTagOk {
+		return fn(r.Ok)
 	}
 	return r
 }
 
 // OrElse chains error recovery operations
 func (r Result[T, E]) OrElse(fn func(E) Result[T, E]) Result[T, E] {
-	if r.Tag == ResultTagErr && r.Err != nil {
-		return fn(*r.Err)
+	if r.Tag == ResultTagErr {
+		return fn(r.Err)
 	}
 	return r
 }
@@ -172,7 +173,7 @@ func (r Result[T, E]) Expect(msg string) T {
 	if r.Tag == ResultTagErr {
 		panic(msg)
 	}
-	return *r.Ok
+	return r.Ok
 }
 
 // ExpectErr returns the Err value or panics with the given message
@@ -180,14 +181,14 @@ func (r Result[T, E]) ExpectErr(msg string) E {
 	if r.Tag == ResultTagOk {
 		panic(msg)
 	}
-	return *r.Err
+	return r.Err
 }
 
 // OkPtr returns the Ok value as a pointer (nil if Err)
 // Useful for optional-style access without panic
 func (r Result[T, E]) OkPtr() *T {
 	if r.Tag == ResultTagOk {
-		return r.Ok
+		return &r.Ok
 	}
 	return nil
 }
@@ -196,7 +197,7 @@ func (r Result[T, E]) OkPtr() *T {
 // Useful for optional-style access without panic
 func (r Result[T, E]) ErrPtr() *E {
 	if r.Tag == ResultTagErr {
-		return r.Err
+		return &r.Err
 	}
 	return nil
 }

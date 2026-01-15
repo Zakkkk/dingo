@@ -93,11 +93,11 @@ func TestGuardGenerator_SingleBinding_Result(t *testing.T) {
 		t.Errorf("Missing IsErr check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "err := *tmp.Err") {
+	if !strings.Contains(output, "err := tmp.Err") {
 		t.Errorf("Missing error binding, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "user := *tmp.Ok") {
+	if !strings.Contains(output, "user := tmp.Ok") {
 		t.Errorf("Missing variable binding with :=, got:\n%s", output)
 	}
 }
@@ -138,7 +138,7 @@ func TestGuardGenerator_SingleBinding_Option(t *testing.T) {
 		t.Errorf("Should not have error binding for Option, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "config := *tmp.Some") {
+	if !strings.Contains(output, "config := tmp.Some") {
 		t.Errorf("Missing variable binding with :=, got:\n%s", output)
 	}
 }
@@ -175,16 +175,16 @@ func TestGuardGenerator_SingleAssignment_Result(t *testing.T) {
 		t.Errorf("Missing IsErr check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "err := *tmp.Err") {
+	if !strings.Contains(output, "err := tmp.Err") {
 		t.Errorf("Missing error binding, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "user = *tmp.Ok") {
+	if !strings.Contains(output, "user = tmp.Ok") {
 		t.Errorf("Missing variable assignment with =, got:\n%s", output)
 	}
 
 	// Ensure it's not using :=
-	if strings.Contains(output, "user := *tmp.Ok") {
+	if strings.Contains(output, "user := tmp.Ok") {
 		t.Errorf("Should use = not := for assignment, got:\n%s", output)
 	}
 }
@@ -221,12 +221,12 @@ func TestGuardGenerator_SingleAssignment_Option(t *testing.T) {
 		t.Errorf("Missing IsNone check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "config = *tmp.Some") {
+	if !strings.Contains(output, "config = tmp.Some") {
 		t.Errorf("Missing variable assignment with =, got:\n%s", output)
 	}
 
 	// Ensure it's not using :=
-	if strings.Contains(output, "config := *tmp.Some") {
+	if strings.Contains(output, "config := tmp.Some") {
 		t.Errorf("Should use = not := for assignment, got:\n%s", output)
 	}
 }
@@ -263,15 +263,15 @@ func TestGuardGenerator_TupleBinding_Result(t *testing.T) {
 		t.Errorf("Missing IsErr check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "e := *tmp.Err") {
+	if !strings.Contains(output, "e := tmp.Err") {
 		t.Errorf("Missing error binding, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "name := (*tmp.Ok).Item1") {
+	if !strings.Contains(output, "name := tmp.Ok.Item1") {
 		t.Errorf("Missing first tuple item binding with :=, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "age := (*tmp.Ok).Item2") {
+	if !strings.Contains(output, "age := tmp.Ok.Item2") {
 		t.Errorf("Missing second tuple item binding with :=, got:\n%s", output)
 	}
 }
@@ -308,11 +308,11 @@ func TestGuardGenerator_TupleBinding_Option(t *testing.T) {
 		t.Errorf("Missing IsNone check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "x := (*tmp.Some).Item1") {
+	if !strings.Contains(output, "x := tmp.Some.Item1") {
 		t.Errorf("Missing first tuple item binding with :=, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "y := (*tmp.Some).Item2") {
+	if !strings.Contains(output, "y := tmp.Some.Item2") {
 		t.Errorf("Missing second tuple item binding with :=, got:\n%s", output)
 	}
 }
@@ -349,20 +349,20 @@ func TestGuardGenerator_TupleAssignment_Result(t *testing.T) {
 		t.Errorf("Missing IsErr check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "e := *tmp.Err") {
+	if !strings.Contains(output, "e := tmp.Err") {
 		t.Errorf("Missing error binding, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "name = (*tmp.Ok).Item1") {
+	if !strings.Contains(output, "name = tmp.Ok.Item1") {
 		t.Errorf("Missing first tuple item assignment with =, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "age = (*tmp.Ok).Item2") {
+	if !strings.Contains(output, "age = tmp.Ok.Item2") {
 		t.Errorf("Missing second tuple item assignment with =, got:\n%s", output)
 	}
 
 	// Ensure it's not using :=
-	if strings.Contains(output, "name := (*tmp.Ok).Item1") {
+	if strings.Contains(output, "name := tmp.Ok.Item1") {
 		t.Errorf("Should use = not := for assignment, got:\n%s", output)
 	}
 }
@@ -399,16 +399,16 @@ func TestGuardGenerator_TupleAssignment_Option(t *testing.T) {
 		t.Errorf("Missing IsNone check, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "x = (*tmp.Some).Item1") {
+	if !strings.Contains(output, "x = tmp.Some.Item1") {
 		t.Errorf("Missing first tuple item assignment with =, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "y = (*tmp.Some).Item2") {
+	if !strings.Contains(output, "y = tmp.Some.Item2") {
 		t.Errorf("Missing second tuple item assignment with =, got:\n%s", output)
 	}
 
 	// Ensure it's not using :=
-	if strings.Contains(output, "x := (*tmp.Some).Item1") {
+	if strings.Contains(output, "x := tmp.Some.Item1") {
 		t.Errorf("Should use = not := for assignment, got:\n%s", output)
 	}
 }
@@ -472,15 +472,15 @@ func TestGuardGenerator_ThreeElementTuple(t *testing.T) {
 	output := string(result.Output)
 
 	// Check all three tuple items are bound
-	if !strings.Contains(output, "name := (*tmp.Ok).Item1") {
+	if !strings.Contains(output, "name := tmp.Ok.Item1") {
 		t.Errorf("Missing first tuple item, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "age := (*tmp.Ok).Item2") {
+	if !strings.Contains(output, "age := tmp.Ok.Item2") {
 		t.Errorf("Missing second tuple item, got:\n%s", output)
 	}
 
-	if !strings.Contains(output, "email := (*tmp.Ok).Item3") {
+	if !strings.Contains(output, "email := tmp.Ok.Item3") {
 		t.Errorf("Missing third tuple item, got:\n%s", output)
 	}
 }
