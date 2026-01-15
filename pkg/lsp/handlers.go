@@ -160,6 +160,11 @@ func (t *Translator) translateDocumentSymbol(
 	if err != nil {
 		return sym, err
 	}
+
+	// LSP Spec: selectionRange MUST be contained within Range
+	// After translation, this constraint may be violated due to line mapping differences.
+	// Clamp SelectionRange to fit within Range.
+	newSelectionRange = constrainRangeWithin(newSelectionRange, newRange)
 	sym.SelectionRange = newSelectionRange
 
 	// Recursively translate children
@@ -173,6 +178,46 @@ func (t *Translator) translateDocumentSymbol(
 	}
 
 	return sym, nil
+}
+
+// constrainRangeWithin ensures inner is fully contained within outer.
+// This is required by LSP spec for DocumentSymbol (selectionRange must be in fullRange).
+func constrainRangeWithin(inner, outer protocol.Range) protocol.Range {
+	// Clamp start position
+	if positionBefore(inner.Start, outer.Start) {
+		inner.Start = outer.Start
+	}
+	// Clamp end position
+	if positionAfter(inner.End, outer.End) {
+		inner.End = outer.End
+	}
+	// Ensure start <= end (in case of degenerate ranges)
+	if positionAfter(inner.Start, inner.End) {
+		inner.End = inner.Start
+	}
+	return inner
+}
+
+// positionBefore returns true if a comes before b
+func positionBefore(a, b protocol.Position) bool {
+	if a.Line < b.Line {
+		return true
+	}
+	if a.Line == b.Line && a.Character < b.Character {
+		return true
+	}
+	return false
+}
+
+// positionAfter returns true if a comes after b
+func positionAfter(a, b protocol.Position) bool {
+	if a.Line > b.Line {
+		return true
+	}
+	if a.Line == b.Line && a.Character > b.Character {
+		return true
+	}
+	return false
 }
 
 // TranslateSymbolInformation translates workspace symbol information locations.
@@ -220,6 +265,9 @@ func (t *Translator) TranslateCallHierarchyItem(
 		// Keep original selection range on error but update main range
 		return item, nil
 	}
+
+	// LSP Spec: selectionRange MUST be contained within Range
+	newSelectionRange = constrainRangeWithin(newSelectionRange, newRange)
 	item.SelectionRange = newSelectionRange
 
 	return item, nil

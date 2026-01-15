@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/MadAppGang/dingo/pkg/config"
+	dingoerrors "github.com/MadAppGang/dingo/pkg/errors"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
@@ -111,6 +112,9 @@ func (at *AutoTranspiler) OnFileChange(ctx context.Context, dingoPath string) {
 		}
 		diagnostic := ParseTranspileError(dingoPath, err, formatter)
 		if diagnostic != nil && at.server != nil {
+			// Clear gopls diagnostics when transpilation fails - the .go file is stale
+			// and gopls errors would point to wrong lines
+			at.server.updateAndPublishDiagnostics(uri, "gopls", []protocol.Diagnostic{})
 			at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
 		}
 		return // Don't proceed to gopls sync
@@ -182,6 +186,40 @@ func ParseTranspileError(dingoPath string, err error, formatter ErrorFormatter) 
 			Severity: protocol.DiagnosticSeverityError,
 			Source:   "dingo",
 			Message:  message,
+		}
+	}
+
+	// Try to unwrap to EnhancedError (from validator)
+	var enhancedErr *dingoerrors.EnhancedError
+	if errors.As(err, &enhancedErr) {
+		// EnhancedError has Line and Column fields (1-indexed)
+		line := enhancedErr.Line
+		col := enhancedErr.Column
+
+		// Get the range for highlighting
+		startChar := 0
+		endChar := 1
+		if line > 0 {
+			_, endChar = getLineRange(dingoPath, line)
+			if col > 0 {
+				startChar = col - 1 // Convert to 0-indexed
+			}
+		}
+
+		return &protocol.Diagnostic{
+			Range: protocol.Range{
+				Start: protocol.Position{
+					Line:      uint32(max(0, line-1)), // 0-based
+					Character: uint32(startChar),
+				},
+				End: protocol.Position{
+					Line:      uint32(max(0, line-1)),
+					Character: uint32(endChar),
+				},
+			},
+			Severity: protocol.DiagnosticSeverityError,
+			Source:   "dingo",
+			Message:  enhancedErr.Message,
 		}
 	}
 

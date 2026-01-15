@@ -172,12 +172,15 @@ func (s *Server) createTranspileFunc() semantic.TranspileFunc {
 		}
 
 		// Convert to semantic.TranspileResult format
+		// Include GoFilePath for module-aware type checking
+		goFilePath := s.dingoToGoPath(fsPath)
 		return semantic.TranspileResult{
 			GoCode:         result.GoCode,
 			LineMappings:   result.LineMappings,
 			ColumnMappings: result.ColumnMappings, // For accurate hover column translation
 			DingoFset:      nil,                   // Not available from this pipeline
 			DingoFile:      filename,
+			GoFilePath:     goFilePath, // For type checker overlay
 		}, nil
 	}
 }
@@ -297,6 +300,15 @@ func (s *Server) handleRequest(ctx context.Context, reply jsonrpc2.Replier, req 
 		return s.handleIncomingCalls(ctx, reply, req)
 	case "callHierarchy/outgoingCalls":
 		return s.handleOutgoingCalls(ctx, reply, req)
+	// Standard LSP notifications that should be silently acknowledged
+	case "$/cancelRequest", "$/setTrace", "$/logTrace", "workspace/didChangeWatchedFiles":
+		// These are client-to-server notifications that we don't need to process
+		// but shouldn't return an error for.
+		// - $/cancelRequest: request cancellation
+		// - $/setTrace, $/logTrace: trace configuration
+		// - workspace/didChangeWatchedFiles: file change notifications (we use our own watcher)
+		s.config.Logger.Debugf("Acknowledged notification: %s", req.Method())
+		return reply(ctx, nil, nil)
 	default:
 		// Unknown method - try forwarding to gopls
 		s.config.Logger.Debugf("Forwarding unknown method to gopls: %s", req.Method())
@@ -344,6 +356,16 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 			}
 		}
 
+		// Set workspace directory on semantic manager for module-aware type checking
+		// Use shadow build directory when available (it has go.mod with proper module path)
+		if s.semanticManager != nil {
+			semanticWorkspace := s.workspacePath
+			if s.shadowPath != "" {
+				semanticWorkspace = s.shadowPath
+			}
+			s.semanticManager.SetWorkspaceDir(semanticWorkspace)
+		}
+
 		// Reinitialize transpiler with workspace config for correct output paths
 		// This ensures .go files go to build/ and .dmap files go to .dmap/
 		if s.dingoConfig != nil && s.transpiler != nil {
@@ -358,6 +380,14 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 			} else {
 				s.watcher = watcher
 			}
+		}
+
+		// CRITICAL: Transpile all .dingo files BEFORE gopls initializes
+		// This ensures gopls sees a complete workspace with all Go files present.
+		// Without this, gopls can't resolve cross-package references because
+		// dependency packages (like middleware/) might not have Go files yet.
+		if s.transpiler != nil {
+			s.transpileWorkspace(ctx)
 		}
 	}
 
@@ -670,6 +700,71 @@ func (s *Server) handleHover(ctx context.Context, reply jsonrpc2.Replier, req js
 	return s.handleHoverWithTranslation(ctx, reply, req)
 }
 
+// transpileWorkspace transpiles all .dingo files in the workspace.
+// This is called during initialization to ensure gopls has a complete
+// view of all Go files before it starts indexing.
+func (s *Server) transpileWorkspace(ctx context.Context) {
+	if s.workspacePath == "" {
+		return
+	}
+
+	s.config.Logger.Infof("Transpiling workspace: %s", s.workspacePath)
+	startTime := time.Now()
+
+	var dingoFiles []string
+
+	// Walk workspace to find all .dingo files
+	err := filepath.Walk(s.workspacePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors, continue walking
+		}
+
+		// Skip common directories that shouldn't contain source files
+		if info.IsDir() {
+			base := filepath.Base(path)
+			switch base {
+			case "node_modules", "vendor", ".git", ".dingo_cache", "dist", "build", ".idea", ".vscode", "bin":
+				return filepath.SkipDir
+			}
+			// Skip hidden directories
+			if strings.HasPrefix(base, ".") && base != "." {
+				return filepath.SkipDir
+			}
+		}
+
+		// Collect .dingo files
+		if !info.IsDir() && strings.HasSuffix(path, ".dingo") {
+			dingoFiles = append(dingoFiles, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		s.config.Logger.Warnf("Error walking workspace: %v", err)
+	}
+
+	if len(dingoFiles) == 0 {
+		s.config.Logger.Debugf("No .dingo files found in workspace")
+		return
+	}
+
+	s.config.Logger.Infof("Found %d .dingo files to transpile", len(dingoFiles))
+
+	// Transpile each file (errors are logged but don't stop the process)
+	successCount := 0
+	for _, dingoPath := range dingoFiles {
+		if err := s.transpiler.TranspileFile(ctx, dingoPath); err != nil {
+			s.config.Logger.Debugf("Transpile failed for %s: %v", dingoPath, err)
+		} else {
+			successCount++
+		}
+	}
+
+	duration := time.Since(startTime)
+	s.config.Logger.Infof("Workspace transpilation complete: %d/%d files in %v", successCount, len(dingoFiles), duration)
+}
+
 // handleDingoFileChange handles file changes detected by the watcher
 func (s *Server) handleDingoFileChange(dingoPath string) {
 	// IMPORTANT FIX I3: Use server context instead of background
@@ -899,6 +994,9 @@ func (s *Server) executeTranspileFromBuffer(uri protocol.DocumentURI, content st
 		if diagnostic != nil {
 			s.config.Logger.Infof("[Debounce] Publishing transpile diagnostic: line=%d, msg=%s",
 				diagnostic.Range.Start.Line, diagnostic.Message)
+			// Clear gopls diagnostics when transpilation fails - the .go file is stale
+			// and gopls errors would point to wrong lines
+			s.updateAndPublishDiagnostics(uri, "gopls", []protocol.Diagnostic{})
 			s.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
 		} else {
 			s.config.Logger.Warnf("[Debounce] ParseTranspileError returned nil for: %v", err)

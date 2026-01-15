@@ -46,6 +46,10 @@ type Manager struct {
 
 	// Documentation provider (shared across all documents)
 	docProvider *DocProvider
+
+	// Workspace directory (where go.mod lives) - enables module-aware type checking
+	// Set via SetWorkspaceDir after initialization
+	workspaceDir string
 }
 
 // TranspileFunc is the signature for transpilation
@@ -59,6 +63,7 @@ type TranspileResult struct {
 	ColumnMappings []sourcemap.ColumnMapping // For accurate hover column translation
 	DingoFset      *token.FileSet
 	DingoFile      string
+	GoFilePath     string // The path where Go output would be written (for type checking overlay)
 }
 
 // Logger interface for the manager
@@ -84,6 +89,14 @@ func NewManager(logger Logger, transpiler TranspileFunc) *Manager {
 // DocProvider returns the shared documentation provider.
 func (m *Manager) DocProvider() *DocProvider {
 	return m.docProvider
+}
+
+// SetWorkspaceDir sets the workspace directory for module-aware type checking.
+// This should be called after workspace initialization with the path to the project root
+// (the directory containing go.mod).
+func (m *Manager) SetWorkspaceDir(dir string) {
+	m.workspaceDir = dir
+	m.logger.Infof("Semantic manager workspace set to: %s", dir)
 }
 
 // Get returns the Document for a URI
@@ -210,16 +223,31 @@ func (m *Manager) rebuild(uri string, source []byte) {
 	}
 
 	// Step 3: Run go/types
-	// Extract package name from AST
-	pkgName := "main"
-	if goAST.Name != nil {
-		pkgName = goAST.Name.Name
+	// Use module-aware type checker when workspace is available (provides full type resolution)
+	// Fall back to basic type checker otherwise (only resolves stdlib and pre-compiled packages)
+	var checker *typechecker.Checker
+
+	if m.workspaceDir != "" && result.GoFilePath != "" {
+		// Module-aware type checking using packages.Load
+		// This resolves types from all imported packages including local module packages
+		var err error
+		checker, err = typechecker.NewWithWorkspace(m.workspaceDir, result.GoFilePath, result.GoCode)
+		if err != nil {
+			m.logger.Debugf("Module-aware type checking failed (falling back to basic): %v", err)
+		}
 	}
-	checker, err := typechecker.New(goFset, goAST, pkgName)
-	if err != nil {
-		// Type checking errors are non-fatal - we can still build semantic map
-		// with partial type information
-		m.logger.Debugf("Type checking completed with errors for %s: %v", uri, err)
+
+	// Fall back to basic type checker if workspace-aware checking failed or wasn't available
+	if checker == nil {
+		pkgName := "main"
+		if goAST.Name != nil {
+			pkgName = goAST.Name.Name
+		}
+		var err error
+		checker, err = typechecker.New(goFset, goAST, pkgName)
+		if err != nil {
+			m.logger.Debugf("Type checking completed with errors for %s: %v", uri, err)
+		}
 	}
 
 	var typesInfo *types.Info

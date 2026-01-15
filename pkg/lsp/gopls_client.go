@@ -372,16 +372,44 @@ func (c *GoplsClient) InitFileVersion(uri string, version int32) {
 	c.fileVersion[uri] = version
 }
 
+// fullDocumentChange represents a full-document content change for LSP didChange.
+// We use a custom struct because go.lsp.dev/protocol's TextDocumentContentChangeEvent
+// always marshals the Range field (no omitempty), causing gopls to interpret it as
+// "insert at 0:0" instead of "replace all".
+type fullDocumentChange struct {
+	Text string `json:"text"`
+}
+
+// didChangeParams is a custom params struct for textDocument/didChange
+// that properly omits Range for full-document sync.
+type didChangeParams struct {
+	TextDocument   versionedTextDocumentIdentifier `json:"textDocument"`
+	ContentChanges []fullDocumentChange            `json:"contentChanges"`
+}
+
+// versionedTextDocumentIdentifier for didChange notifications
+type versionedTextDocumentIdentifier struct {
+	URI     protocol.DocumentURI `json:"uri"`
+	Version int32                `json:"version"`
+}
+
 // SyncFileContent synchronizes gopls with the current content of a .go file
 // This is critical for keeping gopls in sync after transpilation
 //
-// CRITICAL FIX: We use didClose + didOpen instead of didChange because:
-// The go.lsp.dev/protocol library's TextDocumentContentChangeEvent has
-// Range without omitempty, so JSON always includes {"range": {"start":{"line":0,"character":0},...}}.
-// An empty range (0,0→0,0) is interpreted by gopls as "insert at 0:0" not "replace all",
-// causing content to be prepended instead of replaced, leading to duplicate package declarations.
+// PERFORMANCE FIX: Uses didChange instead of didClose+didOpen for incremental analysis.
+// The old didClose+didOpen pattern forced gopls to discard all cached analysis and
+// re-type-check the entire package from scratch, causing 5-15 second delays.
+// With proper didChange, gopls can use incremental analysis for ~0.5-2s response.
+//
+// Strategy:
+// - If file is already open (version > 0): use didChange (fast incremental path)
+// - If file is not open (version == 0): use didOpen (first time opening)
+//
+// We use custom structs instead of go.lsp.dev/protocol types because the library's
+// TextDocumentContentChangeEvent has Range without omitempty, causing JSON to always
+// include {"range": {...}}, which gopls interprets as "insert at 0:0" not "replace all".
 func (c *GoplsClient) SyncFileContent(ctx context.Context, goPath string) error {
-	c.logger.Debugf("Reading .go file for sync: %s", goPath)
+	c.logger.Debugf("Syncing .go file with gopls: %s", goPath)
 
 	// Read current .go file content from disk
 	content, err := os.ReadFile(goPath)
@@ -392,22 +420,28 @@ func (c *GoplsClient) SyncFileContent(ctx context.Context, goPath string) error 
 	fileURI := protocol.DocumentURI(uri.File(goPath))
 	uriStr := string(fileURI)
 
-	// Close the file first to reset gopls's internal state
-	closeParams := protocol.DidCloseTextDocumentParams{
-		TextDocument: protocol.TextDocumentIdentifier{
-			URI: fileURI,
-		},
-	}
-	if err := c.conn.Notify(ctx, "textDocument/didClose", closeParams); err != nil {
-		c.logger.Warnf("gopls didClose failed (continuing anyway): %v", err)
+	// Check if file is already open with gopls
+	c.versionMu.Lock()
+	currentVersion := c.fileVersion[uriStr]
+	c.versionMu.Unlock()
+
+	if currentVersion == 0 {
+		// File not opened yet - use didOpen
+		c.logger.Debugf("File not opened yet, using didOpen for %s", goPath)
+		return c.syncViaDidOpen(ctx, fileURI, uriStr, content)
 	}
 
-	// Reset version to 1 for the fresh open
+	// File already open - use didChange for incremental update
+	return c.syncViaDidChange(ctx, fileURI, uriStr, content)
+}
+
+// syncViaDidOpen opens a file with gopls using didOpen notification
+func (c *GoplsClient) syncViaDidOpen(ctx context.Context, fileURI protocol.DocumentURI, uriStr string, content []byte) error {
+	// Set version to 1 for fresh open
 	c.versionMu.Lock()
 	c.fileVersion[uriStr] = 1
 	c.versionMu.Unlock()
 
-	// Reopen with new content
 	openParams := protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        fileURI,
@@ -417,12 +451,40 @@ func (c *GoplsClient) SyncFileContent(ctx context.Context, goPath string) error 
 		},
 	}
 
-	c.logger.Debugf("Sending didClose + didOpen to gopls with %d bytes for %s", len(content), goPath)
+	c.logger.Debugf("Sending didOpen to gopls with %d bytes for %s", len(content), fileURI.Filename())
 	if err := c.conn.Notify(ctx, "textDocument/didOpen", openParams); err != nil {
 		return fmt.Errorf("failed to send didOpen to gopls: %w", err)
 	}
 
-	c.logger.Debugf("gopls synchronized with .go file: %s (via close+open)", goPath)
+	c.logger.Debugf("gopls synchronized with .go file: %s (via didOpen)", fileURI.Filename())
+	return nil
+}
+
+// syncViaDidChange updates an already-open file with gopls using didChange notification
+func (c *GoplsClient) syncViaDidChange(ctx context.Context, fileURI protocol.DocumentURI, uriStr string, content []byte) error {
+	// Increment version for this file
+	c.versionMu.Lock()
+	c.fileVersion[uriStr]++
+	version := c.fileVersion[uriStr]
+	c.versionMu.Unlock()
+
+	// Use custom struct to properly omit Range for full-document replacement
+	params := didChangeParams{
+		TextDocument: versionedTextDocumentIdentifier{
+			URI:     fileURI,
+			Version: version,
+		},
+		ContentChanges: []fullDocumentChange{
+			{Text: string(content)},
+		},
+	}
+
+	c.logger.Debugf("Sending didChange to gopls with %d bytes, version %d for %s", len(content), version, fileURI.Filename())
+	if err := c.conn.Notify(ctx, "textDocument/didChange", params); err != nil {
+		return fmt.Errorf("failed to send didChange to gopls: %w", err)
+	}
+
+	c.logger.Debugf("gopls synchronized with .go file: %s (via didChange, version %d)", fileURI.Filename(), version)
 	return nil
 }
 
