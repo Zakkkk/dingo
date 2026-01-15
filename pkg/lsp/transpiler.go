@@ -8,10 +8,12 @@ import (
 	"go/token"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/MadAppGang/dingo/pkg/config"
 	dingoerrors "github.com/MadAppGang/dingo/pkg/errors"
 	"github.com/MadAppGang/dingo/pkg/transpiler"
+	"github.com/MadAppGang/dingo/pkg/typeloader"
 	"go.lsp.dev/protocol"
 	lspuri "go.lsp.dev/uri"
 )
@@ -87,6 +89,155 @@ func (at *AutoTranspiler) getFileLock(path string) *sync.Mutex {
 	lock := &sync.Mutex{}
 	at.fileLocks[path] = lock
 	return lock
+}
+
+// OnBatchFileChange handles multiple .dingo file changes efficiently.
+// Pre-loads all imports into a shared type cache before transpiling.
+// This is MUCH faster than OnFileChange for multiple files (~3s for 42 files vs ~1-2s per file).
+func (at *AutoTranspiler) OnBatchFileChange(ctx context.Context, dingoPaths []string) {
+	if len(dingoPaths) == 0 {
+		return
+	}
+
+	// Single file: use regular method
+	if len(dingoPaths) == 1 {
+		at.OnFileChange(ctx, dingoPaths[0])
+		return
+	}
+
+	at.logger.Infof("Batch auto-rebuild: %d files", len(dingoPaths))
+	startTime := time.Now()
+
+	// Step 1: Pre-load all imports into a shared type cache
+	// This is fast (~150ms) and enables fast type lookup during transpilation
+	typeCache := at.preloadTypesForFiles(dingoPaths)
+
+	// Step 2: Transpile all files in parallel with shared type cache
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 4) // Limit parallelism to 4
+
+	for _, dingoPath := range dingoPaths {
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			semaphore <- struct{}{}        // Acquire
+			defer func() { <-semaphore }() // Release
+
+			at.transpileWithCache(ctx, path, typeCache)
+		}(dingoPath)
+	}
+
+	wg.Wait()
+	at.logger.Infof("Batch auto-rebuild complete: %d files in %v", len(dingoPaths), time.Since(startTime))
+}
+
+// preloadTypesForFiles collects imports from all files and loads them into a type cache.
+func (at *AutoTranspiler) preloadTypesForFiles(dingoPaths []string) *typeloader.BuildCache {
+	collector := transpiler.ImportCollector{}
+	importSet := make(map[string]bool)
+
+	for _, path := range dingoPaths {
+		src, err := os.ReadFile(path)
+		if err != nil {
+			at.logger.Warnf("Failed to read %s for import collection: %v", path, err)
+			continue
+		}
+
+		imports, err := collector.CollectImports(src)
+		if err != nil {
+			at.logger.Warnf("Failed to collect imports from %s: %v", path, err)
+			continue
+		}
+
+		for _, imp := range imports {
+			importSet[imp] = true
+		}
+	}
+
+	if len(importSet) == 0 {
+		return nil
+	}
+
+	// Convert to slice
+	allImports := make([]string, 0, len(importSet))
+	for imp := range importSet {
+		allImports = append(allImports, imp)
+	}
+
+	// Load all imports into cache
+	cache := typeloader.NewBuildCache(typeloader.LoaderConfig{
+		WorkingDir: at.server.workspacePath,
+		FailFast:   false,
+	})
+
+	startTime := time.Now()
+	_, err := cache.LoadImports(allImports)
+	if err != nil {
+		at.logger.Warnf("Failed to pre-load types: %v", err)
+		return nil
+	}
+	at.logger.Debugf("Pre-loaded %d packages in %v", len(allImports), time.Since(startTime))
+
+	return cache
+}
+
+// transpileWithCache transpiles a single file using a pre-loaded type cache.
+func (at *AutoTranspiler) transpileWithCache(ctx context.Context, dingoPath string, typeCache *typeloader.BuildCache) {
+	// Acquire file-specific lock
+	fileLock := at.getFileLock(dingoPath)
+	fileLock.Lock()
+	defer fileLock.Unlock()
+
+	uri := protocol.DocumentURI(lspuri.File(dingoPath))
+
+	// Read source
+	src, err := os.ReadFile(dingoPath)
+	if err != nil {
+		at.logger.Errorf("Failed to read %s: %v", dingoPath, err)
+		return
+	}
+
+	// Transpile with type cache
+	opts := transpiler.TranspileOptions{
+		InferTypes: true,
+		TypeCache:  typeCache,
+	}
+
+	result, err := transpiler.PureASTTranspileWithMappingsOpts(src, dingoPath, opts)
+	if err != nil {
+		at.logger.Errorf("Auto-transpile failed for %s: %v", dingoPath, err)
+		// Publish diagnostic
+		var formatter ErrorFormatter = &SimpleFormatter{}
+		if at.server != nil {
+			formatter = GetFormatterForEditor(at.server.editorType)
+		}
+		diagnostic := ParseTranspileError(dingoPath, err, formatter)
+		if diagnostic != nil && at.server != nil {
+			at.server.updateAndPublishDiagnostics(uri, "gopls", []protocol.Diagnostic{})
+			at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{*diagnostic})
+		}
+		return
+	}
+
+	// Write output using server's path calculation
+	goPath := at.server.dingoToGoPath(dingoPath)
+	if err := os.WriteFile(goPath, result.GoCode, 0644); err != nil {
+		at.logger.Errorf("Failed to write %s: %v", goPath, err)
+		return
+	}
+
+	at.logger.Debugf("Transpiled: %s", dingoPath)
+
+	// Clear transpile diagnostics
+	if at.server != nil {
+		at.server.updateAndPublishDiagnostics(uri, "transpile", []protocol.Diagnostic{})
+	}
+
+	// Invalidate cache and sync gopls
+	at.mapCache.Invalidate(goPath)
+	if err := at.SyncGoplsWithGoFile(ctx, goPath); err != nil {
+		at.logger.Warnf("Failed to sync gopls with .go file: %v", err)
+	}
 }
 
 // OnFileChange handles a .dingo file change (called by watcher and didSave)

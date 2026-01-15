@@ -60,6 +60,7 @@ and other quality-of-life features while maintaining 100% Go ecosystem compatibi
 	rootCmd.AddCommand(newVersionCmd()) // dingo version - show version with mascot and update check
 	rootCmd.AddCommand(updateCmd())     // dingo update - auto-update from GitHub
 	rootCmd.AddCommand(mascotCmd())
+	rootCmd.AddCommand(styleguideCmd()) // dingo styleguide - best practices guide
 
 	if err := rootCmd.Execute(); err != nil {
 		// Print error since we have SilenceErrors: true

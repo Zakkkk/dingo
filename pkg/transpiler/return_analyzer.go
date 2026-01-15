@@ -174,6 +174,21 @@ func (ra *ReturnAnalyzer) determineResultWrapper(expr ast.Expr, returnInfo *Retu
 		return WrapperSkip
 	}
 
+	// Strategy 0c: For method calls with unknown return type (nil or invalid), skip wrapping
+	// This prevents wrapping calls to external methods that may already return Result
+	// The user must explicitly wrap if needed (safer than guessing wrong)
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if _, isSel := call.Fun.(*ast.SelectorExpr); isSel {
+			if ra.checker != nil {
+				exprType := ra.checker.TypeOf(expr)
+				// Skip wrapping if type is nil (unknown) or invalid (unresolved)
+				if exprType == nil || isInvalidType(exprType) {
+					return WrapperSkip // Unknown type - don't wrap, let user handle it
+				}
+			}
+		}
+	}
+
 	// Strategy 1: AST-based error detection (works without type checker)
 	// This runs first to catch common error patterns even when type checker fails
 	if ra.isErrorExpression(expr) {
@@ -207,9 +222,10 @@ func (ra *ReturnAnalyzer) determineResultWrapper(expr ast.Expr, returnInfo *Retu
 	}
 
 	// Strategy 4: Check for error interface (requires type checker)
+	// IMPORTANT: Skip invalid types - they may falsely pass implements check
 	if ra.checker != nil {
 		exprType := ra.checker.TypeOf(expr)
-		if exprType != nil && ra.implementsError(exprType) {
+		if exprType != nil && !isInvalidType(exprType) && ra.implementsError(exprType) {
 			return WrapperErr
 		}
 	}
@@ -521,6 +537,37 @@ func containsSubstring(s, substr string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// isInvalidType checks if a type is an "invalid type" from go/types.
+// Invalid types occur when the type checker can't resolve a type (e.g., external package).
+// These types can falsely pass interface implementation checks.
+func isInvalidType(t types.Type) bool {
+	if t == nil {
+		return true
+	}
+
+	// Check the string representation for "invalid type"
+	typeStr := types.TypeString(t, nil)
+	if typeStr == "invalid type" {
+		return true
+	}
+
+	// Also check pointer/slice/map to invalid types
+	switch u := t.(type) {
+	case *types.Pointer:
+		return isInvalidType(u.Elem())
+	case *types.Slice:
+		return isInvalidType(u.Elem())
+	case *types.Array:
+		return isInvalidType(u.Elem())
+	case *types.Map:
+		return isInvalidType(u.Key()) || isInvalidType(u.Elem())
+	case *types.Basic:
+		return u.Kind() == types.Invalid
+	}
+
 	return false
 }
 

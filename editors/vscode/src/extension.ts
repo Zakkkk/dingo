@@ -1,12 +1,57 @@
 import * as vscode from 'vscode';
 import { GoldenFileSupport } from './goldenFileSupport';
-import { activateLSPClient, deactivateLSPClient } from './lspClient';
+import { activateLSPClient, deactivateLSPClient, getLSPClient } from './lspClient';
 import { DingoTaskProvider, registerBuildCommands } from './taskProvider';
 import { registerDebugCommands } from './debugProvider';
 import { registerDingoDebugger } from './dingoDebugAdapter';
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('Dingo extension activating...');
+
+    // Register formatter FIRST (before LSP) to ensure VS Code recognizes this extension as a formatter
+    // The formatter delegates to LSP when available, or returns empty edits if LSP isn't ready
+    const formatterDisposable = vscode.languages.registerDocumentFormattingEditProvider(
+        { scheme: 'file', language: 'dingo' },
+        {
+            async provideDocumentFormattingEdits(document: vscode.TextDocument): Promise<vscode.TextEdit[]> {
+                const client = getLSPClient();
+                if (!client) {
+                    console.log('Dingo formatter: LSP client not available');
+                    vscode.window.showWarningMessage('Dingo LSP is not running. Cannot format.');
+                    return [];
+                }
+                try {
+                    const result = await client.sendRequest('textDocument/formatting', {
+                        textDocument: { uri: document.uri.toString() },
+                        options: {
+                            tabSize: 4,
+                            insertSpaces: false
+                        }
+                    });
+                    if (!result || !Array.isArray(result)) {
+                        return [];
+                    }
+                    return (result as any[]).map((edit: any) => {
+                        return new vscode.TextEdit(
+                            new vscode.Range(
+                                edit.range.start.line,
+                                edit.range.start.character,
+                                edit.range.end.line,
+                                edit.range.end.character
+                            ),
+                            edit.newText
+                        );
+                    });
+                } catch (error) {
+                    console.error('Dingo formatting error:', error);
+                    vscode.window.showErrorMessage(`Dingo formatting failed: ${error}`);
+                    return [];
+                }
+            }
+        }
+    );
+    context.subscriptions.push(formatterDisposable);
+    console.log('Dingo formatter registered');
 
     // Ensure .dingo files always use 'dingo' language mode (prevents Go extension interference)
     context.subscriptions.push(

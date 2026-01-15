@@ -297,7 +297,8 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 
 	// Create shadow builder
 	builder := shadow.NewBuilder(workspaceRoot, shadowDir, cfg)
-	builder.Debug = opts.Debug // Pass debug flag for //line directive emission
+	builder.Debug = opts.Debug     // Pass debug flag for //line directive emission
+	builder.Verbose = opts.Verbose // Pass verbose flag for progress output
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#5AF78E"))
 	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C7086")).Italic(true)
@@ -541,12 +542,25 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 			fmt.Print("\033[0J")                  // Clear from cursor to end of screen
 		}
 
-		// Show completion summary
-		fmt.Printf("  %s Transpile   %d files %s\n",
-			successStyle.Render("✓"),
-			len(result.GeneratedFiles),
-			timeStyle.Render("("+formatDuration(shadowDuration)+")"))
+		// Show completion summary with transpiled vs skipped distinction
+		if result.TranspiledCount > 0 {
+			fmt.Printf("  %s Transpile   %d files %s\n",
+				successStyle.Render("✓"),
+				result.TranspiledCount,
+				timeStyle.Render("("+formatDuration(shadowDuration)+")"))
+		} else {
+			fmt.Printf("  %s Transpile   %d files up to date\n",
+				successStyle.Render("✓"),
+				result.SkippedCount)
+		}
 		fmt.Println()
+	} else if buildUI == nil && opts.Verbose {
+		// In no-mascot verbose mode, show what was transpiled
+		if result.TranspiledCount > 0 {
+			fmt.Printf("Transpiled %d file(s) in %s\n", result.TranspiledCount, formatDuration(shadowDuration))
+		} else if result.SkippedCount > 0 {
+			fmt.Printf("All %d file(s) up to date\n", result.SkippedCount)
+		}
 	}
 
 	// Step 2: Run go build/run from shadow directory
@@ -586,7 +600,13 @@ func runWithShadowBuild(opts *CompileOptions, cfg *config.Config, buildUI *ui.Si
 	// Success!
 	if buildUI != nil {
 		if goCmd == "build" {
-			buildUI.SetStatus(mascot.StateSuccess, "Build successful!", fmt.Sprintf("%d file(s) compiled", len(result.GeneratedFiles)))
+			var detail string
+			if result.TranspiledCount > 0 {
+				detail = fmt.Sprintf("%d file(s) transpiled", result.TranspiledCount)
+			} else {
+				detail = fmt.Sprintf("%d file(s) up to date", result.SkippedCount)
+			}
+			buildUI.SetStatus(mascot.StateSuccess, "Build successful!", detail)
 		} else {
 			buildUI.SetStatus(mascot.StateSuccess, "Run complete!", "")
 		}
@@ -649,8 +669,20 @@ func invokeGoToolFromShadow(opts *CompileOptions, result *shadow.BuildResult, go
 			args = append(args, relGo)
 		}
 	} else if len(opts.PackagePaths) > 0 {
-		// Package mode - use "." since we're running from shadow
-		args = append(args, ".")
+		// Package mode - preserve the original package path
+		// Convert workspace-relative path to shadow-relative
+		for _, pkgPath := range opts.PackagePaths {
+			// Get relative path from workspace root
+			absPath, _ := filepath.Abs(pkgPath)
+			relPath, err := filepath.Rel(workspaceRoot, absPath)
+			if err != nil || relPath == "." {
+				// Can't determine or it's the workspace root - use "."
+				args = append(args, ".")
+			} else {
+				// Use relative path (e.g., ./cmd/api)
+				args = append(args, "./"+relPath)
+			}
+		}
 	}
 
 	// Verbose: print the command

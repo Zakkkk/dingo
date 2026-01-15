@@ -28,7 +28,8 @@ type StmtLocation struct {
 	Kind      StmtKind
 	Start     int    // Start byte position of statement
 	End       int    // End byte position of statement
-	VarName   string // Target variable name (for assign/let)
+	VarName   string // Target variable name (for assign/let) - first var for tuples
+	TupleLHS  string // Full LHS for tuple assignments (e.g., "a, b" for "a, b := ...")
 	ExprStart int    // Start of expression (before ?)
 	ExprEnd   int    // End of expression (after ?)
 
@@ -111,12 +112,28 @@ func FindErrorPropStatements(src []byte) ([]StmtLocation, error) {
 		// Pattern 4: expr? (bare statement)
 
 		if t.Kind == tokenizer.IDENT || t.Kind == tokenizer.UNDERSCORE {
-			// Check for "ident :=" or "_ :=" pattern
+			// Check for "ident :=" or "_ :=" pattern (single variable)
 			if i+1 < len(tokens) && tokens[i+1].Kind == tokenizer.DEFINE {
 				loc := scanForQuestionMark(tokens, i)
 				if loc != nil {
 					loc.Kind = StmtErrorPropAssign
 					loc.VarName = t.Lit
+					locations = append(locations, *loc)
+					// Skip past this statement
+					i = findTokenAtByte(tokens, loc.End)
+				}
+				continue
+			}
+			// Check for tuple assignment "a, b :=" pattern
+			// Scan ahead past comma-separated identifiers to find :=
+			defineIdx, tupleLHS := findDefineAfterTupleLHSWithNames(tokens, i)
+			if defineIdx > i {
+				loc := scanForQuestionMark(tokens, i)
+				if loc != nil {
+					loc.Kind = StmtErrorPropAssign
+					// For tuple LHS, use first variable name but keep full LHS
+					loc.VarName = t.Lit
+					loc.TupleLHS = tupleLHS
 					locations = append(locations, *loc)
 					// Skip past this statement
 					i = findTokenAtByte(tokens, loc.End)
@@ -202,6 +219,70 @@ func isPrecededByAssignOrReturn(tokens []tokenizer.Token, startIdx int) bool {
 		}
 	}
 	return false
+}
+
+// findDefineAfterTupleLHSWithNames checks if tokens starting at startIdx form a tuple LHS followed by :=
+// Pattern: IDENT, IDENT, IDENT := (comma-separated identifiers)
+// Returns (index of :=, full LHS string like "a, b") or (-1, "") if not a tuple LHS
+func findDefineAfterTupleLHSWithNames(tokens []tokenizer.Token, startIdx int) (int, string) {
+	// Must start with IDENT or _
+	if startIdx >= len(tokens) {
+		return -1, ""
+	}
+	t := tokens[startIdx]
+	if t.Kind != tokenizer.IDENT && t.Kind != tokenizer.UNDERSCORE {
+		return -1, ""
+	}
+
+	// Collect variable names
+	var names []string
+	names = append(names, t.Lit)
+
+	// Scan ahead looking for pattern: IDENT (COMMA IDENT)* DEFINE
+	// State: expecting COMMA or DEFINE
+	expectingComma := true
+	for i := startIdx + 1; i < len(tokens); i++ {
+		tok := tokens[i]
+
+		// Skip whitespace/newlines in tuple LHS (rare but valid)
+		if tok.Kind == tokenizer.NEWLINE || tok.Kind == tokenizer.COMMENT {
+			continue
+		}
+
+		if expectingComma {
+			if tok.Kind == tokenizer.COMMA {
+				expectingComma = false
+				continue
+			}
+			if tok.Kind == tokenizer.DEFINE {
+				// Found := after valid tuple LHS (need at least 2 names for tuple)
+				if len(names) >= 2 {
+					// Build LHS string: "a, b, c"
+					lhs := ""
+					for j, name := range names {
+						if j > 0 {
+							lhs += ", "
+						}
+						lhs += name
+					}
+					return i, lhs
+				}
+				return -1, "" // Single name, not a tuple
+			}
+			// Not a tuple LHS pattern
+			return -1, ""
+		} else {
+			// Expecting IDENT or _ after comma
+			if tok.Kind == tokenizer.IDENT || tok.Kind == tokenizer.UNDERSCORE {
+				names = append(names, tok.Lit)
+				expectingComma = true
+				continue
+			}
+			// Invalid token in tuple LHS
+			return -1, ""
+		}
+	}
+	return -1, ""
 }
 
 // scanForQuestionMark scans forward from startIdx looking for a statement ending with ?

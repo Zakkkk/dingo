@@ -379,6 +379,9 @@ func (s *Server) handleInitialize(ctx context.Context, reply jsonrpc2.Replier, r
 				s.config.Logger.Warnf("Failed to start file watcher: %v (auto-transpile disabled)", err)
 			} else {
 				s.watcher = watcher
+				// Set batch handler for efficient multi-file processing
+				// This uses shared type cache and parallel transpilation
+				watcher.SetBatchChangeHandler(s.handleDingoBatchChange)
 			}
 		}
 
@@ -751,24 +754,24 @@ func (s *Server) transpileWorkspace(ctx context.Context) {
 
 	s.config.Logger.Infof("Found %d .dingo files to transpile", len(dingoFiles))
 
-	// Transpile each file (errors are logged but don't stop the process)
-	successCount := 0
-	for _, dingoPath := range dingoFiles {
-		if err := s.transpiler.TranspileFile(ctx, dingoPath); err != nil {
-			s.config.Logger.Debugf("Transpile failed for %s: %v", dingoPath, err)
-		} else {
-			successCount++
-		}
-	}
+	// Use batch processing for efficient workspace transpilation
+	// This pre-loads types once and transpiles in parallel
+	s.transpiler.OnBatchFileChange(ctx, dingoFiles)
 
 	duration := time.Since(startTime)
-	s.config.Logger.Infof("Workspace transpilation complete: %d/%d files in %v", successCount, len(dingoFiles), duration)
+	s.config.Logger.Infof("Workspace transpilation complete: %d files in %v", len(dingoFiles), duration)
 }
 
 // handleDingoFileChange handles file changes detected by the watcher
 func (s *Server) handleDingoFileChange(dingoPath string) {
 	// IMPORTANT FIX I3: Use server context instead of background
 	s.transpiler.OnFileChange(s.ctx, dingoPath)
+}
+
+// handleDingoBatchChange handles multiple .dingo file changes efficiently.
+// Uses shared type cache and parallel transpilation for much faster processing.
+func (s *Server) handleDingoBatchChange(dingoPaths []string) {
+	s.transpiler.OnBatchFileChange(s.ctx, dingoPaths)
 }
 
 // openGoFileWithGopls opens the corresponding .go file with gopls

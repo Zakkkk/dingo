@@ -4,10 +4,16 @@
 package typechecker
 
 import (
+	"bufio"
 	"go/ast"
 	"go/importer"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // Checker runs the Go type checker and provides type queries.
@@ -62,6 +68,124 @@ func New(fset *token.FileSet, file *ast.File, pkgPath string) (*Checker, error) 
 		info: info,
 		pkg:  pkg,
 	}, nil
+}
+
+// NewWithWorkspace creates a Checker using go/packages for full module awareness.
+// This enables proper type resolution for local module packages (not just stdlib).
+//
+// Parameters:
+//   - workspaceDir: The directory containing go.mod (module root, often the shadow build dir)
+//   - goFilePath: The path where the Go file would be written (used for overlay)
+//   - goSource: The in-memory Go source code to type-check
+//
+// This is slower than New() but provides accurate types for all imports.
+func NewWithWorkspace(workspaceDir, goFilePath string, goSource []byte) (*Checker, error) {
+	// Normalize the file path to absolute
+	if !filepath.IsAbs(goFilePath) {
+		goFilePath = filepath.Join(workspaceDir, goFilePath)
+	}
+
+	// Compute the package import path from the file path
+	// E.g., if workspaceDir=/project/build, goFilePath=/project/build/handler/foo.go
+	// and go.mod has module github.com/foo/bar, then pkgPath=github.com/foo/bar/handler
+	pkgPath, err := computePackagePath(workspaceDir, goFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Configure packages.Load with overlay for in-memory source
+	cfg := &packages.Config{
+		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax |
+			packages.NeedName | packages.NeedImports,
+		Dir: workspaceDir,
+		Overlay: map[string][]byte{
+			goFilePath: goSource,
+		},
+	}
+
+	// Load the package by import path (not file=)
+	// This enables proper module resolution
+	pkgs, err := packages.Load(cfg, pkgPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(pkgs) == 0 {
+		return nil, nil
+	}
+
+	pkg := pkgs[0]
+
+	// Even with errors, we may have partial type info
+	// Don't fail on type errors - we want as much info as possible
+
+	return &Checker{
+		fset: pkg.Fset,
+		info: pkg.TypesInfo,
+		pkg:  pkg.Types,
+	}, nil
+}
+
+// computePackagePath computes the Go import path for a file.
+// It reads the go.mod to find the module name, then computes the relative package path.
+func computePackagePath(workspaceDir, goFilePath string) (string, error) {
+	// Read go.mod to get module name
+	goModPath := filepath.Join(workspaceDir, "go.mod")
+	goModData, err := readGoMod(goModPath)
+	if err != nil {
+		return "", err
+	}
+
+	moduleName := goModData.ModuleName
+	if moduleName == "" {
+		return "", nil
+	}
+
+	// Get the package directory relative to workspace
+	pkgDir := filepath.Dir(goFilePath)
+	relDir, err := filepath.Rel(workspaceDir, pkgDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Handle root package
+	if relDir == "." {
+		return moduleName, nil
+	}
+
+	// Combine module name with relative path
+	// Convert path separators to forward slashes for import path
+	relDir = filepath.ToSlash(relDir)
+	return moduleName + "/" + relDir, nil
+}
+
+// goModInfo holds parsed go.mod information
+type goModInfo struct {
+	ModuleName string
+}
+
+// readGoMod reads and parses a go.mod file to extract the module name.
+// This is a simple parser that only extracts the module directive.
+func readGoMod(path string) (*goModInfo, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			// Extract module name (handle quotes if present)
+			moduleName := strings.TrimPrefix(line, "module ")
+			moduleName = strings.TrimSpace(moduleName)
+			moduleName = strings.Trim(moduleName, "\"")
+			return &goModInfo{ModuleName: moduleName}, nil
+		}
+	}
+
+	return &goModInfo{}, nil
 }
 
 // TypeOf returns the type of an expression, or nil if unknown.

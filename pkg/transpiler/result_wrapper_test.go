@@ -28,8 +28,8 @@ func fetch() Result[string, error] {
 	}
 }
 
-// TestResultWrapper_SimpleErr tests wrapping an error value with dgo.Err[T].
-// Go infers E from the error argument, so only T is specified.
+// TestResultWrapper_SimpleErr tests wrapping an error value with dgo.Err[T, E].
+// Both type parameters must be specified for correct type inference.
 func TestResultWrapper_SimpleErr(t *testing.T) {
 	source := `package main
 
@@ -40,7 +40,7 @@ func fetch() Result[string, error] {
 }
 `
 
-	expected := `dgo.Err[string](errors.New("failed"))`
+	expected := `dgo.Err[string, error](errors.New("failed"))`
 
 	result := transformAndExtractReturn(t, source)
 	if !strings.Contains(result, expected) {
@@ -61,7 +61,7 @@ func fetch() Result[string, DBError] {
 }
 `
 
-	expected := `dgo.Err[string](DBError{Code: "ERR"})`
+	expected := `dgo.Err[string, DBError](DBError{Code: "ERR"})`
 
 	result := transformAndExtractReturn(t, source)
 	if !strings.Contains(result, expected) {
@@ -226,9 +226,9 @@ func fetch(id int) Result[string, error] {
 
 	result := transformAndPrint(t, source)
 
-	// Ok needs both [T, E], Err only needs [T]
+	// Both Ok and Err need both [T, E] type parameters
 	okCount := strings.Count(result, "dgo.Ok[string, error]")
-	errCount := strings.Count(result, "dgo.Err[string](")
+	errCount := strings.Count(result, "dgo.Err[string, error]")
 
 	if okCount != 1 {
 		t.Errorf("Expected 1 dgo.Ok wrapper, got %d in:\n%s", okCount, result)

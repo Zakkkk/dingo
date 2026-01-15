@@ -15,6 +15,7 @@ type FileWatcher struct {
 	watcher       *fsnotify.Watcher
 	logger        Logger
 	onChange      func(dingoPath string)
+	onBatchChange func(dingoPaths []string) // Called for batch processing (if set)
 	debounceTimer *time.Timer
 	debounceDur   time.Duration
 	pendingFiles  map[string]bool
@@ -189,11 +190,29 @@ func (fw *FileWatcher) processPendingFiles() {
 	fw.pendingFiles = make(map[string]bool)
 	fw.mu.Unlock()
 
-	// Process each file
+	if len(files) == 0 {
+		return
+	}
+
+	// For batch processing, call onBatchChange if available
+	if fw.onBatchChange != nil {
+		fw.logger.Debugf("Processing %d debounced file changes in batch", len(files))
+		fw.onBatchChange(files)
+		return
+	}
+
+	// Fallback: Process each file individually
 	for _, path := range files {
 		fw.logger.Debugf("Processing debounced file change: %s", path)
 		fw.onChange(path)
 	}
+}
+
+// SetBatchChangeHandler sets the batch change handler for efficient multi-file processing
+func (fw *FileWatcher) SetBatchChangeHandler(handler func(dingoPaths []string)) {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	fw.onBatchChange = handler
 }
 
 // Close stops the file watcher (idempotent)

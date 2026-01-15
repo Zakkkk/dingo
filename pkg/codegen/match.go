@@ -36,9 +36,9 @@ import (
 type MatchCodeGen struct {
 	*BaseGenerator
 	Match            *ast.MatchExpr
-	Context          *GenContext         // Optional context for human-like code generation
-	scrutineeTempVar string              // Temp var name for scrutinee in type switch (e.g., "v")
-	ValueEnumReg     *ast.EnumRegistry   // Registry for value enum detection (from Phase 1/2)
+	Context          *GenContext       // Optional context for human-like code generation
+	scrutineeTempVar string            // Temp var name for scrutinee in type switch (e.g., "v")
+	ValueEnumReg     *ast.EnumRegistry // Registry for value enum detection (from Phase 1/2)
 }
 
 // SharedTempVar generates unique temp var names using shared counter if available.

@@ -73,7 +73,7 @@
         "editor.suggest.snippetsPreventQuickSuggestions": false,
         "editor.wordBasedSuggestions": false,
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "dingo.dingo",
+        "editor.defaultFormatter": "madappgang.dingo",
         "go.useLanguageServer": false
       }
     },

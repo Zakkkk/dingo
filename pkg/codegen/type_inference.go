@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/scanner"
@@ -210,6 +211,32 @@ func InferEnclosingFunctionReturnsResult(src []byte, exprPos int) string {
 	return ""
 }
 
+// InferEnclosingFunctionResultTypes checks if the enclosing function returns a Result type.
+// Returns (isResult, okType, errType) where:
+//   - isResult: true if the enclosing function returns Result[T, E]
+//   - okType: the T type from Result[T, E]
+//   - errType: the E type from Result[T, E]
+//
+// For example, for `func foo() Result[User, AppError]`, returns (true, "User", "AppError").
+func InferEnclosingFunctionResultTypes(src []byte, exprPos int) (isResult bool, okType string, errType string) {
+	typeNames := InferReturnTypeNames(src, exprPos)
+	if len(typeNames) == 0 {
+		return false, "", ""
+	}
+
+	// Check each return type for Result pattern
+	for _, typeName := range typeNames {
+		if IsResultType(typeName) {
+			okType = ExtractResultOkType(typeName)
+			errType = ExtractResultErrType(typeName)
+			if okType != "" && errType != "" {
+				return true, okType, errType
+			}
+		}
+	}
+	return false, "", ""
+}
+
 // InferExprReturnsResult checks if an expression returns a Result type.
 // Returns (isResult, okType, errType) where:
 //   - isResult: true if the expression returns a Result[T, E] type
@@ -252,7 +279,16 @@ func InferExprReturnsResultWithResolver(src []byte, exprBytes []byte, exprPos in
 	methodName := extractMethodName(exprStr)
 
 	// Strategy 1: Find the method/function declaration in the current file
-	if methodName != "" {
+	// This searches for both top-level functions AND methods with receivers.
+	//
+	// IMPORTANT: Only match for:
+	// - Direct function calls: foo()
+	// - Method calls on self: v.validateWithCache() where v is the receiver
+	//
+	// DO NOT match for:
+	// - Method calls on fields: s.companyRepo.Update() where companyRepo is a field
+	//   These have different types and matching by name causes collisions.
+	if methodName != "" && !isMethodCallOnField(exprStr) {
 		returnType := findMethodReturnType(src, methodName)
 		if returnType != "" {
 			// Found the method definition in current file
@@ -262,6 +298,21 @@ func InferExprReturnsResultWithResolver(src []byte, exprBytes []byte, exprPos in
 				return true, okType, errType
 			}
 			// Method found but doesn't return Result - use tuple pattern
+			return false, "", ""
+		}
+	}
+
+	// Strategy 1b: Check interface methods in the CURRENT source file
+	// This handles cases like f.Refresh() where JWKSFetcher interface is defined in the same file.
+	if methodName != "" {
+		localInterfaceMethods := parseLocalInterfaceMethods(src)
+		if returnType, found := localInterfaceMethods[methodName]; found {
+			if IsResultType(returnType) {
+				okType = ExtractResultOkType(returnType)
+				errType = ExtractResultErrType(returnType)
+				return true, okType, errType
+			}
+			// Found but doesn't return Result - use tuple pattern
 			return false, "", ""
 		}
 	}
@@ -280,6 +331,77 @@ func InferExprReturnsResultWithResolver(src []byte, exprBytes []byte, exprPos in
 
 	// No method definition found - use tuple pattern as safe default
 	return false, "", ""
+}
+
+// parseLocalInterfaceMethods extracts interface method signatures from the current source file.
+// Returns a map of method name to return type string.
+// This enables detection of Result-returning methods defined in interfaces within the same file.
+//
+// Key insight: Interface declarations are typically at the TOP of the file, before function
+// bodies that may contain Dingo-specific syntax (match, ?). We extract just the part before
+// the first "func " to get parseable Go code containing the interface definitions.
+func parseLocalInterfaceMethods(src []byte) map[string]string {
+	result := make(map[string]string)
+
+	// Find the first "\nfunc " to extract only package + imports + type declarations
+	// This avoids parsing function bodies which may contain Dingo-specific syntax
+	funcIdx := bytes.Index(src, []byte("\nfunc "))
+	var partial []byte
+	if funcIdx == -1 {
+		partial = src // No functions, parse the whole thing
+	} else {
+		partial = src[:funcIdx]
+	}
+
+	// Parse the partial source
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", partial, parser.SkipObjectResolution)
+	if err != nil {
+		return result
+	}
+
+	// Find all interface type declarations
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			interfaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+			if !ok {
+				continue
+			}
+
+			// Extract methods from interface
+			if interfaceType.Methods != nil {
+				for _, method := range interfaceType.Methods.List {
+					funcType, ok := method.Type.(*ast.FuncType)
+					if !ok {
+						continue
+					}
+
+					if len(method.Names) == 0 {
+						continue
+					}
+					methodName := method.Names[0].Name
+
+					// Extract first return type
+					if funcType.Results != nil && len(funcType.Results.List) > 0 {
+						returnType := exprToTypeName(funcType.Results.List[0].Type)
+						result[methodName] = returnType
+					}
+				}
+			}
+		}
+	}
+
+	return result
 }
 
 // isKnownTupleMethod checks if a method name is a known stdlib method that returns (T, error).
@@ -417,20 +539,27 @@ func ExtractResultErrType(typeStr string) string {
 	}
 
 	// Find the comma that separates T and E (at depth 1)
-	depth := 1
+	// Track both brackets [] and parentheses () for tuple types like (string, string)
+	bracketDepth := 1
+	parenDepth := 0
 	commaIdx := -1
 	for i := resultIdx; i < len(typeStr); i++ {
 		switch typeStr[i] {
 		case '[':
-			depth++
+			bracketDepth++
 		case ']':
-			depth--
-			if depth == 0 {
+			bracketDepth--
+			if bracketDepth == 0 {
 				// No comma found, invalid Result type
 				return ""
 			}
+		case '(':
+			parenDepth++
+		case ')':
+			parenDepth--
 		case ',':
-			if depth == 1 {
+			// Only match comma at top level (bracket depth 1, not inside parens)
+			if bracketDepth == 1 && parenDepth == 0 {
 				commaIdx = i
 				break
 			}
@@ -451,14 +580,14 @@ func ExtractResultErrType(typeStr string) string {
 	}
 
 	// Find closing bracket at depth 1
-	depth = 1
+	bracketDepth = 1
 	for i := start; i < len(typeStr); i++ {
 		switch typeStr[i] {
 		case '[':
-			depth++
+			bracketDepth++
 		case ']':
-			depth--
-			if depth == 0 {
+			bracketDepth--
+			if bracketDepth == 0 {
 				return typeStr[start:i]
 			}
 		}
@@ -746,6 +875,65 @@ func extractMethodName(expr string) string {
 	return extractFuncName(callExpr.Fun)
 }
 
+// isMethodCallOnReceiver checks if an expression is a method call on a receiver (not a direct function call).
+// Returns true for: s.repo.GetBySlug(), obj.Method(), pkg.Func()
+// Returns false for: foo(), getResult()
+//
+// This is used to prevent incorrectly matching local functions when the call is a method
+// on an external receiver that we can't type-check.
+func isMethodCallOnReceiver(expr string) bool {
+	// Parse as Go expression using go/parser
+	parsedExpr, err := parser.ParseExpr(expr)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a call expression
+	callExpr, ok := parsedExpr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	// Check if the function being called is a selector (x.Method)
+	_, isSelector := callExpr.Fun.(*ast.SelectorExpr)
+	return isSelector
+}
+
+// isMethodCallOnField checks if an expression is a method call on a FIELD of the receiver.
+// Returns true for: s.repo.GetBySlug(), s.companyRepo.Update()
+// Returns false for: foo(), v.validateWithCache(), obj.Method()
+//
+// The difference from isMethodCallOnReceiver:
+// - v.Method() has a simple identifier receiver (v) → this is calling a method on self
+// - s.field.Method() has a selector receiver (s.field) → this is calling a method on a field
+//
+// We use this to avoid matching local methods when calling methods on fields,
+// since fields have different types than self.
+func isMethodCallOnField(expr string) bool {
+	// Parse as Go expression using go/parser
+	parsedExpr, err := parser.ParseExpr(expr)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a call expression
+	callExpr, ok := parsedExpr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	// Check if the function being called is a selector (x.Method)
+	sel, isSelector := callExpr.Fun.(*ast.SelectorExpr)
+	if !isSelector {
+		return false
+	}
+
+	// Check if the receiver (sel.X) is itself a selector (x.field)
+	// This means we have x.field.Method() pattern
+	_, receiverIsSelector := sel.X.(*ast.SelectorExpr)
+	return receiverIsSelector
+}
+
 // extractFuncName extracts the function name from a call's Fun expression
 func extractFuncName(expr ast.Expr) string {
 	switch e := expr.(type) {
@@ -837,20 +1025,27 @@ func ExtractResultOkType(typeStr string) string {
 		return ""
 	}
 
-	// Extract until first comma or ]
-	depth := 1
+	// Extract until first comma or ] at top level
+	// Track both brackets [] and parentheses () for tuple types like (string, string)
+	bracketDepth := 1
+	parenDepth := 0
 	start := resultIdx
 	for i := resultIdx; i < len(typeStr); i++ {
 		switch typeStr[i] {
 		case '[':
-			depth++
+			bracketDepth++
 		case ']':
-			depth--
-			if depth == 0 {
+			bracketDepth--
+			if bracketDepth == 0 {
 				return typeStr[start:i]
 			}
+		case '(':
+			parenDepth++
+		case ')':
+			parenDepth--
 		case ',':
-			if depth == 1 {
+			// Only match comma at top level (bracket depth 1, not inside parens)
+			if bracketDepth == 1 && parenDepth == 0 {
 				return typeStr[start:i]
 			}
 		}

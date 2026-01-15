@@ -899,25 +899,91 @@ func adjustWithDirectives(directiveMap map[int]int, lineMappings []sourcemap.Lin
 }
 
 // calculateHeaderOffset determines the line offset between Dingo and Go sources
-// caused by go/printer reformatting (e.g., removing empty comment lines).
+// caused by import expansion (adding dgo import) and go/printer reformatting.
 //
-// The algorithm counts lines before "package" in both sources. If Dingo has
-// more lines before "package" than Go, those extra lines are the header offset.
+// The algorithm finds the line of the first code AFTER imports in both sources.
+// The difference accounts for import expansion (e.g., adding dgo import adds 1 line)
+// as well as go/printer reformatting.
 //
-// Returns negative offset if Go has fewer lines (common case).
+// Returns positive offset if Go has more lines (common case due to dgo import).
 func calculateHeaderOffset(goCode, dingoSource []byte, lineMappings []sourcemap.LineMapping) int {
-	// Use go/scanner to find "package" keyword in both sources
-	goPackageLine := findPackageLine(goCode)
-	dingoPackageLine := findPackageLine(dingoSource)
+	// Find the line of the first code after imports in both sources
+	goFirstCodeLine := findFirstCodeAfterImportsLine(goCode)
+	dingoFirstCodeLine := findFirstCodeAfterImportsLine(dingoSource)
 
-	if goPackageLine == 0 || dingoPackageLine == 0 {
+	if goFirstCodeLine == 0 || dingoFirstCodeLine == 0 {
 		return 0 // Can't determine offset
 	}
 
-	// Header offset = Go package line - Dingo package line
-	// If Dingo has 17 lines before package and Go has 16, offset = -1
-	// This means Go line N corresponds to Dingo line N+1
-	return goPackageLine - dingoPackageLine
+	// Offset = Go first code line - Dingo first code line
+	// If Dingo imports end at line 11 and Go imports end at line 12 (due to dgo),
+	// offset = 12 - 11 = 1, meaning Go line = Dingo line + 1
+	return goFirstCodeLine - dingoFirstCodeLine
+}
+
+// findFirstCodeAfterImportsLine returns the 1-indexed line number of the first
+// code declaration (type, func, var, const) after the import section.
+// Uses go/scanner for CLAUDE.md compliant position tracking.
+func findFirstCodeAfterImportsLine(source []byte) int {
+	fset := token.NewFileSet()
+	file := fset.AddFile("", fset.Base(), len(source))
+
+	var s scanner.Scanner
+	s.Init(file, source, nil, scanner.ScanComments)
+
+	// Track whether we've passed the imports
+	passedPackage := false
+	inImportBlock := false
+	importBlockDepth := 0
+
+	for {
+		pos, tok, _ := s.Scan()
+		if tok == token.EOF {
+			break
+		}
+
+		// Track package keyword
+		if tok == token.PACKAGE {
+			passedPackage = true
+			continue
+		}
+
+		// Track import blocks
+		if tok == token.IMPORT {
+			// Check next token - if LPAREN, multi-line import; if STRING, single-line
+			nextPos, nextTok, _ := s.Scan()
+			if nextTok == token.LPAREN {
+				inImportBlock = true
+				importBlockDepth = 1
+			} else if nextTok == token.STRING {
+				// Single-line import - already past it
+				// Push back the next token check position
+				_ = nextPos
+			}
+			continue
+		}
+
+		// Track paren depth in import blocks
+		if inImportBlock {
+			if tok == token.LPAREN {
+				importBlockDepth++
+			} else if tok == token.RPAREN {
+				importBlockDepth--
+				if importBlockDepth == 0 {
+					inImportBlock = false
+				}
+			}
+			continue
+		}
+
+		// If we've passed package and are not in imports, look for first declaration
+		if passedPackage && !inImportBlock {
+			if tok == token.TYPE || tok == token.FUNC || tok == token.VAR || tok == token.CONST {
+				return fset.Position(pos).Line
+			}
+		}
+	}
+	return 0
 }
 
 // findPackageLine returns the 1-indexed line number of the "package" keyword.

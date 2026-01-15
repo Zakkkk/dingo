@@ -43,6 +43,56 @@ const debugProvider_1 = require("./debugProvider");
 const dingoDebugAdapter_1 = require("./dingoDebugAdapter");
 async function activate(context) {
     console.log('Dingo extension activating...');
+    // Register formatter FIRST (before LSP) to ensure VS Code recognizes this extension as a formatter
+    // The formatter delegates to LSP when available, or returns empty edits if LSP isn't ready
+    const formatterDisposable = vscode.languages.registerDocumentFormattingEditProvider({ scheme: 'file', language: 'dingo' }, {
+        async provideDocumentFormattingEdits(document) {
+            const client = (0, lspClient_1.getLSPClient)();
+            if (!client) {
+                console.log('Dingo formatter: LSP client not available');
+                vscode.window.showWarningMessage('Dingo LSP is not running. Cannot format.');
+                return [];
+            }
+            try {
+                const result = await client.sendRequest('textDocument/formatting', {
+                    textDocument: { uri: document.uri.toString() },
+                    options: {
+                        tabSize: 4,
+                        insertSpaces: false
+                    }
+                });
+                if (!result || !Array.isArray(result)) {
+                    return [];
+                }
+                return result.map((edit) => {
+                    return new vscode.TextEdit(new vscode.Range(edit.range.start.line, edit.range.start.character, edit.range.end.line, edit.range.end.character), edit.newText);
+                });
+            }
+            catch (error) {
+                console.error('Dingo formatting error:', error);
+                vscode.window.showErrorMessage(`Dingo formatting failed: ${error}`);
+                return [];
+            }
+        }
+    });
+    context.subscriptions.push(formatterDisposable);
+    console.log('Dingo formatter registered');
+    // Ensure .dingo files always use 'dingo' language mode (prevents Go extension interference)
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(doc => {
+        if (doc.fileName.endsWith('.dingo') && doc.languageId !== 'dingo') {
+            vscode.languages.setTextDocumentLanguage(doc, 'dingo');
+            console.log(`Dingo: Set language mode to 'dingo' for ${doc.fileName}`);
+        }
+    }));
+    // Also check currently open .dingo files
+    for (const doc of vscode.workspace.textDocuments) {
+        if (doc.fileName.endsWith('.dingo') && doc.languageId !== 'dingo') {
+            vscode.languages.setTextDocumentLanguage(doc, 'dingo');
+            console.log(`Dingo: Set language mode to 'dingo' for ${doc.fileName}`);
+        }
+    }
+    // Disable Go extension features for .dingo files to prevent duplicate hovers/definitions
+    await configureGoExtensionForDingo();
     // Activate LSP client
     await (0, lspClient_1.activateLSPClient)(context);
     // Register task provider for build/run tasks
@@ -64,5 +114,39 @@ async function activate(context) {
 async function deactivate() {
     // Deactivate LSP client
     await (0, lspClient_1.deactivateLSPClient)();
+}
+/**
+ * Configure Go extension to not interfere with .dingo files
+ * This sets workspace configuration to disable Go LSP for .dingo language
+ */
+async function configureGoExtensionForDingo() {
+    // The Go extension checks the 'go.useLanguageServer' setting per language
+    // We set it to false for [dingo] language scope at workspace level
+    // This is more reliable than configurationDefaults which only sets defaults
+    if (!vscode.workspace.workspaceFolders?.length) {
+        return;
+    }
+    try {
+        const config = vscode.workspace.getConfiguration();
+        const dingoSettings = config.inspect('[dingo]');
+        // Check if we already have workspace-level [dingo] settings with go.useLanguageServer
+        const workspaceValue = dingoSettings?.workspaceValue;
+        if (workspaceValue?.['go.useLanguageServer'] === false) {
+            // Already configured
+            return;
+        }
+        // Merge with existing [dingo] settings
+        const existingSettings = (workspaceValue || {});
+        const newSettings = {
+            ...existingSettings,
+            'go.useLanguageServer': false
+        };
+        await config.update('[dingo]', newSettings, vscode.ConfigurationTarget.Workspace);
+        console.log('Dingo: Configured workspace to disable Go LSP for .dingo files');
+    }
+    catch (error) {
+        // Silently fail - this is a best-effort optimization
+        console.log('Dingo: Could not update workspace settings:', error);
+    }
 }
 //# sourceMappingURL=extension.js.map

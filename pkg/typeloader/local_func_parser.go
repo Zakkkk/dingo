@@ -56,13 +56,39 @@ func (p *LocalFuncParser) ParseLocalFunctions(source []byte) (map[string]*Functi
 // normalizeFuncDecls converts Dingo function declarations to valid Go
 // Normalizes both declaration lines and bodies to make them parseable by go/parser
 func (p *LocalFuncParser) normalizeFuncDecls(source []byte) []byte {
-	// Step 1: Replace '?' with space (error propagation operator)
-	// This makes Dingo source parseable while preserving byte positions
+	// Step 1: Replace '?' error propagation with its context strings
+	// Pattern: `expr? "context"` or `expr?` (with optional context string)
+	// Replace with spaces to preserve byte positions
 	sanitized := make([]byte, len(source))
 	copy(sanitized, source)
+
+	// First pass: find and neutralize `? "..."` or `? |x| ...` patterns
+	// Look for ? followed by optional whitespace and then a string or lambda
 	for i := 0; i < len(sanitized); i++ {
 		if sanitized[i] == '?' {
 			sanitized[i] = ' '
+			// Skip whitespace after ?
+			j := i + 1
+			for j < len(sanitized) && (sanitized[j] == ' ' || sanitized[j] == '\t') {
+				j++
+			}
+			// Check if followed by a string literal (context)
+			if j < len(sanitized) && sanitized[j] == '"' {
+				// Replace the entire string with spaces
+				sanitized[j] = ' '
+				j++
+				for j < len(sanitized) && sanitized[j] != '"' {
+					if sanitized[j] == '\\' && j+1 < len(sanitized) {
+						sanitized[j] = ' '
+						j++
+					}
+					sanitized[j] = ' '
+					j++
+				}
+				if j < len(sanitized) {
+					sanitized[j] = ' ' // closing quote
+				}
+			}
 		}
 	}
 
@@ -338,4 +364,104 @@ func formatType(expr ast.Expr) string {
 	default:
 		return "unknown"
 	}
+}
+
+// ParseInterfaceMethods extracts interface method signatures from Dingo source.
+// Returns a map of method name to FunctionSignature.
+// This enables cross-file type resolution for interface method calls.
+//
+// For example, given:
+//
+//	type CompanyRepository interface {
+//	    GetByID(ctx context.Context, id uuid.UUID) Result[*models.Company, error]
+//	}
+//
+// Returns: {"GetByID": &FunctionSignature{Name: "GetByID", Results: [...]}
+func (p *LocalFuncParser) ParseInterfaceMethods(source []byte) (map[string]*FunctionSignature, error) {
+	// Normalize Dingo syntax to valid Go
+	normalized := p.normalizeFuncDecls(source)
+
+	// Parse with Go parser
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "", normalized, parser.SkipObjectResolution)
+	if err != nil {
+		// If Go parser fails, return empty map (interface methods are optional)
+		return make(map[string]*FunctionSignature), nil
+	}
+
+	result := make(map[string]*FunctionSignature)
+
+	// Find all interface type declarations
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			interfaceType, ok := typeSpec.Type.(*ast.InterfaceType)
+			if !ok {
+				continue
+			}
+
+			// Extract methods from interface
+			if interfaceType.Methods != nil {
+				for _, method := range interfaceType.Methods.List {
+					// Each method in an interface is a field with a FuncType
+					funcType, ok := method.Type.(*ast.FuncType)
+					if !ok {
+						continue
+					}
+
+					// Get method name
+					if len(method.Names) == 0 {
+						continue
+					}
+					methodName := method.Names[0].Name
+
+					// Build signature
+					sig := &FunctionSignature{
+						Name: methodName,
+					}
+
+					// Extract return types
+					if funcType.Results != nil {
+						for _, field := range funcType.Results.List {
+							ref := p.astTypeToRef(field.Type)
+							if len(field.Names) == 0 {
+								sig.Results = append(sig.Results, ref)
+							} else {
+								for range field.Names {
+									sig.Results = append(sig.Results, ref)
+								}
+							}
+						}
+					}
+
+					// Extract parameters
+					if funcType.Params != nil {
+						for _, field := range funcType.Params.List {
+							ref := p.astTypeToRef(field.Type)
+							if len(field.Names) == 0 {
+								sig.Parameters = append(sig.Parameters, ref)
+							} else {
+								for range field.Names {
+									sig.Parameters = append(sig.Parameters, ref)
+								}
+							}
+						}
+					}
+
+					result[methodName] = sig
+				}
+			}
+		}
+	}
+
+	return result, nil
 }
