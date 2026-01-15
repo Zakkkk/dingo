@@ -597,56 +597,32 @@ func (r *Reader) DingoLineToGoLine(dingoLine int) int {
 		}
 	}
 
-	// No direct mapping - compute cumulative expansion from transforms BEFORE this line
-	// For multi-line expressions (like QueryRowContext(...)?), the mapping records the
-	// START line but the expansion only applies AFTER the expression ends.
-	//
-	// Example: DingoLine=45, GoLineStart=45, GoLineEnd=56
-	// - This is a 9-line Dingo expression (lines 45-53) that becomes 12 Go lines
-	// - Dingo lines 45-52 map 1:1 to Go lines 45-52 (inside expression)
-	// - Dingo line 53 triggers the expansion (the ? operator)
-	// - The expansion (3 extra lines) only affects lines AFTER line 53
+	// No direct mapping - use the same calculation as CalculateLineShift
+	// This ensures consistency between the two methods.
 
-	dingoLineCount := len(r.dingoLines)
 	goLineCount := len(r.goLines)
-
-	if dingoLineCount == 0 || goLineCount == 0 {
+	if goLineCount == 0 {
 		return dingoLine
 	}
 
-	// Calculate cumulative expansion from transforms that END BEFORE this line
-	cumulativeExpansion := 0
+	// Calculate total shift: base offset + expansion from transforms before this line
+	// This is identical to CalculateLineShift logic for consistency
+	baseOffset := r.calculateBaseOffset()
+
+	transformShift := 0
 	for _, m := range r.lineMappings {
-		goLinesInTransform := int(m.GoLineEnd) - int(m.GoLineStart) + 1
-
-		// For error propagation, expansion is typically 3 lines (tmp/err assign, if, return)
-		// For multi-line expressions, we need to estimate where the Dingo expression ends
-		// Expansion = GoLines - DingoLines, and typical expansion is 3 for error prop
-		const typicalExpansion = 3
-		expansion := typicalExpansion
-		if goLinesInTransform <= typicalExpansion {
-			// Single-line transform or small expansion
-			expansion = goLinesInTransform - 1
+		// Only count mappings BEFORE the target line
+		if int(m.DingoLine) < dingoLine {
+			// Each transform expansion adds extra Go lines:
+			// 1 Dingo line expands to (GoLineEnd - GoLineStart + 1) Go lines
+			// Extra lines = total Go lines - 1 (the original Dingo line)
+			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
+			dingoLines := 1
+			transformShift += goLines - dingoLines
 		}
-
-		// Estimate where the Dingo expression ends
-		// DingoLineEnd = DingoLine + (GoLines - Expansion) - 1
-		dingoLinesInExpr := goLinesInTransform - expansion
-		if dingoLinesInExpr < 1 {
-			dingoLinesInExpr = 1
-		}
-		dingoLineEnd := int(m.DingoLine) + dingoLinesInExpr - 1
-
-		// Only count expansion if our target line is AFTER the expression ends
-		if dingoLine > dingoLineEnd {
-			cumulativeExpansion += expansion
-		}
-		// If dingoLine is INSIDE the expression [DingoLine, dingoLineEnd],
-		// the line maps 1:1 (no expansion applied yet)
 	}
 
-	// Go line = Dingo line + cumulative expansion from completed transforms
-	goLine := dingoLine + cumulativeExpansion
+	goLine := dingoLine + baseOffset + transformShift
 	if goLine < 1 {
 		goLine = 1
 	}

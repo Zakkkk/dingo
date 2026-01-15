@@ -756,12 +756,24 @@ func transformErrorPropStatements(src []byte, originalSrc []byte, filename strin
 			// Calculate LHS lengths for column mapping
 			// Dingo: "varName := " or "a, b := " for tuples
 			dingoLHSLen = len(varNameOrTuple) + 4 // " := " or " = " (always 4 with leading space consideration)
-			// Go: "tmpN, errN := " where N is counter-1 or empty
-			if currentCounter == 1 {
-				goLHSLen = 3 + 2 + 3 + 4 // "tmp" + ", " + "err" + " := "
+			// Go: either "tmp := " (Result types) or "tmpN, errN := " (tuple types)
+			// Check if expression returns Result type to determine Go LHS format
+			isResultType, _, _ := codegen.InferExprReturnsResultWithResolver(result, exprBytes, loc.ExprStart, resolver)
+			if isResultType {
+				// Result types use: tmp := expr (no err variable)
+				if currentCounter == 1 {
+					goLHSLen = 3 + 4 // "tmp" + " := "
+				} else {
+					goLHSLen = len(fmt.Sprintf("tmp%d", currentCounter-1)) + 4 // "tmpN" + " := "
+				}
 			} else {
-				// tmpN and errN where N = currentCounter-1
-				goLHSLen = len(fmt.Sprintf("tmp%d", currentCounter-1)) + 2 + len(fmt.Sprintf("err%d", currentCounter-1)) + 4
+				// Tuple types use: tmp, err := expr
+				if currentCounter == 1 {
+					goLHSLen = 3 + 2 + 3 + 4 // "tmp" + ", " + "err" + " := "
+				} else {
+					// tmpN and errN where N = currentCounter-1
+					goLHSLen = len(fmt.Sprintf("tmp%d", currentCounter-1)) + 2 + len(fmt.Sprintf("err%d", currentCounter-1)) + 4
+				}
 			}
 		case ast.StmtErrorPropReturn:
 			// return foo()?

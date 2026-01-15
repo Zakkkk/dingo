@@ -233,7 +233,8 @@ func (w *Writer) needsSpaceBefore(tok tokenizer.Token) bool {
 	// Never space after certain tokens
 	switch w.lastTokenKind {
 	case tokenizer.LPAREN, tokenizer.LBRACE, tokenizer.LBRACKET,
-		tokenizer.DOT, tokenizer.NOT, tokenizer.QUESTION, tokenizer.QUESTION_DOT:
+		tokenizer.DOT, tokenizer.NOT, tokenizer.QUESTION, tokenizer.QUESTION_DOT,
+		tokenizer.AMPERSAND, tokenizer.STAR:
 		return false
 	}
 
