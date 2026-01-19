@@ -259,7 +259,7 @@ func (r *Reader) parseLineMappings() error {
 		r.lineMappings[i].GoLineStart = binary.LittleEndian.Uint32(data[offset+4 : offset+8])
 		r.lineMappings[i].GoLineEnd = binary.LittleEndian.Uint32(data[offset+8 : offset+12])
 		r.lineMappings[i].KindIdx = binary.LittleEndian.Uint16(data[offset+12 : offset+14])
-		r.lineMappings[i].Reserved = binary.LittleEndian.Uint16(data[offset+14 : offset+16])
+		r.lineMappings[i].DingoLineCount = binary.LittleEndian.Uint16(data[offset+14 : offset+16])
 	}
 
 	// Sort by GoLineStart for efficient Go→Dingo lookups
@@ -553,7 +553,12 @@ func (r *Reader) computeDeltaFallback(goLine int, searchIdx int) int {
 		if int(entry.GoLineEnd) < goLine {
 			// This mapping is entirely before goLine
 			goLinesInMapping := int(entry.GoLineEnd) - int(entry.GoLineStart) + 1
-			cumulativeDelta += goLinesInMapping - 1
+			// DingoLineCount of 0 means 1 line (backwards compat)
+			dingoLinesInMapping := int(entry.DingoLineCount)
+			if dingoLinesInMapping == 0 {
+				dingoLinesInMapping = 1
+			}
+			cumulativeDelta += goLinesInMapping - dingoLinesInMapping
 		} else if goLine < int(entry.GoLineStart) {
 			// goLine is in a gap between this mapping and the previous
 			// Use the last mapping's end to compute offset
@@ -582,43 +587,62 @@ func (r *Reader) computeDeltaFallback(goLine int, searchIdx int) int {
 }
 
 // DingoLineToGoLine converts a 1-indexed Dingo line to the corresponding Go line.
-// For transformed lines (error propagation, match, etc.), returns GoLineStart where
-// the actual code is located (not the //line directive which is at GoLineStart-1).
-// For untransformed lines, uses cumulative expansion from preceding transforms.
+// For lines inside a transform (match, error prop, etc.), returns a proportionally
+// mapped Go line within the transform's Go line range.
+// For lines outside transforms, uses cumulative expansion from preceding transforms.
 func (r *Reader) DingoLineToGoLine(dingoLine int) int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	// Check if this Dingo line has a direct mapping (is a transformed line)
-	for _, m := range r.lineMappings {
-		if int(m.DingoLine) == dingoLine {
-			// Found direct mapping - return GoLineStart where the code is
-			return int(m.GoLineStart)
-		}
-	}
-
-	// No direct mapping - use the same calculation as CalculateLineShift
-	// This ensures consistency between the two methods.
 
 	goLineCount := len(r.goLines)
 	if goLineCount == 0 {
 		return dingoLine
 	}
 
-	// Calculate total shift: base offset + expansion from transforms before this line
-	// This is identical to CalculateLineShift logic for consistency
+	// Check if this Dingo line is inside any transform
+	for _, m := range r.lineMappings {
+		dingoStart := int(m.DingoLine)
+		// DingoLineCount of 0 means 1 line (backwards compat with old .dmap files)
+		dingoLineCount := int(m.DingoLineCount)
+		if dingoLineCount == 0 {
+			dingoLineCount = 1
+		}
+		dingoEnd := dingoStart + dingoLineCount - 1
+
+		if dingoLine >= dingoStart && dingoLine <= dingoEnd {
+			// Line is inside this transform - map proportionally
+			offset := dingoLine - dingoStart
+			goLinesInTransform := int(m.GoLineEnd-m.GoLineStart) + 1
+
+			// Linear mapping: offset within Dingo range -> offset within Go range
+			// For single-line transforms, offset=0 -> return GoLineStart
+			// For multi-line transforms, map proportionally
+			if dingoLineCount == 1 {
+				return int(m.GoLineStart)
+			}
+			goOffset := (offset * goLinesInTransform) / dingoLineCount
+			return int(m.GoLineStart) + goOffset
+		}
+	}
+
+	// Line is outside all transforms - calculate using cumulative expansion
 	baseOffset := r.calculateBaseOffset()
 
 	transformShift := 0
 	for _, m := range r.lineMappings {
-		// Only count mappings BEFORE the target line
-		if int(m.DingoLine) < dingoLine {
-			// Each transform expansion adds extra Go lines:
-			// 1 Dingo line expands to (GoLineEnd - GoLineStart + 1) Go lines
-			// Extra lines = total Go lines - 1 (the original Dingo line)
-			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
-			dingoLines := 1
-			transformShift += goLines - dingoLines
+		dingoStart := int(m.DingoLine)
+		// DingoLineCount of 0 means 1 line (backwards compat)
+		dingoLineCount := int(m.DingoLineCount)
+		if dingoLineCount == 0 {
+			dingoLineCount = 1
+		}
+		dingoEnd := dingoStart + dingoLineCount - 1
+
+		// Only count transforms that END before the target line
+		if dingoEnd < dingoLine {
+			goLines := int(m.GoLineEnd-m.GoLineStart) + 1
+			// Expansion = Go lines produced - Dingo lines consumed
+			transformShift += goLines - dingoLineCount
 		}
 	}
 
@@ -689,14 +713,20 @@ func (r *Reader) CalculateLineShift(dingoLine int) int {
 	// Then add shifts from transformed code expansions
 	transformShift := 0
 	for _, m := range r.lineMappings {
-		// Only count mappings BEFORE the target line
-		if int(m.DingoLine) < dingoLine {
+		// Get the Dingo line count (0 means 1 for backwards compat)
+		dingoLineCount := int(m.DingoLineCount)
+		if dingoLineCount == 0 {
+			dingoLineCount = 1
+		}
+		dingoEnd := int(m.DingoLine) + dingoLineCount - 1
+
+		// Only count mappings that END BEFORE the target line
+		if dingoEnd < dingoLine {
 			// Each transform expansion adds extra Go lines:
-			// 1 Dingo line expands to (GoLineEnd - GoLineStart + 1) Go lines
-			// Extra lines = total Go lines - 1 (the original Dingo line)
+			// N Dingo lines expands to (GoLineEnd - GoLineStart + 1) Go lines
+			// Extra lines = total Go lines - Dingo line count
 			goLines := int(m.GoLineEnd - m.GoLineStart + 1)
-			dingoLines := 1
-			transformShift += goLines - dingoLines
+			transformShift += goLines - dingoLineCount
 		}
 	}
 	return baseOffset + transformShift

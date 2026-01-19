@@ -1,0 +1,39 @@
+package main
+
+import "fmt"
+
+// Value enum with @prefix(false) - generates unprefixed const names
+@prefix(false)
+enum Status: int {
+	Pending,
+	Active,
+	Closed
+}
+
+// String enum with @prefix(false)
+@prefix(false)
+enum contextKey: string {
+	UserID = "user_id",
+	CompanyID = "company_id"
+}
+
+// Default behavior (prefixed)
+enum Priority: int {
+	Low,
+	Medium,
+	High
+}
+
+func main() {
+	// Using unprefixed Status variants
+	status := Active
+	fmt.Println("Status:", status)
+
+	// Using unprefixed context keys
+	key := UserID
+	fmt.Println("Key:", key)
+
+	// Using prefixed Priority variants (default)
+	prio := PriorityHigh
+	fmt.Println("Priority:", prio)
+}

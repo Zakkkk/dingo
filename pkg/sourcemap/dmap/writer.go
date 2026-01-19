@@ -149,12 +149,17 @@ func (w *Writer) Write(lineMappings []sourcemap.LineMapping, colMappings []sourc
 	// Convert LineMapping to LineMappingEntry
 	lineEntries := make([]LineMappingEntry, len(lineMappings))
 	for i, m := range lineMappings {
+		// DingoLineCount: default to 1 if not set (backwards compat with old code)
+		dingoLineCount := m.DingoLineCount
+		if dingoLineCount <= 0 {
+			dingoLineCount = 1
+		}
 		lineEntries[i] = LineMappingEntry{
-			DingoLine:   uint32(m.DingoLine),
-			GoLineStart: uint32(m.GoLineStart),
-			GoLineEnd:   uint32(m.GoLineEnd),
-			KindIdx:     kindMap[m.Kind],
-			Reserved:    0,
+			DingoLine:      uint32(m.DingoLine),
+			GoLineStart:    uint32(m.GoLineStart),
+			GoLineEnd:      uint32(m.GoLineEnd),
+			KindIdx:        kindMap[m.Kind],
+			DingoLineCount: uint16(dingoLineCount),
 		}
 	}
 
@@ -310,7 +315,7 @@ func writeLineMappingEntry(buf []byte, e LineMappingEntry) {
 	binary.LittleEndian.PutUint32(buf[4:8], e.GoLineStart)
 	binary.LittleEndian.PutUint32(buf[8:12], e.GoLineEnd)
 	binary.LittleEndian.PutUint16(buf[12:14], e.KindIdx)
-	binary.LittleEndian.PutUint16(buf[14:16], e.Reserved)
+	binary.LittleEndian.PutUint16(buf[14:16], e.DingoLineCount)
 }
 
 // writeColumnMappingEntry writes a ColumnMappingEntry to the buffer

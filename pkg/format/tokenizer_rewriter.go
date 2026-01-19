@@ -228,6 +228,27 @@ func (w *Writer) needsSpaceBefore(tok tokenizer.Token) bool {
 		if w.lastTokenKind == tokenizer.IDENT {
 			return false
 		}
+		// No space before ( after ] (generic function calls: Ok[T, E](x))
+		if w.lastTokenKind == tokenizer.RBRACKET {
+			return false
+		}
+	case tokenizer.LBRACKET:
+		// No space before [ after identifier (generic type parameters: Result[T, E])
+		if w.lastTokenKind == tokenizer.IDENT {
+			return false
+		}
+		// No space before [ after ] (nested generics: Map[K, V][string])
+		if w.lastTokenKind == tokenizer.RBRACKET {
+			return false
+		}
+	case tokenizer.LBRACE:
+		// Space before { is needed for function bodies: func foo() Result[T, E] {}
+		// But NOT for composite literals: map[K]V{} or []int{}
+		// We need space after ] only if it's a return type, not a type literal
+		// Heuristic: if ] is followed by {, we're likely in a composite literal context
+		// UNLESS there's a keyword like func/if/for before
+		// For simplicity: always allow space before { (Go style)
+		return true
 	}
 
 	// Never space after certain tokens
@@ -236,6 +257,13 @@ func (w *Writer) needsSpaceBefore(tok tokenizer.Token) bool {
 		tokenizer.DOT, tokenizer.NOT, tokenizer.QUESTION, tokenizer.QUESTION_DOT,
 		tokenizer.AMPERSAND, tokenizer.STAR:
 		return false
+	case tokenizer.RBRACKET:
+		// No space after ] for: []int, [n]int, map[K]V
+		// But allow space for function return type: func() []int {}
+		// Heuristic: no space after ] unless followed by { (handled above)
+		if tok.Kind != tokenizer.LBRACE {
+			return false
+		}
 	}
 
 	return true

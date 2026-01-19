@@ -1,0 +1,48 @@
+package main
+
+import "fmt"
+
+// Status represents the state of a task
+enum Status: int {
+	Pending,
+	Active,
+	Closed
+}
+
+// GetMessage returns a human-readable message for a status
+func getMessage(s Status) string {
+	return match s {
+		Pending => "waiting to start",
+		Active => "currently running",
+		Closed => "finished",
+	}
+}
+
+// GetPriority returns priority based on status
+func getPriority(s Status) int {
+	return match s {
+		Pending => 1,
+		Active => 3,
+		Closed => 0,
+	}
+}
+
+// IsActive checks if status is active with match
+func isActive(s Status) bool {
+	return match s {
+		Active => true,
+		_ => false,
+	}
+}
+
+func main() {
+	statuses := []Status{StatusPending, StatusActive, StatusClosed}
+
+	for _, s := range statuses {
+		msg := getMessage(s)
+		priority := getPriority(s)
+		active := isActive(s)
+		fmt.Printf("Status: %d, Message: %s, Priority: %d, Active: %v\n",
+			s, msg, priority, active)
+	}
+}

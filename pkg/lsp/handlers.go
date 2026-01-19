@@ -739,11 +739,54 @@ func (s *Server) handlePublishDiagnostics(
 			diag.Range.End.Line, diag.Range.End.Character)
 	}
 
+	// Filter out known false positives from gopls analyzers
+	filteredDiagnostics := filterFalsePositiveDiagnostics(translatedDiagnostics)
+
+	s.config.Logger.Debugf("[Diagnostic Handler] After filtering: %d diagnostics (filtered %d)",
+		len(filteredDiagnostics), len(translatedDiagnostics)-len(filteredDiagnostics))
+
 	// Use unified diagnostic cache to merge with lint diagnostics
-	s.updateAndPublishDiagnostics(dingoURI, "gopls", translatedDiagnostics)
+	s.updateAndPublishDiagnostics(dingoURI, "gopls", filteredDiagnostics)
 
 	s.config.Logger.Debugf("[Diagnostic Handler] SUCCESS: Published diagnostics to IDE")
 	return nil
+}
+
+// filterFalsePositiveDiagnostics removes known false positive diagnostics from gopls.
+// Currently filters:
+// - infertypeargs warnings for dgo.Ok, dgo.Err, dgo.Some, dgo.None (Go cannot infer
+//   second type parameter that doesn't appear in function arguments, but gopls
+//   incorrectly suggests removing the type arguments - see golang/go#66842)
+func filterFalsePositiveDiagnostics(diagnostics []protocol.Diagnostic) []protocol.Diagnostic {
+	filtered := make([]protocol.Diagnostic, 0, len(diagnostics))
+	for _, diag := range diagnostics {
+		if shouldFilterDiagnostic(diag) {
+			continue
+		}
+		filtered = append(filtered, diag)
+	}
+	return filtered
+}
+
+// shouldFilterDiagnostic returns true if the diagnostic is a known false positive
+func shouldFilterDiagnostic(diag protocol.Diagnostic) bool {
+	msg := diag.Message
+
+	// Filter infertypeargs warnings for dgo Result/Option constructors
+	// These require explicit type args because Go cannot infer the second type parameter
+	// See: https://github.com/golang/go/issues/66842
+	if strings.Contains(msg, "unnecessary type arguments") {
+		// Only filter for dgo.Ok, dgo.Err, dgo.Some, dgo.None constructors
+		// The message format is: "unnecessary type arguments for type Ok[T, E any]"
+		if strings.Contains(msg, "Ok[") ||
+			strings.Contains(msg, "Err[") ||
+			strings.Contains(msg, "Some[") ||
+			strings.Contains(msg, "None[") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // handleFormatting processes textDocument/formatting requests for .dingo files

@@ -840,10 +840,11 @@ func adjustLineMappingsForPrinterOffset(goCode, dingoSource []byte, lineMappings
 	adjustedLineMappings := make([]sourcemap.LineMapping, 0, len(lineMappings))
 	for _, lm := range lineMappings {
 		adjustedLineMappings = append(adjustedLineMappings, sourcemap.LineMapping{
-			DingoLine:   lm.DingoLine,
-			GoLineStart: lm.GoLineStart + headerOffset,
-			GoLineEnd:   lm.GoLineEnd + headerOffset,
-			Kind:        lm.Kind,
+			DingoLine:      lm.DingoLine,
+			DingoLineCount: lm.DingoLineCount,
+			GoLineStart:    lm.GoLineStart + headerOffset,
+			GoLineEnd:      lm.GoLineEnd + headerOffset,
+			Kind:           lm.Kind,
 		})
 	}
 
@@ -869,10 +870,11 @@ func adjustWithDirectives(directiveMap map[int]int, lineMappings []sourcemap.Lin
 		if goLine, found := directiveMap[lm.DingoLine]; found {
 			codeLength := lm.GoLineEnd - lm.GoLineStart + 1
 			adjustedLineMappings = append(adjustedLineMappings, sourcemap.LineMapping{
-				DingoLine:   lm.DingoLine,
-				GoLineStart: goLine + 1,
-				GoLineEnd:   goLine + codeLength,
-				Kind:        lm.Kind,
+				DingoLine:      lm.DingoLine,
+				DingoLineCount: lm.DingoLineCount,
+				GoLineStart:    goLine + 1,
+				GoLineEnd:      goLine + codeLength,
+				Kind:           lm.Kind,
 			})
 		} else {
 			adjustedLineMappings = append(adjustedLineMappings, lm)

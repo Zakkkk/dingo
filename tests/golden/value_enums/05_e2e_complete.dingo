@@ -1,0 +1,133 @@
+package main
+
+import "fmt"
+
+// Test int enum with iota (auto-increment)
+enum Status: int {
+	Pending,
+	Active,
+	Closed
+}
+
+// Test string enum with explicit values
+enum ContextKey: string {
+	UserID = "user_id",
+	CompanyID = "company_id",
+	RequestID = "request_id"
+}
+
+// Test byte enum with decimal values
+enum Permission: byte {
+	NoAccess = 0,
+	ReadOnly = 1,
+	WriteOnly = 2,
+	ExecuteOnly = 4
+}
+
+// Test int enum with explicit values
+enum Priority: int {
+	Low = 1,
+	Medium = 5,
+	High = 10
+}
+
+// Test @prefix(false) attribute
+@prefix(false)
+enum Color: int {
+	Red,
+	Green,
+	Blue
+}
+
+// GetStatusMessage uses match with value enum
+func getStatusMessage(s Status) string {
+	return match s {
+		Pending => "waiting to start",
+		Active => "currently running",
+		Closed => "finished",
+	}
+}
+
+// GetContextKeyName uses match with string enum
+func getContextKeyName(key ContextKey) string {
+	return match key {
+		UserID => "User ID",
+		CompanyID => "Company ID",
+		RequestID => "Request ID",
+	}
+}
+
+// CheckPermission uses match with byte enum
+func checkPermission(perm Permission) string {
+	return match perm {
+		NoAccess => "no access",
+		ReadOnly => "read only",
+		WriteOnly => "write only",
+		ExecuteOnly => "execute only",
+	}
+}
+
+// GetPriorityLevel uses match with explicit int values
+func getPriorityLevel(p Priority) string {
+	return match p {
+		Low => "low priority",
+		Medium => "medium priority",
+		High => "high priority",
+	}
+}
+
+// GetColorName uses match with @prefix(false) enum (bare variant names)
+func getColorName(c Color) string {
+	return match c {
+		Red => "red",
+		Green => "green",
+		Blue => "blue",
+	}
+}
+
+// Test wildcard pattern with value enum
+func isUrgent(p Priority) bool {
+	return match p {
+		High => true,
+		_ => false,
+	}
+}
+
+func main() {
+	// Test int enum with iota
+	fmt.Println("=== Int Enum (iota) ===")
+	statuses := []Status{StatusPending, StatusActive, StatusClosed}
+	for _, s := range statuses {
+		fmt.Printf("Status %d: %s\n", s, getStatusMessage(s))
+	}
+
+	// Test string enum
+	fmt.Println("\n=== String Enum ===")
+	keys := []ContextKey{ContextKeyUserID, ContextKeyCompanyID, ContextKeyRequestID}
+	for _, k := range keys {
+		fmt.Printf("Key %s: %s\n", k, getContextKeyName(k))
+	}
+
+	// Test byte enum with decimal values
+	fmt.Println("\n=== Byte Enum ===")
+	perms := []Permission{PermissionNoAccess, PermissionReadOnly, PermissionWriteOnly, PermissionExecuteOnly}
+	for _, p := range perms {
+		fmt.Printf("Permission %d: %s\n", p, checkPermission(p))
+	}
+
+	// Test int enum with explicit values
+	fmt.Println("\n=== Int Enum (explicit values) ===")
+	priorities := []Priority{PriorityLow, PriorityMedium, PriorityHigh}
+	for _, p := range priorities {
+		fmt.Printf("Priority %d: %s (urgent: %v)\n", p, getPriorityLevel(p), isUrgent(p))
+	}
+
+	// Test @prefix(false) enum
+	fmt.Println("\n=== No Prefix Enum ===")
+	colors := []Color{Red, Green, Blue}
+	for _, c := range colors {
+		fmt.Printf("Color %d: %s\n", c, getColorName(c))
+	}
+
+	fmt.Println("\n=== All tests passed ===")
+}

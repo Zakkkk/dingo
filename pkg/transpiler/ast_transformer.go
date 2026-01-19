@@ -543,10 +543,11 @@ func transformASTExpressions(src []byte, enumRegistry map[string]string, fullEnu
 				}
 
 				lineMappings = append(lineMappings, sourcemap.LineMapping{
-					DingoLine:   dingoLine,
-					GoLineStart: goStartLine,
-					GoLineEnd:   goStartLine + codeLineCount - 1,
-					Kind:        loc.Kind.String(),
+					DingoLine:      dingoLine,
+					DingoLineCount: originalLineCount,
+					GoLineStart:    goStartLine,
+					GoLineEnd:      goStartLine + codeLineCount - 1,
+					Kind:           loc.Kind.String(),
 				})
 			}
 

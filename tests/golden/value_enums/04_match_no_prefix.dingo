@@ -1,0 +1,39 @@
+package main
+
+import "fmt"
+
+// Flags without prefix - uses bare constant names
+@prefix(false)
+enum Flags: byte {
+	Read,
+	Write,
+	Execute
+}
+
+// CheckPermission returns description of a permission flag
+func checkPermission(f Flags) string {
+	return match f {
+		Read => "can read",
+		Write => "can write",
+		Execute => "can execute",
+	}
+}
+
+// HasAccess checks if flag grants access (Read or Write)
+func hasAccess(f Flags) bool {
+	return match f {
+		Read => true,
+		Write => true,
+		_ => false,
+	}
+}
+
+func main() {
+	permissions := []Flags{Read, Write, Execute}
+
+	for _, p := range permissions {
+		desc := checkPermission(p)
+		access := hasAccess(p)
+		fmt.Printf("Flag: %d, Description: %s, HasAccess: %v\n", p, desc, access)
+	}
+}

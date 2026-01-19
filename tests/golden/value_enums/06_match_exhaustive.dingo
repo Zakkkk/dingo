@@ -1,0 +1,104 @@
+package main
+
+import "fmt"
+
+// Status enum for exhaustiveness testing
+enum Status: int {
+	Pending,
+	Active,
+	Closed,
+	Cancelled
+}
+
+// SimpleStatus for testing exhaustiveness with fewer variants
+enum SimpleStatus: int {
+	On,
+	Off
+}
+
+// Traffic light enum for three-way exhaustiveness
+enum TrafficLight: int {
+	Red,
+	Yellow,
+	Green
+}
+
+// Test exhaustive match - all variants covered
+func describeStatus(s Status) string {
+	return match s {
+		Pending => "not started yet",
+		Active => "in progress",
+		Closed => "completed successfully",
+		Cancelled => "aborted",
+	}
+}
+
+// Test exhaustive match with simple two-variant enum
+func checkSimpleStatus(s SimpleStatus) bool {
+	return match s {
+		On => true,
+		Off => false,
+	}
+}
+
+// Test exhaustive match with wildcard covering multiple variants
+func shouldProceed(s Status) bool {
+	return match s {
+		Active => true,
+		_ => false,
+	}
+}
+
+// Test exhaustive match with wildcard on traffic light
+func canGo(light TrafficLight) bool {
+	return match light {
+		Green => true,
+		_ => false,
+	}
+}
+
+// Test exhaustive match covering specific cases with wildcard
+func needsAction(s Status) bool {
+	return match s {
+		Pending => true,
+		Active => true,
+		_ => false,
+	}
+}
+
+// Test all variants explicitly (no wildcard)
+func getTrafficLightAction(light TrafficLight) string {
+	return match light {
+		Red => "stop",
+		Yellow => "slow down",
+		Green => "go",
+	}
+}
+
+func main() {
+	// Test exhaustive matching with all Status variants
+	fmt.Println("=== Exhaustive Status Matching ===")
+	allStatuses := []Status{StatusPending, StatusActive, StatusClosed, StatusCancelled}
+	for _, s := range allStatuses {
+		description := describeStatus(s)
+		proceed := shouldProceed(s)
+		action := needsAction(s)
+		fmt.Printf("Status %d: %s (proceed: %v, needs action: %v)\n",
+			s, description, proceed, action)
+	}
+
+	// Test exhaustive matching with SimpleStatus
+	fmt.Println("\n=== Simple Status Matching ===")
+	fmt.Printf("SimpleStatus On=%v: %v\n", SimpleStatusOn, checkSimpleStatus(SimpleStatusOn))
+	fmt.Printf("SimpleStatus Off=%v: %v\n", SimpleStatusOff, checkSimpleStatus(SimpleStatusOff))
+
+	// Test exhaustive matching with TrafficLight
+	fmt.Println("\n=== Traffic Light Matching ===")
+	lights := []TrafficLight{TrafficLightRed, TrafficLightYellow, TrafficLightGreen}
+	for _, light := range lights {
+		fmt.Printf("TrafficLight %d: %s (can go: %v)\n",
+			light, getTrafficLightAction(light), canGo(light))
+	}
+
+	fmt.Println("\n=== All exhaustiveness tests passed ===")
+}

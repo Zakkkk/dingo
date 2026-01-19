@@ -52,11 +52,11 @@ const (
 
 // LineMappingEntry represents a line-level mapping (16 bytes)
 type LineMappingEntry struct {
-	DingoLine   uint32 // Line number in .dingo source (1-indexed)
-	GoLineStart uint32 // Start line number in .go output (1-indexed)
-	GoLineEnd   uint32 // End line number in .go output (1-indexed, inclusive)
-	KindIdx     uint16 // Index into kind string table
-	Reserved    uint16 // Alignment padding for future use
+	DingoLine      uint32 // Line number in .dingo source (1-indexed, start line for multi-line transforms)
+	GoLineStart    uint32 // Start line number in .go output (1-indexed)
+	GoLineEnd      uint32 // End line number in .go output (1-indexed, inclusive)
+	KindIdx        uint16 // Index into kind string table
+	DingoLineCount uint16 // Number of Dingo lines in transform (0 = 1 line for backwards compat)
 }
 
 // ColumnMappingEntry provides precise position mapping for hover/go-to-definition

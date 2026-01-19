@@ -1,0 +1,15 @@
+package main
+
+import "fmt"
+
+// Status represents the state of a task
+enum Status: int {
+	Pending,
+	Active,
+	Closed
+}
+
+func main() {
+	status := StatusActive
+	fmt.Println("Status:", status)
+}

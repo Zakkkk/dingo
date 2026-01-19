@@ -2,6 +2,8 @@
 // These types use Go 1.18+ generics for type-safe error handling and optional values
 package dgo
 
+import "fmt"
+
 // ResultTag represents the state of a Result value
 type ResultTag uint8
 
@@ -62,7 +64,7 @@ func (r Result[T, E]) Unwrap() T {
 // This follows Go's Must* convention for functions that panic on error
 func (r Result[T, E]) MustOk() T {
 	if r.Tag == ResultTagErr {
-		panic("called MustOk on an Err value")
+		panic(fmt.Sprintf("called MustOk on an Err value: %v", r.Err))
 	}
 	return r.Ok
 }
@@ -92,7 +94,7 @@ func (r Result[T, E]) UnwrapErr() E {
 // This follows Go's Must* convention for functions that panic on error
 func (r Result[T, E]) MustErr() E {
 	if r.Tag == ResultTagOk {
-		panic("called MustErr on an Ok value")
+		panic(fmt.Sprintf("called MustErr on an Ok value: %v", r.Ok))
 	}
 	return r.Err
 }
@@ -171,7 +173,7 @@ func (r Result[T, E]) Or(other Result[T, E]) Result[T, E] {
 // Expect returns the Ok value or panics with the given message
 func (r Result[T, E]) Expect(msg string) T {
 	if r.Tag == ResultTagErr {
-		panic(msg)
+		panic(fmt.Sprintf("%s: %v", msg, r.Err))
 	}
 	return r.Ok
 }
@@ -179,7 +181,7 @@ func (r Result[T, E]) Expect(msg string) T {
 // ExpectErr returns the Err value or panics with the given message
 func (r Result[T, E]) ExpectErr(msg string) E {
 	if r.Tag == ResultTagOk {
-		panic(msg)
+		panic(fmt.Sprintf("%s: %v", msg, r.Ok))
 	}
 	return r.Err
 }
