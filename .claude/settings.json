@@ -45,14 +45,14 @@
   },
   "installedPluginVersions": {
     "orchestration@mag-claude-plugins": "0.8.2",
-    "code-analysis@mag-claude-plugins": "2.13.1",
+    "code-analysis@mag-claude-plugins": "3.0.0",
     "commit-commands@claude-plugins-official": "0.0.0",
     "feature-dev@claude-plugins-official": "0.0.0",
     "code-review@claude-plugins-official": "0.0.0",
     "explanatory-output-style@claude-plugins-official": "0.0.0",
     "learning-output-style@claude-plugins-official": "0.0.0",
     "seo@mag-claude-plugins": "1.5.1",
-    "dev@mag-claude-plugins": "1.13.0",
+    "dev@mag-claude-plugins": "1.17.0",
     "ralph-loop@claude-plugins-official": "0.0.0"
   }
 }
